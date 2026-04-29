@@ -41,6 +41,71 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
   end
 
+  def resend_receipt
+    purchase = fetch_purchase
+    return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.blank?
+
+    purchase.resend_receipt
+    render json: {
+      success: true,
+      message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}"
+    }
+  end
+
+  def resend_all_receipts
+    email = params[:email].to_s.strip
+    return render json: { success: false, message: "email is required" }, status: :bad_request if email.blank?
+
+    purchases = Purchase.where(email: email).successful
+    return render json: { success: false, message: "No purchases found for email: #{email}" }, status: :not_found if purchases.empty?
+
+    CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+    render json: {
+      success: true,
+      message: "Successfully resent all receipts to #{email}",
+      count: purchases.count
+    }
+  end
+
+  def refund_taxes
+    buyer_email = params[:email].to_s.strip.downcase
+    return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
+
+    purchase = fetch_purchase
+    if purchase.blank? || purchase.email.to_s.downcase != buyer_email
+      return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
+    end
+
+    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: {
+        success: true,
+        message: "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}",
+        purchase: serialize_purchase(purchase)
+      }
+    else
+      message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"
+      render json: { success: false, message: message }, status: :unprocessable_entity
+    end
+  end
+
+  def reassign
+    from_email = params[:from].to_s.strip.presence
+    to_email = params[:to].to_s.strip.presence
+
+    result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
+
+    unless result.success?
+      return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+    end
+
+    render json: {
+      success: true,
+      message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+      count: result.count,
+      reassigned_purchase_ids: result.reassigned_purchase_ids
+    }
+  end
+
   def refund
     buyer_email = params[:email].to_s.strip.downcase
     return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
@@ -148,5 +213,13 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       return MAX_SEARCH_RESULTS if requested_limit <= 0
 
       [requested_limit, MAX_SEARCH_RESULTS].min
+    end
+
+    def status_for_reason(reason)
+      case reason
+      when :missing_params then :bad_request
+      when :not_found then :not_found
+      when :no_changes then :unprocessable_entity
+      end
     end
 end

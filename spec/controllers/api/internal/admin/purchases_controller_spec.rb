@@ -548,4 +548,207 @@ describe Api::Internal::Admin::PurchasesController do
       end
     end
   end
+
+  describe "POST resend_receipt" do
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+
+    include_examples "admin api authorization required", :post, :resend_receipt, { id: "123" }
+
+    it "resends the receipt for the given purchase" do
+      post :resend_receipt, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}"
+      }.as_json)
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
+    end
+
+    it "returns 404 when the purchase does not exist" do
+      post :resend_receipt, params: { id: "999999999" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found" }.as_json)
+      expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "returns 404 when the id is not numeric" do
+      post :resend_receipt, params: { id: "abc" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found" }.as_json)
+      expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+    end
+  end
+
+  describe "POST resend_all_receipts" do
+    include_examples "admin api authorization required", :post, :resend_all_receipts
+
+    it "returns 400 when email is missing" do
+      post :resend_all_receipts
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when no successful purchases exist for the email" do
+      post :resend_all_receipts, params: { email: "noone@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "No purchases found for email: noone@example.com" }.as_json)
+    end
+
+    it "enqueues a grouped receipt for all successful purchases" do
+      buyer_email = "buyer@example.com"
+      successful_one = create(:free_purchase, email: buyer_email)
+      successful_two = create(:free_purchase, email: buyer_email)
+      create(:failed_purchase, email: buyer_email)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([successful_one.id, successful_two.id])).and_call_original
+
+      post :resend_all_receipts, params: { email: buyer_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Successfully resent all receipts to #{buyer_email}",
+        "count" => 2
+      )
+    end
+  end
+
+  describe "POST refund_taxes" do
+    let(:admin_user) { create(:admin_user) }
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+
+    include_examples "admin api authorization required", :post, :refund_taxes, { id: "123", email: "buyer@example.com" }
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :refund_taxes, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the purchase is missing" do
+      post :refund_taxes, params: { id: "999999999", email: "buyer@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
+    end
+
+    it "returns 404 when the email does not match the purchase email" do
+      post :refund_taxes, params: params.merge(email: "wrong@example.com")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
+    end
+
+    context "when the purchase exists" do
+      before do
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
+        purchase.errors.clear
+      end
+
+      it "refunds taxes and returns the serialized purchase" do
+        expect(purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: admin_user.id, note: "tax adjustment", business_vat_id: "VAT123").and_return(true)
+
+        post :refund_taxes, params: params.merge(note: "tax adjustment", business_vat_id: "VAT123")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "message" => "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}"
+        )
+        expect(response.parsed_body["purchase"]).to include("id" => purchase.external_id_numeric.to_s)
+      end
+
+      it "returns 422 with the purchase error when refund_gumroad_taxes! fails" do
+        allow(purchase).to receive(:refund_gumroad_taxes!) do
+          purchase.errors.add :base, "Some validation error"
+          false
+        end
+
+        post :refund_taxes, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Some validation error" }.as_json)
+      end
+
+      it "returns 422 with a generic message when there are no refundable taxes and no model errors" do
+        allow(purchase).to receive(:refund_gumroad_taxes!).and_return(false)
+
+        post :refund_taxes, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "No refundable taxes available" }.as_json)
+      end
+    end
+  end
+
+  describe "POST reassign" do
+    include_examples "admin api authorization required", :post, :reassign
+
+    let(:from_email) { "old@example.com" }
+    let(:to_email) { "new@example.com" }
+    let(:buyer) { create(:user) }
+    let!(:target_user) { create(:user, email: to_email) }
+    let!(:merchant_account) { create(:merchant_account, user: nil) }
+    let!(:purchase1) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
+    let!(:purchase2) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
+
+    it "returns 400 when from is missing" do
+      post :reassign, params: { to: to_email }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "Both 'from' and 'to' email addresses are required" }.as_json)
+    end
+
+    it "returns 400 when to is missing" do
+      post :reassign, params: { from: from_email }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "Both 'from' and 'to' email addresses are required" }.as_json)
+    end
+
+    it "returns 404 when no purchases match the from email" do
+      post :reassign, params: { from: "nobody@example.com", to: to_email }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "No purchases found for email: nobody@example.com" }.as_json)
+    end
+
+    it "reassigns purchases via Purchase::ReassignByEmailService and returns the result" do
+      post :reassign, params: { from: from_email, to: to_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["count"]).to eq(2)
+      expect(response.parsed_body["reassigned_purchase_ids"]).to match_array([purchase1.id, purchase2.id])
+      expect(response.parsed_body["message"]).to include("Successfully reassigned 2 purchases from #{from_email} to #{to_email}")
+      expect(purchase1.reload.email).to eq(to_email)
+      expect(purchase1.purchaser_id).to eq(target_user.id)
+      expect(purchase2.reload.email).to eq(to_email)
+    end
+
+    it "returns 422 when every purchase save fails" do
+      allow_any_instance_of(Purchase).to receive(:save).and_return(false)
+
+      post :reassign, params: { from: from_email, to: to_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "No purchases were reassigned" }.as_json)
+    end
+
+    it "returns 422 when from and to emails are the same" do
+      post :reassign, params: { from: from_email, to: from_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "from and to emails are the same" }.as_json)
+    end
+  end
 end

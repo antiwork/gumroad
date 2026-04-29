@@ -298,9 +298,13 @@ Rails.application.routes.draw do
           resources :purchases, only: [:show] do
             collection do
               post :search
+              post :resend_all_receipts
+              post :reassign
             end
             member do
               post :refund
+              post :resend_receipt
+              post :refund_taxes
             end
           end
 
@@ -313,6 +317,10 @@ Rails.application.routes.draw do
           resources :users, only: [] do
             collection do
               post :suspension
+              post :reset_password
+              post :update_email
+              post :two_factor_authentication
+              post :create_comment
             end
           end
 

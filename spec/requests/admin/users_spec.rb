@@ -283,4 +283,40 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(product.reload.deleted?).to eq(true)
     end
   end
+
+  describe "Suspend for fraud button" do
+    it "links to the suspend users page with the user ID pre-filled" do
+      visit admin_user_path(user.external_id)
+
+      expect(page).to have_link("Suspend for fraud")
+      suspend_link = find_link("Suspend for fraud")
+      expect(suspend_link[:href]).to include(admin_suspend_users_path)
+      expect(suspend_link[:href]).to include("identifiers=#{user.external_id}")
+    end
+
+    it "is hidden when user is already flagged for fraud" do
+      user.flag_for_fraud!(author_id: admin.id)
+
+      visit admin_user_path(user.external_id)
+
+      expect(page).not_to have_link("Suspend for fraud")
+    end
+
+    it "is hidden when user is already suspended" do
+      user.flag_for_fraud!(author_id: admin.id)
+      user.suspend_for_fraud(author_id: admin.id)
+
+      visit admin_user_path(user.external_id)
+
+      expect(page).not_to have_link("Suspend for fraud")
+    end
+  end
+
+  describe "Suspend users page pre-fill" do
+    it "pre-fills identifiers from query parameter" do
+      visit "#{admin_suspend_users_path}?identifiers=#{user.external_id}"
+
+      expect(page).to have_field("identifiers", with: user.external_id)
+    end
+  end
 end

@@ -39,10 +39,12 @@ const NOTES_SUGGESTIONS = [
 const SuspendUsers = () => {
   const { authenticity_token: authenticityToken, suspend_reasons: suspendReasons } = usePage<PageProps>().props;
 
+  const initialIdentifiers = new URLSearchParams(window.location.search).get("identifiers") ?? "";
+
   const form = useForm({
     authenticity_token: authenticityToken,
     suspend_users: {
-      identifiers: "",
+      identifiers: initialIdentifiers,
       reason: "",
       additional_notes: "",
     },

@@ -1,10 +1,17 @@
 # frozen_string_literal: true
 
 class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
+  MAX_BY_REFERRAL_DATE_RANGE_DAYS = 365
+
   before_action -> { doorkeeper_authorize! :creator_api }
   before_action :set_date_range, only: [:by_date, :by_state, :by_referral]
+  before_action :clamp_date_range_for_by_referral, only: :by_referral
 
   rescue_from Faraday::TimeoutError do
+    render json: { success: false, message: "Analytics request timed out" }, status: :gateway_timeout
+  end
+
+  rescue_from Rack::Timeout::RequestTimeoutException do
     render json: { success: false, message: "Analytics request timed out" }, status: :gateway_timeout
   end
 
@@ -54,6 +61,12 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   end
 
   protected
+    def clamp_date_range_for_by_referral
+      if (@end_date - @start_date).to_i > MAX_BY_REFERRAL_DATE_RANGE_DAYS
+        @start_date = @end_date - MAX_BY_REFERRAL_DATE_RANGE_DAYS.days
+      end
+    end
+
     def set_date_range
       if params[:date_range]
         @end_date = ActiveSupport::TimeZone[current_resource_owner.timezone].today
