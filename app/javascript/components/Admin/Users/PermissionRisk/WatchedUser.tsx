@@ -1,9 +1,10 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { ResponseError, assertResponseError, request } from "$app/utils/request";
 
-import AdminActionButton from "$app/components/Admin/ActionButton";
 import { Form } from "$app/components/Admin/Form";
 import type { ActiveWatchedUser, User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
@@ -115,6 +116,45 @@ const WatchlistForm = ({ user }: { user: User }) => {
   );
 };
 
+const RemoveFromWatchlistButton = ({ user }: { user: User }) => {
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const handleClick = async () => {
+    // eslint-disable-next-line no-alert
+    if (!confirm(`Remove ${user.email} from the watchlist?`)) return;
+
+    setIsLoading(true);
+
+    try {
+      const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+      const response = await request({
+        url: Routes.admin_user_watchlist_path(user.external_id),
+        method: "DELETE",
+        accept: "json",
+        data: { authenticity_token: csrfToken },
+      });
+
+      if (!response.ok) {
+        const { message } = cast<{ message?: string }>(await response.json());
+        throw new ResponseError(message ?? "Something went wrong.");
+      }
+
+      showAlert("Removed from watchlist.", "success");
+      router.reload();
+    } catch (error) {
+      assertResponseError(error);
+      showAlert(error.message, "error");
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Button type="button" color="danger" onClick={() => void handleClick()} disabled={isLoading}>
+      {isLoading ? "Removing..." : "Remove from watchlist"}
+    </Button>
+  );
+};
+
 const WatchedUser = ({ user }: { user: User }) => {
   const watch = user.active_watched_user;
 
@@ -130,16 +170,7 @@ const WatchedUser = ({ user }: { user: User }) => {
           <WatchlistForm user={user} />
           {watch ? (
             <div>
-              <AdminActionButton
-                label="Remove from watchlist"
-                method="DELETE"
-                url={Routes.admin_user_watchlist_path(user.external_id)}
-                loading="Removing..."
-                done="Removed"
-                success_message="Removed from watchlist."
-                confirm_message={`Remove ${user.email} from the watchlist?`}
-                color="danger"
-              />
+              <RemoveFromWatchlistButton user={user} />
             </div>
           ) : null}
         </div>
