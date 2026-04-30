@@ -2,13 +2,210 @@
 
 set -u
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$ROOT_DIR/.env.development"
+MAKEFILE="$ROOT_DIR/Makefile"
+PROCFILE="$ROOT_DIR/Procfile.dev"
+NGINX_CONFIG="$ROOT_DIR/docker/local-nginx/gumroad_dev.conf"
+RUBY_VERSION_FILE="$ROOT_DIR/.ruby-version"
+GEMFILE_LOCK="$ROOT_DIR/Gemfile.lock"
+
+FAILURES=0
+SERVER_UP=0
+
 ok() { printf "✅ %s\n" "$1"; }
 warn() { printf "⚠️  %s\n" "$1"; }
-fail() { printf "❌ %s\n" "$1"; }
+fail() { printf "❌ %s\n" "$1"; FAILURES=$((FAILURES + 1)); }
 info() { printf "   %s\n" "$1"; }
+source_info() { printf "   source: %s\n" "$1"; }
+hint() { printf "   hint: %s\n" "$1"; }
+
+relative_path() {
+  case "$1" in
+    "$ROOT_DIR"/*) printf "%s" "${1#$ROOT_DIR/}" ;;
+    *) printf "%s" "$1" ;;
+  esac
+}
+
+trim_value() {
+  printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+unquote_value() {
+  local value
+  value="$(trim_value "$1")"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf "%s" "$value"
+}
 
 has_command() {
   command -v "$1" >/dev/null 2>&1
+}
+
+read_env_var() {
+  local key="$1"
+  local file="${2:-$ENV_FILE}"
+  local line
+
+  [[ -f "$file" ]] || return 1
+
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" | head -n 1 || true)"
+  [[ -n "$line" ]] || return 1
+
+  unquote_value "${line#*=}"
+}
+
+read_makefile_var() {
+  local key="$1"
+
+  [[ -f "$MAKEFILE" ]] || return 1
+
+  awk -v key="$key" '$1 == key && $2 == "=" { print $3; exit }' "$MAKEFILE"
+}
+
+read_bundler_version() {
+  [[ -f "$GEMFILE_LOCK" ]] || return 1
+
+  awk '/^BUNDLED WITH$/ { getline; gsub(/[[:space:]]/, ""); print; exit }' "$GEMFILE_LOCK"
+}
+
+read_ruby_version() {
+  [[ -f "$RUBY_VERSION_FILE" ]] || return 1
+
+  tr -d '[:space:]' < "$RUBY_VERSION_FILE"
+}
+
+read_index_name() {
+  local file="$1"
+
+  [[ -f "$file" ]] || return 1
+
+  awk -F'"' '/index_name[[:space:]]+"/ { print $2; exit }' "$file"
+}
+
+procfile_port_after_flag() {
+  local process="$1"
+  local flag="$2"
+
+  [[ -f "$PROCFILE" ]] || return 1
+
+  awk -v process="$process:" -v flag="$flag" '
+    $1 == process {
+      for (i = 1; i <= NF; i++) {
+        if ($i == flag) {
+          print $(i + 1)
+          exit
+        }
+      }
+    }
+  ' "$PROCFILE"
+}
+
+nginx_upstream_port() {
+  local upstream="$1"
+
+  [[ -f "$NGINX_CONFIG" ]] || return 1
+
+  awk -v upstream="$upstream" '
+    $1 == "upstream" && $2 == upstream {
+      in_upstream = 1
+      next
+    }
+    in_upstream && $1 == "server" {
+      split($2, endpoint, ":")
+      gsub(/;/, "", endpoint[2])
+      print endpoint[2]
+      exit
+    }
+    in_upstream && $1 == "}" {
+      in_upstream = 0
+    }
+  ' "$NGINX_CONFIG"
+}
+
+nginx_primary_domain() {
+  [[ -f "$NGINX_CONFIG" ]] || return 1
+
+  awk '
+    $1 == "server_name" {
+      for (i = 2; i <= NF; i++) {
+        gsub(/;/, "", $i)
+        if ($i == "gumroad.dev") {
+          print $i
+          exit
+        }
+      }
+    }
+  ' "$NGINX_CONFIG"
+}
+
+nginx_certificate_path() {
+  [[ -f "$NGINX_CONFIG" ]] || return 1
+
+  awk '$1 == "ssl_certificate" { gsub(/;/, "", $2); print $2; exit }' "$NGINX_CONFIG"
+}
+
+endpoint_authority() {
+  local endpoint="$1"
+
+  endpoint="${endpoint#*://}"
+  endpoint="${endpoint%%/*}"
+  endpoint="${endpoint#*@}"
+  printf "%s" "$endpoint"
+}
+
+endpoint_host() {
+  local authority
+  authority="$(endpoint_authority "$1")"
+
+  case "$authority" in
+    \[*\]*) printf "%s" "${authority%%]*}" | sed 's/^\[//' ;;
+    *:*) printf "%s" "${authority%%:*}" ;;
+    *) printf "%s" "$authority" ;;
+  esac
+}
+
+endpoint_port() {
+  local endpoint="$1"
+  local default_port="${2:-}"
+  local authority
+  authority="$(endpoint_authority "$endpoint")"
+
+  case "$authority" in
+    \[*\]*:*) printf "%s" "${authority##*:}" ;;
+    *:*) printf "%s" "${authority##*:}" ;;
+    *) printf "%s" "$default_port" ;;
+  esac
+}
+
+tcp_listening() {
+  local host="$1"
+  local port="$2"
+
+  if has_command nc && nc -z "$host" "$port" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if has_command lsof && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if has_command ss &&
+    ss -ltn 2>/dev/null |
+      awk -v port="$port" 'NR > 1 { local_address = $4; sub(/.*:/, "", local_address); if (local_address == port) found = 1 } END { exit !found }'; then
+    return 0
+  fi
+
+  if has_command netstat &&
+    netstat -an 2>/dev/null |
+      awk -v port="$port" '$0 ~ /LISTEN/ { local_address = $4; if (local_address ~ "[.:]" port "$") found = 1 } END { exit !found }'; then
+    return 0
+  fi
+
+  return 1
 }
 
 process_running() {
@@ -30,26 +227,51 @@ brew_service_started() {
       awk -v service_name="$service_name" '$1 == service_name && $2 == "started" { found = 1 } END { exit !found }'
 }
 
-port_listening() {
-  local port="$1"
+compose_service_defined() {
+  local service_name="$1"
 
-  if has_command lsof && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  [[ -f "$COMPOSE_FILE" ]] || return 1
+
+  awk -v service_name="$service_name" '$0 ~ "^  " service_name ":" { found = 1 } END { exit !found }' "$COMPOSE_FILE"
+}
+
+compose_services_with_ports() {
+  [[ -f "$COMPOSE_FILE" ]] || return 1
+
+  awk '
+    $1 == "services:" {
+      in_services = 1
+      next
+    }
+    in_services && /^[^[:space:]]/ {
+      exit
+    }
+    in_services && /^  [A-Za-z0-9_-]+:/ {
+      service_name = $1
+      sub(/:$/, "", service_name)
+      next
+    }
+    in_services && service_name != "" && /^    ports:/ {
+      print service_name
+    }
+  ' "$COMPOSE_FILE"
+}
+
+compose_service_running() {
+  local service_name="$1"
+  local service_output
+
+  has_command docker || return 2
+  docker compose version >/dev/null 2>&1 || return 2
+
+  service_output="$(docker compose -f "$COMPOSE_FILE" ps --status running "$service_name" --format '{{.Service}}' 2>/dev/null || true)"
+  if printf "%s\n" "$service_output" | grep -qx "$service_name"; then
     return 0
   fi
 
-  if has_command ss &&
-    ss -ltn 2>/dev/null |
-      awk -v port="$port" 'NR > 1 { local_address = $4; sub(/.*:/, "", local_address); if (local_address == port) found = 1 } END { exit !found }'; then
-    return 0
-  fi
-
-  if has_command netstat &&
-    netstat -an 2>/dev/null |
-      awk -v port="$port" '$0 ~ /LISTEN/ { local_address = $4; if (local_address ~ "[.:]" port "$") found = 1 } END { exit !found }'; then
-    return 0
-  fi
-
-  return 1
+  service_output="$(docker compose -f "$COMPOSE_FILE" ps "$service_name" 2>/dev/null || true)"
+  printf "%s\n" "$service_output" |
+    awk -v service_name="$service_name" 'NR > 1 && $0 ~ service_name && ($0 ~ /Up/ || $0 ~ /running/) { found = 1 } END { exit !found }'
 }
 
 rbenv_init_configured_in() {
@@ -60,184 +282,284 @@ print_header() {
   printf "\n== %s ==\n" "$1"
 }
 
-# ========================
+docker_hint() {
+  hint "Start Docker services from README.md: LOCAL_DETACHED=true make local"
+}
+
+compose_config="$(read_makefile_var LOCAL_DOCKER_COMPOSE_CONFIG || true)"
+compose_config="${compose_config:-docker-compose-local.yml}"
+COMPOSE_FILE="$ROOT_DIR/docker/$compose_config"
+
 print_header "Ruby"
 
-if has_command ruby; then
-  ruby_path="$(which ruby)"
-  ruby_version="$(ruby -v)"
+expected_ruby_version="$(read_ruby_version || true)"
+source_info "$(relative_path "$RUBY_VERSION_FILE") => ${expected_ruby_version:-unknown}"
 
-  if [[ "$ruby_path" == *".rbenv/shims/ruby"* ]]; then
-    ok "Ruby via rbenv"
+if has_command ruby; then
+  ruby_path="$(command -v ruby)"
+  ruby_version="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"
+
+  if [[ -n "$expected_ruby_version" && "$ruby_version" == "$expected_ruby_version" ]]; then
+    ok "Ruby version $ruby_version matches .ruby-version"
   else
-    fail "Ruby is not using rbenv: $ruby_path"
-    info 'export PATH="$HOME/.rbenv/shims:$HOME/.rbenv/bin:$PATH"'
-    info 'eval "$(rbenv init -)"'
+    fail "Ruby version ${ruby_version:-unknown} does not match ${expected_ruby_version:-unknown}"
+    hint "Install Ruby ${expected_ruby_version:-from .ruby-version}"
   fi
 
-  info "$ruby_version"
+  info "Ruby executable: $ruby_path"
 else
   fail "Ruby is not installed"
+  hint "Install the version listed in .ruby-version"
 fi
 
-# ========================
 print_header "Bundler"
 
+expected_bundler_version="$(read_bundler_version || true)"
+source_info "$(relative_path "$GEMFILE_LOCK") BUNDLED WITH => ${expected_bundler_version:-unknown}"
+
 if has_command bundle; then
-  bundle_path="$(which bundle)"
+  bundle_path="$(command -v bundle)"
   bundle_version="$(bundle -v 2>/dev/null || true)"
+  expected_bundle_output="Bundler version $expected_bundler_version"
 
-  if [[ "$bundle_path" == *".rbenv/shims/bundle"* ]]; then
-    ok "Bundler via rbenv"
-  else
-    fail "Bundler is not using rbenv: $bundle_path"
-  fi
-
-  if [[ "$bundle_version" == "Bundler version 2.5.10" ]]; then
+  if [[ -n "$expected_bundler_version" && "$bundle_version" == "$expected_bundle_output" ]]; then
     ok "$bundle_version"
   else
     warn "Unexpected Bundler version: ${bundle_version:-unknown}"
-    info "Run: gem install bundler:2.5.10 && rbenv rehash"
+    hint "gem install bundler:${expected_bundler_version:-$(read_bundler_version)} && rbenv rehash"
   fi
+
+  info "Bundler executable: $bundle_path"
 else
   fail "Bundler is not installed"
+  hint "gem install bundler:${expected_bundler_version:-$(read_bundler_version)}"
 fi
 
-# ========================
 print_header "Shell"
 
-current_shell="${SHELL:-}"
-current_shell="${current_shell##*/}"
+if has_command rbenv || { has_command ruby && [[ "$(command -v ruby)" == *".rbenv/shims/ruby"* ]]; }; then
+  current_shell="${SHELL:-}"
+  current_shell="${current_shell##*/}"
 
-case "$current_shell" in
-  zsh)
-    shell_rc_files=("$HOME/.zshrc")
-    shell_rc_hint="~/.zshrc"
-    ;;
-  bash)
-    shell_rc_files=("$HOME/.bashrc" "$HOME/.bash_profile")
-    shell_rc_hint="~/.bashrc or ~/.bash_profile"
-    ;;
-  *)
-    shell_rc_files=("$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile")
-    shell_rc_hint="~/.zshrc, ~/.bashrc, or ~/.bash_profile"
-    ;;
-esac
+  case "$current_shell" in
+    zsh)
+      shell_rc_files=("$HOME/.zshrc")
+      shell_rc_hint="~/.zshrc"
+      ;;
+    bash)
+      shell_rc_files=("$HOME/.bashrc" "$HOME/.bash_profile")
+      shell_rc_hint="~/.bashrc or ~/.bash_profile"
+      ;;
+    *)
+      shell_rc_files=("$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile")
+      shell_rc_hint="~/.zshrc, ~/.bashrc, or ~/.bash_profile"
+      ;;
+  esac
 
-rbenv_init_file=""
-for shell_rc in "${shell_rc_files[@]}"; do
-  if [[ -f "$shell_rc" ]] && rbenv_init_configured_in "$shell_rc"; then
-    rbenv_init_file="$shell_rc"
-    break
+  source_info "\$SHELL => ${current_shell:-unknown}; accepted rbenv init form: eval \"\$(rbenv init -)\""
+
+  rbenv_init_file=""
+  for shell_rc in "${shell_rc_files[@]}"; do
+    if [[ -f "$shell_rc" ]] && rbenv_init_configured_in "$shell_rc"; then
+      rbenv_init_file="$shell_rc"
+      break
+    fi
+  done
+
+  if [[ -n "$rbenv_init_file" ]]; then
+    ok "rbenv init found in ${rbenv_init_file/#$HOME/~}"
+  else
+    warn "rbenv init not found in $shell_rc_hint"
+    hint 'Add: eval "$(rbenv init -)"'
+  fi
+else
+  info "rbenv not detected; skipping rbenv shell initialization check"
+fi
+
+print_header "Docker services"
+
+source_info "README.md Running Locally => make local"
+source_info "$(relative_path "$MAKEFILE") LOCAL_DOCKER_COMPOSE_CONFIG => $compose_config"
+source_info "$(relative_path "$COMPOSE_FILE")"
+
+if has_command docker && docker compose version >/dev/null 2>&1; then
+  ok "Docker Compose is available"
+else
+  fail "Docker Compose is not available"
+  hint "Install Docker Desktop, then run LOCAL_DETACHED=true make local"
+fi
+
+for compose_service in $(compose_services_with_ports); do
+  if compose_service_defined "$compose_service"; then
+    ok "Docker Compose config defines service '$compose_service'"
   fi
 done
 
-if [[ -n "$rbenv_init_file" ]]; then
-  ok "rbenv init OK in ${rbenv_init_file/#$HOME/~}"
-else
-  fail "Missing rbenv init in $shell_rc_hint"
-  info 'Add: eval "$(rbenv init -)"'
-fi
+info "Service availability is checked below using .env.development endpoints"
 
-# ========================
 print_header "Redis"
 
-if has_command redis-cli && redis-cli ping >/dev/null 2>&1; then
-  ok "Redis is running"
+redis_url="$(read_env_var REDIS_HOST || true)"
+redis_host="$(endpoint_host "$redis_url")"
+redis_port="$(endpoint_port "$redis_url" 6379)"
+source_info "$(relative_path "$ENV_FILE") REDIS_HOST => $redis_url"
+source_info "$(relative_path "$COMPOSE_FILE") service redis"
+
+if has_command redis-cli && redis-cli -h "$redis_host" -p "$redis_port" ping >/dev/null 2>&1; then
+  ok "Redis responds at $redis_host:$redis_port"
+elif tcp_listening "$redis_host" "$redis_port"; then
+  warn "Port $redis_port is open, but redis-cli did not confirm Redis"
 else
-  fail "Redis is not running"
-  info "brew install redis && brew services start redis"
+  fail "Redis is not responding at $redis_host:$redis_port"
+  docker_hint
 fi
 
-# ========================
 print_header "MongoDB"
 
-if port_listening 27017; then
-  ok "MongoDB is running"
+mongo_url="$(read_env_var MONGO_DATABASE_URL || true)"
+mongo_host="$(endpoint_host "$mongo_url")"
+mongo_port="$(endpoint_port "$mongo_url" 27017)"
+source_info "$(relative_path "$ENV_FILE") MONGO_DATABASE_URL => $mongo_url"
+source_info "$(relative_path "$COMPOSE_FILE") service mongo"
+
+if tcp_listening "$mongo_host" "$mongo_port"; then
+  ok "MongoDB port is open at $mongo_host:$mongo_port"
 else
-  fail "MongoDB is not running"
+  fail "MongoDB is not responding at $mongo_host:$mongo_port"
+  docker_hint
 fi
 
-# ========================
 print_header "MySQL"
 
-if port_listening 3306; then
-  ok "MySQL port is open"
+mysql_host="$(read_env_var DATABASE_HOST || true)"
+mysql_port="$(read_env_var DATABASE_PORT || true)"
+mysql_user="$(read_env_var DATABASE_USERNAME || true)"
+mysql_password="$(read_env_var DATABASE_PASSWORD || true)"
+source_info "$(relative_path "$ENV_FILE") DATABASE_HOST/DATABASE_PORT/DATABASE_USERNAME/DATABASE_PASSWORD"
+source_info "$(relative_path "$COMPOSE_FILE") service db"
+
+if tcp_listening "$mysql_host" "$mysql_port"; then
+  ok "MySQL port is open at $mysql_host:$mysql_port"
 
   if has_command mysql; then
-    if mysql -u root -ppassword -e "SELECT 1;" >/dev/null 2>&1; then
-      ok "MySQL credentials work"
+    if mysql -h "$mysql_host" -P "$mysql_port" -u "$mysql_user" -p"$mysql_password" -e "SELECT 1;" >/dev/null 2>&1; then
+      ok "MySQL credentials from .env.development work"
     else
-      fail "MySQL root/password is incorrect"
+      fail "MySQL credentials from .env.development did not work"
+      hint "Check DATABASE_* in .env.development against docker/docker-compose-local.yml"
+    fi
+  else
+    warn "mysql client is not installed; skipping credential check"
+  fi
+else
+  fail "MySQL is not responding at $mysql_host:$mysql_port"
+  docker_hint
+fi
+
+print_header "Elasticsearch"
+
+elasticsearch_url="$(read_env_var ELASTICSEARCH_HOST || true)"
+elasticsearch_host="$(endpoint_host "$elasticsearch_url")"
+elasticsearch_port="$(endpoint_port "$elasticsearch_url" 9200)"
+purchase_index_file="$ROOT_DIR/app/models/concerns/purchase/searchable.rb"
+purchase_index="$(read_index_name "$purchase_index_file" || true)"
+source_info "$(relative_path "$ENV_FILE") ELASTICSEARCH_HOST => $elasticsearch_url"
+source_info "$(relative_path "$COMPOSE_FILE") service elasticsearch"
+
+if tcp_listening "$elasticsearch_host" "$elasticsearch_port" && curl -fsS "$elasticsearch_url" >/dev/null 2>&1; then
+  ok "Elasticsearch responds at $elasticsearch_url"
+
+  if [[ -n "$purchase_index" ]]; then
+    source_info "$(relative_path "$purchase_index_file") index_name => $purchase_index"
+
+    if curl -fsS "$elasticsearch_url/$purchase_index" >/dev/null 2>&1; then
+      ok "Index '$purchase_index' exists"
+    else
+      warn "Index '$purchase_index' is missing"
+      hint "Run in bin/rails console: DevTools.delete_all_indices_and_reindex_all"
     fi
   fi
 else
-  fail "MySQL is not running"
+  fail "Elasticsearch is not responding at $elasticsearch_url"
+  docker_hint
 fi
 
-# ========================
-print_header "Elasticsearch"
-
-if port_listening 9200 && curl -fsS http://localhost:9200 >/dev/null 2>&1; then
-  ok "Elasticsearch is running"
-
-  if curl -fsS http://localhost:9200/purchases >/dev/null 2>&1; then
-    ok "Index 'purchases' exists"
-  else
-    warn "Missing index 'purchases'"
-    info "Run reindex task"
-  fi
-else
-  fail "Elasticsearch is not running"
-fi
-
-# ========================
 print_header "Nginx"
 
-if process_running nginx; then
-  ok "Nginx is running"
+source_info "$(relative_path "$COMPOSE_FILE") service nginx"
+source_info "$(relative_path "$NGINX_CONFIG")"
+
+if compose_service_running nginx; then
+  ok "Docker service 'nginx' is running"
+elif process_running nginx; then
+  ok "Local nginx process is running"
 elif brew_service_started nginx; then
-  ok "Nginx brew service is started"
+  ok "Homebrew nginx service is started"
 else
   fail "Nginx is not running"
+  docker_hint
 fi
 
-# ========================
 print_header "SSL"
 
-if [[ -f /etc/ssl/certs/gumroad_dev.crt ]]; then
-  ok "SSL certificates found"
+nginx_cert_path="$(nginx_certificate_path || true)"
+repo_cert_path="$ROOT_DIR/docker/local-nginx/certs/${nginx_cert_path##*/}"
+source_info "$(relative_path "$NGINX_CONFIG") ssl_certificate => ${nginx_cert_path:-unknown}"
+source_info "$(relative_path "$COMPOSE_FILE") mounts docker/local-nginx/certs"
+
+if [[ -f "$repo_cert_path" ]]; then
+  ok "Docker SSL certificate exists at $(relative_path "$repo_cert_path")"
+elif [[ -n "$nginx_cert_path" && -f "$nginx_cert_path" ]]; then
+  ok "Local SSL certificate exists at $nginx_cert_path"
 else
-  fail "SSL certificates missing"
+  fail "SSL certificate is missing"
+  hint "Run bin/generate_ssl_certificates, then LOCAL_DETACHED=true make local"
 fi
 
-# ========================
 print_header "gumroad.dev"
 
-if curl -kfsS https://gumroad.dev >/dev/null 2>&1; then
-  ok "gumroad.dev responds"
+primary_domain="$(nginx_primary_domain || true)"
+primary_domain="${primary_domain:-gumroad.dev}"
+app_url="https://$primary_domain"
+source_info "$(relative_path "$NGINX_CONFIG") server_name => $primary_domain"
+
+if curl -kfsS "$app_url" >/dev/null 2>&1; then
+  ok "$app_url responds"
   SERVER_UP=1
 else
-  warn "gumroad.dev is not responding yet"
-  SERVER_UP=0
+  warn "$app_url is not responding yet"
 fi
 
-# ========================
-print_header "Ports"
+print_header "Procfile ports"
 
-port_listening 3000 && ok "3000 → Rails running" || info "3000 free"
-port_listening 8080 && ok "8080 → AnyCable running" || info "8080 free"
+rails_port="$(procfile_port_after_flag web -p || true)"
+anycable_upstream_port="$(nginx_upstream_port anycable_ws || true)"
+source_info "$(relative_path "$PROCFILE") web command => port ${rails_port:-unknown}"
+source_info "$(relative_path "$NGINX_CONFIG") upstream anycable_ws => port ${anycable_upstream_port:-unknown}"
 
-# ========================
+if [[ -n "$rails_port" ]]; then
+  tcp_listening 127.0.0.1 "$rails_port" && ok "$rails_port -> Rails running" || info "$rails_port free"
+fi
+
+if [[ -n "$anycable_upstream_port" ]]; then
+  tcp_listening 127.0.0.1 "$anycable_upstream_port" && ok "$anycable_upstream_port -> AnyCable running" || info "$anycable_upstream_port free"
+fi
+
 print_header "Final verdict"
 
 echo
 
 if [[ "$SERVER_UP" -eq 1 ]]; then
   printf "🟢 Server is already running\n\n"
-  printf "🌐 https://gumroad.dev\n\n"
-else
+  printf "🌐 %s\n\n" "$app_url"
+elif [[ "$FAILURES" -eq 0 ]]; then
   printf "🟡 Ready to start\n\n"
   printf "▶ Run:\n"
+  printf "   bin/dev\n\n"
+else
+  printf "🟠 Local setup needs attention\n\n"
+  printf "▶ Docker-first setup path:\n"
+  printf "   LOCAL_DETACHED=true make local\n"
+  printf "   bin/rails db:prepare\n"
   printf "   bin/dev\n\n"
 fi
