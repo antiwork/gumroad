@@ -1,4 +1,4 @@
-import { StripeCardElement } from "@stripe/stripe-js";
+import { StripeElements } from "@stripe/stripe-js";
 
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
@@ -25,7 +25,7 @@ import { Product } from "$app/components/Checkout/payment";
 export type SavedSelectedPaymentMethod = { type: "saved" };
 export type NewCardSelectedPaymentMethod = {
   type: "card";
-  element: StripeCardElement;
+  elements: StripeElements;
   email: string;
   keepOnFile: null | boolean;
   zipCode: null | string;
@@ -160,7 +160,7 @@ export async function getPaymentMethodResult(
     }
     case "card": {
       const paymentMethodData = await prepareCardPaymentMethodData({
-        cardElement: selected.element,
+        elements: selected.elements,
         email: selected.email,
       });
       if (paymentMethodData.status === "success") {

@@ -1,6 +1,6 @@
 import { CreditCard } from "@boxicons/react";
-import { CardElement, Elements } from "@stripe/react-stripe-js";
-import { StripeCardElement, StripeCardElementChangeEvent, StripeElementStyleVariant } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useElements } from "@stripe/react-stripe-js";
+import { Appearance, StripeElements, StripeElementsOptionsMode } from "@stripe/stripe-js";
 import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
@@ -12,31 +12,45 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 
+const MIN_STRIPE_AMOUNT_CENTS = 50;
+
+const ElementsBridge = ({ onReady }: { onReady: (elements: StripeElements) => void }) => {
+  const elements = useElements();
+  const calledRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (elements && !calledRef.current) {
+      calledRef.current = true;
+      onReady(elements);
+    }
+  }, [elements]);
+
+  return null;
+};
+
 export const CreditCardInput = ({
   disabled,
   savedCreditCard,
-  invalid,
   onReady,
   useSavedCard,
   setUseSavedCard,
-  onChange,
+  amount,
+  paymentMethodTypes = ["card", "link"],
 }: {
   disabled?: boolean;
   savedCreditCard: SavedCreditCard | null;
-  invalid?: boolean;
-  onReady: (element: StripeCardElement) => void;
+  onReady: (elements: StripeElements) => void;
   useSavedCard: boolean;
   setUseSavedCard: (value: boolean) => void;
-  onChange?: (evt: StripeCardElementChangeEvent) => void;
+  amount: number;
+  paymentMethodTypes?: string[];
 }) => {
-  // Actually set font family, size, and color and determined on the first render based on a ghost div that is unmounted
-  // as soon as the measurement is performed.
-  const [baseStripeStyle, setBaseStripeStyle] = React.useState<null | StripeElementStyleVariant>(null);
+  const [appearance, setAppearance] = React.useState<Appearance | null>(null);
 
   return (
-    <Fieldset state={invalid ? "danger" : undefined}>
+    <Fieldset>
       <FieldsetTitle>
-        <Label>Card information</Label>
+        <Label>Payment details</Label>
         {savedCreditCard ? (
           <button
             className="cursor-pointer font-normal underline all-unset"
@@ -54,40 +68,76 @@ export const CreditCardInput = ({
           <span style={{ marginLeft: "auto" }}>{savedCreditCard.expiration_date}</span>
         </InputGroup>
       ) : (
-        <InputGroup disabled={disabled} aria-label="Card information" aria-invalid={invalid}>
-          {baseStripeStyle == null ? (
+        <>
+          {appearance == null ? (
             <input
+              className="invisible absolute"
               ref={(el) => {
                 if (el == null) return;
                 const inputStyle = window.getComputedStyle(el);
                 const color = getCssVariable("color").split(" ").join(",");
                 const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
                 const sanitizedFontFamily = inputStyle.fontFamily.replace(/\\[0-9a-fA-F]+\s?/gu, "");
-                setBaseStripeStyle({
-                  fontFamily: sanitizedFontFamily || "sans-serif",
-                  color: inputStyle.color,
-                  iconColor: placeholderColor,
-                  "::placeholder": { color: placeholderColor },
+                setAppearance({
+                  variables: {
+                    fontFamily: sanitizedFontFamily || "sans-serif",
+                    colorText: inputStyle.color,
+                    colorTextPlaceholder: placeholderColor,
+                    colorIcon: placeholderColor,
+                  },
                 });
               }}
             />
           ) : null}
-          <StripeElementsProvider>
-            <CardElement
-              className="flex-1"
-              options={{
-                style: { base: baseStripeStyle ?? {} },
-                hidePostalCode: true,
-                disabled: disabled ?? false,
-                hideIcon: true,
-              }}
-              onReady={onReady}
-              {...(onChange ? { onChange } : {})}
-            />
-          </StripeElementsProvider>
-        </InputGroup>
+          {appearance != null ? (
+            <DeferredIntentElementsProvider
+              amount={Math.max(amount, MIN_STRIPE_AMOUNT_CENTS)}
+              appearance={appearance}
+              paymentMethodTypes={paymentMethodTypes}
+            >
+              <ElementsBridge onReady={onReady} />
+              <PaymentElement
+                options={{
+                  fields: { billingDetails: { address: { postalCode: "never", country: "never" } } },
+                  layout: "tabs",
+                }}
+              />
+            </DeferredIntentElementsProvider>
+          ) : null}
+        </>
       )}
     </Fieldset>
+  );
+};
+
+const DeferredIntentElementsProvider = ({
+  children,
+  amount,
+  appearance,
+  paymentMethodTypes,
+}: {
+  children: React.ReactNode;
+  amount: number;
+  appearance: Appearance;
+  paymentMethodTypes: string[];
+}) => {
+  const [stripePromise] = React.useState(getStripeInstance);
+  const font = useFont();
+  const stripeFonts = [{ family: font.name, src: `url(${font.url})` }];
+
+  const options: StripeElementsOptionsMode = {
+    fonts: stripeFonts,
+    mode: "payment",
+    amount,
+    currency: "usd",
+    paymentMethodTypes,
+    appearance,
+  };
+
+  return (
+    <Elements stripe={stripePromise} options={options}>
+      {children}
+    </Elements>
   );
 };
 
@@ -95,7 +145,6 @@ export const StripeElementsProvider = ({ children }: { children: React.ReactNode
   const [stripePromise] = React.useState(getStripeInstance);
   const font = useFont();
 
-  // Since Stripe Elements are rendered in iframes, we need to explicitly pass in the font source & input styles
   const stripeFonts = [{ family: font.name, src: `url(${font.url})` }];
 
   return (
