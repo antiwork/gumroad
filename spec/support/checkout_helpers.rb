@@ -194,7 +194,8 @@ end
 
 def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123", zip_code: nil)
   within_fieldset "Card information" do
-    within_frame do
+    stripe_frame = all("iframe", wait: 10).find { |f| f["title"]&.include?("Secure") || f["src"]&.include?("elements-inner-card") } || first("iframe", wait: 10)
+    within_frame(stripe_frame) do
       fill_in "Card number", with: number, visible: false if number.present?
       fill_in "MM / YY", with: expiry, visible: false if expiry.present?
       fill_in "CVC", with: cvc, visible: false if cvc.present?
