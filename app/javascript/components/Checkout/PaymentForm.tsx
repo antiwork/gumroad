@@ -720,6 +720,7 @@ const CreditCardContent = () => {
         useSavedCard={useSavedCard}
         setUseSavedCard={setUseSavedCard}
         onChange={(evt) => setCardError(!!evt.error)}
+        enableLink
       />
       {!useSavedCard && isLoggedIn ? (
         <Label className="flex items-center gap-2">

@@ -20,6 +20,7 @@ export const CreditCardInput = ({
   useSavedCard,
   setUseSavedCard,
   onChange,
+  enableLink = false,
 }: {
   disabled?: boolean;
   savedCreditCard: SavedCreditCard | null;
@@ -28,6 +29,7 @@ export const CreditCardInput = ({
   useSavedCard: boolean;
   setUseSavedCard: (value: boolean) => void;
   onChange?: (evt: StripeCardElementChangeEvent) => void;
+  enableLink?: boolean;
 }) => {
   // Actually set font family, size, and color and determined on the first render based on a ghost div that is unmounted
   // as soon as the measurement is performed.
@@ -79,6 +81,7 @@ export const CreditCardInput = ({
                 style: { base: baseStripeStyle ?? {} },
                 hidePostalCode: true,
                 disabled: disabled ?? false,
+                disableLink: !enableLink,
                 hideIcon: true,
               }}
               onReady={onReady}
