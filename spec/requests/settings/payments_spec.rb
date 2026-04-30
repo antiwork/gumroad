@@ -206,7 +206,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Phone number", with: "5022-541-982")
 
       within_fieldset "Card information" do
-        within_frame do
+        stripe_frame = all("iframe", wait: 10).find { |f| f["title"]&.include?("Secure") || f["src"]&.include?("elements-inner-card") } || first("iframe", wait: 10)
+        within_frame(stripe_frame) do
           fill_in "Card number", with: "5200828282828210"
           fill_in "MM / YY", with: StripePaymentMethodHelper::EXPIRY_MMYY
           fill_in "CVC", with: "123"
