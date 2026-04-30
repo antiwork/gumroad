@@ -192,7 +192,19 @@ describe Api::Internal::Admin::PayoutsController do
       expect(comment.content).to eq("Payouts resumed.")
     end
 
-    it "short-circuits when payouts are not paused" do
+    it "reports payouts_paused: true after admin resume when the seller is still self-paused" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID, payouts_paused_by_user: true)
+
+      post :resume, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["payouts_paused"]).to be(true)
+      expect(user.reload.payouts_paused_internally?).to be(false)
+      expect(user.payouts_paused_by_user?).to be(true)
+    end
+
+    it "short-circuits when payouts are not paused by admin" do
       expect { post :resume, params: { email: user.email } }
         .not_to change { user.comments.count }
 
@@ -200,8 +212,21 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body).to include(
         "success" => true,
         "status" => "not_paused",
-        "message" => "Payouts are not paused",
+        "message" => "Payouts are not paused by admin",
         "payouts_paused" => false
+      )
+    end
+
+    it "reports payouts_paused: true on short-circuit when the seller has self-paused" do
+      user.update!(payouts_paused_by_user: true)
+
+      post :resume, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "not_paused",
+        "payouts_paused" => true
       )
     end
   end

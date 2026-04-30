@@ -1034,6 +1034,22 @@ describe Api::Internal::Admin::PurchasesController do
         "message" => "Buyer is not blocked"
       )
     end
+
+    it "clears the stale admin flag when BlockedObject was cleared elsewhere" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      purchase.unblock_buyer!
+      purchase.update!(is_buyer_blocked_by_admin: true)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+      expect(purchase.buyer_blocked?).to be(false)
+
+      expect { post :unblock_buyer, params: params }
+        .to change { purchase.reload.is_buyer_blocked_by_admin? }.from(true).to(false)
+        .and change { purchase.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+    end
   end
 
   describe "POST refund_for_fraud" do

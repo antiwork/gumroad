@@ -51,8 +51,8 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       return render json: {
         success: true,
         status: "not_paused",
-        message: "Payouts are not paused",
-        payouts_paused: false
+        message: "Payouts are not paused by admin",
+        payouts_paused: @user.payouts_paused?
       }
     end
 
@@ -68,7 +68,7 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
     render json: {
       success: true,
       message: "Payouts resumed for #{@user.email}",
-      payouts_paused: false
+      payouts_paused: @user.reload.payouts_paused?
     }
   end
 
