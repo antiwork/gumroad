@@ -605,6 +605,23 @@ describe StripeChargeProcessor, :vcr do
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
     end
 
+    describe "payment_method_types" do
+      it "includes link for on-session charges" do
+        expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(payment_method_types: ["card", "link"])).and_call_original
+        subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: false)
+      end
+
+      it "only includes card for off-session charges" do
+        expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(payment_method_types: ["card"])).and_call_original
+        subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
+      end
+
+      it "defaults to card only (off_session defaults to true)" do
+        expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(payment_method_types: ["card"])).and_call_original
+        subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
+      end
+    end
+
     it "passes on the reference" do
       expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(metadata: hash_including(purchase: "reference"))).and_call_original
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
