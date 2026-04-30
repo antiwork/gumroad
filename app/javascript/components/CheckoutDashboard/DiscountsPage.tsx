@@ -445,7 +445,7 @@ const DiscountsPage = ({
                                 <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none" usePortal>
                               <Menu>
                                 <MenuItem
                                   inert={!offerCode.can_update || isLoading}

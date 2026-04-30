@@ -93,7 +93,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                 </Button>
               </PopoverTrigger>
             </PopoverAnchor>
-            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none" usePortal>
               <Card>
                 <ReviewForm
                   permalink={review.product.permalink}
