@@ -3,24 +3,38 @@
 # bin/test-confidence — AI-driven test execution. Opus decides what to run and how confident to be.
 #
 # Usage:
-#   bin/test-confidence          # Run to 99%, stop
-#   bin/test-confidence --full   # Run to 100%
+#   bin/test-confidence            # Run to 99%, stop. Skips past pre-existing failures.
+#   bin/test-confidence --full     # Run to 100%
+#   bin/test-confidence --strict   # Halt on any failure, including pre-existing
 #
-# Requires: ANTHROPIC_API_KEY
+# Requires: ANTHROPIC_API_KEY (auto-sourced from .env if not exported)
 #
 set -euo pipefail
 
 RUN_FULL=false
+STRICT=false
 
 for arg in "$@"; do
   case "$arg" in
-    --full) RUN_FULL=true ;;
+    --full)   RUN_FULL=true ;;
+    --strict) STRICT=true ;;
   esac
 done
 
+# ── API key (auto-source .env if not exported) ──
+
+if [[ -z "${ANTHROPIC_API_KEY:-}" && -f .env ]]; then
+  KEY_VALUE=$(grep -E '^ANTHROPIC_API_KEY=' .env | head -1 | cut -d= -f2-)
+  KEY_VALUE="${KEY_VALUE%\"}"; KEY_VALUE="${KEY_VALUE#\"}"
+  KEY_VALUE="${KEY_VALUE%\'}"; KEY_VALUE="${KEY_VALUE#\'}"
+  if [[ -n "$KEY_VALUE" ]]; then
+    export ANTHROPIC_API_KEY="$KEY_VALUE"
+  fi
+fi
+
 if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
   echo ""
-  echo "  ❌ ANTHROPIC_API_KEY is required. Set it in your environment."
+  echo "  ❌ ANTHROPIC_API_KEY is required. Export it or add it to .env."
   echo ""
   exit 1
 fi
@@ -30,19 +44,24 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 MERGE_BASE=""
 
-LOCAL_CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
+LOCAL_CHANGED_CODE=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
+LOCAL_CHANGED_ALL=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
+  | sort -u || true)
 
-BRANCH_CHANGED=""
+BRANCH_CHANGED_CODE=""
+BRANCH_CHANGED_ALL=""
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
   MERGE_BASE=$(git merge-base origin/main HEAD 2>/dev/null || echo "")
   if [[ -n "$MERGE_BASE" ]]; then
-    BRANCH_CHANGED=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null \
+    BRANCH_CHANGED_CODE=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null \
       | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
+    BRANCH_CHANGED_ALL=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null || true)
   fi
 fi
 
-CHANGED=$(printf '%s\n%s' "$LOCAL_CHANGED" "$BRANCH_CHANGED" | sort -u | grep -v '^$' || true)
+CHANGED=$(printf '%s\n%s' "$LOCAL_CHANGED_CODE" "$BRANCH_CHANGED_CODE" | sort -u | grep -v '^$' || true)
+CHANGED_ALL=$(printf '%s\n%s' "$LOCAL_CHANGED_ALL" "$BRANCH_CHANGED_ALL" | sort -u | grep -v '^$' || true)
 
 if [[ -z "$CHANGED" ]]; then
   echo ""
@@ -52,7 +71,7 @@ if [[ -z "$CHANGED" ]]; then
 fi
 
 FILE_COUNT=$(echo "$CHANGED" | wc -l | tr -d ' ')
-if [[ -n "$BRANCH_CHANGED" ]]; then
+if [[ -n "$BRANCH_CHANGED_CODE" ]]; then
   echo "  📂 $FILE_COUNT files changed ($CURRENT_BRANCH vs main)"
 else
   echo "  📂 $FILE_COUNT files changed (local)"
@@ -60,30 +79,58 @@ fi
 
 # ── Get the diff ──
 
-# Build diff text: include both local changes AND branch commits when both exist
 DIFF_PARTS=""
-if [[ -n "$LOCAL_CHANGED" ]]; then
-  DIFF_PARTS+=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null)
-  DIFF_PARTS+=$'\n'
+if [[ -n "$LOCAL_CHANGED_CODE" ]]; then
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    chunk=$(git diff HEAD -- "$f" 2>/dev/null || true)
+    DIFF_PARTS+="$chunk"$'\n'
+  done <<< "$LOCAL_CHANGED_CODE"
 fi
-if [[ -n "$MERGE_BASE" && -n "$BRANCH_CHANGED" ]]; then
-  DIFF_PARTS+=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null)
+if [[ -n "$MERGE_BASE" && -n "$BRANCH_CHANGED_CODE" ]]; then
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    chunk=$(git diff "$MERGE_BASE"...HEAD -- "$f" 2>/dev/null || true)
+    DIFF_PARTS+="$chunk"$'\n'
+  done <<< "$BRANCH_CHANGED_CODE"
 fi
-DIFF_TEXT=$(echo "$DIFF_PARTS" | head -500)
 
-# ── Get all spec files ──
+DIFF_BYTES_MAX=200000
+if [[ ${#DIFF_PARTS} -gt $DIFF_BYTES_MAX ]]; then
+  DIFF_TEXT="${DIFF_PARTS:0:$DIFF_BYTES_MAX}"$'\n\n[diff truncated at 200KB]'
+else
+  DIFF_TEXT="$DIFF_PARTS"
+fi
+
+# ── Plan cache (key on diff hash) ──
+
+CACHE_DIR="tmp/test-confidence"
+mkdir -p "$CACHE_DIR"
+find "$CACHE_DIR" -type f -name "*.json" -mtime +7 -delete 2>/dev/null || true
+
+DIFF_HASH=$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | awk '{print $1}')
+CACHE_FILE="$CACHE_DIR/${DIFF_HASH:0:16}.json"
+
+# ── All spec files ──
 
 ALL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort)
 TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
 
-# ── AI planning: one call, Opus decides everything ──
+# ── AI planning (cached if available) ──
 
-PLAN_FILE=$(mktemp)
+if [[ -f "$CACHE_FILE" ]]; then
+  AI_JSON=$(cat "$CACHE_FILE")
+  printf "  🧠 Cached plan (%s)\n" "${DIFF_HASH:0:12}"
+else
+  TOUCHED_DIRS=$(echo "$CHANGED_ALL" | awk -F/ '
+    NF>=3 { print $1"/"$2"/"$3 }
+    NF==2 { print $1"/"$2 }
+    NF==1 { print $1 }
+  ' | sort -u | head -30)
 
-# Group specs by directory for compact listing
-SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
+  SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
 
-PROMPT="You are a senior Rails engineer planning test execution for a code change.
+  PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
 Your job: given this diff, return an ordered list of test files to run, grouped into confidence milestones. YOU decide how many tests are needed for each confidence level based on the risk profile of this specific diff.
 
@@ -96,6 +143,9 @@ Think about:
 - What could break that isn't obvious?
 - What are the transitive dependencies?
 - How risky is this change?
+
+## Directories touched by the diff:
+${TOUCHED_DIRS}
 
 ## Diff:
 ${DIFF_TEXT}
@@ -124,38 +174,38 @@ Rules:
 - Be aggressive early: put the highest-value tests first.
 - For low-risk changes, the 99 milestone might only need 2-5 tests.
 - For critical changes, the 99 milestone might need 50+ tests.
+- Prefer specs whose source files are in the touched directories. A user_spec.rb only makes sense if user.rb (or something it depends on) was changed.
 
 Return ONLY the JSON object. No markdown, no explanation outside the JSON."
 
-PAYLOAD=$(jq -n \
-  --arg model "claude-opus-4-7" \
-  --arg prompt "$PROMPT" \
-  '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
+  PAYLOAD=$(jq -n \
+    --arg model "claude-opus-4-7" \
+    --arg prompt "$PROMPT" \
+    '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
 
-printf "  🧠 Opus planning test execution..."
+  printf "  🧠 Opus planning test execution..."
 
-RESPONSE=$(curl -s --max-time 60 \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-  -H "anthropic-version: 2023-06-01" \
-  -d "$PAYLOAD" \
-  "https://api.anthropic.com/v1/messages" 2>/dev/null)
+  RESPONSE=$(curl -s --max-time 60 \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+    -H "anthropic-version: 2023-06-01" \
+    -d "$PAYLOAD" \
+    "https://api.anthropic.com/v1/messages" 2>/dev/null)
 
-if [[ -z "$RESPONSE" ]]; then
-  echo " failed (no response)"
-  exit 1
-fi
+  if [[ -z "$RESPONSE" ]]; then
+    echo " failed (no response)"
+    exit 1
+  fi
 
-AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+  AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
 
-if [[ -z "$AI_TEXT" ]]; then
-  echo " failed (empty response)"
-  echo "  Response: $(echo "$RESPONSE" | jq -r '.error.message // "unknown error"' 2>/dev/null)"
-  exit 1
-fi
+  if [[ -z "$AI_TEXT" ]]; then
+    echo " failed (empty response)"
+    echo "  Response: $(echo "$RESPONSE" | jq -r '.error.message // "unknown error"' 2>/dev/null)"
+    exit 1
+  fi
 
-# Extract JSON
-AI_JSON=$(echo "$AI_TEXT" | python3 -c "
+  AI_JSON=$(echo "$AI_TEXT" | python3 -c "
 import sys, json, re
 text = sys.stdin.read()
 m = re.search(r'\{[\s\S]*\}', text)
@@ -167,18 +217,21 @@ if m:
         pass
 " 2>/dev/null || true)
 
-if [[ -z "$AI_JSON" ]]; then
-  echo " failed to parse AI response"
-  exit 1
+  if [[ -z "$AI_JSON" ]]; then
+    echo " failed to parse AI response"
+    exit 1
+  fi
+
+  echo "$AI_JSON" > "$CACHE_FILE"
+  echo " done"
 fi
 
+PLAN_FILE=$(mktemp)
 echo "$AI_JSON" > "$PLAN_FILE"
+
 RISK=$(echo "$AI_JSON" | jq -r '.risk // "unknown"')
 REASON=$(echo "$AI_JSON" | jq -r '.reason // ""')
-echo " done"
 echo "  ⚡ Risk: $RISK — $REASON"
-
-# ── Parse plan and execute ──
 
 MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
 
@@ -187,6 +240,81 @@ MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
 pluralize() {
   local n=$1 word=$2
   if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
+}
+
+# Heuristic: returns 0 (true) if this spec failure is likely pre-existing —
+# i.e., neither the spec file nor its source counterpart is in the diff.
+# Returns 1 (false) if the diff plausibly caused it.
+is_likely_preexisting() {
+  local spec_file=$1
+  spec_file="${spec_file#./}"
+
+  if echo "$CHANGED_ALL" | grep -qxF "$spec_file"; then
+    return 1
+  fi
+
+  local module="${spec_file#spec/}"
+  module="${module%_spec.rb}"
+  local basename="${module##*/}"
+
+  if echo "$CHANGED_ALL" | grep -qE "(^|/)${basename}\.(rb|ts|tsx|js|jsx)$"; then
+    return 1
+  fi
+
+  return 0
+}
+
+# Worktree state for merge-base verification (cleaned up on exit/interrupt)
+WORKTREE_DIR=""
+cleanup_worktree() {
+  if [[ -n "$WORKTREE_DIR" && -d "$WORKTREE_DIR" ]]; then
+    git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || rm -rf "$WORKTREE_DIR"
+    WORKTREE_DIR=""
+  fi
+}
+trap cleanup_worktree EXIT INT TERM
+
+# Verify a heuristic "pre-existing" verdict by re-running the failing examples
+# on merge-base in a temporary worktree.
+#
+# Returns: 0 = confirmed pre-existing (failed on merge-base too)
+#          1 = real cross-file regression (passed on merge-base, fails on HEAD)
+#          2 = couldn't verify (no merge-base, schema/dep drift, parse failure)
+verify_preexisting_on_merge_base() {
+  local rspec_output=$1
+
+  [[ -z "$MERGE_BASE" ]] && return 2
+
+  # Skip when DB schema or bundler state likely diverges from merge-base
+  if echo "$CHANGED_ALL" | grep -qE '^db/migrate/.*\.rb$'; then
+    return 2
+  fi
+  if echo "$CHANGED_ALL" | grep -qxF 'Gemfile.lock'; then
+    return 2
+  fi
+
+  local failing_ids
+  failing_ids=$(echo "$rspec_output" | grep -E '^rspec \./spec/' | awk '{print $2}' | head -50)
+  [[ -z "$failing_ids" ]] && return 2
+
+  WORKTREE_DIR=$(mktemp -d -t test-confidence-base.XXXXXX)
+  if ! git worktree add -q --detach "$WORKTREE_DIR" "$MERGE_BASE" 2>/dev/null; then
+    rm -rf "$WORKTREE_DIR"
+    WORKTREE_DIR=""
+    return 2
+  fi
+
+  local rerun_rc=0
+  ( cd "$WORKTREE_DIR" && bundle exec rspec --format progress --no-color $failing_ids >/dev/null 2>&1 ) || rerun_rc=$?
+
+  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || rm -rf "$WORKTREE_DIR"
+  WORKTREE_DIR=""
+
+  if [[ $rerun_rc -eq 0 ]]; then
+    return 1
+  else
+    return 0
+  fi
 }
 
 # ── Header ──
@@ -217,6 +345,8 @@ echo ""
 START=$(date +%s)
 PASSED=0
 FAILED=0
+PREEXISTING=0
+PREEXISTING_FILES=()
 SEEN_RUN=$(mktemp)
 CURRENT_CONFIDENCE=0
 
@@ -239,7 +369,6 @@ for (( m=0; m<MILESTONES; m++ )); do
   CONF=$(jq -r ".milestones[$m].confidence" "$PLAN_FILE")
   TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
-  # Resolve ALL_REMAINING
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
     MILESTONE_TESTS=$(echo "$ALL_SPECS" | while IFS= read -r s; do
       grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
@@ -256,7 +385,6 @@ for (( m=0; m<MILESTONES; m++ )); do
     continue
   fi
 
-  # Skip milestones past 99 unless --full
   if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
     echo "  ${CONF}%  ←  $(pluralize $MILESTONE_COUNT test) ⬜ skipped"
     continue
@@ -278,26 +406,60 @@ for (( m=0; m<MILESTONES; m++ )); do
       bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
       printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
     else
-      FAILED=$((FAILED + 1))
-      echo ""
-      echo ""
-      echo "  ═══════════════════════════════════════════════════"
-      echo "    ❌ FAILED — $spec"
-      echo "  ═══════════════════════════════════════════════════"
-      echo ""
-      echo "$output" | tail -20 | sed 's/^/    /'
-      echo ""
-      echo "  Fix this before committing."
-      echo ""
-      rm -f "$PLAN_FILE" "$SEEN_RUN"
-      exit 1
+      verdict="regression"
+      if [[ "$STRICT" != true ]] && is_likely_preexisting "$spec"; then
+        elapsed=$(( $(date +%s) - START ))
+        bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
+        printf "\r\033[K  %s  →%s%%  %d/%d  %ds  🔍 verifying %s on merge-base..." \
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$(basename "$spec")"
+
+        set +e
+        verify_preexisting_on_merge_base "$output"
+        verify_rc=$?
+        set -e
+
+        case $verify_rc in
+          0) verdict="confirmed pre-existing" ;;
+          1) verdict="cross-file regression" ;;
+          2) verdict="likely pre-existing (unverified)" ;;
+        esac
+      fi
+
+      if [[ "$verdict" == "regression" || "$verdict" == "cross-file regression" ]]; then
+        FAILED=$((FAILED + 1))
+        echo ""
+        echo ""
+        echo "  ═══════════════════════════════════════════════════"
+        if [[ "$verdict" == "cross-file regression" ]]; then
+          echo "    ❌ FAILED (cross-file regression) — $spec"
+          echo "  ───────────────────────────────────────────────────"
+          echo "    These examples pass on merge-base but fail on your branch."
+        else
+          echo "    ❌ FAILED — $spec"
+        fi
+        echo "  ═══════════════════════════════════════════════════"
+        echo ""
+        echo "$output" | tail -20 | sed 's/^/    /'
+        echo ""
+        echo "  Fix this before committing."
+        echo ""
+        rm -f "$PLAN_FILE" "$SEEN_RUN"
+        exit 1
+      else
+        PREEXISTING=$((PREEXISTING + 1))
+        PREEXISTING_FILES+=("$spec — $verdict")
+        MILESTONE_PASSED=$((MILESTONE_PASSED + 1))
+        elapsed=$(( $(date +%s) - START ))
+        bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
+        printf "\r\033[K  %s  →%s%%  %d/%d  %ds  ⚠ %s: %s\n" \
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$verdict" "$(basename "$spec")"
+      fi
     fi
   done <<< "$MILESTONE_TESTS"
 
   CURRENT_CONFIDENCE=$CONF
   elapsed=$(( $(date +%s) - START ))
 
-  # Milestone complete
   echo ""
   if [[ "$CURRENT_CONFIDENCE" -ge 99 && "$PHASE" != "green" ]]; then
     echo ""
@@ -305,6 +467,9 @@ for (( m=0; m<MILESTONES; m++ )); do
     echo "  $bar"
     echo ""
     echo "  ✅ ${CURRENT_CONFIDENCE}% confidence — $(pluralize $PASSED test) passed in ${elapsed}s"
+    if [[ "$PREEXISTING" -gt 0 ]]; then
+      echo "     ($(pluralize $PREEXISTING failure) pre-existing, skipped — see list below)"
+    fi
     echo "     Safe to commit."
     echo ""
   else
@@ -325,6 +490,15 @@ if [[ "$CURRENT_CONFIDENCE" -ge 100 ]]; then
 elif [[ "$CURRENT_CONFIDENCE" -lt 99 ]]; then
   echo ""
   echo "  ⚠️  Only reached ${CURRENT_CONFIDENCE}% — $(pluralize $PASSED test) in ${elapsed}s"
+  echo ""
+fi
+
+if [[ "$PREEXISTING" -gt 0 ]]; then
+  echo "  Pre-existing failures (skipped):"
+  for f in "${PREEXISTING_FILES[@]}"; do
+    echo "    ⚠ $f"
+  done
+  echo "  Re-run with --strict to halt on these."
   echo ""
 fi
 

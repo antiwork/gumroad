@@ -3982,28 +3982,28 @@ describe Purchase, :vcr do
     end
 
     it "is false if the purchase is not recommended" do
-      expect(@purchase.send(:charge_discover_fee?)).to eq(false)
+      expect(@purchase.charge_discover_fee?).to eq(false)
     end
 
     it "returns true if the purchase is recommended" do
       @purchase.was_product_recommended = true
       @purchase.save
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
       @purchase.seller.recommendation_type = User::RecommendationType::NO_RECOMMENDATIONS
       @purchase.seller.save
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
     end
 
     it "returns false if the purchase is recommended by library or more like this" do
-      expect(@purchase.send(:charge_discover_fee?)).to eq(false)
+      expect(@purchase.charge_discover_fee?).to eq(false)
 
       @purchase.update!(was_product_recommended: true)
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
 
       RecommendationType.all.each do |recommendation_type|
         @purchase.update!(recommended_by: recommendation_type)
         expect(@purchase.was_product_recommended?).to eq(true)
-        expect(@purchase.send(:charge_discover_fee?)).to eq(!RecommendationType.is_free_recommendation_type?(recommendation_type))
+        expect(@purchase.charge_discover_fee?).to eq(!RecommendationType.is_free_recommendation_type?(recommendation_type))
       end
     end
   end
@@ -6318,10 +6318,22 @@ describe Purchase, :vcr do
         end
       end
 
-      context "when original subscription purchase did not have a custom fee" do
-        it "does not set a custom fee" do
-          original_subscription_purchase.seller.update!(custom_fee_per_thousand: 75)
+      context "when original subscription purchase did not have a custom fee but the seller has one set" do
+        it "falls back to the seller's custom fee" do
+          recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
+          recurring_purchase.seller.update!(custom_fee_per_thousand: 75)
           expect(original_subscription_purchase.custom_fee_per_thousand).to be_nil
+          expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil
+
+          recurring_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(recurring_purchase.custom_fee_per_thousand).to eq(75)
+        end
+      end
+
+      context "when neither the original subscription purchase nor the seller has a custom fee" do
+        it "does not set a custom fee" do
+          expect(original_subscription_purchase.custom_fee_per_thousand).to be_nil
+          expect(original_subscription_purchase.seller.custom_fee_per_thousand).to be_nil
 
           recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
           expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil

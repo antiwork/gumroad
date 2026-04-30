@@ -109,7 +109,7 @@ describe UpdatePayoutMethod do
       context "when the user already has multiple alive bank accounts" do
         let!(:orphaned_bank_account) { create(:ach_account, user:) }
 
-        it "does not block the replacement and reports the inconsistency" do
+        it "deletes all existing alive bank accounts and does not report an inconsistency" do
           params = ActionController::Parameters.new(
             bank_account: {
               type: AchAccount.name,
@@ -121,21 +121,17 @@ describe UpdatePayoutMethod do
           )
 
           allow(ErrorNotifier).to receive(:notify)
-          allow(Rails.logger).to receive(:error)
 
           result = described_class.new(user_params: params, seller: user).process
 
           expect(result).to eq(success: true)
-          expect(user.bank_accounts.alive.count).to eq(2)
-          expect(ErrorNotifier).to have_received(:notify).with(
-            "Unexpected alive bank account count after payout method update",
-            user_id: user.id,
-            alive_count: 2,
-            alive_bank_account_ids: match_array(user.bank_accounts.alive.pluck(:id)),
-            new_bank_account_id: user.bank_accounts.order(:id).last.id
-          )
+          expect(user.bank_accounts.alive.count).to eq(1)
+          expect(existing_bank_account.reload.deleted_at).to be_present
+          expect(orphaned_bank_account.reload.deleted_at).to be_present
+          expect(ErrorNotifier).not_to have_received(:notify)
         end
       end
+
     end
 
     describe "when account number exceeds maximum length" do

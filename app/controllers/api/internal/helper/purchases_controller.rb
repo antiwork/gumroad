@@ -82,48 +82,17 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     from_email = params[:from]
     to_email = params[:to]
 
-    return render json: { success: false, message: "Both 'from' and 'to' email addresses are required" }, status: :bad_request unless from_email.present? && to_email.present?
+    result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
 
-    purchases = Purchase.where(email: from_email)
-    return render json: { success: false, message: "No purchases found for email: #{from_email}" }, status: :not_found if purchases.empty?
-
-    target_user = User.find_by(email: to_email)
-    reassigned_purchase_ids = []
-
-    purchases.each do |purchase|
-      purchase.email = to_email
-
-      if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchases.include?(purchase.original_purchase)
-        purchase.original_purchase.update(email: to_email)
-        reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
-      end
-
-      purchase.purchaser_id = target_user&.id
-
-      if purchase.is_original_subscription_purchase? && purchase.subscription.present?
-        if target_user
-          purchase.subscription.user = target_user
-          purchase.subscription.save
-        else
-          purchase.subscription.user = nil
-          purchase.subscription.save
-        end
-      end
-
-      if purchase.save
-        reassigned_purchase_ids << purchase.id
-      end
-    end
-
-    if reassigned_purchase_ids.any?
-      CustomerMailer.grouped_receipt(reassigned_purchase_ids).deliver_later(queue: "critical")
+    unless result.success?
+      return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
     end
 
     render json: {
       success: true,
-      message: "Successfully reassigned #{reassigned_purchase_ids.size} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
-      count: reassigned_purchase_ids.size,
-      reassigned_purchase_ids: reassigned_purchase_ids
+      message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+      count: result.count,
+      reassigned_purchase_ids: result.reassigned_purchase_ids
     }
   end
 
@@ -176,5 +145,13 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     def fetch_last_purchase
       @purchase = Purchase.where(email: params[:email]).order(created_at: :desc).first
       e404_json unless @purchase
+    end
+
+    def status_for_reason(reason)
+      case reason
+      when :missing_params then :bad_request
+      when :not_found then :not_found
+      when :no_changes then :unprocessable_entity
+      end
     end
 end

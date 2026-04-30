@@ -115,6 +115,32 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      context "when a temp file is missing during publish" do
+        before do
+          allow_any_instance_of(Link).to receive(:publish!).and_raise(Errno::ENOENT, "No such file or directory @ rb_file_s_size - /tmp/image_processing_test.png")
+        end
+
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify).once
+
+          post :publish, params: { id: @disabled_link.unique_permalink }
+        end
+
+        it "returns a retry-friendly error message" do
+          post :publish, params: { id: @disabled_link.unique_permalink }
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["error_message"]).to eq("There was a temporary issue processing your product images. Please try again.")
+        end
+
+        it "does not publish the link" do
+          post :publish, params: { id: @disabled_link.unique_permalink }
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(@disabled_link.reload.purchase_disabled_at).to be_present
+        end
+      end
+
       context "when an unknown exception is raised" do
         before do
           allow_any_instance_of(Link).to receive(:publish!).and_raise("error")
