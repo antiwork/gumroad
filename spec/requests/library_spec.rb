@@ -658,7 +658,6 @@ describe("Library Scenario", type: :system, js: true) do
           click_on "Edit"
         end
 
-        # The edit form is rendered in a popover portal, outside the table row.
         within "form" do
           expect(page).to have_radio_button("1 star", checked: true)
           (2..5).each do |i|
