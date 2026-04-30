@@ -963,6 +963,12 @@ describe Api::V2::LinksController do
         expect(@product.reload.price_cents).to eq(1099)
       end
 
+      it "rejects price that exceeds the maximum storable value" do
+        put @action, params: @params.merge(price: 2_147_483_648)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Sorry, the price entered is too large.")
+      end
+
       it "rejects price for tiered membership products" do
         membership = create(:membership_product, user: @user)
         put @action, params: @params.merge(id: membership.external_id, price: 2000)

@@ -42,6 +42,11 @@ module Product::Prices
   # create and associated the proper Price(s) object. If the product is a tiered membership product, it does not create or update a new price since
   # these prices are set on the variant.
   def price_cents=(price_cents)
+    if price_cents.present? && price_cents.to_i > BasePrice::Shared::MAX_PRICE_CENTS
+      errors.add(:base, "Sorry, the price entered is too large.")
+      raise Link::LinkInvalid, "Sorry, the price entered is too large."
+    end
+
     return super(price_cents) if !persisted? || is_tiered_membership
 
     create_or_update_new_price!(price_cents:, recurrence: subscription_duration.try(:to_s), is_rental: rent_only?)
