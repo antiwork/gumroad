@@ -143,6 +143,33 @@ describe Api::Internal::Admin::UsersController do
       )
     end
 
+    it "surfaces a deactivated user with a populated deleted_at" do
+      user = create(:compliant_user, email: "deactivated@example.com")
+      user.deactivate!
+
+      post :info, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      info = response.parsed_body["user"]
+      expect(info["id"]).to eq(user.external_id)
+      expect(info["deleted_at"]).to eq(user.reload.deleted_at.as_json)
+    end
+
+    it "uses the latest risk-state comment for last_status_changed_at, including on_probation transitions" do
+      user = create(:compliant_user, email: "probation@example.com")
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_COMPLIANT, created_at: 1.month.ago)
+      probation_comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_ON_PROBATION, created_at: 1.day.ago)
+      user.update_column(:user_risk_state, "on_probation")
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["risk_state"]).to include(
+        "user_risk_state" => "on_probation",
+        "on_probation" => true,
+        "last_status_changed_at" => probation_comment.created_at.as_json
+      )
+    end
+
     it "computes sales_count and total_earnings_formatted from the seller's successful sales" do
       seller = create(:compliant_user, email: "earner@example.com")
       product = create(:product, user: seller)

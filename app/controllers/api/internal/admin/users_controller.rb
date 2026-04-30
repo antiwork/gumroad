@@ -1,13 +1,11 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseController
-  STATUS_COMMENT_TYPES = [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED, Comment::COMMENT_TYPE_FLAGGED, Comment::COMMENT_TYPE_COMPLIANT].freeze
-
   def info
     return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
 
-    user = find_user_or_render(params[:email])
-    return unless user
+    user = User.by_email(params[:email]).first
+    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
 
     render json: { success: true, user: serialize_user_info(user) }
   end
@@ -177,7 +175,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def last_status_changed_at(user)
       user.comments
-        .where(comment_type: STATUS_COMMENT_TYPES)
+        .where(comment_type: Comment::RISK_STATE_COMMENT_TYPES)
         .order(created_at: :desc)
         .first
         &.created_at
