@@ -33,7 +33,7 @@ export const ShippingDestinationsEditor = ({
   };
 
   return (
-    <section className="grid gap-8 border-t border-border p-4 md:p-8">
+    <section id="product-edit-shipping" className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <h2>Shipping destinations</h2>
       </header>

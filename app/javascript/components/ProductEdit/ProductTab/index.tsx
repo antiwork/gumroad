@@ -83,7 +83,7 @@ export const ProductTab = () => {
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
-          <section className="grid gap-8 p-4! md:p-8!">
+          <section id="product-edit-details" className="grid gap-8 p-4! md:p-8!">
             {showAiNotification ? (
               <Alert role="status" variant="accent">
                 <div className="flex items-center gap-4">
@@ -156,7 +156,7 @@ export const ProductTab = () => {
           </section>
           {isCoffee ? (
             <>
-              <section className="grid gap-8 border-t border-border p-4 md:p-8">
+              <section id="product-edit-pricing" className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Pricing</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
@@ -258,13 +258,13 @@ export const ProductTab = () => {
                 </Fieldset>
               </section>
               {product.native_type === "membership" ? (
-                <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                <section id="product-edit-tiers" className="grid gap-8 border-t border-border p-4 md:p-8">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
-                  <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                  <section id="product-edit-pricing" className="grid gap-8 border-t border-border p-4 md:p-8">
                     <h2>Pricing</h2>
                     <PriceEditor
                       priceCents={product.price_cents}
@@ -324,7 +324,10 @@ export const ProductTab = () => {
                   </section>
                   {product.native_type === "call" ? (
                     <>
-                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                      <section
+                        id="product-edit-call-durations"
+                        className="grid gap-8 border-t border-border p-4 md:p-8"
+                      >
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
                           <a
@@ -340,7 +343,10 @@ export const ProductTab = () => {
                           onChange={(variants) => updateProduct({ variants })}
                         />
                       </section>
-                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                      <section
+                        id="product-edit-call-availability"
+                        className="grid gap-8 border-t border-border p-4 md:p-8"
+                      >
                         <h2>Available hours</h2>
                         <AvailabilityEditor
                           availabilities={product.availabilities}
@@ -348,7 +354,10 @@ export const ProductTab = () => {
                         />
                       </section>
                       {product.call_limitation_info ? (
-                        <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                        <section
+                          id="product-edit-call-limitations"
+                          className="grid gap-8 border-t border-border p-4 md:p-8"
+                        >
                           <h2>Call limitations</h2>
                           <CallLimitationsEditor
                             callLimitations={product.call_limitation_info}

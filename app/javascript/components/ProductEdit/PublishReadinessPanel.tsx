@@ -1,9 +1,43 @@
-import { CheckCircle, Circle } from "@boxicons/react";
+import { CheckCircle, ChevronDown, ChevronRight, Circle } from "@boxicons/react";
 import * as React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { classNames } from "$app/utils/classNames";
 
 import { Product, PublishReadiness, PublishReadinessItem, useProductEditContext } from "./state";
+
+const PANEL_EXPANDED_STORAGE_KEY = "product-edit-readiness-panel-expanded";
+
+type ReadinessTarget = {
+  tab: NonNullable<PublishReadinessItem["tab"]>;
+  sectionId: string;
+  label: string;
+};
+
+const PRODUCT_DETAILS_SECTION_ID = "product-edit-details";
+const PRODUCT_COVER_SECTION_ID = "product-edit-cover";
+const PRODUCT_PRICING_SECTION_ID = "product-edit-pricing";
+const PRODUCT_TIERS_SECTION_ID = "product-edit-tiers";
+const PRODUCT_CALL_DURATIONS_SECTION_ID = "product-edit-call-durations";
+const PRODUCT_CALL_AVAILABILITY_SECTION_ID = "product-edit-call-availability";
+const PRODUCT_SHIPPING_SECTION_ID = "product-edit-shipping";
+const CONTENT_SECTION_ID = "product-edit-content";
+const SHARE_DISCOVER_SECTION_ID = "product-edit-discover";
+
+const getStoredExpanded = () => {
+  try {
+    const stored = sessionStorage.getItem(PANEL_EXPANDED_STORAGE_KEY);
+    return stored == null ? null : stored === "true";
+  } catch {
+    return null;
+  }
+};
+
+const setStoredExpanded = (expanded: boolean) => {
+  try {
+    sessionStorage.setItem(PANEL_EXPANDED_STORAGE_KEY, String(expanded));
+  } catch {}
+};
 
 const textContentFromHtml = (html: string) => {
   if (typeof document === "undefined")
@@ -81,40 +115,117 @@ const readinessFromProduct = (
   };
 };
 
-const ReadinessSection = ({ title, items }: { title: string; items: PublishReadinessItem[] }) =>
+const getReadinessTarget = (item: PublishReadinessItem, product: Product): ReadinessTarget | null => {
+  switch (item.id) {
+    case "name":
+    case "description":
+      return { tab: "product", sectionId: PRODUCT_DETAILS_SECTION_ID, label: "Product" };
+    case "price":
+      return { tab: "product", sectionId: PRODUCT_PRICING_SECTION_ID, label: "Product" };
+    case "content":
+      return { tab: "content", sectionId: CONTENT_SECTION_ID, label: "Content" };
+    case "shipping":
+      return { tab: "product", sectionId: PRODUCT_SHIPPING_SECTION_ID, label: "Product" };
+    case "call_schedule": {
+      const hasDuration = product.variants.some(
+        (variant) => "duration_in_minutes" in variant && variant.duration_in_minutes != null,
+      );
+      return {
+        tab: "product",
+        sectionId: hasDuration ? PRODUCT_CALL_AVAILABILITY_SECTION_ID : PRODUCT_CALL_DURATIONS_SECTION_ID,
+        label: "Product",
+      };
+    }
+    case "membership_tier":
+      return { tab: "product", sectionId: PRODUCT_TIERS_SECTION_ID, label: "Product" };
+    case "cover":
+      return { tab: "product", sectionId: PRODUCT_COVER_SECTION_ID, label: "Product" };
+    case "discover_metadata":
+      return { tab: "share", sectionId: SHARE_DISCOVER_SECTION_ID, label: "Share -> Discover" };
+    default:
+      return item.tab ? { tab: item.tab, sectionId: PRODUCT_DETAILS_SECTION_ID, label: item.tab } : null;
+  }
+};
+
+const scrollToSection = (sectionId: string, attempts = 20) => {
+  const element = document.getElementById(sectionId);
+  if (element) {
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (attempts > 0) window.setTimeout(() => scrollToSection(sectionId, attempts - 1), 50);
+};
+
+const ReadinessSection = ({
+  title,
+  items,
+  onSelectItem,
+  product,
+}: {
+  title: string;
+  items: PublishReadinessItem[];
+  onSelectItem: (item: PublishReadinessItem) => void;
+  product: Product;
+}) =>
   items.length > 0 ? (
     <div className="grid gap-2">
       <h4 className="text-sm">{title}</h4>
       <ul className="grid gap-2">
         {items.map((item) => (
-          <ReadinessListItem key={item.id} item={item} />
+          <ReadinessListItem
+            key={item.id}
+            item={item}
+            target={getReadinessTarget(item, product)}
+            onSelect={() => onSelectItem(item)}
+          />
         ))}
       </ul>
     </div>
   ) : null;
 
-const ReadinessListItem = ({ item }: { item: PublishReadinessItem }) => {
+const ReadinessListItem = ({
+  item,
+  target,
+  onSelect,
+}: {
+  item: PublishReadinessItem;
+  target: ReadinessTarget | null;
+  onSelect: () => void;
+}) => {
   const StatusIcon = item.complete ? CheckCircle : Circle;
 
   return (
-    <li className={classNames("flex gap-2 text-sm", item.complete && "text-muted")}>
-      <StatusIcon
-        {...(item.complete ? { pack: "filled" as const } : {})}
+    <li>
+      <button
+        type="button"
         className={classNames(
-          "mt-0.5 size-5 flex-none",
-          item.complete ? "text-success" : item.severity === "required" ? "text-warning" : "text-muted",
+          "flex w-full cursor-pointer gap-2 rounded p-1 text-left text-sm all-unset hover:bg-active-bg",
+          item.complete && "text-muted",
         )}
-      />
-      <span>
-        {item.label}
-        {item.description ? <small className="block text-muted">{item.description}</small> : null}
-      </span>
+        onClick={onSelect}
+      >
+        <StatusIcon
+          {...(item.complete ? { pack: "filled" as const } : {})}
+          className={classNames(
+            "mt-0.5 size-5 flex-none",
+            item.complete ? "text-success" : item.severity === "required" ? "text-warning" : "text-muted",
+          )}
+        />
+        <span>
+          {item.label}
+          {target ? <small className="ml-1 text-muted"> ({target.label})</small> : null}
+          {item.description ? <small className="block text-muted">{item.description}</small> : null}
+        </span>
+      </button>
     </li>
   );
 };
 
 export const PublishReadinessPanel = () => {
-  const { product, publishReadiness: initialPublishReadiness, thumbnail } = useProductEditContext();
+  const { product, publishReadiness: initialPublishReadiness, thumbnail, uniquePermalink } = useProductEditContext();
+  const navigate = useNavigate();
+  const location = useLocation();
   const publishReadiness = React.useMemo(
     () => readinessFromProduct(initialPublishReadiness, product, thumbnail != null),
     [product, initialPublishReadiness, thumbnail],
@@ -126,6 +237,9 @@ export const PublishReadinessPanel = () => {
     (item) => item.severity === "recommended" && !item.complete,
   );
   const completedItems = publishReadiness.items.filter((item) => item.complete);
+  const allComplete = publishReadiness.complete_count === publishReadiness.total_count;
+  const [userExpanded, setUserExpanded] = React.useState<boolean | null>(() => getStoredExpanded());
+  const isExpanded = userExpanded ?? !allComplete;
   const progress =
     publishReadiness.total_count > 0
       ? Math.round((publishReadiness.complete_count / publishReadiness.total_count) * 100)
@@ -136,10 +250,26 @@ export const PublishReadinessPanel = () => {
       : publishReadiness.required_complete
         ? "Looks ready to share. A few extras can still help."
         : "A few things will make this easier to buy.";
+  const rootPath = Routes.edit_link_path(uniquePermalink);
+  const pathForTab = (tab: NonNullable<PublishReadinessItem["tab"]>) =>
+    tab === "product" ? rootPath : `${rootPath}/${tab}`;
+  const onSelectItem = (item: PublishReadinessItem) => {
+    const target = getReadinessTarget(item, product);
+    if (!target) return;
+
+    const path = pathForTab(target.tab);
+    if (location.pathname !== path) navigate(path);
+    window.requestAnimationFrame(() => scrollToSection(target.sectionId));
+  };
+  const toggleExpanded = () => {
+    const expanded = !isExpanded;
+    setUserExpanded(expanded);
+    setStoredExpanded(expanded);
+  };
 
   return (
     <section
-      className="grid gap-3 rounded border border-border bg-background p-4"
+      className={classNames("grid rounded border border-border bg-background p-4", isExpanded && "gap-3")}
       aria-labelledby="publish-readiness-title"
     >
       <div className="flex items-start justify-between gap-3">
@@ -152,20 +282,44 @@ export const PublishReadinessPanel = () => {
         <span className="shrink-0 rounded border border-border px-2 py-1 text-sm whitespace-nowrap">
           {publishReadiness.complete_count} of {publishReadiness.total_count} ready
         </span>
+        <button
+          type="button"
+          className="cursor-pointer rounded p-1 all-unset hover:bg-active-bg"
+          aria-expanded={isExpanded}
+          aria-controls="publish-readiness-content"
+          aria-label={isExpanded ? "Collapse publish readiness checklist" : "Expand publish readiness checklist"}
+          onClick={toggleExpanded}
+        >
+          {isExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+        </button>
       </div>
-      <div
-        className="h-2 overflow-hidden rounded bg-active-bg"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={publishReadiness.total_count}
-        aria-valuenow={publishReadiness.complete_count}
-        aria-label="Publish readiness"
-      >
-        <div className="h-full rounded bg-accent" style={{ width: `${progress}%` }} />
-      </div>
-      <ReadinessSection title="Fix before sharing" items={incompleteRequiredItems} />
-      <ReadinessSection title="Nice to have" items={incompleteRecommendedItems} />
-      <ReadinessSection title="Already set" items={completedItems} />
+      {isExpanded ? (
+        <div id="publish-readiness-content" className="grid gap-3">
+          <div
+            className="h-2 overflow-hidden rounded bg-active-bg"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={publishReadiness.total_count}
+            aria-valuenow={publishReadiness.complete_count}
+            aria-label="Publish readiness"
+          >
+            <div className="h-full rounded bg-accent" style={{ width: `${progress}%` }} />
+          </div>
+          <ReadinessSection
+            title="Fix before sharing"
+            items={incompleteRequiredItems}
+            product={product}
+            onSelectItem={onSelectItem}
+          />
+          <ReadinessSection
+            title="Nice to have"
+            items={incompleteRecommendedItems}
+            product={product}
+            onSelectItem={onSelectItem}
+          />
+          <ReadinessSection title="Already set" items={completedItems} product={product} onSelectItem={onSelectItem} />
+        </div>
+      ) : null}
     </section>
   );
 };

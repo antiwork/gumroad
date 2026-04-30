@@ -56,7 +56,7 @@ export const ShareTab = () => {
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
             profileSections={profileSections}
           />
-          <section className="grid gap-8 border-t border-border p-4 md:p-8">
+          <section id="product-edit-discover" className="grid gap-8 border-t border-border p-4 md:p-8">
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
               <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">

@@ -41,8 +41,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
       within find(:xpath, ".//div[./h4[normalize-space()='#{title}']]"), &block
     end
 
-    it "updates from the draft description while editing and stays current after saving" do
+    def visit_product_edit_with_clean_readiness_session(product)
       visit edit_link_path(product.unique_permalink)
+      page.execute_script("sessionStorage.removeItem('product-edit-readiness-panel-expanded')")
+      visit edit_link_path(product.unique_permalink)
+    end
+
+    it "updates from the draft description while editing and stays current after saving" do
+      visit_product_edit_with_clean_readiness_session(product)
 
       within "section[aria-labelledby='publish-readiness-title']" do
         expect(page).to have_text("2 of 6 ready")
@@ -83,6 +89,61 @@ describe("Product Edit Scenario", type: :system, js: true) do
         end
         within_readiness_section("Already set") do
           expect(page).to have_text("Describe the transformation. What changes after buying this?")
+        end
+      end
+    end
+
+    it "navigates checklist items to the matching edit sections" do
+      visit_product_edit_with_clean_readiness_session(product)
+
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("Add the content (Content)")
+        click_on "Add the content"
+      end
+      expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
+      expect(page).to have_css("#product-edit-content")
+
+      visit edit_link_path(product.unique_permalink)
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("Add category or tags (Share -> Discover)")
+        click_on "Add category or tags"
+      end
+      expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/share")
+      expect(page).to have_css("#product-edit-discover")
+
+      visit edit_link_path(product.unique_permalink)
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("Add a cover (Product)")
+        click_on "Add a cover"
+      end
+      expect(page).to have_current_path(edit_link_path(product.unique_permalink))
+      expect(page).to have_css("#product-edit-cover")
+    end
+
+    context "when every checklist item is ready" do
+      let!(:product) do
+        create(:product_with_pdf_file, :with_films_taxonomy, user: seller, draft: true, purchase_disabled_at: Time.current)
+      end
+
+      before do
+        create(:asset_preview, link: product)
+      end
+
+      it "collapses by default and remembers the user's toggle during the session" do
+        visit_product_edit_with_clean_readiness_session(product)
+
+        within "section[aria-labelledby='publish-readiness-title']" do
+          expect(page).to have_text("6 of 6 ready")
+          expect(page).not_to have_css("#publish-readiness-content")
+
+          click_button "Expand publish readiness checklist"
+          expect(page).to have_css("#publish-readiness-content")
+        end
+
+        visit edit_link_path(product.unique_permalink)
+
+        within "section[aria-labelledby='publish-readiness-title']" do
+          expect(page).to have_css("#publish-readiness-content")
         end
       end
     end

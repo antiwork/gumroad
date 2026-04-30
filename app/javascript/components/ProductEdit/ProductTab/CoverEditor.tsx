@@ -53,7 +53,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="grid gap-8 border-t border-border p-4 md:p-8">
+    <section id="product-edit-cover" className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>

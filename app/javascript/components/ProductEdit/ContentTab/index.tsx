@@ -572,7 +572,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         multiple
         onChange={(e) => uploadFileInput(e.target)}
       />
-      <div className="h-screen sm:h-full md:flex md:flex-col">
+      <div id="product-edit-content" className="h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
