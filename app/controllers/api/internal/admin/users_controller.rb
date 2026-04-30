@@ -1,21 +1,25 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseController
+  def info
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+
+    user = User.by_email(params[:email]).first
+    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
+
+    render json: { success: true, user: serialize_user_info(user) }
+  end
+
   def suspension
     return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
 
     user = find_user_or_render(params[:email])
     return unless user
 
-    last_status_comment = user.comments
-      .where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED, Comment::COMMENT_TYPE_FLAGGED, Comment::COMMENT_TYPE_COMPLIANT])
-      .order(created_at: :desc)
-      .first
-
     render json: {
       success: true,
       status: suspension_status(user),
-      updated_at: last_status_comment&.created_at&.as_json,
+      updated_at: last_status_changed_at(user)&.as_json,
       appeal_url: nil
     }
   end
@@ -167,6 +171,54 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       else
         "Compliant"
       end
+    end
+
+    def last_status_changed_at(user)
+      user.comments
+        .where(comment_type: Comment::RISK_STATE_COMMENT_TYPES)
+        .order(created_at: :desc)
+        .first
+        &.created_at
+    end
+
+    def serialize_user_info(user)
+      compliance_info = user.alive_user_compliance_info
+
+      {
+        id: user.external_id,
+        email: user.form_email,
+        name: user.name,
+        username: user.username,
+        profile_url: user.subdomain_with_protocol,
+        country: compliance_info&.country,
+        created_at: user.created_at.as_json,
+        deleted_at: user.deleted_at&.as_json,
+        risk_state: {
+          status: suspension_status(user),
+          user_risk_state: user.user_risk_state,
+          suspended: user.suspended?,
+          flagged_for_fraud: user.flagged_for_fraud?,
+          flagged_for_tos_violation: user.flagged_for_tos_violation?,
+          on_probation: user.on_probation?,
+          compliant: user.compliant?,
+          last_status_changed_at: last_status_changed_at(user)&.as_json
+        },
+        two_factor_authentication_enabled: user.two_factor_authentication_enabled?,
+        payouts: {
+          paused_internally: user.payouts_paused_internally?,
+          paused_by_user: user.payouts_paused_by_user?,
+          paused_by_source: user.payouts_paused_by_source,
+          paused_for_reason: user.payouts_paused_for_reason,
+          next_payout_date: user.next_payout_date&.to_s,
+          balance_for_next_payout: user.formatted_balance_for_next_payout_date
+        },
+        stats: {
+          sales_count: user.sales.successful.count,
+          total_earnings_formatted: Money.from_cents(user.sales_cents_total).format,
+          unpaid_balance_formatted: Money.from_cents(user.unpaid_balance_cents).format,
+          comments_count: user.comments.size
+        }
+      }
     end
 
     def serialize_comment(comment)

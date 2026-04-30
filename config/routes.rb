@@ -305,6 +305,10 @@ Rails.application.routes.draw do
               post :refund
               post :resend_receipt
               post :refund_taxes
+              post :cancel_subscription
+              post :block_buyer
+              post :unblock_buyer
+              post :refund_for_fraud
             end
           end
 
@@ -316,6 +320,7 @@ Rails.application.routes.draw do
 
           resources :users, only: [] do
             collection do
+              post :info
               post :suspension
               post :reset_password
               post :update_email
@@ -329,6 +334,8 @@ Rails.application.routes.draw do
           resources :payouts, only: [] do
             collection do
               post :list
+              post :pause
+              post :resume
             end
           end
         end

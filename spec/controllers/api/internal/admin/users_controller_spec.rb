@@ -6,6 +6,186 @@ require "shared_examples/authorized_admin_api_method"
 describe Api::Internal::Admin::UsersController do
   let(:admin_user) { create(:admin_user) }
 
+  describe "POST info" do
+    include_examples "admin api authorization required", :post, :info
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns a bad request when email is missing" do
+      post :info
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      post :info, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns a comprehensive info payload for a compliant seller" do
+      user = create(:compliant_user, email: "seller@example.com", name: "Seller One", username: "sellerone")
+
+      post :info, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+
+      info = response.parsed_body["user"]
+      expect(info).to include(
+        "id" => user.external_id,
+        "email" => user.form_email,
+        "name" => "Seller One",
+        "username" => "sellerone",
+        "deleted_at" => nil,
+        "two_factor_authentication_enabled" => false
+      )
+      expect(info["created_at"]).to eq(user.created_at.as_json)
+
+      expect(info["risk_state"]).to include(
+        "status" => "Compliant",
+        "user_risk_state" => "compliant",
+        "suspended" => false,
+        "flagged_for_fraud" => false,
+        "flagged_for_tos_violation" => false,
+        "on_probation" => false,
+        "compliant" => true,
+        "last_status_changed_at" => nil
+      )
+
+      expect(info["payouts"]).to include(
+        "paused_internally" => false,
+        "paused_by_user" => false,
+        "paused_by_source" => nil,
+        "paused_for_reason" => nil
+      )
+
+      expect(info["stats"]).to include(
+        "sales_count" => 0,
+        "total_earnings_formatted" => "$0.00",
+        "unpaid_balance_formatted" => "$0.00",
+        "comments_count" => 0
+      )
+    end
+
+    it "reports the suspension status and latest status timestamp for a suspended user" do
+      user = create(:tos_user, email: "suspended@example.com")
+      comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago)
+
+      post :info, params: { email: user.email }
+
+      info = response.parsed_body["user"]
+      expect(info["risk_state"]).to include(
+        "status" => "Suspended",
+        "suspended" => true,
+        "compliant" => false,
+        "last_status_changed_at" => comment.created_at.as_json
+      )
+    end
+
+    it "reflects two-factor authentication when enabled" do
+      user = create(:compliant_user, email: "tfa@example.com")
+      user.update!(two_factor_authentication_enabled: true)
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["two_factor_authentication_enabled"]).to be(true)
+    end
+
+    it "surfaces the country from the alive user compliance info" do
+      user = create(:compliant_user, email: "geo@example.com")
+      create(:user_compliance_info, user:, country: "Germany")
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["country"]).to eq("Germany")
+    end
+
+    it "reports admin-paused payouts with the latest pause comment as the reason" do
+      user = create(:compliant_user, email: "paused@example.com")
+      user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
+      user.comments.create!(author_id: GUMROAD_ADMIN_ID, comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED, content: "Manual review pending")
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["payouts"]).to include(
+        "paused_internally" => true,
+        "paused_by_source" => User::PAYOUT_PAUSE_SOURCE_ADMIN,
+        "paused_for_reason" => "Manual review pending"
+      )
+    end
+
+    it "reports system-paused payouts without exposing a paused_for_reason" do
+      user = create(:compliant_user, email: "syspaused@example.com")
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["payouts"]).to include(
+        "paused_internally" => true,
+        "paused_by_source" => User::PAYOUT_PAUSE_SOURCE_SYSTEM,
+        "paused_for_reason" => nil
+      )
+    end
+
+    it "reports paused_by_user when the seller has self-paused via Settings" do
+      user = create(:compliant_user, email: "selfpaused@example.com")
+      user.update!(payouts_paused_by_user: true)
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["payouts"]).to include(
+        "paused_internally" => false,
+        "paused_by_user" => true,
+        "paused_by_source" => User::PAYOUT_PAUSE_SOURCE_USER
+      )
+    end
+
+    it "surfaces a deactivated user with a populated deleted_at" do
+      user = create(:compliant_user, email: "deactivated@example.com")
+      user.deactivate!
+
+      post :info, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      info = response.parsed_body["user"]
+      expect(info["id"]).to eq(user.external_id)
+      expect(info["deleted_at"]).to eq(user.reload.deleted_at.as_json)
+    end
+
+    it "uses the latest risk-state comment for last_status_changed_at, including on_probation transitions" do
+      user = create(:compliant_user, email: "probation@example.com")
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_COMPLIANT, created_at: 1.month.ago)
+      probation_comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_ON_PROBATION, created_at: 1.day.ago)
+      user.update_column(:user_risk_state, "on_probation")
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["risk_state"]).to include(
+        "user_risk_state" => "on_probation",
+        "on_probation" => true,
+        "last_status_changed_at" => probation_comment.created_at.as_json
+      )
+    end
+
+    it "computes sales_count and total_earnings_formatted from the seller's successful sales" do
+      seller = create(:compliant_user, email: "earner@example.com")
+      product = create(:product, user: seller)
+      create(:free_purchase, link: product, seller:)
+      create(:free_purchase, link: product, seller:)
+      create(:failed_purchase, link: product, seller:)
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(1500)
+
+      post :info, params: { email: seller.email }
+
+      stats = response.parsed_body["user"]["stats"]
+      expect(stats["sales_count"]).to eq(2)
+      expect(stats["total_earnings_formatted"]).to eq("$15.00")
+    end
+  end
+
   describe "POST suspension" do
     include_examples "admin api authorization required", :post, :suspension
 

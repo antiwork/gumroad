@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import type { User } from "$app/components/Admin/Users/User";
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 
 type FlagForFraudProps = {
   user: User;
@@ -14,12 +14,13 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
 
   return (
     !hide && (
-      <>
-        <hr />
-        <NavigationButton color="danger" href={suspendUrl}>
-          Suspend for fraud
-        </NavigationButton>
-      </>
+      <Button
+        size="sm"
+        color="danger"
+        onClick={() => { window.location.href = suspendUrl; }}
+      >
+        Suspend for fraud
+      </Button>
     )
   );
 };

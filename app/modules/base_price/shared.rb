@@ -47,6 +47,9 @@ module BasePrice::Shared
     save!
   end
 
+  # Maximum price_cents storable in a 32-bit signed integer column.
+  MAX_PRICE_CENTS = 2_147_483_647
+
   def price_must_be_within_range
     currency_config = CURRENCY_CHOICES[price_currency_type]
     unless currency_config
@@ -58,7 +61,9 @@ module BasePrice::Shared
     prices_to_validate.compact.each do |price_cents_to_validate|
       next if price_cents_to_validate == 0
 
-      if price_cents_to_validate < min_price
+      if price_cents_to_validate > MAX_PRICE_CENTS
+        errors.add(:base, "Sorry, the price entered is too large.")
+      elsif price_cents_to_validate < min_price
         errors.add(:base, "Sorry, a product must be at least #{MoneyFormatter.format(min_price, price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}.")
       elsif user.max_product_price && get_usd_cents(price_currency_type, price_cents_to_validate) > user.max_product_price
         errors.add(:base, "Sorry, we don't support pricing products above $5,000.")

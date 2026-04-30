@@ -4,6 +4,18 @@ require "spec_helper"
 
 describe AdminSearchService do
   describe "#search_purchases" do
+    it "returns no results when no search criteria are provided" do
+      create(:purchase)
+      purchases = AdminSearchService.new.search_purchases
+      expect(purchases).to be_empty
+    end
+
+    it "applies a default limit of MAX_RESULTS" do
+      email = "limit-test@example.com"
+      purchases = AdminSearchService.new.search_purchases(query: email)
+      expect(purchases.to_sql).to include("LIMIT #{AdminSearchService::MAX_RESULTS}")
+    end
+
     it "returns no Purchases if query is invalid" do
       purchases = AdminSearchService.new.search_purchases(query: "invalidquery")
 
@@ -211,9 +223,9 @@ describe AdminSearchService do
       context "when query is not set" do
         let(:query) { nil }
 
-        it "ignores product_title_query" do
+        it "returns no results without search criteria" do
           purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
-          expect(purchases).to include(purchase)
+          expect(purchases).to be_empty
         end
       end
     end
@@ -272,9 +284,9 @@ describe AdminSearchService do
       context "when query is not set" do
         let(:query) { nil }
 
-        it "ignores purchase_status" do
+        it "returns no results without search criteria" do
           purchases = AdminSearchService.new.search_purchases(query:, purchase_status: "successful")
-          expect(purchases).to include(successful_purchase, failed_purchase, not_charged_purchase, chargebacked_purchase, chargebacked_reversed_purchase, refunded_purchase)
+          expect(purchases).to be_empty
         end
       end
     end

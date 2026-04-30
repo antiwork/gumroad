@@ -68,4 +68,166 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
   end
+
+  describe "POST pause" do
+    include_examples "admin api authorization required", :post, :pause
+
+    it "returns 400 when email is missing" do
+      post :pause
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :pause, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "pauses payouts and records the admin as the pause source" do
+      expect { post :pause, params: { email: user.email } }.to change { user.reload.payouts_paused_internally? }.from(false).to(true)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Payouts paused for #{user.email}",
+        "payouts_paused" => true
+      )
+      expect(user.reload.payouts_paused_by.to_s).to eq(GUMROAD_ADMIN_ID.to_s)
+    end
+
+    it "creates a COMMENT_TYPE_PAYOUTS_PAUSED comment when reason is provided" do
+      reason = "Payouts paused due to verification"
+
+      expect { post :pause, params: { email: user.email, reason: reason } }
+        .to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+      comment = user.comments.with_type_payouts_paused.last
+      expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
+      expect(comment.content).to eq(reason)
+    end
+
+    it "does not create a comment when reason is blank" do
+      expect { post :pause, params: { email: user.email, reason: "   " } }
+        .not_to change { user.comments.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.payouts_paused_internally?).to be(true)
+    end
+
+    it "short-circuits when payouts are already paused by admin" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
+
+      expect { post :pause, params: { email: user.email, reason: "again" } }
+        .not_to change { user.comments.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "already_paused",
+        "message" => "Payouts are already paused by admin",
+        "payouts_paused" => true
+      )
+    end
+
+    it "asserts admin attribution when payouts were previously paused by the system" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      reason = "Manual review pending"
+
+      expect { post :pause, params: { email: user.email, reason: reason } }
+        .to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+      expect(user.reload.payouts_paused_by.to_s).to eq(GUMROAD_ADMIN_ID.to_s)
+      expect(user.payouts_paused_for_reason).to eq(reason)
+    end
+
+    it "asserts admin attribution when payouts were previously paused by Stripe" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      post :pause, params: { email: user.email, reason: "Stripe escalation" }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+  end
+
+  describe "POST resume" do
+    include_examples "admin api authorization required", :post, :resume
+
+    it "returns 400 when email is missing" do
+      post :resume
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :resume, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "resumes payouts, clears payouts_paused_by, and records a resume comment" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
+
+      expect { post :resume, params: { email: user.email } }
+        .to change { user.reload.payouts_paused_internally? }.from(true).to(false)
+        .and change { user.comments.with_type_payouts_resumed.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Payouts resumed for #{user.email}",
+        "payouts_paused" => false
+      )
+      expect(user.reload.payouts_paused_by).to be_nil
+
+      comment = user.comments.with_type_payouts_resumed.last
+      expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
+      expect(comment.content).to eq("Payouts resumed.")
+    end
+
+    it "reports payouts_paused: true after admin resume when the seller is still self-paused" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID, payouts_paused_by_user: true)
+
+      post :resume, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["payouts_paused"]).to be(true)
+      expect(user.reload.payouts_paused_internally?).to be(false)
+      expect(user.payouts_paused_by_user?).to be(true)
+    end
+
+    it "short-circuits when payouts are not paused by admin" do
+      expect { post :resume, params: { email: user.email } }
+        .not_to change { user.comments.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "not_paused",
+        "message" => "Payouts are not paused by admin",
+        "payouts_paused" => false
+      )
+    end
+
+    it "reports payouts_paused: true on short-circuit when the seller has self-paused" do
+      user.update!(payouts_paused_by_user: true)
+
+      post :resume, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "not_paused",
+        "payouts_paused" => true
+      )
+    end
+  end
 end

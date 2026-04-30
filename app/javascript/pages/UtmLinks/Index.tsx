@@ -335,7 +335,7 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
-        <PopoverContent className="w-48 border-none p-0 shadow-none">
+        <PopoverContent className="w-48 border-none p-0 shadow-none" usePortal>
           <Menu>
             <MenuItem asChild>
               <Link href={Routes.edit_dashboard_utm_link_path(link.id)} className="no-underline">

@@ -751,4 +751,419 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).to eq({ success: false, message: "from and to emails are the same" }.as_json)
     end
   end
+
+  describe "POST cancel_subscription" do
+    let(:admin_user) { create(:admin_user) }
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+
+    include_examples "admin api authorization required", :post, :cancel_subscription, { id: "123", email: "buyer@example.com" }
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :cancel_subscription, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the purchase is missing" do
+      post :cancel_subscription, params: { id: "999999999", email: "buyer@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
+    end
+
+    it "returns 404 when the email does not match the purchase email" do
+      post :cancel_subscription, params: params.merge(email: "wrong@example.com")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
+    end
+
+    it "returns 422 when the purchase has no subscription" do
+      post :cancel_subscription, params: params
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase has no subscription" }.as_json)
+    end
+
+    context "when the purchase has a subscription" do
+      let(:subscription) { instance_double(Subscription, deactivated?: false, cancelled_at: nil) }
+
+      before do
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
+        allow(purchase).to receive(:subscription).and_return(subscription)
+      end
+
+      it "cancels the subscription as buyer-initiated by default" do
+        cancelled_at = Time.current
+        expect(subscription).to receive(:cancel!).with(by_seller: false, by_admin: true) do
+          allow(subscription).to receive(:cancelled_at).and_return(cancelled_at)
+          allow(subscription).to receive(:cancelled_by_buyer?).and_return(true)
+          allow(subscription).to receive(:cancelled_by_admin?).and_return(true)
+        end
+
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["message"]).to eq("Successfully cancelled subscription for purchase number #{purchase.external_id_numeric}")
+        expect(response.parsed_body["cancelled_at"]).to eq(cancelled_at.as_json)
+        expect(response.parsed_body["cancelled_by_admin"]).to be(true)
+        expect(response.parsed_body["cancelled_by_seller"]).to be(false)
+      end
+
+      it "cancels with seller-initiated semantics when by_seller is true" do
+        expect(subscription).to receive(:cancel!).with(by_seller: true, by_admin: true) do
+          allow(subscription).to receive(:cancelled_at).and_return(Time.current)
+          allow(subscription).to receive(:cancelled_by_buyer?).and_return(false)
+          allow(subscription).to receive(:cancelled_by_admin?).and_return(true)
+        end
+
+        post :cancel_subscription, params: params.merge(by_seller: "true")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["cancelled_by_seller"]).to be(true)
+      end
+
+      it "short-circuits when the subscription is already pending cancellation" do
+        cancelled_at = 1.day.from_now
+        allow(subscription).to receive(:cancelled_at).and_return(cancelled_at)
+        allow(subscription).to receive(:cancelled_by_admin?).and_return(false)
+        expect(subscription).not_to receive(:cancel!)
+
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "status" => "already_cancelled",
+          "message" => "Subscription is already cancelled",
+          "cancelled_at" => cancelled_at.as_json,
+          "cancelled_by_admin" => false
+        )
+      end
+
+      it "returns already_inactive with the termination reason when the subscription is deactivated via failed payment" do
+        deactivated_at = 1.day.ago
+        allow(subscription).to receive(:deactivated?).and_return(true)
+        allow(subscription).to receive(:deactivated_at).and_return(deactivated_at)
+        allow(subscription).to receive(:termination_reason).and_return("failed_payment")
+        expect(subscription).not_to receive(:cancel!)
+
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "status" => "already_inactive",
+          "message" => "Subscription is no longer active",
+          "termination_reason" => "failed_payment",
+          "deactivated_at" => deactivated_at.as_json
+        )
+      end
+
+      it "returns already_inactive when the subscription ended naturally" do
+        allow(subscription).to receive(:deactivated?).and_return(true)
+        allow(subscription).to receive(:deactivated_at).and_return(2.days.ago)
+        allow(subscription).to receive(:termination_reason).and_return("fixed_subscription_period_ended")
+        expect(subscription).not_to receive(:cancel!)
+
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["status"]).to eq("already_inactive")
+        expect(response.parsed_body["termination_reason"]).to eq("fixed_subscription_period_ended")
+      end
+    end
+  end
+
+  describe "POST block_buyer" do
+    let(:admin_user) { create(:admin_user) }
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+
+    include_examples "admin api authorization required", :post, :block_buyer, { id: "123", email: "buyer@example.com" }
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :block_buyer, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the purchase is missing" do
+      post :block_buyer, params: { id: "999999999", email: "buyer@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 when the email does not match" do
+      post :block_buyer, params: params.merge(email: "wrong@example.com")
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "blocks the buyer and flips buyer_blocked? to true" do
+      expect { post :block_buyer, params: params }.to change { purchase.reload.buyer_blocked? }.from(false).to(true)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["message"]).to eq("Successfully blocked buyer for purchase number #{purchase.external_id_numeric}")
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+    end
+
+    it "creates an audit comment with the provided comment_content" do
+      post :block_buyer, params: params.merge(comment_content: "Refund abuse")
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase.comments.where(author_id: admin_user.id, content: "Refund abuse").count).to eq(1)
+    end
+
+    it "creates a default audit comment when comment_content is omitted" do
+      post :block_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase.comments.where(author_id: admin_user.id).where("content LIKE ?", "Buyer blocked%").count).to eq(1)
+    end
+
+    it "short-circuits when the buyer is already blocked by admin on this purchase" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+      expect_any_instance_of(Purchase).not_to receive(:block_buyer!)
+
+      post :block_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "already_blocked",
+        "message" => "Buyer is already blocked by admin"
+      )
+    end
+
+    it "does not short-circuit when the buyer was auto-blocked without admin attribution" do
+      previous_purchase = create(:free_purchase, email: purchase.email)
+      previous_purchase.block_buyer!(blocking_user_id: nil, comment_content: "Auto-blocked: chargeback rate")
+      expect(purchase.reload.buyer_blocked?).to be(true)
+      expect(purchase.is_buyer_blocked_by_admin?).to be(false)
+
+      expect { post :block_buyer, params: params }
+        .to change { purchase.reload.is_buyer_blocked_by_admin? }.from(false).to(true)
+        .and change { purchase.comments.where(author_id: admin_user.id).count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+    end
+
+    it "re-establishes the block when the admin flag is stale and BlockedObject was cleared elsewhere" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      purchase.unblock_buyer!
+      purchase.update!(is_buyer_blocked_by_admin: true)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+      expect(purchase.buyer_blocked?).to be(false)
+
+      expect { post :block_buyer, params: params }
+        .to change { purchase.reload.buyer_blocked? }.from(false).to(true)
+        .and change { purchase.comments.where(author_id: admin_user.id).count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+    end
+  end
+
+  describe "POST unblock_buyer" do
+    let(:admin_user) { create(:admin_user) }
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+
+    include_examples "admin api authorization required", :post, :unblock_buyer, { id: "123", email: "buyer@example.com" }
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :unblock_buyer, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "returns 404 when the purchase is missing" do
+      post :unblock_buyer, params: { id: "999999999", email: "buyer@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "unblocks the buyer, flips buyer_blocked? to false, and creates an audit comment" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      expect(purchase.reload.buyer_blocked?).to be(true)
+
+      expect { post :unblock_buyer, params: params }
+        .to change { purchase.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["message"]).to eq("Successfully unblocked buyer for purchase number #{purchase.external_id_numeric}")
+      expect(purchase.reload.buyer_blocked?).to be(false)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(false)
+    end
+
+    it "creates an unblock comment on the purchaser when present" do
+      buyer = create(:user, email: "buyer@example.com")
+      purchase.update!(purchaser: buyer)
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+
+      expect { post :unblock_buyer, params: params }
+        .to change { buyer.reload.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
+    end
+
+    it "short-circuits when the buyer is not blocked" do
+      expect_any_instance_of(Purchase).not_to receive(:unblock_buyer!)
+
+      post :unblock_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "status" => "not_blocked",
+        "message" => "Buyer is not blocked"
+      )
+    end
+
+    it "clears the stale admin flag when BlockedObject was cleared elsewhere" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      purchase.unblock_buyer!
+      purchase.update!(is_buyer_blocked_by_admin: true)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+      expect(purchase.buyer_blocked?).to be(false)
+
+      expect { post :unblock_buyer, params: params }
+        .to change { purchase.reload.is_buyer_blocked_by_admin? }.from(true).to(false)
+        .and change { purchase.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+    end
+  end
+
+  describe "POST refund_for_fraud" do
+    let(:admin_user) { create(:admin_user) }
+    let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+
+    include_examples "admin api authorization required", :post, :refund_for_fraud, { id: "123", email: "buyer@example.com" }
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :refund_for_fraud, params: { id: purchase.external_id_numeric.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the purchase is missing" do
+      post :refund_for_fraud, params: { id: "999999999", email: "buyer@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
+    end
+
+    it "returns 404 when the email does not match" do
+      post :refund_for_fraud, params: params.merge(email: "wrong@example.com")
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    context "when the purchase exists" do
+      before do
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
+        allow(purchase).to receive(:stripe_transaction_id).and_return("ch_test")
+        allow(purchase).to receive(:amount_refundable_cents).and_return(1000)
+        purchase.errors.clear
+      end
+
+      it "returns 422 when the purchase is already fully refunded" do
+        allow(purchase).to receive(:stripe_refunded).and_return(true)
+        expect(purchase).not_to receive(:refund_for_fraud_and_block_buyer!)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Purchase has already been fully refunded" }.as_json)
+      end
+
+      it "returns 422 when the purchase has no charge to refund" do
+        allow(purchase).to receive(:stripe_transaction_id).and_return(nil)
+        expect(purchase).not_to receive(:refund_for_fraud_and_block_buyer!)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Purchase has no charge to refund" }.as_json)
+      end
+
+      it "returns 422 when the purchase has no remaining refundable amount" do
+        allow(purchase).to receive(:amount_refundable_cents).and_return(0)
+        expect(purchase).not_to receive(:refund_for_fraud_and_block_buyer!)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Purchase has no charge to refund" }.as_json)
+      end
+
+      it "delegates to refund_for_fraud_and_block_buyer! and returns the serialized purchase" do
+        expect(purchase).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id).and_return(true)
+        cancelled_at = Time.current
+        subscription = instance_double(Subscription, cancelled_at: cancelled_at, price: nil)
+        allow(purchase).to receive(:subscription).and_return(subscription)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["message"]).to eq("Successfully refunded purchase number #{purchase.external_id_numeric} for fraud and blocked the buyer")
+        expect(response.parsed_body["purchase"]).to include("id" => purchase.external_id_numeric.to_s)
+        expect(response.parsed_body["subscription_cancelled"]).to be(true)
+      end
+
+      it "returns subscription_cancelled: false when there is no subscription" do
+        expect(purchase).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id).and_return(true)
+        allow(purchase).to receive(:subscription).and_return(nil)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["subscription_cancelled"]).to be(false)
+      end
+
+      it "returns 422 with the model error when refund_for_fraud_and_block_buyer! fails" do
+        allow(purchase).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id) do
+          purchase.errors.add :base, "Refund amount cannot be greater than the purchase price."
+          false
+        end
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Refund amount cannot be greater than the purchase price." }.as_json)
+      end
+
+      it "returns 422 with a generic message when refund_for_fraud_and_block_buyer! fails without errors" do
+        allow(purchase).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id).and_return(false)
+
+        post :refund_for_fraud, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Refund-for-fraud failed for purchase number #{purchase.external_id_numeric}" }.as_json)
+      end
+    end
+  end
 end

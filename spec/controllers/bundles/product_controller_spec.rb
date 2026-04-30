@@ -355,7 +355,7 @@ describe Bundles::ProductController, inertia: true do
         put :update, params: { bundle_id: bundle.external_id, price_cents: 3_000_000_000 }
 
         expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
-        expect(flash[:alert]).to eq("The value entered is too large. Please enter a smaller number.")
+        expect(flash[:alert]).to eq("Sorry, the price entered is too large.")
       end
     end
 

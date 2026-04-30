@@ -390,6 +390,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       else
         return render_response(false, message: object.errors.full_messages.to_sentence)
       end
+    rescue ActiveModel::RangeError
+      return render_response(false, message: "One or more numeric values are out of range.")
     end
 
     offer_code_warning = check_offer_code_validity

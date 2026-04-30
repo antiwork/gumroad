@@ -40,6 +40,10 @@ describe RefundUnpaidPurchasesWorker, :vcr do
       expect(@purchase.purchase_success_balance.unpaid?).to be(true)
       expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_without_balance.id, @admin_user.id)
       expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_with_paid_balance.id, @admin_user.id)
+
+      comment = @user.comments.where(comment_type: Comment::COMMENT_TYPE_REFUND_BALANCE).last
+      expect(comment.content).to eq("Refund balance initiated by #{@admin_user.username}.")
+      expect(comment.author_id).to eq(@admin_user.id)
     end
   end
 end

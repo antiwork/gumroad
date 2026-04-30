@@ -3,7 +3,6 @@ import React from "react";
 import AdminUserPermissionRiskActions from "$app/components/Admin/Users/PermissionRisk/Actions";
 import Bio from "$app/components/Admin/Users/PermissionRisk/Bio";
 import CompliantStatus from "$app/components/Admin/Users/PermissionRisk/CompliantStatus";
-import FlagForFraud from "$app/components/Admin/Users/PermissionRisk/FlagForFraud";
 import UserGuids from "$app/components/Admin/Users/PermissionRisk/Guids";
 import LatestPosts from "$app/components/Admin/Users/PermissionRisk/LatestPosts";
 import SchedulePayout from "$app/components/Admin/Users/PermissionRisk/SchedulePayout";
@@ -24,7 +23,6 @@ const AdminUserPermissionRisk = ({ user }: AdminUserPermissionRiskProps) => (
       <CompliantStatus user={user} />
     </div>
 
-    <FlagForFraud user={user} />
     <SuspendForFraud user={user} />
     <SchedulePayout user={user} />
     <WatchedUser user={user} />
