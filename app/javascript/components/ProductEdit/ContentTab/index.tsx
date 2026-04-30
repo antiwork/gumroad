@@ -973,7 +973,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         >
           <NodeVisibilityProvider scrollRef={scrollContainerRef}>
             <div className="relative h-full flex-1">
-              {editor?.isEmpty && isSelectedPageEmpty ? (
+              {isSelectedPageEmpty ? (
                 <div className="pointer-events-none absolute inset-0 flex items-start">
                   <p className="flex flex-wrap items-center gap-1 text-muted">
                     <span>Enter the content you want to sell.</span>
