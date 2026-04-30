@@ -117,7 +117,7 @@ describe Api::Internal::Admin::PayoutsController do
       expect(user.reload.payouts_paused_internally?).to be(true)
     end
 
-    it "short-circuits when payouts are already paused" do
+    it "short-circuits when payouts are already paused by admin" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
 
       expect { post :pause, params: { email: user.email, reason: "again" } }
@@ -127,9 +127,32 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body).to include(
         "success" => true,
         "status" => "already_paused",
-        "message" => "Payouts are already paused",
+        "message" => "Payouts are already paused by admin",
         "payouts_paused" => true
       )
+    end
+
+    it "asserts admin attribution when payouts were previously paused by the system" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      reason = "Manual review pending"
+
+      expect { post :pause, params: { email: user.email, reason: reason } }
+        .to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+      expect(user.reload.payouts_paused_by.to_s).to eq(GUMROAD_ADMIN_ID.to_s)
+      expect(user.payouts_paused_for_reason).to eq(reason)
+    end
+
+    it "asserts admin attribution when payouts were previously paused by Stripe" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      post :pause, params: { email: user.email, reason: "Stripe escalation" }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
     end
   end
 

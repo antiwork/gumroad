@@ -960,6 +960,22 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body["success"]).to be(true)
       expect(response.parsed_body).not_to have_key("status")
     end
+
+    it "re-establishes the block when the admin flag is stale and BlockedObject was cleared elsewhere" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      purchase.unblock_buyer!
+      purchase.update!(is_buyer_blocked_by_admin: true)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
+      expect(purchase.buyer_blocked?).to be(false)
+
+      expect { post :block_buyer, params: params }
+        .to change { purchase.reload.buyer_blocked? }.from(false).to(true)
+        .and change { purchase.comments.where(author_id: admin_user.id).count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
+    end
   end
 
   describe "POST unblock_buyer" do

@@ -223,7 +223,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     purchase = fetch_purchase_with_email_match
     return unless purchase
 
-    if purchase.is_buyer_blocked_by_admin?
+    if purchase.is_buyer_blocked_by_admin? && purchase.buyer_blocked?
       return render json: {
         success: true,
         status: "already_blocked",
