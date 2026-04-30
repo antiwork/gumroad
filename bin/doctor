@@ -93,7 +93,7 @@ if has_command bundle; then
     fail "Bundler is not using rbenv: $bundle_path"
   fi
 
-  if [[ "$bundle_version" == "*2.5.10" ]]; then
+  if [[ "$bundle_version" == "Bundler version 2.5.10" ]]; then
     ok "$bundle_version"
   else
     warn "Unexpected Bundler version: ${bundle_version:-unknown}"
