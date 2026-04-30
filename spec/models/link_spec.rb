@@ -69,6 +69,13 @@ describe Link, :vcr do
       expect(link.errors.full_messages).to include "Sorry, we don't support pricing products above $5,000."
     end
 
+    it "fails if price exceeds the maximum storable value" do
+      link = build(:product, user: create(:user, verified: true), price_cents: 2_147_483_648)
+
+      expect(link).not_to be_valid
+      expect(link.errors.full_messages).to include "Sorry, the price entered is too large."
+    end
+
     it "fails if price is too low" do
       link = build(:product, price_cents: 98)
 
