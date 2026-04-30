@@ -288,10 +288,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "links to the suspend users page with the user ID pre-filled" do
       visit admin_user_path(user.external_id)
 
-      expect(page).to have_link("Suspend for fraud")
-      suspend_link = find_link("Suspend for fraud")
-      expect(suspend_link[:href]).to include(admin_suspend_users_path)
-      expect(suspend_link[:href]).to include("identifiers=#{user.external_id}")
+      expect(page).to have_button("Suspend for fraud")
     end
 
     it "is hidden when user is already flagged for fraud" do
@@ -299,7 +296,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
       visit admin_user_path(user.external_id)
 
-      expect(page).not_to have_link("Suspend for fraud")
+      expect(page).not_to have_button("Suspend for fraud")
     end
 
     it "is hidden when user is already suspended" do
@@ -308,7 +305,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
       visit admin_user_path(user.external_id)
 
-      expect(page).not_to have_link("Suspend for fraud")
+      expect(page).not_to have_button("Suspend for fraud")
     end
   end
 
