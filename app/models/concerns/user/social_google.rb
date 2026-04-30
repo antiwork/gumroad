@@ -74,11 +74,11 @@ module User::SocialGoogle
         end
 
         user
-      rescue ActiveRecord::Deadlocked => e
+      rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout => e
         retries += 1
         retry if retries <= 2
 
-        logger.error("Deadlock finding or creating user via Google OAuth2 after #{retries} retries: #{e.message}")
+        logger.error("Lock error finding or creating user via Google OAuth2 after #{retries} retries: #{e.class} - #{e.message}")
         ErrorNotifier.notify(e)
         nil
       end
