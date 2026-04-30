@@ -1,8 +1,3 @@
-/**
- * HYPER-SPATIAL MASTER COPY // TIMELINE: OPTIMAL-SUCCESS
- * RESOLUTION: ARIA-ACCESSIBILITY + STATE-RESET INJECTION
- */
-
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
