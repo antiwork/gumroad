@@ -6,7 +6,7 @@ import {
   PaymentRequestPaymentMethodEvent,
   PaymentRequestShippingAddress,
   PaymentRequestShippingAddressEvent,
-  StripeElements,
+  StripeCardElement,
 } from "@stripe/stripe-js";
 import { DataCollector, PayPal } from "braintree-web";
 import * as BraintreeClient from "braintree-web/client";
@@ -38,7 +38,6 @@ import {
   addressFields,
   getErrors,
   getTotalPrice,
-  getTotalPriceFromProducts,
   hasShipping,
   isProcessing,
   isSubmitDisabled,
@@ -659,12 +658,11 @@ const CreditCardContent = () => {
   const fail = useFail();
   const isLoggedIn = !!useLoggedInUser();
 
-  const elementsRef = React.useRef<StripeElements | null>(null);
+  const cardElementRef = React.useRef<StripeCardElement | null>(null);
   const [useSavedCard, setUseSavedCard] = React.useState(!!state.savedCreditCard);
   const [keepOnFile, setKeepOnFile] = React.useState(isLoggedIn);
 
-  const amount = getTotalPrice(state) ?? getTotalPriceFromProducts(state);
-  const paymentMethodTypes = requiresReusablePaymentMethod(state) ? ["card"] : ["card", "link"];
+  const [cardError, setCardError] = React.useState(false);
 
   React.useEffect(() => {
     dispatch({
@@ -679,16 +677,17 @@ const CreditCardContent = () => {
   React.useEffect(() => {
     if (state.status.type !== "starting" || state.paymentMethod !== "card") return;
     (async () => {
-      if (!useSavedCard && !elementsRef.current) {
+      if (!useSavedCard && !cardElementRef.current) {
+        setCardError(true);
         return dispatch({ type: "cancel" });
       }
       const selectedPaymentMethod: SelectedPaymentMethod = useSavedCard
         ? { type: "saved" }
         : {
             type: "card",
-            elements: assertDefined(
-              elementsRef.current,
-              "`elementsRef.current` should be defined when the payment method is an unsaved card",
+            element: assertDefined(
+              cardElementRef.current,
+              "`cardElementRef.current` should be defined when the payment method is an unsaved card",
             ),
             zipCode: state.zipCode,
             keepOnFile,
@@ -704,6 +703,7 @@ const CreditCardContent = () => {
         paymentMethod.cardParamsResult.cardParams.status === "error" &&
         paymentMethod.cardParamsResult.cardParams.stripe_error.type === "validation_error"
       ) {
+        setCardError(true);
         return dispatch({ type: "cancel" });
       }
       dispatch({ type: "set-payment-method", paymentMethod });
@@ -715,11 +715,11 @@ const CreditCardContent = () => {
       <CreditCardInput
         savedCreditCard={state.savedCreditCard}
         disabled={isProcessing(state)}
-        onReady={(elements) => (elementsRef.current = elements)}
+        onReady={(element) => (cardElementRef.current = element)}
+        invalid={cardError}
         useSavedCard={useSavedCard}
         setUseSavedCard={setUseSavedCard}
-        amount={amount}
-        paymentMethodTypes={paymentMethodTypes}
+        onChange={(evt) => setCardError(!!evt.error)}
       />
       {!useSavedCard && isLoggedIn ? (
         <Label className="flex items-center gap-2">
