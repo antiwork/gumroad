@@ -11,8 +11,49 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+process_running() {
+  local process_name="$1"
+
+  if has_command pgrep && pgrep -x "$process_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  ps -ax -o comm= 2>/dev/null |
+    awk -F/ -v process_name="$process_name" '$NF == process_name || $NF ~ "^" process_name ": " { found = 1 } END { exit !found }'
+}
+
+brew_service_started() {
+  local service_name="$1"
+
+  has_command brew &&
+    brew services list 2>/dev/null |
+      awk -v service_name="$service_name" '$1 == service_name && $2 == "started" { found = 1 } END { exit !found }'
+}
+
 port_listening() {
-  lsof -i :"$1" -n -P >/dev/null 2>&1
+  local port="$1"
+
+  if has_command lsof && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if has_command ss &&
+    ss -ltn 2>/dev/null |
+      awk -v port="$port" 'NR > 1 { local_address = $4; sub(/.*:/, "", local_address); if (local_address == port) found = 1 } END { exit !found }'; then
+    return 0
+  fi
+
+  if has_command netstat &&
+    netstat -an 2>/dev/null |
+      awk -v port="$port" '$0 ~ /LISTEN/ { local_address = $4; if (local_address ~ "[.:]" port "$") found = 1 } END { exit !found }'; then
+    return 0
+  fi
+
+  return 1
+}
+
+rbenv_init_configured_in() {
+  grep -Eq 'rbenv[[:space:]]+init[[:space:]]+-([[:space:]]+(zsh|bash))?([[:space:]]|["\)]|$)' "$1"
 }
 
 print_header() {
@@ -31,7 +72,7 @@ if has_command ruby; then
   else
     fail "Ruby is not using rbenv: $ruby_path"
     info 'export PATH="$HOME/.rbenv/shims:$HOME/.rbenv/bin:$PATH"'
-    info 'eval "$(rbenv init - zsh)"'
+    info 'eval "$(rbenv init -)"'
   fi
 
   info "$ruby_version"
@@ -65,10 +106,37 @@ fi
 # ========================
 print_header "Shell"
 
-if [[ -f "$HOME/.zshrc" ]]; then
-  grep -q 'rbenv init - zsh' "$HOME/.zshrc" && ok "rbenv init OK" || fail "Missing rbenv init"
+current_shell="${SHELL:-}"
+current_shell="${current_shell##*/}"
+
+case "$current_shell" in
+  zsh)
+    shell_rc_files=("$HOME/.zshrc")
+    shell_rc_hint="~/.zshrc"
+    ;;
+  bash)
+    shell_rc_files=("$HOME/.bashrc" "$HOME/.bash_profile")
+    shell_rc_hint="~/.bashrc or ~/.bash_profile"
+    ;;
+  *)
+    shell_rc_files=("$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile")
+    shell_rc_hint="~/.zshrc, ~/.bashrc, or ~/.bash_profile"
+    ;;
+esac
+
+rbenv_init_file=""
+for shell_rc in "${shell_rc_files[@]}"; do
+  if [[ -f "$shell_rc" ]] && rbenv_init_configured_in "$shell_rc"; then
+    rbenv_init_file="$shell_rc"
+    break
+  fi
+done
+
+if [[ -n "$rbenv_init_file" ]]; then
+  ok "rbenv init OK in ${rbenv_init_file/#$HOME/~}"
 else
-  warn "~/.zshrc not found"
+  fail "Missing rbenv init in $shell_rc_hint"
+  info 'Add: eval "$(rbenv init -)"'
 fi
 
 # ========================
@@ -126,8 +194,10 @@ fi
 # ========================
 print_header "Nginx"
 
-if has_command nginx && ps aux | grep nginx | grep -v grep >/dev/null 2>&1; then
+if process_running nginx; then
   ok "Nginx is running"
+elif brew_service_started nginx; then
+  ok "Nginx brew service is started"
 else
   fail "Nginx is not running"
 fi
