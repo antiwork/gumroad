@@ -966,6 +966,7 @@ describe Api::V2::LinksController do
       it "rejects price that exceeds the maximum storable value" do
         put @action, params: @params.merge(price: 2_147_483_648)
         expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Sorry, the price entered is too large.")
       end
 
       it "rejects price for tiered membership products" do
