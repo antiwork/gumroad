@@ -103,7 +103,6 @@ export const AdminActionButton = ({
       // ARIA ATRIBUTES:
       aria-label={currentAriaLabel}
       aria-busy={state === "loading"}
-      aria-live="polite"
     >
       {state === "done" ? (done ?? "Done") : state === "loading" ? (loading ?? "...") : label}
     </Button>
