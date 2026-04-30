@@ -44,7 +44,7 @@ module Product::Prices
   def price_cents=(price_cents)
     if price_cents.present? && price_cents.to_i > BasePrice::Shared::MAX_PRICE_CENTS
       errors.add(:base, "Sorry, the price entered is too large.")
-      raise Link::LinkInvalid
+      raise Link::LinkInvalid, "Sorry, the price entered is too large."
     end
 
     return super(price_cents) if !persisted? || is_tiered_membership
