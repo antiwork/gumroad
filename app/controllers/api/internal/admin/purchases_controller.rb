@@ -187,13 +187,23 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       return render json: { success: false, message: "Purchase has no subscription" }, status: :unprocessable_entity
     end
 
-    if subscription.cancelled_at.present? || subscription.deactivated?
+    if subscription.cancelled_at.present?
       return render json: {
         success: true,
         status: "already_cancelled",
         message: "Subscription is already cancelled",
-        cancelled_at: subscription.cancelled_at&.as_json,
+        cancelled_at: subscription.cancelled_at.as_json,
         cancelled_by_admin: subscription.cancelled_by_admin?
+      }
+    end
+
+    if subscription.deactivated?
+      return render json: {
+        success: true,
+        status: "already_inactive",
+        message: "Subscription is no longer active",
+        termination_reason: subscription.termination_reason,
+        deactivated_at: subscription.deactivated_at&.as_json
       }
     end
 
@@ -213,11 +223,11 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     purchase = fetch_purchase_with_email_match
     return unless purchase
 
-    if purchase.buyer_blocked?
+    if purchase.is_buyer_blocked_by_admin?
       return render json: {
         success: true,
         status: "already_blocked",
-        message: "Buyer is already blocked"
+        message: "Buyer is already blocked by admin"
       }
     end
 
@@ -242,6 +252,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     end
 
     purchase.unblock_buyer!
+    create_unblock_buyer_comments!(purchase)
 
     render json: {
       success: true,
@@ -275,6 +286,14 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   end
 
   private
+    def create_unblock_buyer_comments!(purchase)
+      content = "Buyer unblocked by Admin"
+      purchase.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID)
+      if purchase.purchaser.present?
+        purchase.purchaser.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID, purchase:)
+      end
+    end
+
     def fetch_purchase_with_email_match
       buyer_email = params[:email].to_s.strip.downcase
       if buyer_email.blank?

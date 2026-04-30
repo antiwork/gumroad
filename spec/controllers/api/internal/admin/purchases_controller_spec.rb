@@ -846,15 +846,36 @@ describe Api::Internal::Admin::PurchasesController do
         )
       end
 
-      it "short-circuits when the subscription is already deactivated" do
+      it "returns already_inactive with the termination reason when the subscription is deactivated via failed payment" do
+        deactivated_at = 1.day.ago
         allow(subscription).to receive(:deactivated?).and_return(true)
-        allow(subscription).to receive(:cancelled_by_admin?).and_return(true)
+        allow(subscription).to receive(:deactivated_at).and_return(deactivated_at)
+        allow(subscription).to receive(:termination_reason).and_return("failed_payment")
         expect(subscription).not_to receive(:cancel!)
 
         post :cancel_subscription, params: params
 
         expect(response).to have_http_status(:ok)
-        expect(response.parsed_body["status"]).to eq("already_cancelled")
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "status" => "already_inactive",
+          "message" => "Subscription is no longer active",
+          "termination_reason" => "failed_payment",
+          "deactivated_at" => deactivated_at.as_json
+        )
+      end
+
+      it "returns already_inactive when the subscription ended naturally" do
+        allow(subscription).to receive(:deactivated?).and_return(true)
+        allow(subscription).to receive(:deactivated_at).and_return(2.days.ago)
+        allow(subscription).to receive(:termination_reason).and_return("fixed_subscription_period_ended")
+        expect(subscription).not_to receive(:cancel!)
+
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["status"]).to eq("already_inactive")
+        expect(response.parsed_body["termination_reason"]).to eq("fixed_subscription_period_ended")
       end
     end
   end
@@ -910,8 +931,9 @@ describe Api::Internal::Admin::PurchasesController do
       expect(purchase.comments.where(author_id: admin_user.id).where("content LIKE ?", "Buyer blocked%").count).to eq(1)
     end
 
-    it "short-circuits when the buyer is already blocked" do
+    it "short-circuits when the buyer is already blocked by admin on this purchase" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
+      expect(purchase.reload.is_buyer_blocked_by_admin?).to be(true)
       expect_any_instance_of(Purchase).not_to receive(:block_buyer!)
 
       post :block_buyer, params: params
@@ -920,8 +942,23 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).to include(
         "success" => true,
         "status" => "already_blocked",
-        "message" => "Buyer is already blocked"
+        "message" => "Buyer is already blocked by admin"
       )
+    end
+
+    it "does not short-circuit when the buyer was auto-blocked without admin attribution" do
+      previous_purchase = create(:free_purchase, email: purchase.email)
+      previous_purchase.block_buyer!(blocking_user_id: nil, comment_content: "Auto-blocked: chargeback rate")
+      expect(purchase.reload.buyer_blocked?).to be(true)
+      expect(purchase.is_buyer_blocked_by_admin?).to be(false)
+
+      expect { post :block_buyer, params: params }
+        .to change { purchase.reload.is_buyer_blocked_by_admin? }.from(false).to(true)
+        .and change { purchase.comments.where(author_id: admin_user.id).count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body).not_to have_key("status")
     end
   end
 
@@ -946,17 +983,27 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response).to have_http_status(:not_found)
     end
 
-    it "unblocks the buyer and flips buyer_blocked? to false" do
+    it "unblocks the buyer, flips buyer_blocked? to false, and creates an audit comment" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       expect(purchase.reload.buyer_blocked?).to be(true)
 
-      post :unblock_buyer, params: params
+      expect { post :unblock_buyer, params: params }
+        .to change { purchase.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
       expect(response.parsed_body["message"]).to eq("Successfully unblocked buyer for purchase number #{purchase.external_id_numeric}")
       expect(purchase.reload.buyer_blocked?).to be(false)
       expect(purchase.reload.is_buyer_blocked_by_admin?).to be(false)
+    end
+
+    it "creates an unblock comment on the purchaser when present" do
+      buyer = create(:user, email: "buyer@example.com")
+      purchase.update!(purchaser: buyer)
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+
+      expect { post :unblock_buyer, params: params }
+        .to change { buyer.reload.comments.where(author_id: admin_user.id, content: "Buyer unblocked by Admin").count }.by(1)
     end
 
     it "short-circuits when the buyer is not blocked" do
