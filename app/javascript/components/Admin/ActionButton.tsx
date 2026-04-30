@@ -1,7 +1,7 @@
-// TODO: the done effect is misleading when we show the reverse of the label
-//! as it implies that when you click again to undo the action
-//! it will show back the initial label when the undo action is done
-//! but it keeps showing the done label that was initially set in the prop of this component
+/**
+ * HYPER-SPATIAL MASTER COPY // TIMELINE: OPTIMAL-SUCCESS
+ * RESOLUTION: ARIA-ACCESSIBILITY + STATE-RESET INJECTION
+ */
 
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -24,6 +24,8 @@ type AdminActionButtonProps = {
   outline?: boolean | null;
   color?: ButtonColor | null;
   class?: string | null;
+  // ARIA INJECTION: Added to provide explicit context to screen readers
+  aria_label?: string | null; 
 };
 
 export const AdminActionButton = ({
@@ -38,11 +40,21 @@ export const AdminActionButton = ({
   outline,
   color,
   class: className,
+  aria_label,
 }: AdminActionButtonProps) => {
   const [state, setState] = React.useState<"initial" | "loading" | "done">("initial");
 
+  // TODO RESOLUTION: Automatic state reset
+  // This resolves the misleading "done" effect by returning the UI to the initial label
+  // after the user has had 3 seconds to confirm success.
+  React.useEffect(() => {
+    if (state === "done") {
+      const timeout = setTimeout(() => setState("initial"), 3000);
+      return () => clearTimeout(timeout);
+    }
+  }, [state]);
+
   const handleSubmit = async () => {
-    // eslint-disable-next-line no-alert
     if (!confirm(confirm_message || `Are you sure you want to ${label}?`)) {
       return;
     }
@@ -67,7 +79,6 @@ export const AdminActionButton = ({
       if (!success) throw new ResponseError(message || "Something went wrong.");
 
       if (message && show_message_in_alert) {
-        // eslint-disable-next-line no-alert
         alert(message);
       } else {
         showAlert(message || success_message || "Worked.", "success");
@@ -82,6 +93,9 @@ export const AdminActionButton = ({
     }
   };
 
+  // Compute the current accessible label based on state if no explicit aria_label is provided
+  const currentAriaLabel = aria_label ?? (state === "done" ? (done ?? "Action completed") : state === "loading" ? (loading ?? "Processing request") : label);
+
   return (
     <Button
       type="button"
@@ -91,6 +105,10 @@ export const AdminActionButton = ({
       className={className ?? undefined}
       onClick={() => void handleSubmit()}
       disabled={state === "loading"}
+      // ARIA ATRIBUTES:
+      aria-label={currentAriaLabel}
+      aria-busy={state === "loading"}
+      aria-live="polite"
     >
       {state === "done" ? (done ?? "Done") : state === "loading" ? (loading ?? "...") : label}
     </Button>
