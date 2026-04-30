@@ -316,6 +316,7 @@ Rails.application.routes.draw do
 
           resources :users, only: [] do
             collection do
+              post :info
               post :suspension
               post :reset_password
               post :update_email
