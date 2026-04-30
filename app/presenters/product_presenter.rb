@@ -10,6 +10,15 @@ class ProductPresenter
 
   attr_reader :product, :editing_page_id, :pundit_user, :request, :ai_generated
 
+  PUBLISH_READINESS_CONTENT_NATIVE_TYPES = [
+    Link::NATIVE_TYPE_DIGITAL,
+    Link::NATIVE_TYPE_COURSE,
+    Link::NATIVE_TYPE_EBOOK,
+    Link::NATIVE_TYPE_NEWSLETTER,
+    Link::NATIVE_TYPE_PODCAST,
+    Link::NATIVE_TYPE_AUDIOBOOK,
+  ].freeze
+
   delegate :user, :skus,
            :skus_enabled, :is_licensed, :is_multiseat_license, :quantity_enabled, :description,
            :is_recurring_billing, :should_include_last_post, :should_show_all_posts, :should_show_sales_count,
@@ -225,6 +234,7 @@ class ProductPresenter
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
+      publish_readiness:,
       thumbnail: product.thumbnail&.alive&.as_json,
       refund_policies: product.user
         .product_refund_policies
@@ -329,5 +339,132 @@ class ProductPresenter
           message: "Domain verification failed. Please make sure you have correctly configured the DNS record for #{domain}.",
         }
       end
+    end
+
+    def publish_readiness
+      items = [
+        readiness_item(
+          "name",
+          "Name the product",
+          description: "Buyers should know what they're getting.",
+          complete: product.name.present?,
+          severity: "required",
+          tab: "product",
+        ),
+        readiness_item(
+          "price",
+          "Set a price",
+          description: "Free and pay-what-you-want are fine.",
+          complete: product.price_cents.present? || !!product.customizable_price,
+          severity: "required",
+          tab: "product",
+        ),
+        readiness_item(
+          "description",
+          "Describe the transformation. What changes after buying this?",
+          description: "A short summary is enough.",
+          complete: product_description_ready?,
+          severity: "required",
+          tab: "product",
+        ),
+        content_readiness_item,
+        physical_shipping_readiness_item,
+        call_schedule_readiness_item,
+        membership_tier_readiness_item,
+        readiness_item(
+          "cover",
+          "Add a cover",
+          description: "A preview helps the page feel trustworthy.",
+          complete: product.display_asset_previews.any? || product.thumbnail&.alive.present?,
+          severity: "recommended",
+          tab: "product",
+        ),
+        readiness_item(
+          "discover_metadata",
+          "Add category or tags",
+          description: "Help people find the right product.",
+          complete: product.taxonomy_id.present? || product.tags.exists?,
+          severity: "recommended",
+          tab: "share",
+        ),
+      ].compact
+
+      {
+        complete_count: items.count { _1[:complete] },
+        total_count: items.length,
+        required_complete: items.none? { _1[:severity] == "required" && !_1[:complete] },
+        items:,
+      }
+    end
+
+    def readiness_item(id, label, complete:, severity:, description: nil, tab: nil)
+      {
+        id:,
+        label:,
+        description:,
+        complete:,
+        severity:,
+        tab:,
+      }.compact
+    end
+
+    def product_description_ready?
+      description_text = ActionView::Base.full_sanitizer.sanitize(product.description.to_s)
+      description_text.gsub(/\u00a0/, " ").strip.present? || product.custom_summary.present?
+    end
+
+    def content_readiness_item
+      return unless PUBLISH_READINESS_CONTENT_NATIVE_TYPES.include?(product.native_type)
+
+      readiness_item(
+        "content",
+        "Add the content",
+        description: "Upload a file or add a content page.",
+        complete: product.has_content? || product.has_files?,
+        severity: "required",
+        tab: "content",
+      )
+    end
+
+    def physical_shipping_readiness_item
+      return unless product.native_type == Link::NATIVE_TYPE_PHYSICAL || product.is_physical?
+
+      readiness_item(
+        "shipping",
+        "Set shipping",
+        description: "Add at least one shipping destination.",
+        complete: product.shipping_destinations.alive.any?,
+        severity: "required",
+        tab: "product",
+      )
+    end
+
+    def call_schedule_readiness_item
+      return unless product.native_type == Link::NATIVE_TYPE_CALL
+
+      has_duration = product.alive_variants.any? { _1.duration_in_minutes.present? }
+      has_availability = product.call_availabilities.any?
+
+      readiness_item(
+        "call_schedule",
+        "Add call times",
+        description: "Set a duration and availability.",
+        complete: has_duration && has_availability,
+        severity: "required",
+        tab: "product",
+      )
+    end
+
+    def membership_tier_readiness_item
+      return unless product.native_type == Link::NATIVE_TYPE_MEMBERSHIP
+
+      readiness_item(
+        "membership_tier",
+        "Add a tier",
+        description: "Give buyers a membership option.",
+        complete: product.alive_variants.any?,
+        severity: "required",
+        tab: "product",
+      )
     end
 end

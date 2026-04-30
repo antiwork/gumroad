@@ -27,6 +27,7 @@ import {
   Product,
   ProductEditContext,
   ProfileSection,
+  PublishReadiness,
   ShippingCountry,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
@@ -59,6 +60,7 @@ type Props = {
   product: Product;
   id: string;
   unique_permalink: string;
+  publish_readiness: PublishReadiness;
   thumbnail: Thumbnail | null;
   refund_policies: OtherRefundPolicy[];
   currency_type: CurrencyCode;
@@ -93,6 +95,7 @@ const createContextValue = (props: Props) => ({
   product: props.product,
   updateProduct: () => {},
   uniquePermalink: props.unique_permalink,
+  publishReadiness: props.publish_readiness,
   refundPolicies: props.refund_policies,
   thumbnail: props.thumbnail,
   currencyType: props.currency_type,

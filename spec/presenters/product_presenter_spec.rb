@@ -260,7 +260,7 @@ describe ProductPresenter do
     end
     let(:presenter) { described_class.new(product:, request:) }
     let!(:asset_previews) { create_list(:asset_preview, 2, link: product) }
-    let!(:thumbnail) { create(:thumbnail, product:) }
+    let!(:thumbnail) { create(:unsplash_thumbnail, product:) }
     let!(:refund_policy) { create(:product_refund_policy, product:, seller: product.user) }
     let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 0, fine_print: "This is another refund policy") }
     let!(:variant_category) { create(:variant_category, link: product, title: "Version") }
@@ -295,8 +295,6 @@ describe ProductPresenter do
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
             customizable_price: true,
             suggested_price_cents: 200,
-            default_offer_code_id: nil,
-            default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
             custom_view_content_button_text: "Download Files",
@@ -425,6 +423,61 @@ describe ProductPresenter do
           },
           id: product.external_id,
           unique_permalink: product.unique_permalink,
+          publish_readiness: {
+            complete_count: 6,
+            total_count: 6,
+            required_complete: true,
+            items: [
+              {
+                id: "name",
+                label: "Name the product",
+                description: "Buyers should know what they're getting.",
+                complete: true,
+                severity: "required",
+                tab: "product",
+              },
+              {
+                id: "price",
+                label: "Set a price",
+                description: "Free and pay-what-you-want are fine.",
+                complete: true,
+                severity: "required",
+                tab: "product",
+              },
+              {
+                id: "description",
+                label: "Describe the transformation. What changes after buying this?",
+                description: "A short summary is enough.",
+                complete: true,
+                severity: "required",
+                tab: "product",
+              },
+              {
+                id: "content",
+                label: "Add the content",
+                description: "Upload a file or add a content page.",
+                complete: true,
+                severity: "required",
+                tab: "content",
+              },
+              {
+                id: "cover",
+                label: "Add a cover",
+                description: "A preview helps the page feel trustworthy.",
+                complete: true,
+                severity: "recommended",
+                tab: "product",
+              },
+              {
+                id: "discover_metadata",
+                label: "Add category or tags",
+                description: "Help people find the right product.",
+                complete: true,
+                severity: "recommended",
+                tab: "share",
+              }
+            ],
+          },
           currency_type: "usd",
           thumbnail: thumbnail.as_json,
           refund_policies: [
@@ -546,8 +599,6 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
-              default_offer_code_id: nil,
-              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,
@@ -679,6 +730,61 @@ describe ProductPresenter do
             },
             id: membership.external_id,
             unique_permalink: membership.unique_permalink,
+            publish_readiness: {
+              complete_count: 4,
+              total_count: 6,
+              required_complete: true,
+              items: [
+                {
+                  id: "name",
+                  label: "Name the product",
+                  description: "Buyers should know what they're getting.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "price",
+                  label: "Set a price",
+                  description: "Free and pay-what-you-want are fine.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "description",
+                  label: "Describe the transformation. What changes after buying this?",
+                  description: "A short summary is enough.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "membership_tier",
+                  label: "Add a tier",
+                  description: "Give buyers a membership option.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "cover",
+                  label: "Add a cover",
+                  description: "A preview helps the page feel trustworthy.",
+                  complete: false,
+                  severity: "recommended",
+                  tab: "product",
+                },
+                {
+                  id: "discover_metadata",
+                  label: "Add category or tags",
+                  description: "Help people find the right product.",
+                  complete: false,
+                  severity: "recommended",
+                  tab: "share",
+                }
+              ],
+            },
             currency_type: "usd",
             thumbnail: nil,
             refund_policies: [],
@@ -805,8 +911,6 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
-              default_offer_code_id: nil,
-              default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
               custom_view_content_button_text: nil,
@@ -893,6 +997,61 @@ describe ProductPresenter do
             },
             id: new_product.external_id,
             unique_permalink: new_product.unique_permalink,
+            publish_readiness: {
+              complete_count: 3,
+              total_count: 6,
+              required_complete: false,
+              items: [
+                {
+                  id: "name",
+                  label: "Name the product",
+                  description: "Buyers should know what they're getting.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "price",
+                  label: "Set a price",
+                  description: "Free and pay-what-you-want are fine.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "description",
+                  label: "Describe the transformation. What changes after buying this?",
+                  description: "A short summary is enough.",
+                  complete: true,
+                  severity: "required",
+                  tab: "product",
+                },
+                {
+                  id: "content",
+                  label: "Add the content",
+                  description: "Upload a file or add a content page.",
+                  complete: false,
+                  severity: "required",
+                  tab: "content",
+                },
+                {
+                  id: "cover",
+                  label: "Add a cover",
+                  description: "A preview helps the page feel trustworthy.",
+                  complete: false,
+                  severity: "recommended",
+                  tab: "product",
+                },
+                {
+                  id: "discover_metadata",
+                  label: "Add category or tags",
+                  description: "Help people find the right product.",
+                  complete: false,
+                  severity: "recommended",
+                  tab: "share",
+                }
+              ],
+            },
             currency_type: "usd",
             thumbnail: nil,
             refund_policies: [],
@@ -969,6 +1128,66 @@ describe ProductPresenter do
           expect(described_class.new(product:).edit_props[:product][:community_chat_enabled]).to be(false)
         end
       end
+    end
+  end
+
+  describe "#edit_props publish_readiness" do
+    def publish_readiness_for(product)
+      described_class.new(product:).edit_props[:publish_readiness]
+    end
+
+    def readiness_item(readiness, id)
+      readiness[:items].find { _1[:id] == id }
+    end
+
+    it "marks digital products with missing basics incomplete" do
+      product = create(:product, description: nil)
+      product.update_columns(name: "")
+
+      readiness = publish_readiness_for(product)
+
+      expect(readiness).to include(complete_count: 1, total_count: 6, required_complete: false)
+      expect(readiness_item(readiness, "name")).to include(complete: false, severity: "required")
+      expect(readiness_item(readiness, "description")).to include(complete: false, severity: "required")
+      expect(readiness_item(readiness, "content")).to include(complete: false, severity: "required", tab: "content")
+    end
+
+    it "marks digital products with core basics mostly complete" do
+      product = create(:product_with_pdf_file, description: "A useful guide for creators")
+      create(:asset_preview, link: product)
+
+      readiness = publish_readiness_for(product)
+
+      expect(readiness).to include(complete_count: 5, total_count: 6, required_complete: true)
+      expect(readiness_item(readiness, "content")).to include(complete: true)
+      expect(readiness_item(readiness, "cover")).to include(complete: true)
+      expect(readiness_item(readiness, "discover_metadata")).to include(complete: false, severity: "recommended")
+    end
+
+    it "separates required and recommended items" do
+      readiness = publish_readiness_for(create(:product, description: nil))
+
+      expect(readiness[:items].select { _1[:severity] == "required" }.map { _1[:id] })
+        .to eq(["name", "price", "description", "content"])
+      expect(readiness[:items].select { _1[:severity] == "recommended" }.map { _1[:id] })
+        .to eq(["cover", "discover_metadata"])
+    end
+
+    it "does not add content checks for service products without clear deliverables" do
+      readiness = publish_readiness_for(create(:commission_product, description: "A custom illustration commission"))
+
+      expect(readiness[:items].map { _1[:id] })
+        .to contain_exactly("name", "price", "description", "cover", "discover_metadata")
+    end
+
+    it "adds product-type-specific checks when the existing data is reliable" do
+      physical_readiness = publish_readiness_for(create(:physical_product))
+      call_readiness = publish_readiness_for(create(:call_product))
+      membership_readiness = publish_readiness_for(create(:membership_product))
+
+      expect(readiness_item(physical_readiness, "shipping")).to include(complete: true, severity: "required")
+      expect(readiness_item(call_readiness, "call_schedule")).to include(complete: false, severity: "required")
+      expect(readiness_item(membership_readiness, "membership_tier")).to include(complete: true, severity: "required")
     end
   end
 

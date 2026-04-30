@@ -24,6 +24,7 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { PublishReadinessPanel } from "./PublishReadinessPanel";
 import { FileEntry, useProductEditContext } from "./state";
 
 export const useProductUrl = (params = {}) => {
@@ -349,6 +350,7 @@ export const Layout = ({
               ),
             })}
           >
+            <PublishReadinessPanel />
             <Preview
               scaleFactor={previewScaleFactor}
               style={

@@ -170,10 +170,27 @@ export type ContentUpdates = {
   uniquePermalinkOrVariantIds: string[];
 } | null;
 
+export type PublishReadinessItem = {
+  id: string;
+  label: string;
+  description?: string;
+  complete: boolean;
+  severity: "required" | "recommended";
+  tab?: "product" | "content" | "receipt" | "share";
+};
+
+export type PublishReadiness = {
+  complete_count: number;
+  total_count: number;
+  required_complete: boolean;
+  items: PublishReadinessItem[];
+};
+
 export const ProductEditContext = React.createContext<{
   id: string;
   product: Product;
   uniquePermalink: string;
+  publishReadiness: PublishReadiness;
   updateProduct: (update: Partial<Product> | ((product: Product) => void)) => void;
   thumbnail: Thumbnail | null;
   refundPolicies: OtherRefundPolicy[];

@@ -34,6 +34,60 @@ describe("Product Edit Scenario", type: :system, js: true) do
     save_change
   end
 
+  describe "publish readiness" do
+    let!(:product) { create(:product, user: seller, description: nil, draft: true, purchase_disabled_at: Time.current) }
+
+    def within_readiness_section(title, &block)
+      within find(:xpath, ".//div[./h4[normalize-space()='#{title}']]"), &block
+    end
+
+    it "updates from the draft description while editing and stays current after saving" do
+      visit edit_link_path(product.unique_permalink)
+
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("2 of 6 ready")
+        within_readiness_section("Fix before sharing") do
+          expect(page).to have_text("Describe the transformation. What changes after buying this?")
+        end
+      end
+
+      set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "Customers learn how to launch with confidence.")
+
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("3 of 6 ready")
+        within_readiness_section("Already set") do
+          expect(page).to have_text("Describe the transformation. What changes after buying this?")
+        end
+      end
+
+      set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "")
+
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("2 of 6 ready")
+        within_readiness_section("Fix before sharing") do
+          expect(page).to have_text("Describe the transformation. What changes after buying this?")
+        end
+      end
+
+      set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "Customers learn how to launch with confidence.")
+      click_on "Save and continue"
+      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
+
+      select_tab "Product"
+
+      within "section[aria-labelledby='publish-readiness-title']" do
+        expect(page).to have_text("3 of 6 ready")
+        within_readiness_section("Fix before sharing") do
+          expect(page).not_to have_text("Describe the transformation. What changes after buying this?")
+        end
+        within_readiness_section("Already set") do
+          expect(page).to have_text("Describe the transformation. What changes after buying this?")
+        end
+      end
+    end
+  end
+
   describe "Custom domain" do
     let(:valid_domain) { "valid-domain.com" }
     let(:invalid_domain) { "invalid-domain.com" }
@@ -370,9 +424,9 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows to edit suggested price of PWYW products" do
     visit edit_link_path(product.unique_permalink)
 
-    fill_in "Amount", with: "20"
+    fill_in "Amount", with: "20", fill_options: { clear: :backspace }
     check "Allow customers to pay what they want"
-    fill_in "Suggested amount", with: "50"
+    fill_in "Suggested amount", with: "50", fill_options: { clear: :backspace }
     save_change
 
     expect(page).to have_text("$20+")
@@ -383,7 +437,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     expect(page).to have_field("Suggested amount", with: "50")
 
-    find_field("Suggested amount", with: "50").fill_in with: ""
+    find_field("Suggested amount", with: "50").fill_in with: "", fill_options: { clear: :backspace }
     click_on "Save changes"
     expect(page).to have_alert(text: "Changes saved!")
 
@@ -408,7 +462,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     visit edit_link_path(product.unique_permalink)
     new_name = "Slot machine"
-    fill_in("Name", with: new_name)
+    fill_in("Name", with: new_name, fill_options: { clear: :backspace })
     fill_in("Amount", with: 777)
     save_change
     expect(product.reload.name).to eq new_name
@@ -693,6 +747,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       login_as(recommendable_seller)
 
       expect(recommendable_product.recommendable?).to be(true)
+      index_model_records(Link)
       visit edit_link_path(recommendable_product.unique_permalink) + "/share"
       expect(page).to have_status(text: "#{recommendable_product.name} is listed on Gumroad Discover.")
 
@@ -939,7 +994,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       new_name = "Slot machine"
       expect do
-        fill_in("Name", with: new_name)
+        fill_in("Name", with: new_name, fill_options: { clear: :backspace })
         fill_in("Amount", with: 777)
         save_change
       end.to change { product.reload.name }.to(new_name)
