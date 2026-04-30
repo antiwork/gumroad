@@ -93,7 +93,7 @@ if has_command bundle; then
     fail "Bundler is not using rbenv: $bundle_path"
   fi
 
-  if [[ "$bundle_version" == *"2.5.10"* ]]; then
+  if [[ "$bundle_version" == "*2.5.10" ]]; then
     ok "$bundle_version"
   else
     warn "Unexpected Bundler version: ${bundle_version:-unknown}"
@@ -163,16 +163,16 @@ print_header "MySQL"
 
 if port_listening 3306; then
   ok "MySQL port is open"
+
+  if has_command mysql; then
+    if mysql -u root -ppassword -e "SELECT 1;" >/dev/null 2>&1; then
+      ok "MySQL credentials work"
+    else
+      fail "MySQL root/password is incorrect"
+    fi
+  fi
 else
   fail "MySQL is not running"
-fi
-
-if has_command mysql; then
-  if mysql -u root -ppassword -e "SELECT 1;" >/dev/null 2>&1; then
-    ok "MySQL credentials work"
-  else
-    fail "MySQL root/password is incorrect"
-  fi
 fi
 
 # ========================
@@ -180,15 +180,15 @@ print_header "Elasticsearch"
 
 if port_listening 9200 && curl -fsS http://localhost:9200 >/dev/null 2>&1; then
   ok "Elasticsearch is running"
+
+  if curl -fsS http://localhost:9200/purchases >/dev/null 2>&1; then
+    ok "Index 'purchases' exists"
+  else
+    warn "Missing index 'purchases'"
+    info "Run reindex task"
+  fi
 else
   fail "Elasticsearch is not running"
-fi
-
-if curl -fsS http://localhost:9200/purchases >/dev/null 2>&1; then
-  ok "Index 'purchases' exists"
-else
-  warn "Missing index 'purchases'"
-  info "Run reindex task"
 fi
 
 # ========================
