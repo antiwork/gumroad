@@ -95,6 +95,45 @@ describe User::SocialGoogle do
 
       expect(result).to be_nil
     end
+
+    it "retries after a lock wait timeout and returns the created user" do
+      lock_timeout_data = @data.deep_dup
+      lock_timeout_data["uid"] = "google-lock-timeout-retry-uid"
+      lock_timeout_data["info"]["email"] = "google-lock-timeout-retry@example.com"
+      lock_timeout_data["extra"]["raw_info"]["email"] = "google-lock-timeout-retry@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      save_attempts = 0
+      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+        save_attempts += 1
+        raise ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded" if save_attempts == 1
+
+        original.call(*args)
+      end
+
+      result = User.find_or_create_for_google_oauth2(lock_timeout_data)
+
+      expect(result).to be_persisted
+      expect(result).to be_valid
+      expect(result.google_uid).to eq(lock_timeout_data["uid"])
+      expect(save_attempts).to be >= 2
+    end
+
+    it "returns nil and notifies after exhausting lock wait timeout retries" do
+      lock_timeout_data = @data.deep_dup
+      lock_timeout_data["uid"] = "google-lock-timeout-failure-uid"
+      lock_timeout_data["info"]["email"] = "google-lock-timeout-failure@example.com"
+      lock_timeout_data["extra"]["raw_info"]["email"] = "google-lock-timeout-failure@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
+
+      result = User.find_or_create_for_google_oauth2(lock_timeout_data)
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".google_picture_url", :vcr do

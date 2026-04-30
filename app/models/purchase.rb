@@ -3333,6 +3333,7 @@ class Purchase < ApplicationRecord
       return false unless link.recommendable? || (not_is_original_subscription_purchase? && original_purchase&.was_discover_fee_charged?)
       was_product_recommended? && !RecommendationType.is_free_recommendation_type?(recommended_by)
     end
+    public :charge_discover_fee?
 
     # Calculates the fees we charge based on price_cents
     #
@@ -3394,7 +3395,8 @@ class Purchase < ApplicationRecord
 
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         original_purchase = subscription.original_purchase
-        self.custom_fee_per_thousand = original_purchase.custom_fee_per_thousand if original_purchase&.custom_fee_per_thousand.present?
+        fee = original_purchase&.custom_fee_per_thousand.presence || seller.custom_fee_per_thousand
+        self.custom_fee_per_thousand = fee if fee.present?
       elsif is_preorder_charge?
         self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
       elsif seller.custom_fee_per_thousand.present?

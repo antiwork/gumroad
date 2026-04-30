@@ -66,6 +66,35 @@ describe UpdateUserCountry do
       end
     end
 
+    context "when changing from Japan with invalid kana data" do
+      before do
+        @user.alive_user_compliance_info.mark_deleted(validate: false)
+        jp_compliance = @user.user_compliance_infos.build(
+          country: "Japan",
+          first_name: "Taro",
+          last_name: "Yamada",
+          street_address: "address_full_match",
+          city: "Tokyo",
+          state: "Tokyo",
+          zip_code: "1000001"
+        )
+        jp_compliance.street_address_kana = "123 Main St"
+        jp_compliance.save!(validate: false)
+        @user.reload
+      end
+
+      it "soft-deletes old compliance info without raising validation errors" do
+        old_compliance_info = @user.alive_user_compliance_info
+        expect(old_compliance_info.country).to eq("Japan")
+
+        expect {
+          UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+        }.not_to raise_error
+
+        expect(old_compliance_info.reload.deleted?).to eq(true)
+      end
+    end
+
     context "when user has balance" do
       before do
         stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id) # For negative credits

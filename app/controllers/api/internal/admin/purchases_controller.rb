@@ -41,6 +41,71 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
   end
 
+  def resend_receipt
+    purchase = fetch_purchase
+    return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.blank?
+
+    purchase.resend_receipt
+    render json: {
+      success: true,
+      message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}"
+    }
+  end
+
+  def resend_all_receipts
+    email = params[:email].to_s.strip
+    return render json: { success: false, message: "email is required" }, status: :bad_request if email.blank?
+
+    purchases = Purchase.where(email: email).successful
+    return render json: { success: false, message: "No purchases found for email: #{email}" }, status: :not_found if purchases.empty?
+
+    CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+    render json: {
+      success: true,
+      message: "Successfully resent all receipts to #{email}",
+      count: purchases.count
+    }
+  end
+
+  def refund_taxes
+    buyer_email = params[:email].to_s.strip.downcase
+    return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
+
+    purchase = fetch_purchase
+    if purchase.blank? || purchase.email.to_s.downcase != buyer_email
+      return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
+    end
+
+    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: {
+        success: true,
+        message: "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}",
+        purchase: serialize_purchase(purchase)
+      }
+    else
+      message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"
+      render json: { success: false, message: message }, status: :unprocessable_entity
+    end
+  end
+
+  def reassign
+    from_email = params[:from].to_s.strip.presence
+    to_email = params[:to].to_s.strip.presence
+
+    result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
+
+    unless result.success?
+      return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+    end
+
+    render json: {
+      success: true,
+      message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+      count: result.count,
+      reassigned_purchase_ids: result.reassigned_purchase_ids
+    }
+  end
+
   def refund
     buyer_email = params[:email].to_s.strip.downcase
     return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
@@ -113,7 +178,138 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     }.compact
   end
 
+  def cancel_subscription
+    purchase = fetch_purchase_with_email_match
+    return unless purchase
+
+    subscription = purchase.subscription
+    if subscription.blank?
+      return render json: { success: false, message: "Purchase has no subscription" }, status: :unprocessable_entity
+    end
+
+    if subscription.cancelled_at.present?
+      return render json: {
+        success: true,
+        status: "already_cancelled",
+        message: "Subscription is already cancelled",
+        cancelled_at: subscription.cancelled_at.as_json,
+        cancelled_by_admin: subscription.cancelled_by_admin?
+      }
+    end
+
+    if subscription.deactivated?
+      return render json: {
+        success: true,
+        status: "already_inactive",
+        message: "Subscription is no longer active",
+        termination_reason: subscription.termination_reason,
+        deactivated_at: subscription.deactivated_at&.as_json
+      }
+    end
+
+    by_seller = ActiveModel::Type::Boolean.new.cast(params[:by_seller]) == true
+    subscription.cancel!(by_seller: by_seller, by_admin: true)
+
+    render json: {
+      success: true,
+      message: "Successfully cancelled subscription for purchase number #{purchase.external_id_numeric}",
+      cancelled_at: subscription.cancelled_at&.as_json,
+      cancelled_by_admin: subscription.cancelled_by_admin?,
+      cancelled_by_seller: !subscription.cancelled_by_buyer?
+    }
+  end
+
+  def block_buyer
+    purchase = fetch_purchase_with_email_match
+    return unless purchase
+
+    if purchase.is_buyer_blocked_by_admin? && purchase.buyer_blocked?
+      return render json: {
+        success: true,
+        status: "already_blocked",
+        message: "Buyer is already blocked by admin"
+      }
+    end
+
+    purchase.block_buyer!(blocking_user_id: GUMROAD_ADMIN_ID, comment_content: params[:comment_content].presence)
+
+    render json: {
+      success: true,
+      message: "Successfully blocked buyer for purchase number #{purchase.external_id_numeric}"
+    }
+  end
+
+  def unblock_buyer
+    purchase = fetch_purchase_with_email_match
+    return unless purchase
+
+    unless purchase.buyer_blocked? || purchase.is_buyer_blocked_by_admin?
+      return render json: {
+        success: true,
+        status: "not_blocked",
+        message: "Buyer is not blocked"
+      }
+    end
+
+    purchase.unblock_buyer!
+    create_unblock_buyer_comments!(purchase)
+
+    render json: {
+      success: true,
+      message: "Successfully unblocked buyer for purchase number #{purchase.external_id_numeric}"
+    }
+  end
+
+  def refund_for_fraud
+    purchase = fetch_purchase_with_email_match
+    return unless purchase
+
+    if purchase.stripe_refunded
+      return render json: { success: false, message: "Purchase has already been fully refunded" }, status: :unprocessable_entity
+    end
+
+    if purchase.stripe_transaction_id.blank? || purchase.amount_refundable_cents <= 0
+      return render json: { success: false, message: "Purchase has no charge to refund" }, status: :unprocessable_entity
+    end
+
+    unless purchase.refund_for_fraud_and_block_buyer!(GUMROAD_ADMIN_ID)
+      message = purchase.errors.full_messages.presence&.to_sentence || "Refund-for-fraud failed for purchase number #{purchase.external_id_numeric}"
+      return render json: { success: false, message: }, status: :unprocessable_entity
+    end
+
+    render json: {
+      success: true,
+      message: "Successfully refunded purchase number #{purchase.external_id_numeric} for fraud and blocked the buyer",
+      purchase: serialize_purchase(purchase),
+      subscription_cancelled: purchase.subscription&.cancelled_at.present?
+    }
+  end
+
   private
+    def create_unblock_buyer_comments!(purchase)
+      content = "Buyer unblocked by Admin"
+      purchase.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID)
+      if purchase.purchaser.present?
+        purchase.purchaser.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID, purchase:)
+      end
+    end
+
+    def fetch_purchase_with_email_match
+      buyer_email = params[:email].to_s.strip.downcase
+      if buyer_email.blank?
+        render json: { success: false, message: "email is required" }, status: :bad_request
+        return nil
+      end
+
+      purchase = fetch_purchase
+      if purchase.blank? || purchase.email.to_s.downcase != buyer_email
+        render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
+        return nil
+      end
+
+      purchase
+    end
+
     def fetch_purchase
       return nil unless params[:id].to_s.match?(/\A\d+\z/)
       Purchase.find_by_external_id_numeric(params[:id].to_i)
@@ -148,5 +344,13 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       return MAX_SEARCH_RESULTS if requested_limit <= 0
 
       [requested_limit, MAX_SEARCH_RESULTS].min
+    end
+
+    def status_for_reason(reason)
+      case reason
+      when :missing_params then :bad_request
+      when :not_found then :not_found
+      when :no_changes then :unprocessable_entity
+      end
     end
 end

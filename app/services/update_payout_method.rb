@@ -254,13 +254,16 @@ class UpdatePayoutMethod
     end
 
     def replace_active_bank_account_with_validated_delete!(new_bank_account)
-      user.active_bank_account&.mark_deleted!
+      user.bank_accounts.alive.each(&:mark_deleted!)
       new_bank_account.save!
       notify_if_unexpected_alive_bank_accounts(new_bank_account)
     end
 
     def replace_active_bank_account_with_unvalidated_delete!(new_bank_account)
-      user.active_bank_account&.mark_deleted(validate: false)
+      user.bank_accounts.alive.find_each do |bank_account|
+        bank_account.deleted_at = Time.current
+        bank_account.save!(validate: false)
+      end
       new_bank_account.save!
       notify_if_unexpected_alive_bank_accounts(new_bank_account)
     end

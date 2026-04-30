@@ -16,13 +16,35 @@ type PageProps = {
 
 const DEFAULT_SCHEDULED_PAYOUT_DELAY_DAYS = "21";
 
+const NOTES_SUGGESTIONS = [
+  "Adult (18+) content",
+  "Stripe reported high risk",
+  "Intellectual property infringement",
+  "General non-compliance",
+  "Credit repair services",
+  "Pirated/unauthorized software or content",
+  "Counterfeit or copied products from another creator",
+  "DMCA/copyright infringement",
+  "Card testing or fraudulent transactions",
+  "High chargeback rate",
+  "Shared bank account with previously suspended user",
+  "Unauthorized resale of third-party products",
+  "Spam or SEO manipulation",
+  "Phishing or scam products",
+  "Physical goods only (not permitted)",
+  "Negative balance over 3 months",
+  "No products / empty storefront with balance",
+];
+
 const SuspendUsers = () => {
   const { authenticity_token: authenticityToken, suspend_reasons: suspendReasons } = usePage<PageProps>().props;
+
+  const initialIdentifiers = new URLSearchParams(window.location.search).get("identifiers") ?? "";
 
   const form = useForm({
     authenticity_token: authenticityToken,
     suspend_users: {
-      identifiers: "",
+      identifiers: initialIdentifiers,
       reason: "",
       additional_notes: "",
     },
@@ -108,6 +130,22 @@ const SuspendUsers = () => {
         </Select>
 
         <Label htmlFor="additionalNotes">Notes</Label>
+        <div className="flex flex-wrap gap-1 mb-2">
+          {NOTES_SUGGESTIONS.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-black hover:text-white transition-colors"
+              onClick={() => {
+                const current = form.data.suspend_users.additional_notes;
+                const sep = current && !current.endsWith("\n") ? "\n" : "";
+                form.setData("suspend_users.additional_notes", current + sep + suggestion);
+              }}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
         <Textarea
           id="additionalNotes"
           name="suspend_users[additional_notes]"

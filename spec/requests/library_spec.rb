@@ -656,29 +656,35 @@ describe("Library Scenario", type: :system, js: true) do
           expect(page).to have_link("Seller", href: reviews.first.link.user.profile_url)
           expect(page).to have_selector("[aria-label='1 star']")
           click_on "Edit"
-          within "form" do
-            expect(page).to have_radio_button("1 star", checked: true)
-            (2..5).each do |i|
-              expect(page).to have_radio_button("#{i} stars", checked: false)
-            end
-            click_on "Edit"
-            choose "4 stars"
-            fill_in "Want to leave a written review?", with: "Message 0"
-            click_on "Update review"
+        end
+
+        within "form" do
+          expect(page).to have_radio_button("1 star", checked: true)
+          (2..5).each do |i|
+            expect(page).to have_radio_button("#{i} stars", checked: false)
           end
+          click_on "Edit"
+          choose "4 stars"
+          fill_in "Want to leave a written review?", with: "Message 0"
+          click_on "Update review"
         end
 
         expect(page).to have_alert(text: "Review submitted successfully!")
 
         within find("tr", text: "Product 0") do
-          within "form" do
-            expect(page).to have_radio_button("1 star", checked: false)
-            [2, 3, 5].each do |i|
-              expect(page).to have_radio_button("#{i} stars", checked: false)
-            end
-            expect(page).to have_radio_button("4 stars", checked: true)
-            expect(page).to have_text('"Message 0"')
+          expect(page).to have_text('"Message 0"')
+        end
+
+        within "form" do
+          expect(page).to have_radio_button("1 star", checked: false)
+          [2, 3, 5].each do |i|
+            expect(page).to have_radio_button("#{i} stars", checked: false)
           end
+          expect(page).to have_radio_button("4 stars", checked: true)
+          expect(page).to have_text('"Message 0"')
+        end
+
+        within find("tr", text: "Product 0") do
           click_on "Edit", match: :first
           expect(page).to have_selector("[aria-label='4 stars']")
           expect(page).to have_text('"Message 0"')
