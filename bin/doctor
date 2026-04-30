@@ -63,7 +63,7 @@ read_makefile_var() {
 
   [[ -f "$MAKEFILE" ]] || return 1
 
-  awk -v key="$key" '$1 == key && $2 == "=" { print $3; exit }' "$MAKEFILE"
+  awk -v key="$key" '$1 == key && ($2 == "=" || $2 == "?=" || $2 == ":=" || $2 == "+=") { print $3; exit }' "$MAKEFILE"
 }
 
 read_bundler_version() {
@@ -264,12 +264,12 @@ compose_service_running() {
   has_command docker || return 2
   docker compose version >/dev/null 2>&1 || return 2
 
-  service_output="$(docker compose -f "$COMPOSE_FILE" ps --status running "$service_name" --format '{{.Service}}' 2>/dev/null || true)"
+  service_output="$(docker compose -p "$compose_project_name" -f "$COMPOSE_FILE" ps --status running "$service_name" --format '{{.Service}}' 2>/dev/null || true)"
   if printf "%s\n" "$service_output" | grep -qx "$service_name"; then
     return 0
   fi
 
-  service_output="$(docker compose -f "$COMPOSE_FILE" ps "$service_name" 2>/dev/null || true)"
+  service_output="$(docker compose -p "$compose_project_name" -f "$COMPOSE_FILE" ps "$service_name" 2>/dev/null || true)"
   printf "%s\n" "$service_output" |
     awk -v service_name="$service_name" 'NR > 1 && $0 ~ service_name && ($0 ~ /Up/ || $0 ~ /running/) { found = 1 } END { exit !found }'
 }
@@ -288,6 +288,8 @@ docker_hint() {
 
 compose_config="$(read_makefile_var LOCAL_DOCKER_COMPOSE_CONFIG || true)"
 compose_config="${compose_config:-docker-compose-local.yml}"
+compose_project_name="$(read_makefile_var COMPOSE_PROJECT_NAME || true)"
+compose_project_name="${compose_project_name:-web}"
 COMPOSE_FILE="$ROOT_DIR/docker/$compose_config"
 
 print_header "Ruby"
@@ -380,6 +382,7 @@ print_header "Docker services"
 
 source_info "README.md Running Locally => make local"
 source_info "$(relative_path "$MAKEFILE") LOCAL_DOCKER_COMPOSE_CONFIG => $compose_config"
+source_info "$(relative_path "$MAKEFILE") COMPOSE_PROJECT_NAME => $compose_project_name"
 source_info "$(relative_path "$COMPOSE_FILE")"
 
 if has_command docker && docker compose version >/dev/null 2>&1; then
@@ -442,7 +445,7 @@ if tcp_listening "$mysql_host" "$mysql_port"; then
   ok "MySQL port is open at $mysql_host:$mysql_port"
 
   if has_command mysql; then
-    if mysql -h "$mysql_host" -P "$mysql_port" -u "$mysql_user" -p"$mysql_password" -e "SELECT 1;" >/dev/null 2>&1; then
+    if MYSQL_PWD="$mysql_password" mysql --connect-timeout=5 -h "$mysql_host" -P "$mysql_port" -u "$mysql_user" -e "SELECT 1;" </dev/null >/dev/null 2>&1; then
       ok "MySQL credentials from .env.development work"
     else
       fail "MySQL credentials from .env.development did not work"
@@ -549,7 +552,7 @@ print_header "Final verdict"
 
 echo
 
-if [[ "$SERVER_UP" -eq 1 ]]; then
+if [[ "$SERVER_UP" -eq 1 && "$FAILURES" -eq 0 ]]; then
   printf "🟢 Server is already running\n\n"
   printf "🌐 %s\n\n" "$app_url"
 elif [[ "$FAILURES" -eq 0 ]]; then

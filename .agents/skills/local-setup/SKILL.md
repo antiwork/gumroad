@@ -40,6 +40,9 @@ RAILS_ENV=test bin/rails db:seed
 ## Rules
 
 - Do not hardcode service ports, credentials, Ruby versions, or Bundler versions in new diagnostics. Derive them from the source files above.
+- Derive the Docker Compose project name from `Makefile` so diagnostics match `make local`.
+- Do not invoke clients in a way that can block on interactive prompts; redirect stdin or use non-interactive env vars when checking credentials.
+- A green final verdict requires both the app URL to respond and all required checks to pass.
 - If `bin/doctor` gives a misleading result, update it to derive from the correct source of truth and make the output state that source.
 - Do not treat a stopped Docker Compose container as a problem when the matching service endpoint is reachable and the app responds.
 - Keep local setup fixes separate from product behavior changes.
