@@ -14,12 +14,9 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
 
   return (
     !hide && (
-      <>
-        <hr />
-        <NavigationButton color="danger" href={suspendUrl}>
-          Suspend for fraud
-        </NavigationButton>
-      </>
+      <NavigationButton color="danger" href={suspendUrl}>
+        Suspend for fraud
+      </NavigationButton>
     )
   );
 };
