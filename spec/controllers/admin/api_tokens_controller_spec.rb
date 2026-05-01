@@ -21,6 +21,7 @@ describe Admin::ApiTokensController, type: :controller, inertia: true do
       _other_plaintext_token, other_admin_token = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
       legacy_token = create_legacy_admin_token
       revoked_token.update!(revoked_at: Time.current)
+      expect(AdminApiToken).to receive(:legacy_admin_token).once.and_call_original
 
       get :index
 

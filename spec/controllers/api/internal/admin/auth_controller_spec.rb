@@ -81,6 +81,28 @@ describe Api::Internal::Admin::AuthController do
       expect(AdminApiToken.authenticate(other_plaintext_token)).to be_nil
     end
 
+    it "records an audit log when revoking another token" do
+      actor = create(:admin_user)
+      bearer_plaintext_token, bearer_token = AdminApiToken.mint_with_plaintext!(actor_user_id: actor.id, expires_at: 30.days.from_now)
+      _other_plaintext_token, other_token = AdminApiToken.mint_with_plaintext!(actor_user_id: actor.id, expires_at: 30.days.from_now)
+      request.headers["Authorization"] = "Bearer #{bearer_plaintext_token}"
+
+      expect do
+        post :revoke, params: { external_id: other_token.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "auth.revoke",
+        target_type: "AdminApiToken",
+        target_id: other_token.id,
+        target_external_id: other_token.external_id,
+        actor_user_id: actor.id,
+        admin_api_token_id: bearer_token.id,
+        response_status: 200
+      )
+      expect(AdminApiAuditLog.last.params_snapshot).to include("external_id" => other_token.external_id)
+    end
+
     it "does not revoke another actor's token" do
       bearer_plaintext_token, = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
       _other_plaintext_token, other_token = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)

@@ -22,8 +22,10 @@ class Api::Internal::Admin::AuthController < Api::Internal::Admin::BaseControlle
     admin_api_token = token_to_revoke
     return render json: { success: false, message: "admin token not found" }, status: :not_found if admin_api_token.blank?
 
-    admin_api_token.update!(revoked_at: Time.current)
-    render json: { success: true }
+    record_admin_write(action: "auth.revoke", target: admin_api_token) do
+      admin_api_token.update!(revoked_at: Time.current)
+      render json: { success: true }
+    end
   end
 
   private

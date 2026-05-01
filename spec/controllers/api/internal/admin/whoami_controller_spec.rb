@@ -25,5 +25,29 @@ describe Api::Internal::Admin::WhoamiController do
                                            "scopes" => ["admin"]
                                          })
     end
+
+    it "returns a placeholder actor for the legacy admin token" do
+      actor = create(:admin_user, name: "Admin User", email: "admin@example.com")
+      stub_const("GUMROAD_ADMIN_ID", actor.id)
+      plaintext_token = "legacy-admin-token"
+      admin_api_token = create(:admin_api_token, actor_user: actor, token_hash: AdminApiToken.hash_token(plaintext_token))
+      request.headers["Authorization"] = "Bearer #{plaintext_token}"
+
+      get :show
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+                                           "actor" => {
+                                             "external_id" => nil,
+                                             "name" => "Legacy internal admin token",
+                                             "email" => nil
+                                           },
+                                           "token" => {
+                                             "external_id" => admin_api_token.external_id,
+                                             "expires_at" => nil
+                                           },
+                                           "scopes" => ["admin"]
+                                         })
+    end
   end
 end

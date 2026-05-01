@@ -4,8 +4,9 @@ class Admin::ApiTokensController < Admin::BaseController
   def index
     set_meta_tag(title: "Admin API tokens")
 
+    legacy_admin_token_id = AdminApiToken.legacy_admin_token&.id
     render inertia: "Admin/ApiTokens/Index", props: {
-      tokens: admin_api_tokens.map { serialize_token(_1) }
+      tokens: admin_api_tokens.map { serialize_token(_1, legacy: _1.id == legacy_admin_token_id) }
     }
   end
 
@@ -24,11 +25,11 @@ class Admin::ApiTokensController < Admin::BaseController
       AdminApiToken.active.includes(:actor_user).order(created_at: :desc, id: :desc)
     end
 
-    def serialize_token(admin_api_token)
+    def serialize_token(admin_api_token, legacy:)
       {
         external_id: admin_api_token.external_id,
-        actor: serialize_actor(admin_api_token),
-        kind: token_kind(admin_api_token),
+        actor: serialize_actor(admin_api_token, legacy:),
+        kind: token_kind(admin_api_token, legacy:),
         created_at: admin_api_token.created_at.as_json,
         last_used_at: admin_api_token.last_used_at&.as_json,
         expires_at: admin_api_token.expires_at&.as_json,
@@ -36,8 +37,8 @@ class Admin::ApiTokensController < Admin::BaseController
       }
     end
 
-    def serialize_actor(admin_api_token)
-      return { id: nil, name: "Legacy internal admin token", email: nil } if admin_api_token.legacy_admin_token?
+    def serialize_actor(admin_api_token, legacy:)
+      return { id: nil, name: "Legacy internal admin token", email: nil } if legacy
 
       actor_user = admin_api_token.actor_user
       return { id: nil, name: nil, email: nil } if actor_user.blank?
@@ -49,8 +50,8 @@ class Admin::ApiTokensController < Admin::BaseController
       }
     end
 
-    def token_kind(admin_api_token)
-      return "Legacy" if admin_api_token.legacy_admin_token?
+    def token_kind(admin_api_token, legacy:)
+      return "Legacy" if legacy
       return "CLI" if admin_api_token.expires_at.present?
 
       "Service"

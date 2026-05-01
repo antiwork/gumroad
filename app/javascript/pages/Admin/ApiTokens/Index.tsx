@@ -60,7 +60,7 @@ const AdminApiTokens = () => {
                 </TableCell>
                 <TableCell>
                   <div>{actorName(token.actor)}</div>
-                  {token.actor.name ? (
+                  {token.actor.email ? (
                     <div className="max-w-64 truncate text-xs text-muted">{token.actor.email}</div>
                   ) : null}
                 </TableCell>
