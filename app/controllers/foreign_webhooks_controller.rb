@@ -145,7 +145,7 @@ class ForeignWebhooksController < ApplicationController
       return unless Feature.active?(:verify_sendgrid_webhook_signatures)
 
       ErrorNotifier.notify("Error verifying SendGrid webhook: #{error}")
-      render json: { success: false }, status: :bad_request
+      render json: { success: false }, status: :internal_server_error
     end
 
     def verify_sendgrid_signature(public_keys)
