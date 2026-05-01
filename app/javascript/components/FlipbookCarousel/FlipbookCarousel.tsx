@@ -138,6 +138,7 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
   const isVisibleRef = useRef(true);
   const framesSinceLastChange = useRef(0);
   const cardRefs = useRef<{ card: HTMLElement; inner: HTMLElement | null }[]>([]);
+  const captionRefs = useRef<HTMLElement[]>([]);
   const rafId = useRef<number>(0);
   const isRunning = useRef(false);
   const intersectionObserverRef = useRef<IntersectionObserver | null>(null);
@@ -187,6 +188,17 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
 
         card.classList.toggle("flipbook-card--inactive", absOffset > 2);
         card.classList.toggle("flipbook-card--active", absOffset < 0.05);
+      }
+
+      const captions = captionRefs.current;
+      for (let i = 0; i < captions.length; i++) {
+        const el = captions[i];
+        if (!el) continue;
+
+        const absOffset = Math.abs(i - progress);
+        const opacity = Math.max(0, 1 - absOffset * 2);
+        el.style.opacity = String(opacity);
+        el.setAttribute("aria-hidden", opacity < 0.1 ? "true" : "false");
       }
     },
     [transformConfig],
@@ -414,8 +426,9 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
   const handleTouchEnd = useCallback(() => {}, []);
 
   return (
-    <div className="flipbook-wrapper relative w-full overflow-visible" ref={wrapperRef}>
-      <div
+    <div className="flipbook-wrapper min-h-[50vh] relative w-full overflow-visible" ref={wrapperRef}>
+
+<div
         ref={scrollDriverRef}
         className="flipbook-scroll-driver absolute inset-0 z-10 grid cursor-grab grid-flow-col overflow-x-auto overflow-y-hidden scroll-smooth select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500/50 active:cursor-grabbing"
         tabIndex={0}
@@ -441,7 +454,7 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
         ))}
       </div>
 
-      <div className="flipbook-stack pointer-events-none absolute top-1/2 left-1/2 z-20" ref={stackRef}>
+      <div className="flipbook-stack pointer-events-none absolute top-1/3 left-1/2 z-20" ref={stackRef}>
         {slides.map((slide, index) => (
           <div key={index} className="flipbook-card absolute inset-0 h-full w-full">
             <div className="flipbook-card__inner w-full">
@@ -467,15 +480,28 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
                   />
                 ))}
               </div>
-              <div className="flipbook-card__caption pt-5 text-center sm:pt-6">
-                <h3 className="mx-auto max-w-[15em] text-[clamp(1.55rem,3vw,2.6rem)] leading-none font-medium text-black">
-                  {slide.title}
-                </h3>
-                <p className="mx-auto mt-3 max-w-[34rem] text-[clamp(1rem,1.6vw,1.35rem)] leading-snug text-black">
-                  {slide.subtitle}
-                </p>
-              </div>
             </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flipbook-captions pointer-events-none absolute right-0 bottom-0 left-0 z-30 text-center">
+        {slides.map((slide, index) => (
+          <div
+            key={index}
+            ref={(el) => {
+              if (el) captionRefs.current[index] = el;
+            }}
+            className="flipbook-caption absolute inset-0 flex flex-col items-center justify-center"
+            style={{ opacity: index === 0 ? 1 : 0 }}
+            aria-hidden={index !== 0}
+          >
+            <h3 className="mx-auto max-w-[15em] text-4xl leading-tight lg:text-5xl">
+              {slide.title}
+            </h3>
+            <p className="mx-auto mt-3 max-w-2xl text-xl">
+              {slide.subtitle}
+            </p>
           </div>
         ))}
       </div>

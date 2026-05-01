@@ -4,7 +4,7 @@
   --flipbook-card-height: var(--flipbook-card-width);
   --flipbook-card-radius: 1.25rem;
   --flipbook-caption-height: 9rem;
-  height: calc(var(--flipbook-card-height) + var(--flipbook-caption-height) + 3rem);
+  height: calc(var(--flipbook-card-height) + var(--flipbook-caption-height));
   perspective: 1800px;
   perspective-origin: center center;
 }
@@ -28,8 +28,12 @@
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
   width: var(--flipbook-card-width);
-  height: calc(var(--flipbook-card-height) + var(--flipbook-caption-height));
+  height: var(--flipbook-card-height);
   contain: layout style;
+}
+
+.flipbook-caption {
+  transition: opacity 0.05s linear;
 }
 
 .flipbook-card {
@@ -111,7 +115,6 @@
   .flipbook-wrapper {
     --flipbook-card-width: min(420px, 86vw);
     --flipbook-caption-height: 8.5rem;
-    height: calc(var(--flipbook-card-height) + var(--flipbook-caption-height) + 2rem);
     perspective: 1400px;
     perspective-origin: center center;
   }
