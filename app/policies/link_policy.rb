@@ -24,6 +24,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def workspace?
+    edit?
+  end
+
   def show?
     new?
   end

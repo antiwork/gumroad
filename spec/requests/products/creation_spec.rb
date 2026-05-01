@@ -11,6 +11,11 @@ describe "Product creation", type: :system, js: true do
   include_context "with switching account to user as admin for seller"
 
   describe "native types" do
+    # Examples in this block exercise the returning-seller create flow
+    # that lands on the legacy editor. The first-time-seller redirect
+    # is covered separately in spec/requests/products/workspace_spec.rb.
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
+
     it "selects 'digital' by default" do
       visit new_product_path
       fill_in("Name", with: "Default digital native type")
@@ -175,6 +180,8 @@ describe "Product creation", type: :system, js: true do
   end
 
   context "user can create multiple products in one session" do
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
+
     it "creates multiple products" do
       visit new_product_path
       fill_in("Name", with: "My First product")
@@ -224,6 +231,7 @@ describe "Product creation", type: :system, js: true do
 
   context "seller is eligible for service products" do
     let(:seller) { create(:user, :eligible_for_service_products) }
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
     before do
       Feature.activate(:product_edit_react)
     end
@@ -266,6 +274,8 @@ describe "Product creation", type: :system, js: true do
   end
 
   describe "currencies" do
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
+
     it "creates a membership priced in a single-unit currency" do
       visit new_product_path
       fill_in("Name", with: "membership in yen")
@@ -359,6 +369,8 @@ describe "Product creation", type: :system, js: true do
   end
 
   describe "bundles" do
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
+
     it "allows the creation of a bundle" do
       visit new_product_path
       choose "Bundle"
@@ -374,6 +386,7 @@ describe "Product creation", type: :system, js: true do
   end
 
   it "does not automatically enable the community chat on creating a product" do
+    create(:product, user: seller, name: "Existing product")
     Feature.activate_user(:communities, seller)
     visit new_product_path
     choose "Digital product"
@@ -388,6 +401,8 @@ describe "Product creation", type: :system, js: true do
   end
 
   describe "AI Product Generation" do
+    let!(:_prior_product) { create(:product, user: seller, name: "Existing product") }
+
     before do
       Feature.activate_user(:ai_product_generation, seller)
       allow_any_instance_of(User).to receive(:eligible_for_ai_product_generation?).and_return(true)

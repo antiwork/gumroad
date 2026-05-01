@@ -61,6 +61,31 @@ export type Product = {
 
 export type RecurringProductType = "membership" | "newsletter" | "podcast";
 
+export type ProductWorkspaceSections = {
+  basics: boolean;
+  offer: boolean;
+  payments: boolean;
+};
+
+export type ProductWorkspaceProduct = {
+  id: number;
+  name: string;
+  native_type: string;
+  custom_summary: string | null;
+  permalink: string;
+  edit_url: string;
+  url: string;
+  thumbnail_url: string | null;
+  price_formatted: string;
+};
+
+export type ProductWorkspaceProps = {
+  product: ProductWorkspaceProduct;
+  readiness: ProductReadiness | null;
+  sections: ProductWorkspaceSections;
+  settings_payments_url: string;
+};
+
 export async function getFolderArchiveDownloadUrl(request_url: string) {
   const res = await request({
     method: "GET",

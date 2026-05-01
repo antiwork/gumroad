@@ -32,7 +32,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: %i[index new show cart_items_count edit]
+  layout "inertia", only: %i[index new show cart_items_count edit workspace]
 
   def index
     authorize Link
@@ -86,11 +86,23 @@ class LinksController < ApplicationController
     end
 
     create_user_event("add_product")
-    if ai_generated
+    if first_time_seller_for?(@product)
+      redirect_to workspace_link_path(@product), status: :see_other
+    elsif ai_generated
       redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
     else
       redirect_to edit_link_path(@product), status: :see_other
     end
+  end
+
+  def workspace
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    set_meta_tag(title: @product.name)
+
+    presenter = ProductWorkspacePresenter.new(product: @product, pundit_user:)
+    render inertia: "Products/Workspace", props: presenter.props
   end
 
   def show
@@ -509,6 +521,10 @@ class LinksController < ApplicationController
   end
 
   private
+    def first_time_seller_for?(product)
+      !current_seller.products.where.not(id: product.id).exists?
+    end
+
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end
