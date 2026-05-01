@@ -777,6 +777,37 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
+    describe "US business with EIN already saved, editing non-EIN fields" do
+      before do
+        create(:ach_account_stripe_succeed, user: @user)
+        ActiveRecord::Base.transaction do
+          @user.alive_user_compliance_info.mark_deleted!
+          create(
+            :user_compliance_info_business,
+            user: @user,
+            business_phone: "+15052426789",
+            phone: "+15022541982",
+            birthday: Date.new(1980, 1, 1),
+          )
+        end
+      end
+
+      it "saves changes without rejecting the saved EIN" do
+        visit settings_payments_path
+
+        find_field("Address", match: :first).set("456 Updated Business Lane")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(page).not_to have_status(text: "US business tax IDs (EIN) must have 9 digits.")
+
+        compliance_info = @user.reload.alive_user_compliance_info
+        expect(compliance_info.business_street_address).to eq("456 Updated Business Lane")
+        expect(compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))).to eq("000000000")
+      end
+    end
+
     describe "CA corporation requiring company registration verification document" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info
