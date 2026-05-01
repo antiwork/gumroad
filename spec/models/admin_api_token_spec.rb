@@ -20,6 +20,29 @@ describe AdminApiToken do
     end
   end
 
+  describe ".seed_legacy_admin_token!" do
+    it "creates the legacy admin token from the configured shared token" do
+      actor = create(:admin_user)
+      stub_const("GUMROAD_ADMIN_ID", actor.id)
+      allow(GlobalConfig).to receive(:get).with("INTERNAL_ADMIN_API_TOKEN").and_return("legacy-token")
+
+      admin_api_token = described_class.seed_legacy_admin_token!
+
+      expect(admin_api_token).to have_attributes(
+        actor_user: actor,
+        token_hash: described_class.hash_token("legacy-token")
+      )
+      expect { described_class.seed_legacy_admin_token! }.not_to change(described_class, :count)
+    end
+
+    it "does not create a token when the configured shared token is blank" do
+      allow(GlobalConfig).to receive(:get).with("INTERNAL_ADMIN_API_TOKEN").and_return("")
+
+      expect(described_class.seed_legacy_admin_token!).to be_nil
+      expect(described_class.count).to eq(0)
+    end
+  end
+
   describe ".authenticate" do
     it "returns an active token for the matching plaintext token" do
       actor = create(:admin_user)

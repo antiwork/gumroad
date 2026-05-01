@@ -22,6 +22,15 @@ class AdminApiToken < ApplicationRecord
     plaintext_token
   end
 
+  def self.seed_legacy_admin_token!
+    legacy_token = GlobalConfig.get("INTERNAL_ADMIN_API_TOKEN").to_s
+    return nil if legacy_token.blank?
+
+    find_or_create_by!(token_hash: hash_token(legacy_token)) do |admin_api_token|
+      admin_api_token.actor_user_id = GUMROAD_ADMIN_ID
+    end
+  end
+
   def self.authenticate(plaintext_token)
     return nil if plaintext_token.blank?
 

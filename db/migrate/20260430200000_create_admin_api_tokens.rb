@@ -32,7 +32,11 @@ class CreateAdminApiTokens < ActiveRecord::Migration[7.1]
   private
     def seed_legacy_admin_token!
       legacy_token = GlobalConfig.get("INTERNAL_ADMIN_API_TOKEN").to_s
-      return if legacy_token.blank?
+      if legacy_token.blank?
+        say "INTERNAL_ADMIN_API_TOKEN is blank; skipping legacy admin token seed. " \
+            "Set it and run AdminApiToken.seed_legacy_admin_token! before using the shared token."
+        return
+      end
 
       now = Time.current
       execute <<~SQL.squish
