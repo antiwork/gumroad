@@ -184,6 +184,8 @@ describe ForeignWebhooksController do
       ForeignWebhooksController::SENDGRID_WEBHOOK_PUBLIC_KEY_ENV_VARS.each_with_index do |name, i|
         allow(GlobalConfig).to receive(:get).with(name).and_return(public_keys[i])
       end
+      allow(Feature).to receive(:active?).and_call_original
+      allow(Feature).to receive(:active?).with(:verify_sendgrid_webhook_signatures).and_return(true)
       request.headers["X-Twilio-Email-Event-Webhook-Signature"] = signature
       request.headers["X-Twilio-Email-Event-Webhook-Timestamp"] = timestamp
     end
@@ -282,6 +284,45 @@ describe ForeignWebhooksController do
         expect(response).to be_a_bad_request
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
         expect(LogSendgridEventWorker.jobs.size).to eq(0)
+      end
+    end
+
+    it "logs verification failures via Rails.logger.warn" do
+      request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
+      allow(ErrorNotifier).to receive(:notify)
+      expect(Rails.logger).to receive(:warn).with("SendGrid webhook verification failed: Missing signature")
+      post :sendgrid, body: raw_body, as: :json
+    end
+
+    context "when verify_sendgrid_webhook_signatures feature flag is disabled" do
+      before do
+        allow(Feature).to receive(:active?).with(:verify_sendgrid_webhook_signatures).and_return(false)
+      end
+
+      it "still processes a valid webhook successfully" do
+        post :sendgrid, body: raw_body, as: :json
+        expect(response).to be_successful
+        expect(HandleSendgridEventJob.jobs.size).to eq(1)
+        expect(LogSendgridEventWorker.jobs.size).to eq(1)
+      end
+
+      it "shadow-logs failures but processes the webhook anyway" do
+        request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
+        expect(Rails.logger).to receive(:warn).with("SendGrid webhook verification failed: Missing signature")
+        expect(ErrorNotifier).not_to receive(:notify)
+        post :sendgrid, body: raw_body, as: :json
+        expect(response).to be_successful
+        expect(HandleSendgridEventJob.jobs.size).to eq(1)
+        expect(LogSendgridEventWorker.jobs.size).to eq(1)
+      end
+
+      it "processes unsigned legacy webhooks without erroring" do
+        request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
+        request.headers["X-Twilio-Email-Event-Webhook-Timestamp"] = nil
+        allow(Rails.logger).to receive(:warn)
+        post :sendgrid, body: raw_body, as: :json
+        expect(response).to be_successful
+        expect(HandleSendgridEventJob.jobs.size).to eq(1)
       end
     end
   end

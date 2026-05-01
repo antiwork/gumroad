@@ -138,15 +138,26 @@ class ForeignWebhooksController < ApplicationController
     end
 
     def validate_sendgrid_webhook(public_keys)
+      error = verify_sendgrid_signature(public_keys)
+      return unless error
+
+      Rails.logger.warn("SendGrid webhook verification failed: #{error}")
+      return unless Feature.active?(:verify_sendgrid_webhook_signatures)
+
+      ErrorNotifier.notify("Error verifying SendGrid webhook: #{error}")
+      render json: { success: false }, status: :bad_request
+    end
+
+    def verify_sendgrid_signature(public_keys)
       signature = request.headers["X-Twilio-Email-Event-Webhook-Signature"]
       timestamp = request.headers["X-Twilio-Email-Event-Webhook-Timestamp"]
 
-      raise "No public keys configured" if public_keys.empty?
-      raise "Missing signature" if signature.blank?
-      raise "Missing timestamp" if timestamp.blank?
+      return "No public keys configured" if public_keys.empty?
+      return "Missing signature" if signature.blank?
+      return "Missing timestamp" if timestamp.blank?
 
       timestamp_dt = Time.at(timestamp.to_i)
-      raise "Timestamp too old" if (Time.current.utc - timestamp_dt).abs > 5.minutes
+      return "Timestamp too old" if (Time.current.utc - timestamp_dt).abs > 5.minutes
 
       event_webhook = SendGrid::EventWebhook.new
       verified = public_keys.any? do |public_key|
@@ -154,10 +165,9 @@ class ForeignWebhooksController < ApplicationController
         event_webhook.verify_signature(ec_public_key, request.raw_post, signature, timestamp)
       end
 
-      raise "Invalid signature" unless verified
+      verified ? nil : "Invalid signature"
     rescue => e
-      ErrorNotifier.notify("Error verifying SendGrid webhook: #{e.message}")
-      render json: { success: false }, status: :bad_request
+      "Verification raised: #{e.message}"
     end
 
     def validate_resend_webhook(secret)
