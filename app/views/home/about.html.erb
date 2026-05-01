@@ -142,72 +142,104 @@
     </div>
   </div>
 
-  <div class="relative bg-gray py-24 lg:py-32">
-    <div class="px-8 lg:px-[4vw]">
-      <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
-        You know all those great ideas you have?
+  <%
+    home_ideas_explainer_props = {
+      slides: [
+        {
+          title: "Enhance your existing site or build a new one",
+          subtitle: "Embed our payment platform into your site or use our flexible page editor to build your own.",
+          backgroundColor: "rgb(255, 144, 232)",
+          mainImage: {
+            src: image_path("features/home-feature-4.svg"),
+            alt: "Illustration showing customizable store options"
+          },
+          stickers: [
+            {
+              src: image_path("features/thumbsup.svg"),
+              alt: "Thumbs up icon",
+              position: "lower-left"
+            }
+          ]
+        },
+        {
+          title: "Memberships and subscriptions are built in",
+          subtitle: "Give customers gated access to your content or let customers pay over time.",
+          backgroundColor: "rgb(255, 201, 0)",
+          mainImage: {
+            src: image_path("features/features-3.svg"),
+            alt: "Illustration showing memberships and subscriptions"
+          }
+        },
+        {
+          title: "Versioning, licensing, and intellectual property protection from day one",
+          subtitle: "We can create license keys, sell multiple versions of a product, and even apply DRM to your content.",
+          backgroundColor: "rgb(144, 168, 237)",
+          mainImage: {
+            src: image_path("features/features-5.svg"),
+            alt: "Illustration showing license keys"
+          }
+        },
+        {
+          title: "Accept a wide variety of currencies without worrying about taxes",
+          subtitle: "We handle many currencies and tax collection so you can serve a global audience.",
+          backgroundColor: "#FF7051",
+          mainImage: {
+            src: image_path("features/features-4.svg"),
+            alt: "Illustration showing payment integrations"
+          }
+        },
+        {
+          title: "Import email lists and reach your customers anywhere",
+          subtitle: "Importing existing customers is easy and new product updates are just an email away.",
+          backgroundColor: "#23A094",
+          mainImage: {
+            src: image_path("features/features-6.svg"),
+            alt: "Illustration showing creator tools and features"
+          },
+          stickers: [
+            {
+              src: image_path("features/easy.svg"),
+              alt: "Easy sticker with handwritten text",
+              position: "upper-right"
+            },
+            {
+              src: image_path("features/price-tag.svg"),
+              alt: "Decorative price tag sticker with handwritten text",
+              position: "lower-left"
+            }
+          ]
+        },
+        {
+          title: "Instant payments and analytics built into your dashboard",
+          subtitle: "Customers get instant access to your work and you get instant feedback on your sales.",
+          backgroundColor: "rgb(241, 243, 51)",
+          mainImage: {
+            src: image_path("features/sales-graph.svg"),
+            alt: "Interactive graph showing sales analytics and growth metrics"
+          },
+          stickers: [
+            {
+              src: image_path("features/clapping.svg"),
+              alt: "Decorative clapping hands sticker celebrating success",
+              position: "lower-right"
+            }
+          ]
+        }
+      ]
+    }
+  %>
+  <%= tag.div id: "home-ideas-explainer", data: { props: home_ideas_explainer_props.to_json } do %>
+    <section class="relative bg-gray py-20 lg:py-24">
+      <div class="px-8 lg:px-[4vw]">
+        <div class="mx-auto max-w-4xl text-center text-4xl leading-tight lg:text-5xl">
+          You know all those great ideas you have?
+        </div>
       </div>
-    </div>
-    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
-      <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
-        <lottie-player
-          src="<%= asset_path("about/gumhead.json") %>"
-          speed="1"
-          loop
-          autoplay>
-        </lottie-player>
-      </div>
-      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black bg-orange z-10 lg:px-8 lg:rounded-full">
-        <div class="override hidden px-4 md:flex justify-between -mt-3 lg:px-40">
-          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
-            <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
-            <div class="lg:text-2xl">The Gumroad Way</div>
-          </div>
-          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
-            <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
-            <div class="lg:text-2xl">Start Small</div>
-          </div>
-        </div>
-        <div class="override hidden px-4 md:flex justify-between -mb-3 lg:flex lg:px-40">
-          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
-            <div class="lg:text-2xl">Get Better Together</div>
-            <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
-          </div>
-          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
-            <div class="lg:text-2xl">Learn Quickly</div>
-            <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
-          </div>
-        </div>
-        <div class="override flex h-6 items-center bg-orange absolute top-0 -ml-2 pr-3 -mt-3 left-1/2 -translate-x-1/2 lg:hidden">
-          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-          <div class="whitespace-nowrap lg:text-2xl">The Gumroad Way</div>
-        </div>
-        <div class="override flex h-6 items-center bg-orange absolute right-0 pr-3 origin-center rotate-90 top-1/2 -translate-y-1/2 translate-x-1/2 lg:hidden">
-          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-          <div class="whitespace-nowrap lg:text-2xl">Start Small</div>
-        </div>
-        <div class="override flex h-6 items-center bg-orange absolute bottom-0 -ml-2 pl-3 -mb-3 left-1/2 -translate-x-1/2 lg:hidden">
-          <div class="whitespace-nowrap lg:text-2xl">Get Better Together</div>
-          <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-4 w-4 translate-x-2 translate-y-px rotate-180" %>
-        </div>
-        <div class="override flex h-6 items-center bg-orange absolute left-0 pr-3 origin-center -rotate-90 top-1/2 -translate-y-1/2 -translate-x-1/2 lg:hidden">
-          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-          <div class="whitespace-nowrap lg:text-2xl">Learn Quickly</div>
-        </div>
-      </div>
-    </div>
-    <div class="max-w-4xl mx-auto text-center flex flex-col gap-4 px-8">
-      <h2 class="text-4xl lg:text-5xl lg:leading-tight">
-        We want you to try them, lots of them, and find out what works.
-      </h2>
-      <p class="text-xl max-w-2xl mx-auto">
-        You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.
-      </p>
-      <div class="w-full mt-4">
-        <%= render "home/shared/button", text: "Find out how", url: features_path %>
-      </div>
-    </div>
-  </div>
+    </section>
+  <% end %>
+  <% content_for :script do %>
+    <%= javascript_pack_tag "base" %>
+  <% end %>
 
   <div class="relative bg-gray w-full">
     <div class="flex flex-col justify-center gap-8 px-8 text-center py-20 md:items-center md:gap-16 md:pt-40">
