@@ -222,7 +222,7 @@ class StripeChargeProcessor
         purchase: reference
       },
       transfer_group:,
-      payment_method_types: off_session ? ["card"] : ["card", "link"],
+      payment_method_types: ["card"],
       off_session:,
       setup_future_usage: ("off_session" if should_setup_future_usage)
     }
