@@ -51,6 +51,17 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
 - Avoid `to_not have_enqueued_sidekiq_job` or `not_to have_enqueued_sidekiq_job` because they're prone to false positives. Make assertions on `SidekiqWorkerName.jobs.size` instead.
 
+### Branch hygiene
+
+Rebase your branch onto `main` when starting work and before every commit:
+
+```bash
+git fetch origin
+git rebase origin/main
+```
+
+Resolve conflicts locally before pushing. PRs with stale branches will not be merged.
+
 ### Before pushing
 
 Run **test-confidence** before every commit:
