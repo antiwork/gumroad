@@ -86,7 +86,7 @@ class UpdateUserComplianceInfo
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
 
       if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
-          new_compliance_info.business_tax_id.present? && new_compliance_info.business_tax_id.length != 9
+          compliance_params[:business_tax_id].present? && new_compliance_info.business_tax_id.length != 9
         return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
       end
 

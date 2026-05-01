@@ -52,5 +52,46 @@ describe UpdateUserComplianceInfo do
         expect(result[:error_message]).to eq("Individual tax id is too long")
       end
     end
+
+    context "with a US business that already has a 9-digit business_tax_id saved" do
+      let(:us_business_user) do
+        create(:user).tap { |u| create(:user_compliance_info_business, user: u) }
+      end
+
+      it "accepts a non-tax-id field update without re-submitting business_tax_id" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address: "456 Updated Street",
+        )
+
+        result = described_class.new(compliance_params: params, user: us_business_user).process
+
+        expect(result[:success]).to be true
+        expect(us_business_user.alive_user_compliance_info.business_street_address).to eq("456 Updated Street")
+      end
+
+      it "rejects a too-short business_tax_id submitted in the same request" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "12345",
+        )
+
+        result = described_class.new(compliance_params: params, user: us_business_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("US business tax IDs (EIN) must have 9 digits.")
+      end
+
+      it "accepts a 9-digit business_tax_id submitted with formatting" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "12-3456789",
+        )
+
+        result = described_class.new(compliance_params: params, user: us_business_user).process
+
+        expect(result[:success]).to be true
+      end
+    end
   end
 end
