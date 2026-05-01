@@ -56,6 +56,7 @@ Rails.application.routes.draw do
       end
 
       get "/user", to: "users#show"
+      get "/meta", to: "meta#show"
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
         resources :custom_fields, only: [:index, :create, :update, :destroy]
         resources :offer_codes, only: [:index, :create, :show, :update, :destroy]
