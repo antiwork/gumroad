@@ -15,10 +15,11 @@ namespace :admin do
   namespace :cli do
     get "authorize", to: "authorizations#show", as: :authorize
     post "authorize", to: "authorizations#create"
-    resources :tokens, only: :index, param: :external_id do
-      member do
-        post :revoke
-      end
+  end
+
+  resources :api_tokens, only: :index, param: :external_id do
+    member do
+      post :revoke
     end
   end
 

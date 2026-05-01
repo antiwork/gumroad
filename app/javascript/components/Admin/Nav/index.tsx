@@ -54,7 +54,7 @@ const Nav = () => {
         <InertiaNavLink
           text="Admin API tokens"
           icon={<Key pack="filled" className="size-5" />}
-          href={Routes.admin_cli_tokens_url(routeParams)}
+          href={Routes.admin_api_tokens_url(routeParams)}
           component={Link}
         />
         <InertiaNavLink

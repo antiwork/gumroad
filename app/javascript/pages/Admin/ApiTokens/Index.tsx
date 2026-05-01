@@ -32,7 +32,7 @@ const typeColor: Record<AdminApiToken["kind"], React.ComponentProps<typeof Pill>
 };
 const actorName = (actor: AdminApiToken["actor"]) => actor.name ?? actor.email ?? "Unknown user";
 
-const AdminCliTokens = () => {
+const AdminApiTokens = () => {
   const { tokens, authenticity_token: authenticityToken } = usePage<PageProps>().props;
 
   return (
@@ -97,4 +97,4 @@ const AdminCliTokens = () => {
   );
 };
 
-export default AdminCliTokens;
+export default AdminApiTokens;

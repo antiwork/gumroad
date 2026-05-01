@@ -3,7 +3,7 @@
 require "spec_helper"
 require "inertia_rails/rspec"
 
-describe Admin::Cli::TokensController, type: :controller, inertia: true do
+describe Admin::ApiTokensController, type: :controller, inertia: true do
   render_views
 
   let(:admin_user) { create(:admin_user) }
@@ -25,7 +25,7 @@ describe Admin::Cli::TokensController, type: :controller, inertia: true do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(inertia.component).to eq "Admin/Cli/Tokens/Index"
+      expect(inertia.component).to eq "Admin/ApiTokens/Index"
       expect(inertia.props[:title]).to eq("Admin API tokens")
       expect(inertia.props[:tokens]).to match_array([
                                                       serialized_token(active_token, kind: "CLI"),
@@ -43,7 +43,7 @@ describe Admin::Cli::TokensController, type: :controller, inertia: true do
 
       post :revoke, params: { external_id: admin_api_token.external_id }
 
-      expect(response).to redirect_to(admin_cli_tokens_path)
+      expect(response).to redirect_to(admin_api_tokens_path)
       expect(response).to have_http_status(:see_other)
       expect(flash[:notice]).to eq("Admin API token revoked.")
       expect(admin_api_token.reload.revoked_at).to be_present
@@ -54,7 +54,7 @@ describe Admin::Cli::TokensController, type: :controller, inertia: true do
 
       post :revoke, params: { external_id: admin_api_token.external_id }
 
-      expect(response).to redirect_to(admin_cli_tokens_path)
+      expect(response).to redirect_to(admin_api_tokens_path)
       expect(flash[:alert]).to eq("Active admin API token not found.")
       expect(admin_api_token.reload.revoked_at).to be_nil
     end
@@ -73,7 +73,7 @@ describe Admin::Cli::TokensController, type: :controller, inertia: true do
       created_at: admin_api_token.created_at.as_json,
       last_used_at: nil,
       expires_at: admin_api_token.expires_at&.as_json,
-      revoke_path: revoke_admin_cli_token_path(admin_api_token.external_id)
+      revoke_path: revoke_admin_api_token_path(admin_api_token.external_id)
     }
   end
 
@@ -89,7 +89,7 @@ describe Admin::Cli::TokensController, type: :controller, inertia: true do
       created_at: admin_api_token.created_at.as_json,
       last_used_at: nil,
       expires_at: nil,
-      revoke_path: revoke_admin_cli_token_path(admin_api_token.external_id)
+      revoke_path: revoke_admin_api_token_path(admin_api_token.external_id)
     }
   end
 
