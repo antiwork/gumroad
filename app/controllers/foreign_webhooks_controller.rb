@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 class ForeignWebhooksController < ApplicationController
+  SENDGRID_WEBHOOK_PUBLIC_KEY_ENV_VARS = %w[
+    SENDGRID_GR_CREATORS_WEBHOOK_PUBLIC_KEY
+    SENDGRID_GR_CUSTOMERS_WEBHOOK_PUBLIC_KEY
+    SENDGRID_GR_CUSTOMERS_LEVEL_2_WEBHOOK_PUBLIC_KEY
+    SENDGRID_GUMROAD_FOLLOWER_CONFIRMATION_WEBHOOK_PUBLIC_KEY
+    SENDGRID_GUMROAD_TRANSACTIONS_WEBHOOK_PUBLIC_KEY
+  ].freeze
+
   skip_before_action :verify_authenticity_token
   before_action :validate_sns_webhook, only: [:mediaconvert]
 
@@ -17,6 +25,11 @@ class ForeignWebhooksController < ApplicationController
   before_action only: [:resend] do
     endpoint_secret = GlobalConfig.get("RESEND_WEBHOOK_SECRET")
     validate_resend_webhook(endpoint_secret)
+  end
+
+  before_action only: [:sendgrid] do
+    public_keys = SENDGRID_WEBHOOK_PUBLIC_KEY_ENV_VARS.map { |name| GlobalConfig.get(name) }.reject(&:blank?)
+    validate_sendgrid_webhook(public_keys)
   end
 
   def stripe
@@ -122,6 +135,29 @@ class ForeignWebhooksController < ApplicationController
         # Invalid signature
         render json: { success: false }, status: :bad_request
       end
+    end
+
+    def validate_sendgrid_webhook(public_keys)
+      signature = request.headers["X-Twilio-Email-Event-Webhook-Signature"]
+      timestamp = request.headers["X-Twilio-Email-Event-Webhook-Timestamp"]
+
+      raise "No public keys configured" if public_keys.empty?
+      raise "Missing signature" if signature.blank?
+      raise "Missing timestamp" if timestamp.blank?
+
+      timestamp_dt = Time.at(timestamp.to_i)
+      raise "Timestamp too old" if (Time.current.utc - timestamp_dt).abs > 5.minutes
+
+      event_webhook = SendGrid::EventWebhook.new
+      verified = public_keys.any? do |public_key|
+        ec_public_key = event_webhook.convert_public_key_to_ecdsa(public_key)
+        event_webhook.verify_signature(ec_public_key, request.raw_post, signature, timestamp)
+      end
+
+      raise "Invalid signature" unless verified
+    rescue => e
+      ErrorNotifier.notify("Error verifying SendGrid webhook: #{e.message}")
+      render json: { success: false }, status: :bad_request
     end
 
     def validate_resend_webhook(secret)
