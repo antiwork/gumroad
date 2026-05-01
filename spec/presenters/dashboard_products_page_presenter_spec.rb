@@ -811,6 +811,71 @@ describe DashboardProductsPagePresenter do
     end
   end
 
+  describe "product readiness" do
+    let(:rich_content_description) { [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }] }
+
+    def readiness_for(product)
+      described_class.new(pundit_user:).product_props(product)["readiness"]
+    end
+
+    it "returns live for a published, alive product" do
+      product = create(:product, user: seller, name: "live one", price_cents: 1000)
+      expect(readiness_for(product)).to eq("state" => "live", "missing" => [])
+    end
+
+    it "returns ready for a draft product with name, price, content, and cover" do
+      product = create(:product, user: seller, name: "ready one", price_cents: 1000, draft: true)
+      create(:rich_content, entity: product, description: rich_content_description)
+      create(:thumbnail, product:)
+
+      expect(readiness_for(product.reload)).to eq("state" => "ready", "missing" => [])
+    end
+
+    it "treats free products with price_cents 0 as having valid price intent" do
+      product = create(:product, user: seller, name: "free one", price_cents: 0, draft: true)
+      create(:rich_content, entity: product, description: rich_content_description)
+      create(:thumbnail, product:)
+
+      readiness = readiness_for(product.reload)
+      expect(readiness["state"]).to eq("ready")
+      expect(readiness["missing"]).not_to include("price")
+    end
+
+    it "returns building with the missing items for a draft product without content or cover" do
+      product = create(:product, user: seller, name: "building one", price_cents: 1000, draft: true)
+
+      readiness = readiness_for(product)
+      expect(readiness["state"]).to eq("building")
+      expect(readiness["missing"]).to match_array(["content", "cover"])
+    end
+
+    it "returns nil for preorder products to leave existing status untouched" do
+      product = create(:product, user: seller, name: "preorder one", price_cents: 1000, is_in_preorder_state: true)
+      expect(readiness_for(product)).to be_nil
+    end
+
+    it "returns nil for archived products" do
+      product = create(:product, user: seller, name: "archived one", price_cents: 1000, archived: true)
+      expect(readiness_for(product)).to be_nil
+    end
+
+    it "returns nil for purchase-disabled products" do
+      product = create(:product, user: seller, name: "paused one", price_cents: 1000,
+                                 purchase_disabled_at: Time.current)
+      expect(readiness_for(product)).to be_nil
+    end
+
+    it "returns nil for banned products" do
+      product = create(:product, user: seller, name: "banned one", price_cents: 1000, banned_at: Time.current)
+      expect(readiness_for(product)).to be_nil
+    end
+
+    it "returns nil for membership / recurring billing products" do
+      product = create(:membership_product, user: seller, name: "membership one")
+      expect(readiness_for(product)).to be_nil
+    end
+  end
+
   describe "#empty?" do
     context "when archived: false (default)" do
       it "returns nil" do

@@ -124,6 +124,9 @@ class DashboardProductsPagePresenter
       products = seller
         .products
         .includes([
+                    :alive_rich_contents,
+                    :display_asset_previews,
+                    { variant_categories_alive: { alive_variants: :alive_rich_contents } },
                     thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
                     thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
                   ])
@@ -165,6 +168,7 @@ class DashboardProductsPagePresenter
         "price_formatted" => product.price_formatted_including_rental_verbose,
         "revenue" => product.total_usd_cents,
         "status" => product_status(product),
+        "readiness" => product_readiness(product),
         "thumbnail" => product.thumbnail&.alive&.as_json,
         "display_price_cents" => product.display_price_cents,
         "url" => product.long_url,
@@ -186,5 +190,25 @@ class DashboardProductsPagePresenter
       else
         "published"
       end
+    end
+
+    def product_readiness(product)
+      return nil if product.is_recurring_billing?
+      return nil if product.is_in_preorder_state?
+      return nil if product.archived?
+      return nil if product.banned_at.present?
+      return nil if product.purchase_disabled_at.present?
+
+      if product.published? && product.alive?
+        return { "state" => "live", "missing" => [] }
+      end
+
+      missing = []
+      missing << "name" if product.name.blank?
+      missing << "price" if product.price_cents.nil?
+      missing << "content" unless product.has_content?
+      missing << "cover" if product.thumbnail_or_cover_url.blank?
+
+      { "state" => missing.empty? ? "ready" : "building", "missing" => missing }
     end
 end
