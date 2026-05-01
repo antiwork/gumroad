@@ -5,6 +5,9 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   include AfterCommitEverywhere
 
   ADMIN_AUDIT_REDACTED_PARAM_PATTERN = /password|secret|token|two_factor|otp|webhook_url|license_key|email/i
+  ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS = {
+    "purchases.reassign" => %w[from to]
+  }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
     purchases.reassign
     purchases.resend_all_receipts
@@ -79,14 +82,18 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         target_external_id: admin_audit_target_external_id(target),
         route: request.path,
         http_method: request.request_method,
-        params_snapshot: admin_audit_params_snapshot,
+        params_snapshot: admin_audit_params_snapshot(action),
         request_id: request.request_id,
         response_status: error.present? ? Rack::Utils.status_code(:internal_server_error) : response.status,
         error_class: error&.class&.name,
         created_at: Time.current
       }
 
-      after_commit { AdminApiAuditLog.create!(attributes) }
+      after_commit do
+        AdminApiAuditLog.create!(attributes)
+      rescue => e
+        handle_admin_audit_log_failure(e, attributes)
+      end
     end
 
     def admin_audit_target_type(target)
@@ -100,25 +107,37 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       target.external_id_numeric.to_s if target.respond_to?(:external_id_numeric) && target.external_id_numeric.present?
     end
 
-    def admin_audit_params_snapshot
-      redacted_admin_audit_value(params.to_unsafe_h.except("controller", "action", "format"))
+    def handle_admin_audit_log_failure(error, attributes)
+      Rails.logger.error("Failed to record admin audit log for #{attributes[:action]}: #{error.class.name}: #{error.message}")
+      ErrorNotifier.notify(error) do |report|
+        report.add_metadata(:admin_audit_log, attributes.except(:params_snapshot))
+      end
     end
 
-    def redacted_admin_audit_value(value, key: nil)
-      return "[REDACTED]" if key.to_s.match?(ADMIN_AUDIT_REDACTED_PARAM_PATTERN)
+    def admin_audit_params_snapshot(action)
+      redacted_admin_audit_value(params.to_unsafe_h.except("controller", "action", "format"), action:)
+    end
+
+    def redacted_admin_audit_value(value, key: nil, action:)
+      return "[REDACTED]" if admin_audit_redacted_param_key?(key, action:)
 
       case value
       when ActionController::Parameters
-        redacted_admin_audit_value(value.to_unsafe_h, key:)
+        redacted_admin_audit_value(value.to_unsafe_h, key:, action:)
       when Hash
         value.to_h.each_with_object({}) do |(nested_key, nested_value), redacted|
-          redacted[nested_key] = redacted_admin_audit_value(nested_value, key: nested_key)
+          redacted[nested_key] = redacted_admin_audit_value(nested_value, key: nested_key, action:)
         end
       when Array
-        value.map { redacted_admin_audit_value(_1, key:) }
+        value.map { redacted_admin_audit_value(_1, key:, action:) }
       else
         value
       end
+    end
+
+    def admin_audit_redacted_param_key?(key, action:)
+      key.to_s.match?(ADMIN_AUDIT_REDACTED_PARAM_PATTERN) ||
+        ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS.fetch(action, []).include?(key.to_s)
     end
 
     def serialize_purchase(purchase)

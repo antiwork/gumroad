@@ -752,6 +752,16 @@ describe Api::Internal::Admin::PurchasesController do
       expect(purchase2.reload.email).to eq(to_email)
     end
 
+    it "redacts the reassignment email addresses from the audit snapshot" do
+      post :reassign, params: { from: from_email, to: to_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(AdminApiAuditLog.last.params_snapshot).to include(
+        "from" => "[REDACTED]",
+        "to" => "[REDACTED]"
+      )
+    end
+
     it "returns 422 when every purchase save fails" do
       allow_any_instance_of(Purchase).to receive(:save).and_return(false)
 

@@ -261,5 +261,17 @@ describe Api::Internal::Admin::BaseController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(legacy_admin_actor.reload.name).not_to eq("Rolled Back")
     end
+
+    it "does not fail the write request when audit logging fails" do
+      error = ActiveRecord::StatementInvalid.new("boom")
+      allow(AdminApiAuditLog).to receive(:create!).and_raise(error)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(Rails.logger).to receive(:error).with(include("Failed to record admin audit log for users.update_email"))
+
+      patch :update, params: { id: legacy_admin_actor.id }
+
+      expect(response).to have_http_status(:ok)
+      expect(ErrorNotifier).to have_received(:notify).with(error)
+    end
   end
 end
