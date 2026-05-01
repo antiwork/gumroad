@@ -145,6 +145,37 @@ describe AnalyticsController do
     end
   end
 
+  describe "GET data_by_referral" do
+    it_behaves_like "supports start and end times", :data_by_referral
+
+    it_behaves_like "authorize called for action", :get, :data_by_referral do
+      let(:record) { :analytics }
+      let(:policy_method) { :index? }
+    end
+
+    it "clamps the date range to #{AnalyticsController::MAX_BY_REFERRAL_DATE_RANGE_DAYS} days" do
+      start_time = "Mon Jan 01 2024 00:00:00 GMT-0000"
+      end_time = "Tue Dec 31 2025 00:00:00 GMT-0000"
+      expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(
+        Date.new(2025, 12, 31) - AnalyticsController::MAX_BY_REFERRAL_DATE_RANGE_DAYS.days,
+        Date.new(2025, 12, 31),
+        by: :referral
+      ).and_return({})
+      get :data_by_referral, params: { start_time:, end_time: }
+    end
+
+    it "does not clamp the date range when within the limit" do
+      start_time = "Mon Jun 01 2025 00:00:00 GMT-0000"
+      end_time = "Wed Jul 30 2025 00:00:00 GMT-0000"
+      expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(
+        Date.new(2025, 6, 1),
+        Date.new(2025, 7, 30),
+        by: :referral
+      ).and_return({})
+      get :data_by_referral, params: { start_time:, end_time: }
+    end
+  end
+
   describe "GET data_by_date" do
     before do
       @stats = { data: "data" }
