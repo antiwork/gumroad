@@ -1,7 +1,7 @@
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
-import { Product, SortKey } from "$app/data/products";
+import { Product, ProductReadiness, ProductReadinessMissingItem, SortKey } from "$app/data/products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
@@ -9,6 +9,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { Pill } from "$app/components/ui/Pill";
 import {
   Table,
   TableBody,
@@ -143,16 +144,20 @@ export const ProductsPageProductsTable = (props: {
               <TableCell className="whitespace-nowrap">{product.price_formatted}</TableCell>
 
               <TableCell className="whitespace-nowrap">
-                {(() => {
-                  switch (product.status) {
-                    case "unpublished":
-                      return <>Unpublished</>;
-                    case "preorder":
-                      return <>Pre-order</>;
-                    case "published":
-                      return <>Published</>;
-                  }
-                })()}
+                {product.readiness ? (
+                  <ReadinessCell readiness={product.readiness} />
+                ) : (
+                  (() => {
+                    switch (product.status) {
+                      case "unpublished":
+                        return <>Unpublished</>;
+                      case "preorder":
+                        return <>Pre-order</>;
+                      case "published":
+                        return <>Published</>;
+                    }
+                  })()
+                )}
               </TableCell>
               {product.can_duplicate || product.can_destroy ? (
                 <TableCell>
@@ -200,3 +205,36 @@ export const ProductsPageProductsTable = (props: {
     </div>
   );
 };
+
+const READINESS_LABELS: Record<ProductReadiness["state"], string> = {
+  draft: "Drafted",
+  ready: "Ready to sell",
+  live: "On the road",
+};
+
+const READINESS_COLORS: Record<ProductReadiness["state"], "warning" | "primary" | "success"> = {
+  draft: "warning",
+  ready: "primary",
+  live: "success",
+};
+
+const MISSING_ITEM_LABELS: Record<ProductReadinessMissingItem, string> = {
+  name: "name",
+  price: "price",
+  content: "content",
+  cover: "cover",
+  payment: "payments",
+};
+
+const ReadinessCell = ({ readiness }: { readiness: ProductReadiness }) => (
+  <div className="flex flex-col gap-1">
+    <Pill size="small" color={READINESS_COLORS[readiness.state]}>
+      {READINESS_LABELS[readiness.state]}
+    </Pill>
+    {readiness.state === "draft" && readiness.missing.length > 0 ? (
+      <small className="text-muted">
+        Missing: {readiness.missing.map((item) => MISSING_ITEM_LABELS[item]).join(", ")}
+      </small>
+    ) : null}
+  </div>
+);

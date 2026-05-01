@@ -4,6 +4,13 @@ import { request } from "$app/utils/request";
 
 export type SortKey = "name" | "successful_sales_count" | "revenue" | "display_price_cents" | "status" | "cut";
 
+export type ProductReadinessMissingItem = "name" | "price" | "content" | "cover" | "payment";
+
+export type ProductReadiness = {
+  state: "draft" | "ready" | "live";
+  missing: ProductReadinessMissingItem[];
+};
+
 export type Membership = {
   id: number;
   edit_url: string;
@@ -41,6 +48,7 @@ export type Product = {
   successful_sales_count: number;
   remaining_for_sale_count: number | null;
   status: "preorder" | "published" | "unpublished";
+  readiness: ProductReadiness | null;
   thumbnail: { url: string } | null;
   url: string;
   url_without_protocol: string;

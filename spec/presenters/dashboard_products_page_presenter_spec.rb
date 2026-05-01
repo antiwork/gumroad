@@ -841,12 +841,24 @@ describe DashboardProductsPagePresenter do
       expect(readiness["missing"]).not_to include("price")
     end
 
-    it "returns building with the missing items for a draft product without content or cover" do
-      product = create(:product, user: seller, name: "building one", price_cents: 1000, draft: true)
+    it "returns draft with the missing basics for a draft product without content or cover" do
+      product = create(:product, user: seller, name: "draft one", price_cents: 1000, draft: true)
 
       readiness = readiness_for(product)
-      expect(readiness["state"]).to eq("building")
+      expect(readiness["state"]).to eq("draft")
       expect(readiness["missing"]).to match_array(["content", "cover"])
+    end
+
+    it "returns draft with payment missing when basics are complete but the seller has no payment setup" do
+      seller.update!(payment_address: nil)
+
+      product = create(:product, user: seller, name: "needs payment", price_cents: 1000, draft: true)
+      create(:rich_content, entity: product, description: rich_content_description)
+      create(:thumbnail, product:)
+
+      readiness = readiness_for(product.reload)
+      expect(readiness["state"]).to eq("draft")
+      expect(readiness["missing"]).to eq(["payment"])
     end
 
     it "returns nil for preorder products to leave existing status untouched" do

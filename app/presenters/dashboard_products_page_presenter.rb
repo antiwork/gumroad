@@ -208,7 +208,13 @@ class DashboardProductsPagePresenter
       missing << "price" if product.price_cents.nil?
       missing << "content" unless product.has_content?
       missing << "cover" if product.thumbnail_or_cover_url.blank?
+      missing << "payment" unless seller_can_publish_products?
 
-      { "state" => missing.empty? ? "ready" : "building", "missing" => missing }
+      { "state" => missing.empty? ? "ready" : "draft", "missing" => missing }
+    end
+
+    def seller_can_publish_products?
+      return @seller_can_publish_products if defined?(@seller_can_publish_products)
+      @seller_can_publish_products = seller.can_publish_products?
     end
 end
