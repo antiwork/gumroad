@@ -23,10 +23,12 @@ const READINESS_COLORS: Record<ProductReadiness["state"], "warning" | "primary" 
 };
 
 const READINESS_HELPER: Record<ProductReadiness["state"], string> = {
-  draft: "Your product is drafted. Finish setup before it can sell.",
+  draft: "Your product has been drafted. Finish the offer and payments before it can go on the road.",
   ready: "Your setup is complete. This can now go on the road.",
   live: "Your product is live. Share it with the people most likely to care.",
 };
+
+const SECTIONS_HELPER = "Basics creates the product. Offer makes it sellable. Payments lets Gumroad process the sale.";
 
 const SECTION_LABELS: Record<keyof ProductWorkspaceSections, string> = {
   basics: "Basics",
@@ -35,8 +37,8 @@ const SECTION_LABELS: Record<keyof ProductWorkspaceSections, string> = {
 };
 
 const TEMPLATE_CARDS: { name: string; price_label: string }[] = [
-  { name: "Example layout", price_label: "$9" },
-  { name: "Example layout", price_label: "Free" },
+  { name: "Example slot", price_label: "$9" },
+  { name: "Example slot", price_label: "Free" },
 ];
 
 const SectionChip = ({ complete, label, href }: { complete: boolean; label: string; href: string }) => (
@@ -90,6 +92,7 @@ const ProductWorkspacePage = () => {
                   />
                 ))}
               </div>
+              <small className="text-muted">{SECTIONS_HELPER}</small>
             </div>
           ) : (
             <p className="text-muted">Manage this product from the editor.</p>
