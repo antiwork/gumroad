@@ -462,11 +462,11 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
                 className="flipbook-card__cover relative flex w-full items-center justify-center overflow-hidden border border-black p-6 sm:p-8"
                 style={{ backgroundColor: slide.backgroundColor }}
               >
-                <div className="relative z-10 flex h-full w-full items-center justify-center">
+                <div className="relative z-10 mx-auto flex w-full items-center justify-center" style={{ aspectRatio: '1/1', maxHeight: '100%' }}>
                   <img
                     src={slide.mainImage.src}
                     alt={slide.mainImage.alt}
-                    className="max-h-[88%] w-full max-w-[88%] object-contain select-none"
+                    className="h-full w-full object-contain select-none"
                     draggable={false}
                   />
                 </div>
@@ -496,7 +496,7 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
             style={{ opacity: index === 0 ? 1 : 0 }}
             aria-hidden={index !== 0}
           >
-            <h3 className="mx-auto max-w-[15em] text-4xl leading-tight lg:text-5xl">
+            <h3 className="mx-auto max-w-[19em] text-4xl leading-tight lg:text-5xl">
               {slide.title}
             </h3>
             <p className="mx-auto mt-3 max-w-2xl text-xl">
