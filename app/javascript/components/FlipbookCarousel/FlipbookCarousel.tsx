@@ -426,9 +426,8 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
   const handleTouchEnd = useCallback(() => {}, []);
 
   return (
-    <div className="flipbook-wrapper min-h-[50vh] relative w-full overflow-visible" ref={wrapperRef}>
-
-<div
+    <div className="flipbook-wrapper relative min-h-[50vh] w-full overflow-visible" ref={wrapperRef}>
+      <div
         ref={scrollDriverRef}
         className="flipbook-scroll-driver absolute inset-0 z-10 grid cursor-grab grid-flow-col overflow-x-auto overflow-y-hidden scroll-smooth select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500/50 active:cursor-grabbing"
         tabIndex={0}
@@ -454,7 +453,11 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
         ))}
       </div>
 
-      <div className="flipbook-stack pointer-events-none absolute left-1/2 z-20" style={{ top: 'calc(var(--flipbook-card-height) / 2)' }} ref={stackRef}>
+      <div
+        className="flipbook-stack pointer-events-none absolute left-1/2 z-20"
+        style={{ top: "calc(var(--flipbook-card-height) / 2)" }}
+        ref={stackRef}
+      >
         {slides.map((slide, index) => (
           <div key={index} className="flipbook-card absolute inset-0 h-full w-full">
             <div className="flipbook-card__inner w-full">
@@ -462,7 +465,10 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
                 className="flipbook-card__cover relative flex w-full items-center justify-center overflow-hidden border border-black p-6 sm:p-8"
                 style={{ backgroundColor: slide.backgroundColor }}
               >
-                <div className="relative z-10 mx-auto flex w-full items-center justify-center" style={{ aspectRatio: '1/1', maxHeight: '100%' }}>
+                <div
+                  className="relative z-10 mx-auto flex w-full items-center justify-center"
+                  style={{ aspectRatio: "1/1", maxHeight: "100%" }}
+                >
                   <img
                     src={slide.mainImage.src}
                     alt={slide.mainImage.alt}
@@ -485,7 +491,10 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
         ))}
       </div>
 
-      <div className="flipbook-captions pointer-events-none absolute right-0 bottom-0 left-0 z-30 text-center" style={{ height: 'var(--flipbook-caption-height)' }}>
+      <div
+        className="flipbook-captions pointer-events-none absolute right-0 bottom-0 left-0 z-30 text-center"
+        style={{ height: "var(--flipbook-caption-height)" }}
+      >
         {slides.map((slide, index) => (
           <div
             key={index}
@@ -496,12 +505,8 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
             style={{ opacity: index === 0 ? 1 : 0 }}
             aria-hidden={index !== 0}
           >
-            <h3 className="mx-auto max-w-[19em] text-4xl leading-tight lg:text-5xl">
-              {slide.title}
-            </h3>
-            <p className="mx-auto mt-3 max-w-2xl text-xl">
-              {slide.subtitle}
-            </p>
+            <h3 className="mx-auto max-w-[19em] text-4xl leading-tight lg:text-5xl">{slide.title}</h3>
+            <p className="mx-auto mt-3 max-w-2xl text-xl">{slide.subtitle}</p>
           </div>
         ))}
       </div>

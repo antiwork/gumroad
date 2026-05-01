@@ -18,6 +18,15 @@ describe HomeController do
     end
   end
 
+  describe "GET about" do
+    it "renders successfully" do
+      get :about
+
+      expect(response).to be_successful
+      expect(assigns(:hide_layouts)).to be(true)
+    end
+  end
+
   describe "GET small_bets" do
     it "renders successfully" do
       get :small_bets
