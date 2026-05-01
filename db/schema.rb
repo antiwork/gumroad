@@ -39,6 +39,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_24_000000) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "admin_api_authorization_codes", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "actor_user_id", null: false
+    t.bigint "admin_api_token_id"
+    t.string "code_hash", limit: 64, null: false
+    t.string "code_challenge", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["actor_user_id", "created_at"], name: "idx_admin_api_auth_codes_actor_created"
+    t.index ["admin_api_token_id"], name: "idx_admin_api_auth_codes_token"
+    t.index ["code_hash"], name: "idx_admin_api_auth_codes_code_hash", unique: true
+    t.index ["expires_at"], name: "idx_admin_api_auth_codes_expires"
+  end
+
   create_table "admin_api_tokens", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "external_id", limit: 21, null: false
     t.bigint "actor_user_id", null: false

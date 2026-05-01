@@ -12,6 +12,16 @@ namespace :admin do
   get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
   get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
+  namespace :cli do
+    get "authorize", to: "authorizations#show", as: :authorize
+    post "authorize", to: "authorizations#create"
+    resources :tokens, only: :index, param: :external_id do
+      member do
+        post :revoke
+      end
+    end
+  end
+
   get "action_call_dashboard", to: "action_call_dashboard#index"
 
   resources :users, only: [:show, :destroy], param: :external_id, defaults: { format: "html" } do

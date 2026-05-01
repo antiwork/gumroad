@@ -4,9 +4,12 @@ class AdminApiToken < ApplicationRecord
   EXTERNAL_ID_LENGTH = 21
   PLAINTEXT_TOKEN_LENGTH = 43
   TOKEN_ALPHABET = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  HUMAN_TOKEN_TTL = 30.days
+  HUMAN_TOKEN_MAX_AGE = 90.days
 
   belongs_to :actor_user, class_name: "User"
   has_many :admin_api_audit_logs
+  has_many :admin_api_authorization_codes
 
   validates :external_id, presence: true, uniqueness: true
   validates :token_hash, presence: true, uniqueness: true
@@ -17,10 +20,20 @@ class AdminApiToken < ApplicationRecord
   scope :active, -> { where(revoked_at: nil).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   def self.mint!(actor_user_id:, expires_at: nil)
-    plaintext_token = generate_plaintext_token
-    create!(actor_user_id:, expires_at:, token_hash: hash_token(plaintext_token))
+    plaintext_token, = mint_with_plaintext!(actor_user_id:, expires_at:)
 
     plaintext_token
+  end
+
+  def self.mint_with_plaintext!(actor_user_id:, expires_at: nil)
+    plaintext_token = generate_plaintext_token
+    admin_api_token = create!(actor_user_id:, expires_at:, token_hash: hash_token(plaintext_token))
+
+    [plaintext_token, admin_api_token]
+  end
+
+  def self.human_token_expires_at
+    HUMAN_TOKEN_TTL.from_now
   end
 
   def self.seed_legacy_admin_token!
@@ -74,7 +87,14 @@ class AdminApiToken < ApplicationRecord
   end
 
   def record_used!
-    update_column(:last_used_at, Time.current)
+    used_at = Time.current
+    attributes = { last_used_at: used_at }
+    if expires_at.present?
+      hard_cap = created_at + HUMAN_TOKEN_MAX_AGE
+      attributes[:expires_at] = [used_at + HUMAN_TOKEN_TTL, hard_cap].min
+    end
+
+    update_columns(attributes)
   end
 
   private

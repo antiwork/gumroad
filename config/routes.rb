@@ -295,6 +295,12 @@ Rails.application.routes.draw do
         end
 
         namespace :admin do
+          namespace :auth do
+            post :exchange
+            post :revoke
+          end
+          get :whoami, to: "whoami#show"
+
           resources :purchases, only: [:show] do
             collection do
               post :search

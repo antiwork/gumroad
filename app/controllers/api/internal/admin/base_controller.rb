@@ -46,6 +46,21 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       render json: { success: false, message: "authorization is invalid" }, status: :unauthorized
     end
 
+    def serialize_admin_actor(admin_actor)
+      {
+        external_id: admin_actor.external_id,
+        name: admin_actor.name.presence || admin_actor.email,
+        email: admin_actor.email
+      }
+    end
+
+    def serialize_admin_token(admin_api_token)
+      {
+        external_id: admin_api_token.external_id,
+        expires_at: admin_api_token.expires_at&.as_json
+      }
+    end
+
     def current_admin_actor_id
       Current.admin_actor.id
     end

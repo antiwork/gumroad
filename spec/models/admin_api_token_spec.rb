@@ -20,6 +20,21 @@ describe AdminApiToken do
     end
   end
 
+  describe ".mint_with_plaintext!" do
+    it "returns the plaintext token and token row" do
+      actor = create(:admin_user)
+
+      plaintext_token, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: actor.id, expires_at: 30.days.from_now)
+
+      expect(plaintext_token).to be_present
+      expect(admin_api_token).to have_attributes(
+        actor_user: actor,
+        token_hash: described_class.hash_token(plaintext_token),
+        expires_at: be_present
+      )
+    end
+  end
+
   describe ".seed_legacy_admin_token!" do
     it "creates the legacy admin token from the configured shared token" do
       actor = create(:admin_user)
@@ -77,6 +92,33 @@ describe AdminApiToken do
       expect(legacy_admin_token).to be_legacy_admin_token
       expect(later_admin_actor_token).not_to be_legacy_admin_token
       expect(service_token).not_to be_legacy_admin_token
+    end
+  end
+
+  describe "#record_used!" do
+    it "extends expiring tokens by 30 days capped at 90 days from creation" do
+      actor = create(:admin_user)
+      plaintext_token, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: actor.id, expires_at: 1.day.from_now)
+      created_at = 80.days.ago
+      admin_api_token.update_columns(created_at:, updated_at: created_at)
+
+      freeze_time do
+        admin_api_token.record_used!
+
+        admin_api_token.reload
+        expect(admin_api_token.last_used_at).to be_within(1.second).of(Time.current)
+        expect(admin_api_token.expires_at).to be_within(1.second).of(created_at + 90.days)
+        expect(described_class.authenticate(plaintext_token)).to eq(admin_api_token)
+      end
+    end
+
+    it "does not add expiry to service tokens" do
+      admin_api_token = create(:admin_api_token, expires_at: nil)
+
+      admin_api_token.record_used!
+
+      expect(admin_api_token.reload.expires_at).to be_nil
+      expect(admin_api_token.last_used_at).to be_present
     end
   end
 end
