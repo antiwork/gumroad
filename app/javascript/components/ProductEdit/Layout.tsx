@@ -13,6 +13,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
+import { FlubberPanel } from "$app/components/Flubber/FlubberPanel";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
@@ -240,6 +241,7 @@ export const Layout = ({
 
   return (
     <>
+      <FlubberPanel />
       <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form className="hidden" data-id={uniquePermalink} id="edit-link-basic-form" />
@@ -276,7 +278,12 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button
+                  color="accent"
+                  disabled={isBusy}
+                  onClick={() => void setPublished(true)}
+                  data-flubber="publish-button"
+                >
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -390,7 +397,9 @@ export const Layout = ({
           </PreviewSidebar>
         </WithPreviewSidebar>
       ) : (
-        <div className="flex-1">{children}</div>
+        <div className="flex-1">
+          {children}
+        </div>
       )}
     </>
   );

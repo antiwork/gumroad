@@ -27,6 +27,7 @@
   - [Push Notifications](#push-notifications)
   - [Common Development Tasks](#common-development-tasks)
   - [Linting](#linting)
+- [Flubber (experimental)](#flubber-experimental)
 
 ## Getting Started
 
@@ -242,6 +243,10 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
+
+## Flubber (experimental)
+
+Flubber is a voice-first assistant on the product editor. Local setup and **next steps** for vision, prompts, and metadata are documented in [docs/flubber.md](docs/flubber.md).
 
 ## Common Issues
 

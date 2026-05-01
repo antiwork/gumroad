@@ -1,0 +1,42 @@
+@keyframes flubber-wobble {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.flubber-blob-svg,
+.flubber-blob-img {
+  pointer-events: none;
+  animation: flubber-wobble 2s ease-in-out infinite;
+}
+
+[data-flubber-active] {
+  box-shadow:
+    0 0 0 3px #b5ff6d,
+    0 0 20px #b5ff6d55;
+  border-radius: 6px;
+  transition: box-shadow 0.2s ease;
+}
+
+.flubber-chat-bubble {
+  background: #3aa757;
+  border: 2px solid #88d89b;
+  border-radius: 26px;
+}
+
+.flubber-chat-bubble::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: -12px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-right: 14px solid #3aa757;
+  filter: drop-shadow(-1px 0 #88d89b);
+}

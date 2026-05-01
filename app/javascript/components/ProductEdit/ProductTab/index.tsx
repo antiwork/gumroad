@@ -102,7 +102,7 @@ export const ProductTab = () => {
               </Alert>
             ) : null}
             <BundleConversionNotice />
-            <Fieldset>
+            <Fieldset data-flubber="product-name">
               <Label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</Label>
               <Input
                 id={`${uid}-name`}
@@ -156,7 +156,7 @@ export const ProductTab = () => {
           </section>
           {isCoffee ? (
             <>
-              <section className="grid gap-8 border-t border-border p-4 md:p-8">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8" data-flubber="pricing">
                 <h2>Pricing</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
@@ -258,13 +258,13 @@ export const ProductTab = () => {
                 </Fieldset>
               </section>
               {product.native_type === "membership" ? (
-                <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                <section className="grid gap-8 border-t border-border p-4 md:p-8" data-flubber="pricing">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
-                  <section className="grid gap-8 border-t border-border p-4 md:p-8">
+                  <section className="grid gap-8 border-t border-border p-4 md:p-8" data-flubber="pricing">
                     <h2>Pricing</h2>
                     <PriceEditor
                       priceCents={product.price_cents}

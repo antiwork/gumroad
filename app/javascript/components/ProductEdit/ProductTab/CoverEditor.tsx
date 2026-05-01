@@ -53,7 +53,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="grid gap-8 border-t border-border p-4 md:p-8">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8" data-flubber="cover-upload">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>

@@ -32,6 +32,7 @@ import { Pill } from "$app/components/ui/Pill";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { FlubberPanel } from "$app/components/Flubber/FlubberPanel";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
 
@@ -251,6 +252,7 @@ const NewProductPage = () => {
 
   return (
     <>
+      <FlubberPanel />
       <PageHeader
         className="sticky-top"
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
@@ -307,7 +309,13 @@ const NewProductPage = () => {
                 </PopoverContent>
               </Popover>
             ) : null}
-            <Button color="accent" type="submit" form={`new-product-form-${formUID}`} disabled={form.processing}>
+            <Button
+              color="accent"
+              type="submit"
+              form={`new-product-form-${formUID}`}
+              disabled={form.processing}
+              data-flubber="publish-button"
+            >
               {form.processing ? "Adding..." : "Next: Customize"}
             </Button>
           </>
@@ -348,7 +356,7 @@ const NewProductPage = () => {
                 </Alert>
               ) : null}
 
-              <Fieldset state={errors["link.name"] ? "danger" : undefined}>
+              <Fieldset state={errors["link.name"] ? "danger" : undefined} data-flubber="product-name">
                 <FieldsetTitle>
                   <Label htmlFor={`name-${formUID}`}>Name</Label>
                 </FieldsetTitle>
@@ -364,7 +372,7 @@ const NewProductPage = () => {
                 <Errors errors={errors["link.name"]} label="Name" />
               </Fieldset>
 
-              <Fieldset>
+              <Fieldset data-flubber="product-type">
                 <FieldsetTitle>Products</FieldsetTitle>
                 <ProductTypeSelector
                   selectedType={form.data.link.native_type}
@@ -384,7 +392,10 @@ const NewProductPage = () => {
                 </Fieldset>
               ) : null}
 
-              <Fieldset state={errors["link.price_range"] || errors["link.base"] ? "danger" : undefined}>
+              <Fieldset
+                state={errors["link.price_range"] || errors["link.base"] ? "danger" : undefined}
+                data-flubber="pricing"
+              >
                 <FieldsetTitle>
                   <Label htmlFor={`price-${formUID}`}>
                     {form.data.link.native_type === "coffee" ? "Suggested amount" : "Price"}

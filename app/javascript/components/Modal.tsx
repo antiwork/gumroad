@@ -6,6 +6,7 @@ import { classNames } from "$app/utils/classNames";
 
 export const Modal = ({
   className,
+  overlayClassName,
   title,
   children,
   footer,
@@ -16,6 +17,7 @@ export const Modal = ({
   ...props
 }: {
   className?: string;
+  overlayClassName?: string;
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -48,7 +50,7 @@ export const Modal = ({
         {children}
         {footer ? <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer> : null}
       </Dialog.Content>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-backdrop" />
+      <Dialog.Overlay className={classNames("fixed inset-0 z-50 bg-backdrop", overlayClassName)} />
     </>
   );
 

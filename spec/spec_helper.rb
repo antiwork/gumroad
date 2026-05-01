@@ -99,6 +99,7 @@ def configure_vcr
     config.filter_sensitive_data("<ZOOM_CLIENT_ID>") { GlobalConfig.get("ZOOM_CLIENT_ID") }
     config.filter_sensitive_data("<GCAL_CLIENT_ID>") { GlobalConfig.get("GCAL_CLIENT_ID") }
     config.filter_sensitive_data("<OPENAI_ACCESS_TOKEN>") { GlobalConfig.get("OPENAI_ACCESS_TOKEN") }
+    config.filter_sensitive_data("<ANTHROPIC_API_KEY>") { GlobalConfig.get("ANTHROPIC_API_KEY") }
     config.filter_sensitive_data("<IOS_CONSUMER_APP_APPLE_LOGIN_IDENTIFIER>") { GlobalConfig.get("IOS_CONSUMER_APP_APPLE_LOGIN_IDENTIFIER") }
     config.filter_sensitive_data("<IOS_CREATOR_APP_APPLE_LOGIN_TEAM_ID>") { GlobalConfig.get("IOS_CREATOR_APP_APPLE_LOGIN_TEAM_ID") }
     config.filter_sensitive_data("<IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER>") { GlobalConfig.get("IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER") }

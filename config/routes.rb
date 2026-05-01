@@ -1006,6 +1006,9 @@ Rails.application.routes.draw do
       end
     end
 
+    post "/api/flubber/chat", to: "api/flubber#chat", defaults: { format: :json }
+    post "/api/flubber/voice_turn", to: "api/flubber#voice_turn", defaults: { format: :json }
+
     post "/working-webhook", to: "public#working_webhook"
 
     get "/ping", to: "public#ping", as: "ping"
