@@ -55,6 +55,26 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_24_000000) do
     t.index ["token_hash"], name: "index_admin_api_tokens_on_token_hash", unique: true
   end
 
+  create_table "admin_api_audit_logs", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "actor_user_id", null: false
+    t.bigint "admin_api_token_id", null: false
+    t.string "action", null: false
+    t.string "target_type"
+    t.bigint "target_id"
+    t.string "target_external_id"
+    t.string "route", null: false
+    t.string "http_method", null: false
+    t.json "params_snapshot"
+    t.string "request_id"
+    t.integer "response_status"
+    t.string "error_class"
+    t.datetime "created_at", null: false
+    t.index ["actor_user_id", "created_at"], name: "index_admin_api_audit_logs_on_actor_user_id_and_created_at"
+    t.index ["admin_api_token_id", "created_at"], name: "idx_on_admin_api_token_id_created_at_95eabf5e0d"
+    t.index ["created_at"], name: "index_admin_api_audit_logs_on_created_at"
+    t.index ["target_type", "target_id", "created_at"], name: "idx_on_target_type_target_id_created_at_bc67bbc74b"
+  end
+
   create_table "admin_action_call_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "controller_name", null: false
     t.string "action_name", null: false

@@ -3,10 +3,11 @@
 class User::CreateAdminCommentService
   class IdempotencyConflictError < StandardError; end
 
-  def initialize(user:, content:, idempotency_key:)
+  def initialize(user:, content:, idempotency_key:, author_id: GUMROAD_ADMIN_ID)
     @user = user
     @content = content
     @idempotency_key = idempotency_key
+    @author_id = author_id
   end
 
   def perform
@@ -21,7 +22,7 @@ class User::CreateAdminCommentService
     comment = @user.comments.new(
       content: @content,
       comment_type: Comment::COMMENT_TYPE_NOTE,
-      author_id: GUMROAD_ADMIN_ID,
+      author_id: @author_id,
       idempotency_key: @idempotency_key
     )
     comment.save

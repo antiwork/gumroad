@@ -6,6 +6,7 @@ class AdminApiToken < ApplicationRecord
   TOKEN_ALPHABET = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
   belongs_to :actor_user, class_name: "User"
+  has_many :admin_api_audit_logs
 
   validates :external_id, presence: true, uniqueness: true
   validates :token_hash, presence: true, uniqueness: true

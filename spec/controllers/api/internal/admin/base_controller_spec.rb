@@ -17,6 +17,34 @@ describe Api::Internal::Admin::BaseController do
     def create
       render json: { success: true }
     end
+
+    def update
+      record_admin_write(action: "users.update_email", target: Current.admin_actor) do
+        render json: { success: true }
+      end
+    end
+
+    def destroy
+      record_admin_write(action: "users.update_email", target: Current.admin_actor) do
+        render json: { success: false }, status: :unprocessable_entity
+      end
+    end
+
+    def edit
+      record_admin_write(action: "users.update_email", target: Current.admin_actor) do
+        raise RuntimeError, "boom"
+      end
+    end
+
+    def new
+      User.transaction do
+        record_admin_write(action: "users.update_email", target: Current.admin_actor) do
+          Current.admin_actor.update!(name: "Rolled Back")
+          raise ActiveRecord::Rollback
+        end
+      end
+      render json: { success: false }, status: :unprocessable_entity
+    end
   end
 
   let(:legacy_admin_actor) { create(:admin_user) }
@@ -154,6 +182,84 @@ describe Api::Internal::Admin::BaseController do
 
       expect(response).to have_http_status(:unauthorized)
       expect(response.body).to eq({ success: false, message: "per-actor admin token is required" }.to_json)
+    end
+  end
+
+  describe "admin write auditing" do
+    let!(:legacy_admin_token) do
+      create(:admin_api_token, actor_user: legacy_admin_actor, token_hash: AdminApiToken.hash_token("test-admin-token"))
+    end
+
+    before do
+      request.headers["Authorization"] = "Bearer test-admin-token"
+    end
+
+    it "records the actor, token, target, route, request id, and redacted params for write requests" do
+      patch :update, params: {
+        id: legacy_admin_actor.id,
+        email: "seller@example.com",
+        note: "safe note",
+        nested: {
+          api_token: "secret",
+          kept: "visible"
+        }
+      }
+
+      expect(response).to have_http_status(:ok)
+      audit_log = AdminApiAuditLog.last
+      expect(audit_log).to have_attributes(
+        actor_user_id: legacy_admin_actor.id,
+        admin_api_token_id: legacy_admin_token.id,
+        action: "users.update_email",
+        target_type: "User",
+        target_id: legacy_admin_actor.id,
+        target_external_id: legacy_admin_actor.external_id,
+        route: request.path,
+        http_method: "PATCH",
+        request_id: request.request_id,
+        response_status: 200,
+        error_class: nil
+      )
+      expect(audit_log.params_snapshot).to include(
+        "email" => "[REDACTED]",
+        "note" => "safe note",
+        "nested" => {
+          "api_token" => "[REDACTED]",
+          "kept" => "visible"
+        }
+      )
+    end
+
+    it "records handled client errors with their response status" do
+      delete :destroy, params: { id: legacy_admin_actor.id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "users.update_email",
+        response_status: 422,
+        error_class: nil
+      )
+    end
+
+    it "records unhandled server errors with the exception class" do
+      expect do
+        get :edit, params: { id: legacy_admin_actor.id }
+      end.to raise_error(RuntimeError, "boom")
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "users.update_email",
+        response_status: 500,
+        error_class: "RuntimeError"
+      )
+    end
+
+    it "does not leave an audit row when the wrapped transaction rolls back" do
+      expect do
+        get :new
+      end.not_to change { AdminApiAuditLog.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(legacy_admin_actor.reload.name).not_to eq("Rolled Back")
     end
   end
 end

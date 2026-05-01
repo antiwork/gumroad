@@ -17,59 +17,63 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
   end
 
   def pause
-    if @user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
-      return render json: {
+    record_admin_write(action: "payouts.pause", target: @user) do
+      if @user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
+        return render json: {
+          success: true,
+          status: "already_paused",
+          message: "Payouts are already paused by admin",
+          payouts_paused: true
+        }
+      end
+
+      reason = params[:reason].to_s.strip.presence
+
+      User.transaction do
+        @user.update!(payouts_paused_internally: true, payouts_paused_by: current_admin_actor_id)
+        if reason.present?
+          @user.comments.create!(
+            author_id: current_admin_actor_id,
+            comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+            content: reason
+          )
+        end
+      end
+
+      render json: {
         success: true,
-        status: "already_paused",
-        message: "Payouts are already paused by admin",
+        message: "Payouts paused for #{@user.email}",
         payouts_paused: true
       }
     end
-
-    reason = params[:reason].to_s.strip.presence
-
-    User.transaction do
-      @user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
-      if reason.present?
-        @user.comments.create!(
-          author_id: GUMROAD_ADMIN_ID,
-          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-          content: reason
-        )
-      end
-    end
-
-    render json: {
-      success: true,
-      message: "Payouts paused for #{@user.email}",
-      payouts_paused: true
-    }
   end
 
   def resume
-    unless @user.payouts_paused_internally?
-      return render json: {
+    record_admin_write(action: "payouts.resume", target: @user) do
+      unless @user.payouts_paused_internally?
+        return render json: {
+          success: true,
+          status: "not_paused",
+          message: "Payouts are not paused by admin",
+          payouts_paused: @user.payouts_paused?
+        }
+      end
+
+      User.transaction do
+        @user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+        @user.comments.create!(
+          author_id: current_admin_actor_id,
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+          content: "Payouts resumed."
+        )
+      end
+
+      render json: {
         success: true,
-        status: "not_paused",
-        message: "Payouts are not paused by admin",
-        payouts_paused: @user.payouts_paused?
+        message: "Payouts resumed for #{@user.email}",
+        payouts_paused: @user.reload.payouts_paused?
       }
     end
-
-    User.transaction do
-      @user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
-      @user.comments.create!(
-        author_id: GUMROAD_ADMIN_ID,
-        comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
-        content: "Payouts resumed."
-      )
-    end
-
-    render json: {
-      success: true,
-      message: "Payouts resumed for #{@user.email}",
-      payouts_paused: @user.reload.payouts_paused?
-    }
   end
 
   private

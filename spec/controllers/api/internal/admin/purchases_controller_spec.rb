@@ -565,6 +565,23 @@ describe Api::Internal::Admin::PurchasesController do
       expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
     end
 
+    it "records an audit log with the purchase target" do
+      legacy_admin_token = AdminApiToken.find_by!(token_hash: AdminApiToken.hash_token("test-admin-token"))
+
+      expect do
+        post :resend_receipt, params: { id: purchase.external_id_numeric.to_s }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "purchases.resend_receipt",
+        target_type: "Purchase",
+        target_id: purchase.id,
+        target_external_id: purchase.external_id,
+        admin_api_token_id: legacy_admin_token.id,
+        response_status: 200
+      )
+    end
+
     it "returns 404 when the purchase does not exist" do
       post :resend_receipt, params: { id: "999999999" }
 

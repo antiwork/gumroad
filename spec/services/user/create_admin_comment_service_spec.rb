@@ -20,6 +20,15 @@ describe User::CreateAdminCommentService do
       expect(comment.commentable).to eq(user)
     end
 
+    it "creates a comment attributed to the supplied author" do
+      actor = create(:admin_user)
+
+      comment = described_class.new(user:, content: "Note from support", idempotency_key: "key-1", author_id: actor.id).perform
+
+      expect(comment).to be_persisted
+      expect(comment.author_id).to eq(actor.id)
+    end
+
     it "returns the existing comment when called twice with the same idempotency key and matching content" do
       first = described_class.new(user:, content: "Same content", idempotency_key: "dup").perform
       second = described_class.new(user:, content: "Same content", idempotency_key: "dup").perform

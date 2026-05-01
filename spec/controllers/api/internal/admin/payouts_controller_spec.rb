@@ -109,6 +109,50 @@ describe Api::Internal::Admin::PayoutsController do
       expect(comment.content).to eq(reason)
     end
 
+    it "records the legacy token in the audit log" do
+      legacy_admin_token = AdminApiToken.find_by!(token_hash: AdminApiToken.hash_token("test-admin-token"))
+
+      expect do
+        post :pause, params: { email: user.email, reason: "Manual review" }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      audit_log = AdminApiAuditLog.last
+      expect(audit_log).to have_attributes(
+        action: "payouts.pause",
+        target_type: "User",
+        target_id: user.id,
+        target_external_id: user.external_id,
+        actor_user_id: GUMROAD_ADMIN_ID,
+        admin_api_token_id: legacy_admin_token.id,
+        response_status: 200
+      )
+      expect(audit_log.params_snapshot).to include(
+        "email" => "[REDACTED]",
+        "reason" => "Manual review"
+      )
+    end
+
+    it "attributes payout comments and audit rows to a per-actor token" do
+      actor = create(:admin_user)
+      plaintext_token = AdminApiToken.mint!(actor_user_id: actor.id)
+      admin_api_token = AdminApiToken.find_by!(actor_user: actor, token_hash: AdminApiToken.hash_token(plaintext_token))
+      request.headers["Authorization"] = "Bearer #{plaintext_token}"
+
+      post :pause, params: { email: user.email, reason: "Actor review" }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.comments.with_type_payouts_paused.last).to have_attributes(
+        author_id: actor.id,
+        content: "Actor review"
+      )
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "payouts.pause",
+        actor_user_id: actor.id,
+        admin_api_token_id: admin_api_token.id,
+        target_id: user.id
+      )
+    end
+
     it "does not create a comment when reason is blank" do
       expect { post :pause, params: { email: user.email, reason: "   " } }
         .not_to change { user.comments.count }

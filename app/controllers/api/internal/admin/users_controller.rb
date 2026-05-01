@@ -31,8 +31,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    user.send_reset_password_instructions
-    render json: { success: true, message: "Reset password instructions sent" }
+    record_admin_write(action: "users.reset_password", target: user) do
+      user.send_reset_password_instructions
+      render json: { success: true, message: "Reset password instructions sent" }
+    end
   end
 
   def update_email
@@ -47,29 +49,31 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:current_email])
     return unless user
 
-    if user.email.to_s.casecmp(params[:new_email].to_s).zero?
-      return render json: { success: false, message: "New email is the same as the current email" }, status: :unprocessable_entity
-    end
+    record_admin_write(action: "users.update_email", target: user) do
+      if user.email.to_s.casecmp(params[:new_email].to_s).zero?
+        return render json: { success: false, message: "New email is the same as the current email" }, status: :unprocessable_entity
+      end
 
-    user.email = params[:new_email]
-    unless user.save
-      return render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
-    end
+      user.email = params[:new_email]
+      unless user.save
+        return render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      end
 
-    if user.unconfirmed_email.present?
-      render json: {
-        success: true,
-        message: "Email change pending confirmation. Confirmation email sent to #{user.unconfirmed_email}.",
-        unconfirmed_email: user.unconfirmed_email,
-        pending_confirmation: true
-      }
-    else
-      render json: {
-        success: true,
-        message: "Email updated.",
-        email: user.email,
-        pending_confirmation: false
-      }
+      if user.unconfirmed_email.present?
+        render json: {
+          success: true,
+          message: "Email change pending confirmation. Confirmation email sent to #{user.unconfirmed_email}.",
+          unconfirmed_email: user.unconfirmed_email,
+          pending_confirmation: true
+        }
+      else
+        render json: {
+          success: true,
+          message: "Email updated.",
+          email: user.email,
+          pending_confirmation: false
+        }
+      end
     end
   end
 
@@ -80,18 +84,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    enabled = ActiveModel::Type::Boolean.new.cast(params[:enabled])
-    user.two_factor_authentication_enabled = enabled
+    record_admin_write(action: "users.two_factor_authentication", target: user) do
+      enabled = ActiveModel::Type::Boolean.new.cast(params[:enabled])
+      user.two_factor_authentication_enabled = enabled
 
-    if user.save
-      user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
-      render json: {
-        success: true,
-        message: "Two-factor authentication #{enabled ? "enabled" : "disabled"}",
-        two_factor_authentication_enabled: user.two_factor_authentication_enabled?
-      }
-    else
-      render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      if user.save
+        user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
+        render json: {
+          success: true,
+          message: "Two-factor authentication #{enabled ? "enabled" : "disabled"}",
+          two_factor_authentication_enabled: user.two_factor_authentication_enabled?
+        }
+      else
+        render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      end
     end
   end
 
@@ -103,15 +109,17 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    comment = User::CreateAdminCommentService.new(user:, content: params[:content], idempotency_key: params[:idempotency_key]).perform
+    record_admin_write(action: "users.create_comment", target: user) do
+      comment = User::CreateAdminCommentService.new(user:, content: params[:content], idempotency_key: params[:idempotency_key], author_id: current_admin_actor_id).perform
 
-    if comment.persisted?
-      render json: { success: true, comment: serialize_comment(comment) }
-    else
-      render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      if comment.persisted?
+        render json: { success: true, comment: serialize_comment(comment) }
+      else
+        render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      end
+    rescue User::CreateAdminCommentService::IdempotencyConflictError
+      render json: { success: false, message: "Idempotency key already used with different content" }, status: :conflict
     end
-  rescue User::CreateAdminCommentService::IdempotencyConflictError
-    render json: { success: false, message: "Idempotency key already used with different content" }, status: :conflict
   end
 
   def mark_compliant
@@ -120,18 +128,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    if user.compliant?
-      return render json: { success: true, status: "already_compliant", message: "User is already compliant" }
+    record_admin_write(action: "users.mark_compliant", target: user) do
+      if user.compliant?
+        return render json: { success: true, status: "already_compliant", message: "User is already compliant" }
+      end
+
+      note = build_admin_note(user, params[:note]) if params[:note].present?
+      return render_invalid_comment(note) if note&.invalid?
+
+      user.mark_compliant!(author_id: current_admin_actor_id)
+      note&.save!
+      render json: { success: true, status: "marked_compliant", message: "User marked compliant" }
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
-
-    note = build_admin_note(user, params[:note]) if params[:note].present?
-    return render_invalid_comment(note) if note&.invalid?
-
-    user.mark_compliant!(author_id: GUMROAD_ADMIN_ID)
-    note&.save!
-    render json: { success: true, status: "marked_compliant", message: "User marked compliant" }
-  rescue StateMachines::InvalidTransition => e
-    render json: { success: false, message: e.message }, status: :unprocessable_entity
   end
 
   def suspend_for_fraud
@@ -140,18 +150,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    if user.suspended_for_fraud?
-      return render json: { success: true, status: "already_suspended", message: "User is already suspended for fraud" }
+    record_admin_write(action: "users.suspend_for_fraud", target: user) do
+      if user.suspended_for_fraud?
+        return render json: { success: true, status: "already_suspended", message: "User is already suspended for fraud" }
+      end
+
+      suspension_note = build_suspension_note(user) if params[:suspension_note].present?
+      return render_invalid_comment(suspension_note) if suspension_note&.invalid?
+
+      user.suspend_for_fraud!(author_id: current_admin_actor_id)
+      suspension_note&.save!
+      render json: { success: true, status: "suspended_for_fraud", message: "User suspended for fraud" }
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
-
-    suspension_note = build_suspension_note(user) if params[:suspension_note].present?
-    return render_invalid_comment(suspension_note) if suspension_note&.invalid?
-
-    user.suspend_for_fraud!(author_id: GUMROAD_ADMIN_ID)
-    suspension_note&.save!
-    render json: { success: true, status: "suspended_for_fraud", message: "User suspended for fraud" }
-  rescue StateMachines::InvalidTransition => e
-    render json: { success: false, message: e.message }, status: :unprocessable_entity
   end
 
   private
@@ -233,7 +245,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def build_admin_note(user, content)
       user.comments.new(
-        author_id: GUMROAD_ADMIN_ID,
+        author_id: current_admin_actor_id,
         comment_type: Comment::COMMENT_TYPE_NOTE,
         content:
       )
@@ -241,7 +253,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def build_suspension_note(user)
       user.comments.new(
-        author_id: GUMROAD_ADMIN_ID,
+        author_id: current_admin_actor_id,
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
         content: params[:suspension_note]
       )
