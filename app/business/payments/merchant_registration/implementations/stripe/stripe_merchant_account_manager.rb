@@ -438,10 +438,16 @@ module StripeMerchantAccountManager
       if bank_account.is_a?(CardBankAccount)
         Stripe::Token.create({ customer: bank_account.credit_card.stripe_customer_id }, { stripe_account: stripe_account["id"] }).id
       else
+        account_number_for_stripe =
+          if bank_account.respond_to?(:stripe_account_number)
+            bank_account.stripe_account_number(passphrase)
+          else
+            bank_account.account_number.decrypt(passphrase).gsub(/[ -]/, "")
+          end
         bank_account_hash = {
           country: bank_account.country,
           currency: bank_account.currency,
-          account_number: bank_account.account_number.decrypt(passphrase).gsub(/[ -]/, "")
+          account_number: account_number_for_stripe
         }
         if bank_account.routing_number.present?
           routing_number = bank_account.routing_number

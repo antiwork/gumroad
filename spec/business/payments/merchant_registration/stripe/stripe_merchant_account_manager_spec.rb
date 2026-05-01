@@ -3067,7 +3067,7 @@ describe StripeMerchantAccountManager, :vcr do
           bank_account: {
             country: "SV",
             currency: "usd",
-            account_number: "12345678901234",
+            account_number: "SV44BCIE12345678901234567890",
             routing_number: "AAAASVS1XXX"
           },
           settings: {
@@ -3094,6 +3094,22 @@ describe StripeMerchantAccountManager, :vcr do
         expect(bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
         expect(bank_account.reload.stripe_bank_account_id).to match(/ba_[a-zA-Z0-9]+/)
         expect(bank_account.reload.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
+      end
+
+      context "when the seller stored a plain account number instead of an IBAN" do
+        let(:bank_account) { create(:el_salvador_bank_account, user:, bank_number: "CAGRSVSS", account_number: "3280602160", account_number_last_four: "2160") }
+
+        it "constructs an IBAN from the SWIFT/BIC and account number before sending to Stripe" do
+          captured_params = nil
+          allow(Stripe::Account).to receive(:create) do |params|
+            captured_params = params
+            raise Stripe::APIError, "stop_here"
+          end
+
+          expect { subject.create_account(user, passphrase: "1234") }.to raise_error(Stripe::APIError, "stop_here")
+          expect(captured_params[:bank_account][:account_number]).to eq("SV88CAGR00000000003280602160")
+          expect(captured_params[:bank_account][:routing_number]).to eq("CAGRSVSS")
+        end
       end
     end
     describe "all info provided of a Chile individual" do
