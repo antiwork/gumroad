@@ -1,22 +1,39 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::BaseController < Api::Internal::BaseController
+  include AdminActor
+
   skip_before_action :verify_authenticity_token
   before_action :verify_authorization_header!
   before_action :authorize_admin_token!
 
   private
     def authorize_admin_token!
-      token = request.authorization.split(" ").last
-      expected_token = GlobalConfig.get("INTERNAL_ADMIN_API_TOKEN").to_s
+      token = bearer_token
+      admin_api_token = AdminApiToken.authenticate(token)
+      return render_invalid_authorization unless admin_api_token
 
-      unless expected_token.present? && token.present? && ActiveSupport::SecurityUtils.secure_compare(token, expected_token)
-        render json: { success: false, message: "authorization is invalid" }, status: :unauthorized
-      end
+      set_current_admin_actor!(admin_api_token.actor_user, admin_token: admin_api_token)
+      admin_api_token.record_used!
+    end
+
+    def require_per_actor_token!
+      return if Current.admin_token.present? && !Current.admin_token.legacy_admin_token?
+
+      render json: { success: false, message: "per-actor admin token is required" }, status: :unauthorized
     end
 
     def verify_authorization_header!
       render json: { success: false, message: "unauthenticated" }, status: :unauthorized if request.authorization.nil?
+    end
+
+    def bearer_token
+      authorization_header = request.authorization.to_s
+      authorization_header.match(/\ABearer (.+)\z/)&.[](1)
+    end
+
+    def render_invalid_authorization
+      render json: { success: false, message: "authorization is invalid" }, status: :unauthorized
     end
 
     def serialize_purchase(purchase)

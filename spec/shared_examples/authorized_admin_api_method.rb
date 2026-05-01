@@ -3,9 +3,11 @@
 require "spec_helper"
 
 RSpec.shared_examples_for "admin api authorization required" do |verb, action, params = {}|
+  let(:legacy_admin_actor) { respond_to?(:admin_user) ? admin_user : create(:admin_user) }
+
   before do
-    allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("INTERNAL_ADMIN_API_TOKEN").and_return("test-admin-token")
+    stub_const("GUMROAD_ADMIN_ID", legacy_admin_actor.id)
+    create(:admin_api_token, actor_user: legacy_admin_actor, token_hash: AdminApiToken.hash_token("test-admin-token"))
     request.headers["Authorization"] = "Bearer test-admin-token"
   end
 

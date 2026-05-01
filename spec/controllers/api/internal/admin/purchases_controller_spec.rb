@@ -1059,8 +1059,6 @@ describe Api::Internal::Admin::PurchasesController do
 
     include_examples "admin api authorization required", :post, :refund_for_fraud, { id: "123", email: "buyer@example.com" }
 
-    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
-
     it "returns 400 when email is missing" do
       post :refund_for_fraud, params: { id: purchase.external_id_numeric.to_s }
 
