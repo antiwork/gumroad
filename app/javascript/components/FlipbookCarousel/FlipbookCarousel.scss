@@ -1,7 +1,7 @@
 .flipbook-wrapper {
-  --flipbook-card-aspect: 557 / 706;
-  --flipbook-card-width: min(780px, 72vw);
-  --flipbook-card-height: calc(var(--flipbook-card-width) * 706 / 557);
+  --flipbook-card-aspect: 8 / 9;
+  --flipbook-card-width: min(680px, 65vw);
+  --flipbook-card-height: calc(var(--flipbook-card-width) * 9 / 8);
   --flipbook-card-radius: 1.25rem;
   --flipbook-caption-height: 9rem;
   height: calc(var(--flipbook-card-height) + var(--flipbook-caption-height));

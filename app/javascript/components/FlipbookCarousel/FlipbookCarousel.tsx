@@ -454,7 +454,7 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
         ))}
       </div>
 
-      <div className="flipbook-stack pointer-events-none absolute top-1/3 left-1/2 z-20" ref={stackRef}>
+      <div className="flipbook-stack pointer-events-none absolute left-1/2 z-20" style={{ top: 'calc(var(--flipbook-card-height) / 2)' }} ref={stackRef}>
         {slides.map((slide, index) => (
           <div key={index} className="flipbook-card absolute inset-0 h-full w-full">
             <div className="flipbook-card__inner w-full">
@@ -485,7 +485,7 @@ export default function FlipbookCarousel({ slides, ariaLabel = "Feature carousel
         ))}
       </div>
 
-      <div className="flipbook-captions pointer-events-none absolute right-0 bottom-0 left-0 z-30 text-center">
+      <div className="flipbook-captions pointer-events-none absolute right-0 bottom-0 left-0 z-30 text-center" style={{ height: 'var(--flipbook-caption-height)' }}>
         {slides.map((slide, index) => (
           <div
             key={index}
