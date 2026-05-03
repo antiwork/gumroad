@@ -1966,4 +1966,54 @@ describe Api::V2::LinksController do
       end
     end
   end
+
+  describe "GET 'readiness'" do
+    before do
+      @product = create(:product, user: @user, name: "Master Lightroom in 14 days", description: "<p>Short.</p>", price_cents: 1999)
+      @action = :readiness
+      @params = { id: @product.external_id }
+      Rails.cache.clear
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(access_token: @token.token)
+      end
+
+      context "when feature flag is off" do
+        it "returns success false" do
+          get @action, params: @params
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to match(/not enabled/i)
+        end
+      end
+
+      context "when feature flag is on" do
+        before { Feature.activate_user(:product_readiness_score, @user) }
+
+        it "returns the readiness payload" do
+          get @action, params: @params
+          body = response.parsed_body
+          expect(body["success"]).to be(true)
+          expect(body["readiness"]).to include("overall", "severity", "categories", "computed_at")
+          keys = body["readiness"]["categories"].map { |c| c["key"] }
+          expect(keys).to eq(%w[name description cover pricing social_proof])
+        end
+
+        it "returns 404-style error when product is missing" do
+          get @action, params: @params.merge(id: "NOT_REAL_ID")
+          expect(response.parsed_body["success"]).to be(false)
+        end
+
+        it "does not recompute on a second request for the same product" do
+          expect_any_instance_of(Ai::ProductPageOptimizerService).to receive(:compute).once.and_call_original
+          get @action, params: @params
+          get @action, params: @params
+        end
+      end
+    end
+  end
 end

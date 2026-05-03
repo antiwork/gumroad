@@ -19,11 +19,11 @@ class Api::V2::LinksController < Api::V2::BaseController
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
-  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:show, :index, :readiness]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :readiness]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :readiness]
 
   def index
     products = current_resource_owner.products.visible.includes(
@@ -425,6 +425,15 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   def destroy
     success_with_product if @product.delete!
+  end
+
+  def readiness
+    unless Feature.active?(:product_readiness_score, current_resource_owner)
+      return render_response(false, message: "Readiness scoring is not enabled for this account.")
+    end
+
+    result = Ai::ProductPageOptimizerService.new(product: @product).call
+    render_response(true, readiness: result)
   end
 
   private

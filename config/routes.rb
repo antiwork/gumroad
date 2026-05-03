@@ -70,6 +70,7 @@ Rails.application.routes.draw do
         member do
           put "disable"
           put "enable"
+          get "readiness"
         end
       end
       resources :sales, only: [:index, :show] do
