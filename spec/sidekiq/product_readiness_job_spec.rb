@@ -12,7 +12,7 @@ describe ProductReadinessJob do
   end
 
   it "computes and caches readiness for the product" do
-    expect_any_instance_of(Ai::ProductPageOptimizerService).to receive(:call).and_call_original
+    expect_any_instance_of(ProductReadinessService).to receive(:call).and_call_original
     described_class.new.perform(product.id)
   end
 

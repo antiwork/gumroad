@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Ai::ProductPageOptimizerService
+class ProductReadinessService
   WEIGHTS = {
     name: 15,
     description: 30,

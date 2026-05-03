@@ -432,7 +432,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "Readiness scoring is not enabled for this account.")
     end
 
-    result = Ai::ProductPageOptimizerService.new(product: @product).call
+    result = ProductReadinessService.new(product: @product).call
     render_response(true, readiness: result)
   end
 

@@ -8,6 +8,6 @@ class ProductReadinessJob
     product = Link.find_by(id: product_id)
     return if product.nil?
 
-    Ai::ProductPageOptimizerService.new(product: product).call
+    ProductReadinessService.new(product: product).call
   end
 end

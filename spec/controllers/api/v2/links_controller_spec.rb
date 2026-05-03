@@ -2009,7 +2009,7 @@ describe Api::V2::LinksController do
         end
 
         it "does not recompute on a second request for the same product" do
-          expect_any_instance_of(Ai::ProductPageOptimizerService).to receive(:compute).once.and_call_original
+          expect_any_instance_of(ProductReadinessService).to receive(:compute).once.and_call_original
           get @action, params: @params
           get @action, params: @params
         end

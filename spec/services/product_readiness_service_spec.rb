@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Ai::ProductPageOptimizerService do
+describe ProductReadinessService do
   let(:product) do
     create(:product,
            name: "Master Lightroom in 14 days",
