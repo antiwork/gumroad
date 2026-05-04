@@ -1966,4 +1966,28 @@ describe Api::V2::LinksController do
       end
     end
   end
+  describe "POST 'suggest_tags'" do
+    before do
+      @action = :suggest_tags
+      @product = create(:product, user: @user, name: "Design System Kit")
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
+      @params = { id: @product.external_id, format: :json, access_token: @token.token }
+    end
+
+    it "returns tag suggestions" do
+      post @action, params: @params
+
+      expect(response).to have_http_status(:success)
+      json = JSON.parse(response.body)
+      expect(json["tags"]).to be_an(Array)
+      expect(json["tags"].length).to be_between(5, 7)
+    end
+
+    it "returns error when product not found" do
+      @params[:id] = "invalid"
+      post @action, params: @params
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end
