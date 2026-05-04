@@ -62,6 +62,7 @@ export const PriceCheckerCard = () => {
         try {
           assertResponseError(e);
         } catch {
+          setStatus("error");
           throw e;
         }
         setStatus("error");

@@ -108,6 +108,29 @@ describe PriceCheckerService do
       end
     end
 
+    context "when ES returns null percentiles even though there are enough matches" do
+      before do
+        12.times do |i|
+          create(:product, user: create(:user), taxonomy: films_taxonomy, price_cents: 500 + i * 100)
+        end
+        index_model_records(Link)
+      end
+
+      it "cascades to insufficient_data instead of dereferencing nil" do
+        results_double = double(total: 12)
+        aggregations_double = double(
+          dig: { "5.0" => nil, "25.0" => nil, "50.0" => nil, "75.0" => nil, "95.0" => nil }
+        )
+        response_double = double(results: results_double, aggregations: aggregations_double)
+        allow(Link).to receive(:search).and_return(response_double)
+
+        expect { described_class.call(product:) }.not_to raise_error
+        result = described_class.call(product:)
+        expect(result[:status]).to eq("insufficient_data")
+        expect(result[:summary]).to be_nil
+      end
+    end
+
     context "exclusion rules" do
       before do
         create(:product, user: seller, price_cents: 5_000, taxonomy: films_taxonomy) # same seller

@@ -64,7 +64,7 @@ class PriceCheckerService
       p95 = pcts["95.0"]
       mean = percentiles_response.aggregations.dig("price_mean", "value")
 
-      return { match_count:, percentiles: nil, histogram: nil, mean: nil } if [p5, p25, p50, p75, p95].any?(&:nil?)
+      return { match_count: 0, percentiles: nil, histogram: nil, mean: nil } if [p5, p25, p50, p75, p95].any?(&:nil?)
 
       interval = nice_interval(p5, p95)
       histogram_response = Link.search(histogram_body(include_taxonomy:, interval:, p5:, p95:))
