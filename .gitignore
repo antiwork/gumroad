@@ -66,3 +66,5 @@ test-branch-creation.log
 .claude/worktrees/
 autoresearch.*
 .codex/
+_wildcard.gumroad.dev*.pem
+config/puma_ssl.rb

@@ -1,6 +1,9 @@
-import { Link } from "@boxicons/react";
+import { Link, Sparkle } from "@boxicons/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
+
+import { ResponseError, assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -13,11 +16,16 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
+import { Pill } from "$app/components/ui/Pill";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
+
+const MAX_ALLOWED_TAGS = 5;
+const cleanTag = (tag: string) => tag.toLowerCase().replace(/^[#\s]+|,/gu, "").trim();
 
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
@@ -84,6 +92,7 @@ export const ShareTab = () => {
               taxonomies={taxonomies}
             />
             <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />
+            <AiTagSuggestions />
             <Fieldset>
               <Switch
                 checked={product.display_product_reviews}
@@ -108,6 +117,66 @@ export const ShareTab = () => {
         </form>
       </div>
     </Layout>
+  );
+};
+
+const AiTagSuggestions = () => {
+  const { id, product, updateProduct } = useProductEditContext();
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [suggestions, setSuggestions] = React.useState<string[]>([]);
+
+  const visibleSuggestions = suggestions.filter((tag) => !product.tags.includes(tag));
+
+  const fetchSuggestions = async () => {
+    setIsLoading(true);
+    try {
+      const response = await request({
+        method: "POST",
+        url: `/api/v2/products/${encodeURIComponent(id)}/suggest_tags`,
+        accept: "json",
+      });
+      if (!response.ok) throw new ResponseError("Failed to suggest tags.");
+      const result = cast<{ tags: string[] }>(await response.json());
+      setSuggestions(
+        [...new Set(result.tags.map(cleanTag))]
+          .filter((tag) => tag.length > 0)
+          .slice(0, 7),
+      );
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Failed to suggest tags", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const addTag = (tag: string) => {
+    if (product.tags.length >= MAX_ALLOWED_TAGS || product.tags.includes(tag)) return;
+    updateProduct({ tags: [...product.tags, tag] });
+  };
+
+  return (
+    <Fieldset>
+      <div className="flex flex-col gap-4">
+        <div>
+          <Button type="button" color="primary" onClick={() => void fetchSuggestions()} disabled={isLoading}>
+            <Sparkle className="size-5" />
+            {isLoading ? "Suggesting..." : "✨ Suggest tags with AI"}
+          </Button>
+        </div>
+        {visibleSuggestions.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {visibleSuggestions.map((tag) => (
+              <Pill asChild size="small" key={tag}>
+                <button type="button" onClick={() => addTag(tag)} disabled={product.tags.length >= MAX_ALLOWED_TAGS}>
+                  {tag}
+                </button>
+              </Pill>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Fieldset>
   );
 };
 

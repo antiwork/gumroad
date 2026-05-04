@@ -70,6 +70,7 @@ Rails.application.routes.draw do
         member do
           put "disable"
           put "enable"
+          post "suggest_tags"
         end
       end
       resources :sales, only: [:index, :show] do

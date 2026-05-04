@@ -205,6 +205,25 @@ class Api::V2::LinksController < Api::V2::BaseController
     success_with_product(@product)
   end
 
+  def suggest_tags
+    begin
+      seller = doorkeeper_token.present? ? current_resource_owner : current_seller
+      return render_response(false, message: "The product was not found.") if seller.blank?
+
+      doorkeeper_authorize! :edit_products if doorkeeper_token.present?
+
+      product = seller.links.find_by_external_id(params[:id]) || seller.links.find_by(unique_permalink: params[:id])
+      return render_response(false, message: "The product was not found.") if product.blank?
+
+      service = Ai::TagSuggestionsService.new(current_seller: seller)
+      tags = service.generate_tags(product_name: product.name, description: product.plaintext_description)
+      render json: { tags: }
+    rescue => e
+      ErrorNotifier.notify(e)
+      render json: { error: "Failed to suggest tags. Please try again." }, status: 500
+    end
+  end
+
   def update
     if @product.is_tiered_membership && params.key?(:price)
       return render_response(false, message: "Price cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
