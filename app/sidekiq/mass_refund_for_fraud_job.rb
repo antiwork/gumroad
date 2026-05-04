@@ -15,8 +15,10 @@ class MassRefundForFraudJob
         next
       end
 
+      next if purchase.refunded_at.present?
+
       begin
-        purchase.refund_for_fraud_and_block_buyer!(admin_user_id)
+        purchase.refund_for_fraud_and_block_buyer!(admin_user_id, idempotency_key: "mass-fraud-#{purchase.id}-#{jid}")
         results[:success] += 1
       rescue StandardError => e
         results[:failed] += 1
