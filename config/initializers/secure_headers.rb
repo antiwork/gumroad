@@ -106,7 +106,6 @@ SecureHeaders::Configuration.default do |config|
       # stripe frontend tokenization
       "js.stripe.com",
       "api.stripe.com",
-      "connect-js.stripe.com",
 
       # braintree
       "*.braintreegateway.com",
