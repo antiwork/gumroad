@@ -97,6 +97,10 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       return render json: { success: false, message: "payout_period_end_date is invalid" }, status: :bad_request
     end
 
+    if date >= Date.current
+      return render json: { success: false, message: "payout_period_end_date must be in the past" }, status: :bad_request
+    end
+
     record_admin_write(action: "payouts.issue", target: @user) do
       if processor_param == PayoutProcessorType::PAYPAL && ActiveModel::Type::Boolean.new.cast(params[:should_split_the_amount])
         @user.update!(should_paypal_payout_be_split: true)

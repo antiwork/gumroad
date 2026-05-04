@@ -311,6 +311,17 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body["message"]).to eq("payout_period_end_date is invalid")
     end
 
+    it "returns 400 without writing an audit row when payout_period_end_date is today or in the future" do
+      [Date.current, Date.current + 1].each do |date|
+        expect do
+          post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+        end.not_to change { AdminApiAuditLog.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["message"]).to eq("payout_period_end_date must be in the past")
+      end
+    end
+
     it "issues a stripe payout via Payouts.create_payments_for_balances_up_to_date_for_users" do
       payment = create(:payment_completed, user:)
       date = 1.day.ago.to_date
