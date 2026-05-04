@@ -57,7 +57,6 @@ type PaymentsPageProps = {
   aus_backtax_details: AusBacktaxDetails & {
     show_au_backtax_prompt: boolean;
   };
-  show_verification_section: boolean;
   countries: Record<string, string>;
   ip_country_code: string | null;
   bank_account_details: BankAccountDetails;
@@ -902,11 +901,7 @@ export default function PaymentsPage() {
         />
       ) : null}
       <form ref={formRef}>
-        <AccountStatusSection
-          accountStatus={props.account_status}
-          payoutsPausedBy={props.payouts_paused_by}
-          showVerificationSection={props.show_verification_section}
-        />
+        <AccountStatusSection accountStatus={props.account_status} payoutsPausedBy={props.payouts_paused_by} />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection

@@ -1868,7 +1868,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
                                                              account: stripe_connect_account_id,
                                                              refresh_url: remediation_settings_payments_url,
                                                              return_url: verify_stripe_remediation_settings_payments_url,
-                                                             type: "account_onboarding",
+                                                             type: "account_update",
                                                            }).and_call_original
 
       get :remediation

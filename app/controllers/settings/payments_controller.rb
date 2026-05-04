@@ -166,7 +166,7 @@ class Settings::PaymentsController < Settings::BaseController
                                              account: current_seller.stripe_account.charge_processor_merchant_id,
                                              refresh_url: remediation_settings_payments_url,
                                              return_url: verify_stripe_remediation_settings_payments_url,
-                                             type: "account_onboarding",
+                                             type: "account_update",
                                            }).url, allow_other_host: true
   end
 

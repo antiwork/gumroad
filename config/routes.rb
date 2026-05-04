@@ -569,8 +569,6 @@ Rails.application.routes.draw do
       resource :dismiss_ai_product_generation_promo, only: [:create]
     end
 
-    resources :stripe_account_sessions, only: :create
-
     namespace :checkout do
       resources :discounts, only: %i[index create update destroy] do
         get :paged, on: :collection

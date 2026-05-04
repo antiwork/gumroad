@@ -462,7 +462,6 @@ describe SettingsPresenter do
           bank_account: nil,
         },
         paypal_address: seller.payment_address,
-        show_verification_section: false,
         paypal_connect: {
           show_paypal_connect: false,
           allow_paypal_connect: false,
@@ -789,7 +788,6 @@ describe SettingsPresenter do
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
                                                                        user: @base_us_props[:user].merge({ need_full_ssn: true }),
-                                                                       show_verification_section: true,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
@@ -803,7 +801,6 @@ describe SettingsPresenter do
         seller.put_on_probation!(author_name: "test")
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       show_verification_section: true,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
@@ -818,7 +815,6 @@ describe SettingsPresenter do
         seller.update!(payouts_paused_internally: true)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       show_verification_section: true,
                                                                        payouts_paused_internally: true,
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(
@@ -835,7 +831,6 @@ describe SettingsPresenter do
         seller.update!(payouts_paused_internally: true)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       show_verification_section: true,
                                                                        payouts_paused_internally: true,
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(

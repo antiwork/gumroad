@@ -228,7 +228,6 @@ class SettingsPresenter
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,
-      show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && payments_policy.update?,
       paypal_connect:,
       fee_info: fee_info(user_compliance_info),
       user: user_details(user_compliance_info),

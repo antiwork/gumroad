@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { Alert } from "$app/components/ui/Alert";
 
 const HELP_URL = "https://help.gumroad.com";
@@ -38,15 +37,11 @@ export type AccountStatus = {
 export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
-  showVerificationSection,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
-  showVerificationSection: boolean;
 }) {
   if (!accountStatus.show_section) return null;
-
-  const showStripeVerificationBanner = !accountStatus.is_suspended && showVerificationSection;
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
@@ -72,15 +67,13 @@ export default function AccountStatusSection({
       )
     ) : null;
 
-  const showPayoutPausedAlert =
-    !accountStatus.is_suspended && payoutPausedReason && (!showVerificationSection || payoutsPausedBy !== "stripe");
+  const showPayoutPausedAlert = !accountStatus.is_suspended && payoutPausedReason;
 
   return (
     <section aria-labelledby="account-status-heading" className="flex flex-col gap-4 p-4 md:p-8">
       <h2 id="account-status-heading" className="sr-only">
         Account status
       </h2>
-      {showStripeVerificationBanner ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
       {accountStatus.is_suspended && accountStatus.suspension_reason ? (
         <Alert role="status" variant="danger">
@@ -95,7 +88,7 @@ export default function AccountStatusSection({
         </Alert>
       ) : null}
 
-      {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
+      {!accountStatus.is_suspended && accountStatus.compliance_actions.length > 0 ? (
         <Alert role="status" variant="warning">
           <div className="flex flex-col gap-1">
             {accountStatus.compliance_actions.map((action, i) => (
