@@ -298,6 +298,17 @@ class LinksController < ApplicationController
     render inertia: "Products/Edit", props: presenter.edit_props
   end
 
+  def price_check
+    fetch_product_by_unique_permalink
+    authorize @product, :edit?
+
+    result = PriceCheckerService.call(
+      product: @product,
+      force_refresh: params[:refresh].present?,
+    )
+    render json: result
+  end
+
   def update
     authorize @product
     begin

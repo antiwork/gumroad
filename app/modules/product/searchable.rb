@@ -24,7 +24,9 @@ module Product::Searchable
     "is_in_preorder_state" => "is_preorder",
     "display_product_reviews" => ["display_product_reviews", "is_recommendable"],
     "is_adult" => "rated_as_adult",
-    "native_type" => "is_call",
+    "native_type" => ["is_call", "native_type"],
+    "price_currency_type" => "price_currency_type",
+    "customizable_price" => "customizable_price",
   }.freeze
   private_constant :ATTRIBUTE_TO_SEARCH_FIELDS_MAP
 
@@ -126,8 +128,11 @@ module Product::Searchable
         indexes :is_alive_on_profile, type: :boolean
         indexes :is_call, type: :boolean
         indexes :is_alive, type: :boolean
+        indexes :native_type, type: :keyword
+        indexes :customizable_price, type: :boolean
         indexes :price_cents, type: :long
         indexes :available_price_cents, type: :long
+        indexes :price_currency_type, type: :keyword
         indexes :recommendable, type: :text do # unused
           indexes :keyword, type: :keyword, ignore_above: 256
         end
@@ -488,6 +493,9 @@ module Product::Searchable
       when "is_alive_on_profile"  then (alive? && !archived?)
       when "is_alive"            then alive?
       when "is_call"             then native_type == Link::NATIVE_TYPE_CALL
+      when "native_type"         then native_type
+      when "customizable_price"  then customizable_price?
+      when "price_currency_type" then price_currency_type
       when "display_product_reviews" then display_product_reviews?
       when "updated_at"        then updated_at
       when "creator_external_id" then user.external_id

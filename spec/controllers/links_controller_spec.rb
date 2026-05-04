@@ -312,6 +312,59 @@ describe LinksController, :vcr, inertia: true do
       end
     end
 
+    describe "GET price_check" do
+      let(:product) { create(:product, user: seller) }
+
+      it_behaves_like "authorize called for action", :get, :price_check do
+        let(:record) { product }
+        let(:policy_method) { :edit? }
+        let(:request_params) { { id: product.unique_permalink } }
+      end
+
+      it "returns the price distribution payload as JSON" do
+        payload = {
+          status: "ok",
+          tier: "broadened",
+          match_count: 25,
+          taxonomy_label: nil,
+          currency_code: "usd",
+          current_price_cents: product.price_cents,
+          summary: { median_cents: 1_500, p25_cents: 1_000, p75_cents: 2_500, mean_cents: 1_750 },
+          histogram: { interval_cents: 500, bins: [{ from_cents: 1_000, to_cents: 1_500, count: 5 }] },
+          computed_at: "2024-01-01T00:00:00Z",
+        }
+        expect(PriceCheckerService).to receive(:call).with(product: product, force_refresh: false).and_return(payload)
+
+        get :price_check, params: { id: product.unique_permalink }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to include(
+          "status" => "ok",
+          "tier" => "broadened",
+          "match_count" => 25,
+        )
+      end
+
+      it "passes force_refresh when refresh param is present" do
+        expect(PriceCheckerService).to receive(:call).with(product: product, force_refresh: true).and_return({})
+
+        get :price_check, params: { id: product.unique_permalink, refresh: "1" }
+
+        expect(response).to be_successful
+      end
+
+      context "when the user does not own the product" do
+        let(:other_user) { create(:user) }
+
+        before { sign_in other_user }
+
+        it "denies access" do
+          get :price_check, params: { id: product.unique_permalink }
+          expect(response).not_to be_successful
+        end
+      end
+    end
+
     describe "PUT update" do
       before do
         @product = create(:product_with_pdf_file, user: seller)

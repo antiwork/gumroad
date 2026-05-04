@@ -27,6 +27,7 @@ import { DurationsEditor } from "$app/components/ProductEdit/ProductTab/Duration
 import { FreeTrialSelector } from "$app/components/ProductEdit/ProductTab/FreeTrialSelector";
 import { GoogleCalendarIntegrationEditor } from "$app/components/ProductEdit/ProductTab/GoogleCalendarIntegrationEditor";
 import { MaxPurchaseCountToggle } from "$app/components/ProductEdit/ProductTab/MaxPurchaseCountToggle";
+import { PriceCheckerCard } from "$app/components/ProductEdit/ProductTab/PriceChecker";
 import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor";
 import { ShippingDestinationsEditor } from "$app/components/ProductEdit/ProductTab/ShippingDestinationsEditor";
 import { SuggestedAmountsEditor } from "$app/components/ProductEdit/ProductTab/SuggestedAmountsEditor";
@@ -264,63 +265,71 @@ export const ProductTab = () => {
                 </section>
               ) : (
                 <>
-                  <section className="grid gap-8 border-t border-border p-4 md:p-8">
-                    <h2>Pricing</h2>
-                    <PriceEditor
-                      priceCents={product.price_cents}
-                      suggestedPriceCents={product.suggested_price_cents}
-                      isPWYW={product.customizable_price}
-                      setPriceCents={(priceCents) => {
-                        const hasPaidVariantPrices = product.variants.some(
-                          (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
-                        );
-                        updateProduct({
-                          price_cents: priceCents,
-                          ...(priceCents === 0 && !hasPaidVariantPrices && { customizable_price: true }),
-                        });
-                      }}
-                      setSuggestedPriceCents={(suggestedPriceCents) =>
-                        updateProduct({ suggested_price_cents: suggestedPriceCents })
-                      }
-                      currencyCodeSelector={{
-                        options: currencyCodeList,
-                        onChange: (currencyCode) => {
-                          setCurrencyType(currencyCode);
-                        },
-                      }}
-                      setIsPWYW={(isPWYW) => updateProduct({ customizable_price: isPWYW })}
-                      currencyType={currencyType}
-                      eligibleForInstallmentPlans={product.eligible_for_installment_plans}
-                      allowInstallmentPlan={product.allow_installment_plan}
-                      numberOfInstallments={product.installment_plan?.number_of_installments ?? null}
-                      onAllowInstallmentPlanChange={(allowed) => updateProduct({ allow_installment_plan: allowed })}
-                      onNumberOfInstallmentsChange={(value) =>
-                        updateProduct({
-                          installment_plan: { ...product.installment_plan, number_of_installments: value },
-                        })
-                      }
-                      maxEffectivePriceCents={Math.max(
-                        product.price_cents,
-                        ...product.variants.map(
-                          (v) =>
-                            product.price_cents + ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
-                        ),
-                      )}
-                      hasPaidVariants={product.variants.some(
-                        (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
-                      )}
-                    />
-                    {product.native_type === "commission" ? (
-                      <p
-                        style={{
-                          marginTop: "var(--spacer-2)",
-                          fontSize: "var(--font-size-small)",
-                          color: "var(--color-text-secondary)",
+                  <section className="flex flex-col gap-8 border-t border-border p-4 md:p-8 xl:flex-row xl:items-start">
+                    <div className="grid gap-4 xl:flex-1">
+                      <h2>Pricing</h2>
+                      <PriceEditor
+                        priceCents={product.price_cents}
+                        suggestedPriceCents={product.suggested_price_cents}
+                        isPWYW={product.customizable_price}
+                        setPriceCents={(priceCents) => {
+                          const hasPaidVariantPrices = product.variants.some(
+                            (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                          );
+                          updateProduct({
+                            price_cents: priceCents,
+                            ...(priceCents === 0 && !hasPaidVariantPrices && { customizable_price: true }),
+                          });
                         }}
-                      >
-                        Commission products use a 50% deposit upfront, 50% upon completion payment split.
-                      </p>
-                    ) : null}
+                        setSuggestedPriceCents={(suggestedPriceCents) =>
+                          updateProduct({ suggested_price_cents: suggestedPriceCents })
+                        }
+                        currencyCodeSelector={{
+                          options: currencyCodeList,
+                          onChange: (currencyCode) => {
+                            setCurrencyType(currencyCode);
+                          },
+                        }}
+                        setIsPWYW={(isPWYW) => updateProduct({ customizable_price: isPWYW })}
+                        currencyType={currencyType}
+                        eligibleForInstallmentPlans={product.eligible_for_installment_plans}
+                        allowInstallmentPlan={product.allow_installment_plan}
+                        numberOfInstallments={product.installment_plan?.number_of_installments ?? null}
+                        onAllowInstallmentPlanChange={(allowed) => updateProduct({ allow_installment_plan: allowed })}
+                        onNumberOfInstallmentsChange={(value) =>
+                          updateProduct({
+                            installment_plan: { ...product.installment_plan, number_of_installments: value },
+                          })
+                        }
+                        maxEffectivePriceCents={Math.max(
+                          product.price_cents,
+                          ...product.variants.map(
+                            (v) =>
+                              product.price_cents +
+                              ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
+                          ),
+                        )}
+                        hasPaidVariants={product.variants.some(
+                          (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                        )}
+                      />
+                      {product.native_type === "commission" ? (
+                        <p
+                          style={{
+                            marginTop: "var(--spacer-2)",
+                            fontSize: "var(--font-size-small)",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          Commission products use a 50% deposit upfront, 50% upon completion payment split.
+                        </p>
+                      ) : null}
+                    </div>
+                    {product.customizable_price ? null : (
+                      <div className="xl:flex-1">
+                        <PriceCheckerCard />
+                      </div>
+                    )}
                   </section>
                   {product.native_type === "call" ? (
                     <>
