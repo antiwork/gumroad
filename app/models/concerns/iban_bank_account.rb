@@ -4,9 +4,9 @@ module IbanBankAccount
   extend ActiveSupport::Concern
 
   SEPA_COUNTRY_CODES = %w[
-    AD AL AT BE BG CH CY CZ DE DK EE ES FI FR GB GI
-    GR HR HU IE IS IT LI LT LU LV MC MD ME MK MT NL
-    NO PL PT RO RS SE SI SK SM VA
+    AD AT BE BG CH CY CZ DE DK EE ES FI FR GB GI GR
+    HR HU IE IS IT LI LT LU LV MC MT NL NO PL PT RO
+    SE SI SK SM VA
   ].freeze
 
   def stripe_external_account_country
