@@ -48,6 +48,15 @@
       <%= hidden_field_tag :scope, @pre_auth.scope %>
       <%= hidden_field_tag :code_challenge, @pre_auth.code_challenge %>
       <%= hidden_field_tag :code_challenge_method, @pre_auth.code_challenge_method %>
+      <% if admin_scope_optional? %>
+        <%= hidden_field_tag :admin_scope, params[:admin_scope] %>
+      <% end %>
+      <% if show_admin_authorization_checkbox? %>
+        <label class="flex items-start gap-3 rounded border border-border p-3 text-left">
+          <%= check_box_tag :authorize_admin_operations, "1", false, class: "mt-1" %>
+          <span>Also authorize admin operations on this machine</span>
+        </label>
+      <% end %>
       <%= button_tag "Authorize", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
     <% end %>
     <%= form_tag oauth_authorization_path, method: :delete, style: "display: contents" do %>
@@ -58,6 +67,9 @@
       <%= hidden_field_tag :scope, @pre_auth.scope %>
       <%= hidden_field_tag :code_challenge, @pre_auth.code_challenge %>
       <%= hidden_field_tag :code_challenge_method, @pre_auth.code_challenge_method %>
+      <% if admin_scope_optional? %>
+        <%= hidden_field_tag :admin_scope, params[:admin_scope] %>
+      <% end %>
       <%= button_tag "Deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
     <% end %>
   </footer>

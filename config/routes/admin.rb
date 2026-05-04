@@ -12,11 +12,6 @@ namespace :admin do
   get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
   get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
-  namespace :cli do
-    get "authorize", to: "authorizations#show", as: :authorize
-    post "authorize", to: "authorizations#create"
-  end
-
   resources :api_tokens, only: :index, param: :external_id do
     member do
       post :revoke
