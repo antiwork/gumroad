@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SwedenBankAccount < BankAccount
+  include IbanBankAccount
+
   BANK_ACCOUNT_TYPE = "SE"
 
   validate :validate_account_number, if: -> { Rails.env.production? }
@@ -27,11 +29,4 @@ class SwedenBankAccount < BankAccount
       bank_account_type:
     }
   end
-
-  private
-    def validate_account_number
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
-
-      errors.add :base, "The account number is invalid."
-    end
 end

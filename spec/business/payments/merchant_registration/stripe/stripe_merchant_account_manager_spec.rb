@@ -9252,6 +9252,176 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  describe "cross-border SEPA IBAN payouts" do
+    let(:user) { create(:named_user) }
+    let(:tos_agreement) { travel_to(Time.find_zone("UTC").local(2015, 4, 1)) { create(:tos_agreement, user:) } }
+
+    before { tos_agreement }
+
+    context "when a Bulgaria-based creator submits a Lithuanian IBAN (the issue case)" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:, city: "Sofia", street_address: "address_full_match",
+                                      state: nil, zip_code: "1000", country: "Bulgaria")
+      end
+      let(:bank_account) { create(:bulgaria_bank_account, user:, account_number: "LT121000011101001000") }
+
+      before do
+        user_compliance_info
+        bank_account
+      end
+
+      it "creates a Stripe account in BG and registers the LT IBAN as an EUR external account" do
+        expect(Stripe::Account).to receive(:create).with(
+          hash_including(
+            country: "BG",
+            default_currency: "eur",
+            bank_account: hash_including(country: "LT", currency: "eur", account_number: "LT121000011101001000")
+          )
+        ).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.country).to eq("BG")
+        expect(merchant_account.currency).to eq("eur")
+        expect(merchant_account.charge_processor_merchant_id).to match(/acct_[a-zA-Z0-9]+/)
+        expect(bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+        expect(bank_account.reload.stripe_external_account_id).to match(/ba_[a-zA-Z0-9]+/)
+        expect(bank_account.reload.stripe_fingerprint).to be_present
+      end
+    end
+
+    context "when a Bulgaria-based creator with an existing BG IBAN switches to a Lithuanian IBAN" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:, city: "Sofia", street_address: "address_full_match",
+                                      state: nil, zip_code: "1000", country: "Bulgaria")
+      end
+      let(:original_bank_account) { create(:bulgaria_bank_account, user:, account_number: "BG80BNBG96611020345678") }
+      let(:cross_border_bank_account) { create(:bulgaria_bank_account, user:, account_number: "LT121000011101001000") }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+
+      before do
+        user_compliance_info
+        original_bank_account
+        merchant_account
+        original_bank_account.update!(deleted_at: Time.current)
+        cross_border_bank_account
+      end
+
+      it "syncs the LT IBAN with EUR currency to the existing BG Stripe account" do
+        expect(Stripe::Account).to receive(:update).with(
+          merchant_account.charge_processor_merchant_id,
+          hash_including(bank_account: hash_including(country: "LT", currency: "eur", account_number: "LT121000011101001000"))
+        ).and_call_original
+
+        result = subject.update_bank_account(user, passphrase: "1234")
+
+        expect(result).to eq(:synced)
+        expect(cross_border_bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+        expect(cross_border_bank_account.reload.stripe_external_account_id).to match(/ba_[a-zA-Z0-9]+/)
+        expect(cross_border_bank_account.reload.stripe_fingerprint).to be_present
+      end
+    end
+
+    context "when a Denmark-based creator submits a Lithuanian IBAN (Stripe's stated cross-border SEPA example)" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:, city: "Copenhagen", street_address: "address_full_match",
+                                      state: nil, zip_code: "1050", country: "Denmark")
+      end
+      let(:bank_account) { create(:denmark_bank_account, user:, account_number: "LT121000011101001000") }
+
+      before do
+        user_compliance_info
+        bank_account
+      end
+
+      it "creates a Stripe account in DK with DKK default currency but registers the LT IBAN as an EUR external account" do
+        expect(Stripe::Account).to receive(:create).with(
+          hash_including(
+            country: "DK",
+            default_currency: "dkk",
+            bank_account: hash_including(country: "LT", currency: "eur", account_number: "LT121000011101001000")
+          )
+        ).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.country).to eq("DK")
+        expect(merchant_account.currency).to eq("dkk")
+        expect(merchant_account.charge_processor_merchant_id).to match(/acct_[a-zA-Z0-9]+/)
+        expect(bank_account.reload.stripe_external_account_id).to match(/ba_[a-zA-Z0-9]+/)
+      end
+    end
+
+    context "when a Bulgaria-based creator submits a Bulgarian IBAN (regression: same-country still works)" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:, city: "Sofia", street_address: "address_full_match",
+                                      state: nil, zip_code: "1000", country: "Bulgaria")
+      end
+      let(:bank_account) { create(:bulgaria_bank_account, user:, account_number: "BG80BNBG96611020345678") }
+
+      before do
+        user_compliance_info
+        bank_account
+      end
+
+      it "creates a Stripe account in BG and registers the BG IBAN as an EUR external account" do
+        expect(Stripe::Account).to receive(:create).with(
+          hash_including(
+            country: "BG",
+            default_currency: "eur",
+            bank_account: hash_including(country: "BG", currency: "eur", account_number: "BG80BNBG96611020345678")
+          )
+        ).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.country).to eq("BG")
+        expect(merchant_account.currency).to eq("eur")
+        expect(bank_account.reload.stripe_external_account_id).to match(/ba_[a-zA-Z0-9]+/)
+      end
+    end
+
+    context "when a Denmark-based creator submits a Danish IBAN (regression: same-country still works)" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:, city: "Copenhagen", street_address: "address_full_match",
+                                      state: nil, zip_code: "1050", country: "Denmark")
+      end
+      let(:bank_account) { create(:denmark_bank_account, user:, account_number: "DK5000400440116243") }
+
+      before do
+        user_compliance_info
+        bank_account
+      end
+
+      it "creates a Stripe account in DK and registers the DK IBAN as a DKK external account" do
+        expect(Stripe::Account).to receive(:create).with(
+          hash_including(
+            country: "DK",
+            default_currency: "dkk",
+            bank_account: hash_including(country: "DK", currency: "dkk", account_number: "DK5000400440116243")
+          )
+        ).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.country).to eq("DK")
+        expect(merchant_account.currency).to eq("dkk")
+        expect(bank_account.reload.stripe_external_account_id).to match(/ba_[a-zA-Z0-9]+/)
+      end
+    end
+
+    context "when a Bulgaria-based creator submits a Saudi IBAN (non-SEPA)" do
+      it "is rejected at the model layer before any Stripe call" do
+        allow(Rails.env).to receive(:production?).and_return(true)
+        bank_account = build(:bulgaria_bank_account, user:, account_number: "SA0380000000608010167519")
+
+        expect(Stripe::Account).not_to receive(:create)
+        expect(bank_account).not_to be_valid
+        expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      end
+    end
+  end
+
   describe ".save_stripe_bank_account_info" do
     let(:user) { create(:named_user) }
     let(:bank_account) { create(:japan_bank_account, user:) }

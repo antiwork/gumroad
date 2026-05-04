@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class IcelandBankAccount < BankAccount
+  include IbanBankAccount
+
   BANK_ACCOUNT_TYPE = "IS"
 
   validate :validate_account_number
@@ -27,11 +29,4 @@ class IcelandBankAccount < BankAccount
       bank_account_type:
     }
   end
-
-  private
-    def validate_account_number
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
-
-      errors.add :base, "The account number is invalid."
-    end
 end

@@ -445,8 +445,8 @@ module StripeMerchantAccountManager
             bank_account.account_number.decrypt(passphrase).gsub(/[ -]/, "")
           end
         bank_account_hash = {
-          country: bank_account.country,
-          currency: bank_account.currency,
+          country: bank_account.stripe_external_account_country,
+          currency: bank_account.stripe_external_account_currency,
           account_number: account_number_for_stripe
         }
         if bank_account.routing_number.present?
