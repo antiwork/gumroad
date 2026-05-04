@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SanMarinoBankAccount < BankAccount
+  include IbanBankAccount
+
   BANK_ACCOUNT_TYPE = "SM"
 
   BANK_CODE_FORMAT_REGEX = /^[0-9a-zA-Z]{8,11}$/
@@ -43,10 +45,5 @@ class SanMarinoBankAccount < BankAccount
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
-    end
-
-    def validate_account_number
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
-      errors.add :base, "The account number is invalid."
     end
 end
