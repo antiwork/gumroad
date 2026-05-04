@@ -399,6 +399,20 @@ describe User::OmniauthCallbacksController do
         expect(user.twitter_oauth_token).to be_present
         expect(user.twitter_oauth_secret).to be_present
       end
+
+      ["link_twitter_account", "async_link_twitter_account"].each do |state|
+        it "redirects to login when no user is signed in and state is #{state}" do
+          request.env["omniauth.params"] = { "state" => state }
+          OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
+          request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
+          allow(controller).to receive(:current_user).and_return(nil)
+
+          post :twitter
+
+          expect(response).to redirect_to login_path
+          expect(flash[:alert]).to eq "You need to be logged in to link your X account."
+        end
+      end
     end
 
     describe "has no 2FA email" do

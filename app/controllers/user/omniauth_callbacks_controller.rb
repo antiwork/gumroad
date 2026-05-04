@@ -16,12 +16,13 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   # Log in user through Twitter OAuth
   def twitter
     auth_params = request.env["omniauth.params"]
-    if auth_params.present? && auth_params[REQ_PARAM_STATE].present?
-      if auth_params[REQ_PARAM_STATE] == "link_twitter_account"
-        return sync_link_twitter_account
-      elsif auth_params[REQ_PARAM_STATE] == "async_link_twitter_account"
-        return async_link_twitter_account
+    state = auth_params&.[](REQ_PARAM_STATE)
+    if state == "link_twitter_account" || state == "async_link_twitter_account"
+      if logged_in_user.blank?
+        flash[:alert] = "You need to be logged in to link your X account."
+        return redirect_to login_path
       end
+      return state == "link_twitter_account" ? sync_link_twitter_account : async_link_twitter_account
     end
 
     @user = User.find_or_create_for_twitter_oauth!(request.env["omniauth.auth"])

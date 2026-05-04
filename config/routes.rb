@@ -512,8 +512,6 @@ Rails.application.routes.draw do
 
     draw(:admin)
 
-    get "/settings/async_twitter_complete", to: "users/oauth#async_twitter_complete", as: :async_twitter_complete
-
     # user account settings stuff
     resource :settings, only: [] do
       resources :applications, only: [] do

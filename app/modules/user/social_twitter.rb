@@ -22,7 +22,7 @@ module User::SocialTwitter
       self.avatar.blob.save!
     end
 
-    self.avatar.analyze unless self.avatar.attached?
+    self.avatar.analyze if self.avatar.attached?
 
     self.avatar_url
   rescue StandardError
