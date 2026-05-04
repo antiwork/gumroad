@@ -19,8 +19,7 @@ class DollarStoreController < ApplicationController
 
     params[:max_price] = MAX_PRICE_DOLLARS
     params[:min_price] = 0.01 if price_mode == "paid"
-    params[:sort] = ProductSortKey::RANDOM
-    params[:random_seed] = random_seed
+    params[:sort] = ProductSortKey::HIGHEST_RATED
     params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
     params[:size] = PAGE_SIZE
 
@@ -47,7 +46,6 @@ class DollarStoreController < ApplicationController
       search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
       price_mode:,
-      random_seed: params[:random_seed],
       search_offset: params[:from] || 0,
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
       selected_taxonomy_path: selected_taxonomy_path,
@@ -56,11 +54,6 @@ class DollarStoreController < ApplicationController
   end
 
   private
-    def random_seed
-      return params[:random_seed].to_i if params[:random_seed].present?
-      session[:dollar_store_seed] ||= SecureRandom.random_number(2**31 - 1)
-    end
-
     def selected_taxonomy
       return @selected_taxonomy if defined?(@selected_taxonomy)
       @selected_taxonomy = params[:taxonomy].present? ? Taxonomy.find_by_path(params[:taxonomy].split("/")) : nil

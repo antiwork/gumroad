@@ -28,6 +28,8 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 import { CardWishlist } from "$app/components/Wishlist/Card";
 
+import dollarBurst from "$assets/images/dollar-store/dollar-burst.png";
+import storeItalic from "$assets/images/dollar-store/store-italic.png";
 import blackFridayImage from "$assets/images/illustrations/black_friday.svg";
 import saleImage from "$assets/images/illustrations/sale.svg";
 
@@ -118,6 +120,25 @@ const ProductsCarouselSkeleton = () => (
       ))}
     </div>
   </section>
+);
+
+const DollarStoreBanner = () => (
+  <a
+    href={Routes.dollar_store_path()}
+    className="group relative flex flex-col items-center gap-3 overflow-hidden border-2 border-black bg-white p-6 text-center text-black no-underline shadow-[4px_4px_0_0_rgba(0,0,0,1)] transition-all duration-200 ease-out hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
+  >
+    <span className="absolute top-2 right-2 border border-black bg-yellow-400 px-2 py-0.5 text-xs font-medium tracking-wider text-black uppercase">
+      New
+    </span>
+    <div className="flex items-center gap-2 pt-2">
+      <img src={dollarBurst} alt="$1" className="h-16 w-auto" />
+      <img src={storeItalic} alt="store" className="-ml-0.5 h-[22px] w-auto -translate-y-[2px]" />
+    </div>
+    <span className="flex items-center gap-1 text-base text-black">
+      Browse the $1 store
+      <ArrowRight className="size-4 transition-transform duration-200 ease-out group-hover:translate-x-1" />
+    </span>
+  </a>
 );
 
 const BlackFridayBanner = ({
@@ -481,6 +502,7 @@ function DiscoverIndex() {
                 query: state.params.query,
                 sort: state.params.query || hasOfferCode ? "default" : state.params.sort,
               }}
+              belowFilters={!taxonomyPath && !state.params.query && !hasOfferCode ? <DollarStoreBanner /> : null}
               appendFilters={
                 <>
                   <CardContent asChild details>

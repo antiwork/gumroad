@@ -126,6 +126,7 @@ type Props = {
   hideSort?: boolean;
   prependFilters?: React.ReactNode;
   appendFilters?: React.ReactNode;
+  belowFilters?: React.ReactNode;
   pagination?: "scroll" | "button";
 };
 
@@ -179,6 +180,7 @@ export const CardGrid = ({
   defaults = {},
   prependFilters,
   appendFilters,
+  belowFilters,
   hideSort,
   pagination = "scroll",
 }: Props) => {
@@ -251,142 +253,145 @@ export const CardGrid = ({
       )}
     >
       {hideFilters ? null : (
-        <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
-          <CardContent asChild>
-            <header>
-              {title ?? "Filters"}
-              {anyFilters ? (
-                <div className="grow text-right">
-                  <button className="cursor-pointer underline all-unset" onClick={resetFilters}>
-                    Clear
-                  </button>
-                </div>
-              ) : null}
-            </header>
-          </CardContent>
-          {prependFilters}
-          {hideSort ? null : (
+        <div className="flex flex-col gap-8 lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]">
+          <UICard className="min-h-0 flex-1 overflow-y-auto" aria-label="Filters">
+            <CardContent asChild>
+              <header>
+                {title ?? "Filters"}
+                {anyFilters ? (
+                  <div className="grow text-right">
+                    <button className="cursor-pointer underline all-unset" onClick={resetFilters}>
+                      Clear
+                    </button>
+                  </div>
+                ) : null}
+              </header>
+            </CardContent>
+            {prependFilters}
+            {hideSort ? null : (
+              <CardContent asChild details>
+                <Details>
+                  <DetailsToggle chevronPosition="right" className="grow">
+                    Sort by
+                  </DetailsToggle>
+                  <Fieldset role="group">
+                    {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
+                      <Label key={key} className="w-full">
+                        {SORT_BY_LABELS[key]}
+                        <Radio
+                          wrapperClassName="ml-auto"
+                          disabled={disableFilters}
+                          name={`${uid}-sortBy`}
+                          checked={(searchParams.sort ?? defaults.sort) === key}
+                          onChange={() => updateParams({ sort: key })}
+                        />
+                      </Label>
+                    ))}
+                  </Fieldset>
+                </Details>
+              </CardContent>
+            )}
+            {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
+              <CardContent asChild details>
+                <Details open={tagsOpen} onToggle={setTagsOpen}>
+                  <DetailsToggle chevronPosition="right" className="grow">
+                    Tags
+                  </DetailsToggle>
+                  <Fieldset role="group">
+                    <Label className="w-full">
+                      All Products
+                      <Checkbox
+                        wrapperClassName="ml-auto"
+                        checked={!searchParams.tags?.length}
+                        disabled={disableFilters || !searchParams.tags?.length}
+                        onChange={() => updateParams({ tags: undefined })}
+                      />
+                    </Label>
+                    {results ? (
+                      <FilterCheckboxes
+                        filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
+                        selection={searchParams.tags ?? []}
+                        setSelection={(tags) => updateParams({ tags })}
+                        disabled={disableFilters ?? false}
+                      />
+                    ) : null}
+                  </Fieldset>
+                </Details>
+              </CardContent>
+            ) : null}
+            {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
+              <CardContent asChild details>
+                <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
+                  <DetailsToggle chevronPosition="right" className="grow">
+                    Contains
+                  </DetailsToggle>
+                  <Fieldset role="group">
+                    {results ? (
+                      <FilterCheckboxes
+                        filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
+                        selection={searchParams.filetypes ?? []}
+                        setSelection={(filetypes) => updateParams({ filetypes })}
+                        disabled={disableFilters ?? false}
+                      />
+                    ) : null}
+                  </Fieldset>
+                </Details>
+              </CardContent>
+            ) : null}
             <CardContent asChild details>
               <Details>
                 <DetailsToggle chevronPosition="right" className="grow">
-                  Sort by
+                  Price
                 </DetailsToggle>
-                <Fieldset role="group">
-                  {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
-                    <Label key={key} className="w-full">
-                      {SORT_BY_LABELS[key]}
-                      <Radio
-                        wrapperClassName="ml-auto"
-                        disabled={disableFilters}
-                        name={`${uid}-sortBy`}
-                        checked={(searchParams.sort ?? defaults.sort) === key}
-                        onChange={() => updateParams({ sort: key })}
-                      />
-                    </Label>
-                  ))}
-                </Fieldset>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    gridAutoFlow: "row",
+                    gap: "var(--spacer-3)",
+                  }}
+                >
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={minPriceUid}>Minimum price</Label>
+                    </FieldsetTitle>
+                    <InputGroup>
+                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                      <NumberInput
+                        onChange={(value) => {
+                          setEnteredMinPrice(value);
+                          debouncedTrySetPrice(value, enteredMaxPrice);
+                        }}
+                        value={enteredMinPrice ?? null}
+                      >
+                        {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
+                      </NumberInput>
+                    </InputGroup>
+                  </Fieldset>
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={maxPriceUid}>Maximum price</Label>
+                    </FieldsetTitle>
+                    <InputGroup>
+                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                      <NumberInput
+                        onChange={(value) => {
+                          setEnteredMaxPrice(value);
+                          debouncedTrySetPrice(enteredMinPrice, value);
+                        }}
+                        value={enteredMaxPrice ?? null}
+                      >
+                        {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
+                      </NumberInput>
+                    </InputGroup>
+                  </Fieldset>
+                </div>
               </Details>
             </CardContent>
-          )}
-          {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
-            <CardContent asChild details>
-              <Details open={tagsOpen} onToggle={setTagsOpen}>
-                <DetailsToggle chevronPosition="right" className="grow">
-                  Tags
-                </DetailsToggle>
-                <Fieldset role="group">
-                  <Label className="w-full">
-                    All Products
-                    <Checkbox
-                      wrapperClassName="ml-auto"
-                      checked={!searchParams.tags?.length}
-                      disabled={disableFilters || !searchParams.tags?.length}
-                      onChange={() => updateParams({ tags: undefined })}
-                    />
-                  </Label>
-                  {results ? (
-                    <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
-                      selection={searchParams.tags ?? []}
-                      setSelection={(tags) => updateParams({ tags })}
-                      disabled={disableFilters ?? false}
-                    />
-                  ) : null}
-                </Fieldset>
-              </Details>
-            </CardContent>
-          ) : null}
-          {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
-            <CardContent asChild details>
-              <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
-                <DetailsToggle chevronPosition="right" className="grow">
-                  Contains
-                </DetailsToggle>
-                <Fieldset role="group">
-                  {results ? (
-                    <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
-                      selection={searchParams.filetypes ?? []}
-                      setSelection={(filetypes) => updateParams({ filetypes })}
-                      disabled={disableFilters ?? false}
-                    />
-                  ) : null}
-                </Fieldset>
-              </Details>
-            </CardContent>
-          ) : null}
-          <CardContent asChild details>
-            <Details>
-              <DetailsToggle chevronPosition="right" className="grow">
-                Price
-              </DetailsToggle>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  gridAutoFlow: "row",
-                  gap: "var(--spacer-3)",
-                }}
-              >
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={minPriceUid}>Minimum price</Label>
-                  </FieldsetTitle>
-                  <InputGroup>
-                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                    <NumberInput
-                      onChange={(value) => {
-                        setEnteredMinPrice(value);
-                        debouncedTrySetPrice(value, enteredMaxPrice);
-                      }}
-                      value={enteredMinPrice ?? null}
-                    >
-                      {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
-                    </NumberInput>
-                  </InputGroup>
-                </Fieldset>
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={maxPriceUid}>Maximum price</Label>
-                  </FieldsetTitle>
-                  <InputGroup>
-                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                    <NumberInput
-                      onChange={(value) => {
-                        setEnteredMaxPrice(value);
-                        debouncedTrySetPrice(enteredMinPrice, value);
-                      }}
-                      value={enteredMaxPrice ?? null}
-                    >
-                      {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
-                    </NumberInput>
-                  </InputGroup>
-                </Fieldset>
-              </div>
-            </Details>
-          </CardContent>
-          {appendFilters}
-        </UICard>
+            {appendFilters}
+          </UICard>
+          {belowFilters}
+        </div>
       )}
       {results?.products.length === 0 ? (
         <Placeholder>

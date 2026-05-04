@@ -3,6 +3,7 @@ import { router } from "@inertiajs/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
+import { getRootTaxonomy, getRootTaxonomyImage } from "$app/utils/discover";
 
 import merchandiseIcon from "$assets/images/discover/merchandise.svg";
 
@@ -51,10 +52,7 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
     () => taxonomies.filter((t) => !t.parent_key).sort((a, b) => a.label.localeCompare(b.label)),
     [taxonomies],
   );
-  const hasChildren = React.useCallback(
-    (key: string) => taxonomies.some((x) => x.parent_key === key),
-    [taxonomies],
-  );
+  const hasChildren = React.useCallback((key: string) => taxonomies.some((x) => x.parent_key === key), [taxonomies]);
 
   const buildPath = (taxonomy: Taxonomy): string => {
     const slugs: string[] = [];
@@ -76,15 +74,17 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
   const drillTaxonomy = drillKey ? taxonomyByKey.get(drillKey) : null;
   const subItems = React.useMemo(() => {
     if (!drillTaxonomy) return [];
-    return taxonomies
-      .filter((t) => t.parent_key === drillTaxonomy.key)
-      .sort((a, b) => a.label.localeCompare(b.label));
+    return taxonomies.filter((t) => t.parent_key === drillTaxonomy.key).sort((a, b) => a.label.localeCompare(b.label));
   }, [drillTaxonomy, taxonomies]);
 
   const triggerLabel = selectedLabel ?? "all";
+  const drilledRootSlug = drillKey ? getRootTaxonomy(taxonomyByKey.get(drillKey)?.slug) : null;
+  const selectedRootSlug = getRootTaxonomy(selectedPath ?? undefined);
+  const cornerSlug = drilledRootSlug ?? selectedRootSlug;
+  const cornerIconUrl = cornerSlug ? getRootTaxonomyImage(cornerSlug) : merchandiseIcon;
 
   return (
-    <div className="flex items-center justify-center gap-3 px-4 pt-2 pb-8 text-xl text-black">
+    <div className="hidden items-center justify-center gap-3 px-4 pt-2 pb-8 text-xl text-black lg:flex">
       <span>Showing</span>
       <div className="relative" ref={wrapperRef}>
         <button
@@ -101,7 +101,7 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
         {isOpen ? (
           <div
             role="menu"
-            className="absolute left-1/2 top-[calc(100%+8px)] z-40 w-[720px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden border-2 border-black bg-dark-gray text-gray shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
+            className="absolute top-[calc(100%+8px)] left-1/2 z-40 w-[720px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden border-2 border-black bg-dark-gray text-gray shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
           >
             {drillTaxonomy ? (
               <SubcategoryView
@@ -128,7 +128,7 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
                 hasChildren={hasChildren}
               />
             )}
-            <CornerIcon />
+            <CornerIcon iconUrl={cornerIconUrl} />
           </div>
         ) : null}
       </div>
@@ -151,14 +151,7 @@ type RootViewProps = {
   hasChildren: (key: string) => boolean;
 };
 
-const RootView = ({
-  roots,
-  onSelectAll,
-  onSelectRoot,
-  isAllSelected,
-  selectedRootKey,
-  hasChildren,
-}: RootViewProps) => (
+const RootView = ({ roots, onSelectAll, onSelectRoot, isAllSelected, selectedRootKey, hasChildren }: RootViewProps) => (
   <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
     <MenuOption label="All" onClick={onSelectAll} isSelected={isAllSelected} hasChildren={false} />
     {roots.map((t) => (
@@ -239,9 +232,9 @@ const MenuOption = ({
   </button>
 );
 
-const CornerIcon = () => (
+const CornerIcon = ({ iconUrl }: { iconUrl: string }) => (
   <img
-    src={merchandiseIcon}
+    src={iconUrl}
     aria-hidden
     alt=""
     className="pointer-events-none absolute -right-10 -bottom-10 z-0 h-32 w-auto opacity-25"
