@@ -75,5 +75,11 @@ describe IbanBankAccount do
       expect(bank_account).not_to be_valid
       expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
+
+    it "rejects a non-SEPA IBAN on EuropeanBankAccount, whose country derives from the IBAN prefix" do
+      bank_account = build(:european_bank_account, account_number: "SA0380000000608010167519")
+      expect(bank_account).not_to be_valid
+      expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
   end
 end

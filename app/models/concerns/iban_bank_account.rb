@@ -35,7 +35,6 @@ module IbanBankAccount
         errors.add(:base, "The account number is invalid.")
         return
       end
-      return if iban.country_code == country
       return if SEPA_COUNTRY_CODES.include?(iban.country_code)
       errors.add(:base, "The account number is invalid.")
     end
