@@ -86,6 +86,18 @@ describe "Login Feature Scenario", js: true, type: :system do
       expect(page).to have_current_path(balance_path)
     end
 
+    it "supports logging in with X" do
+      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json")))
+      user.update!(twitter_user_id: OmniAuth.config.mock_auth[:twitter][:extra][:raw_info][:id])
+
+      visit signup_path
+
+      expect do
+        click_button "X"
+        expect(page).to have_content("We're here to help you get paid for your work.")
+      end.not_to change(User, :count)
+    end
+
     it "supports logging in with Stripe" do
       OmniAuth.config.mock_auth[:stripe_connect] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/stripe_connect_omniauth.json")))
       create(:merchant_account_stripe_connect, user:, charge_processor_merchant_id: OmniAuth.config.mock_auth[:stripe_connect][:uid])

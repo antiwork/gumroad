@@ -98,6 +98,17 @@ describe "Signup Feature Scenario", js: true, type: :system do
       end.to change(User, :count).by(1)
     end
 
+    it "supports signing up with X" do
+      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json")))
+
+      visit signup_path
+
+      expect do
+        click_button "X"
+        expect(page).to have_alert(text: "Please enter an email address!")
+      end.to change(User, :count).by(1)
+    end
+
     it "supports signing up with Stripe" do
       OmniAuth.config.mock_auth[:stripe_connect] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/stripe_connect_omniauth.json")))
 

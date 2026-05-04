@@ -1,3 +1,4 @@
+import { TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -24,11 +25,17 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
   const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
 
-  const headerButtons = cartItemsCount ? (
-    <div className="ml-auto flex items-center gap-3">
-      <CartNavigationButton />
-    </div>
-  ) : null;
+  const headerButtons =
+    creatorProfile.twitter_handle || cartItemsCount ? (
+      <div className="ml-auto flex items-center gap-3">
+        {creatorProfile.twitter_handle ? (
+          <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
+            <TwitterX pack="brands" className="size-5" />
+          </NavigationButton>
+        ) : null}
+        <CartNavigationButton />
+      </div>
+    ) : null;
 
   return (
     <div className="flex min-h-screen flex-col">

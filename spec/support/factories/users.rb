@@ -169,6 +169,10 @@ FactoryBot.define do
       bio { Faker::Lorem.sentence }
     end
 
+    trait :with_twitter_handle do
+      twitter_handle { Faker::Lorem.word }
+    end
+
     trait :deleted do
       deleted_at { Time.current }
     end

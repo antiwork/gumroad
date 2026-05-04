@@ -570,9 +570,15 @@ class Link < ApplicationRecord
   end
 
   def social_share_text
-    return "I pre-ordered #{name} on @Gumroad" if is_in_preorder_state
+    if user.twitter_handle.present?
+      return "I pre-ordered #{name} from @#{user.twitter_handle} on @Gumroad" if is_in_preorder_state
 
-    "I got #{name} on @Gumroad"
+      "I got #{name} from @#{user.twitter_handle} on @Gumroad"
+    else
+      return "I pre-ordered #{name} on @Gumroad" if is_in_preorder_state
+
+      "I got #{name} on @Gumroad"
+    end
   end
 
   def self.human_attribute_name(attr, _)

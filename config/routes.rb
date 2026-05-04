@@ -440,6 +440,7 @@ Rails.application.routes.draw do
       get "logout", to: "logins#destroy"
       delete "logout", to: "logins#destroy"
       scope "/users" do
+        get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
         scope module: :users do
           get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
@@ -511,12 +512,19 @@ Rails.application.routes.draw do
 
     draw(:admin)
 
+    get "/settings/async_twitter_complete", to: "users/oauth#async_twitter_complete", as: :async_twitter_complete
+
     # user account settings stuff
     resource :settings, only: [] do
       resources :applications, only: [] do
         resources :access_tokens, only: :create, controller: "oauth/access_tokens"
       end
       get :profiles, to: redirect("/settings")
+      resource :connections, only: [] do
+        member do
+          post :unlink_twitter
+        end
+      end
     end
     namespace :settings do
       resource :main, only: %i[show update], path: "", controller: "main" do

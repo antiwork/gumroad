@@ -32,15 +32,15 @@ const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
       {
         name: "price_difference",
         type: "number | null",
-        description: "Price difference in cents from the base price (0 for membership tiers, whose prices are set via recurrence_prices)",
+        description:
+          "Price difference in cents from the base price (0 for membership tiers, whose prices are set via recurrence_prices)",
       },
       {
         name: "purchasing_power_parity_prices",
         type: "object | null",
         description:
           "PPP-adjusted prices for this option, computed from the base price plus price_difference; null for options whose price_difference is null",
-        condition:
-          "present when the seller has purchasing power parity enabled and the product has not opted out",
+        condition: "present when the seller has purchasing power parity enabled and the product has not opted out",
       },
       { name: "is_pay_what_you_want", type: "boolean", description: "Whether this option is pay-what-you-want" },
       { name: "url", type: "null", description: "Deprecated, always null" },
@@ -61,8 +61,7 @@ const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
             name: "purchasing_power_parity_prices",
             type: "object",
             description: "PPP-adjusted prices for this recurrence",
-            condition:
-              "present when the seller has purchasing power parity enabled and the product has not opted out",
+            condition: "present when the seller has purchasing power parity enabled and the product has not opted out",
           },
         ],
       },
@@ -83,8 +82,7 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
   {
     name: "custom_fields",
     type: "array",
-    description:
-      "Combined list of the seller's global checkout custom fields and the product's own custom fields",
+    description: "Combined list of the seller's global checkout custom fields and the product's own custom fields",
   },
   { name: "customizable_price", type: "boolean | null", description: "Whether pay-what-you-want pricing is enabled" },
   { name: "description", type: "string | null", description: "Product description" },
@@ -184,7 +182,12 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
 
 export const PRODUCT_LIST_FIELDS: FieldDefinition[] = [
   ...SHARED_PRODUCT_FIELDS,
-  { name: "variants", type: "array", description: "Variant categories and their options", children: PRODUCT_VARIANT_FIELDS },
+  {
+    name: "variants",
+    type: "array",
+    description: "Variant categories and their options",
+    children: PRODUCT_VARIANT_FIELDS,
+  },
 ];
 
 export const PRODUCT_FIELDS: FieldDefinition[] = [
@@ -207,13 +210,18 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
       {
         name: "url",
         type: "string",
-        description: "Signed download URL for uploaded files; raw URL for external-link files (filetype: \"link\")",
+        description: 'Signed download URL for uploaded files; raw URL for external-link files (filetype: "link")',
       },
       { name: "filetype", type: "string", description: 'File extension (e.g. "pdf") or "link" for external URLs' },
       { name: "filegroup", type: "string", description: 'Group classification (e.g. "audio", "video", "document")' },
     ],
   },
-  { name: "variants", type: "array", description: "Variant categories and their options", children: PRODUCT_VARIANT_FIELDS },
+  {
+    name: "variants",
+    type: "array",
+    description: "Variant categories and their options",
+    children: PRODUCT_VARIANT_FIELDS,
+  },
 ];
 
 export const SALE_FIELDS: FieldDefinition[] = [
@@ -515,6 +523,7 @@ export const PAYOUT_DETAIL_FIELDS: FieldDefinition[] = [
 export const USER_FIELDS: FieldDefinition[] = [
   { name: "bio", type: "string | null", description: "User's bio" },
   { name: "name", type: "string", description: "User's display name" },
+  { name: "twitter_handle", type: "string | null", description: "User's Twitter handle" },
   { name: "id", type: "string", description: "Unique identifier for the user" },
   { name: "user_id", type: "string", description: "Alternate user ID, not currently used" },
   {

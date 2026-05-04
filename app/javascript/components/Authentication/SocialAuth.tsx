@@ -1,4 +1,4 @@
-import { Apple, Google, Stripe } from "@boxicons/react";
+import { Apple, Google, Stripe, TwitterX } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -29,6 +29,12 @@ export const SocialAuth = () => {
       >
         <Google pack="brands" className="size-5" />
         Google
+      </SocialAuthButton>
+      <SocialAuthButton
+        provider="twitter"
+        href={Routes.user_twitter_omniauth_authorize_path({ referer: next, x_auth_access_type: "read" })}
+      >
+        <TwitterX pack="brands" className="size-5" /> X
       </SocialAuthButton>
       {showStripe ? (
         <SocialAuthButton

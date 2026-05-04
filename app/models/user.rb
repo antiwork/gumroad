@@ -7,7 +7,7 @@ class User < ApplicationRecord
   has_paper_trail
   has_one_time_password
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, JsonData, Deletable, MoneyBalance,
-          DeviseInternal, PayoutSchedule, SocialGoogle, SocialApple, SocialGoogleMobile,
+          DeviseInternal, PayoutSchedule, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
@@ -297,7 +297,7 @@ class User < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  LINK_PROPERTIES = %w[username bio name google_analytics_id flags
+  LINK_PROPERTIES = %w[username twitter_handle bio name google_analytics_id flags
                        facebook_pixel_id tiktok_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
 
   after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || user.tiktok_pixel_id_changed_in_json_data? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }

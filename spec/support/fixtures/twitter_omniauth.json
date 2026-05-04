@@ -1,0 +1,289 @@
+{
+  "provider": "twitter",
+  "uid": "279418691",
+  "info": {
+    "nickname": "squidarth",
+    "name": "Sidharth Shanker",
+    "location": "San Francisco, California",
+    "image": "http://pbs.twimg.com/profile_images/444434188952158208/YD4wuEbp_normal.jpeg",
+    "description": "formerly @columbia, now @gumroad http://t.co/W53meNp0EW",
+    "urls": {
+      "Website": "http://sidshanker.com",
+      "Twitter": "http://twitter.com/squidarth"
+    }
+  },
+  "credentials": {
+    "token": "279418691-TjP5EFmnrWmRHRTP6yJBrE0BLu4fEnc3oVTyvnla",
+    "secret": "gu09XRTDliWn0TYHGrnfecY7HTnX4eqnhwQ4HiPFFY"
+  },
+  "extra": {
+    "access_token": {
+      "token": "27941869    1-TjP5EFmnrWmRHRTP6yJBrE0BLu4fEnc3oVTyvnla",
+      "secret": "gu09XRTDliWn0TYHGrnfecY7HTnX4eqnhwQ4HiPFFY",
+      "consumer": {
+        "key": "g7o85wf9ZE3LOpmUChplqw",
+        "secret": "lAtWpaKxw2NiGswQ4GOHkudsE3PmGITivvLZCshoVg",
+        "options": {
+          "signature_method": "HMAC-SHA1",
+          "request_token_path": "/oauth/request_tok    en",
+          "authorize_path": "/oauth/authenticate",
+          "access_token_path": "/oauth/access_token",
+          "proxy": null,
+          "scheme": "header",
+          "http_method": "post",
+          "oauth_version": "1.0",
+          "site": "https://api.twitter.com"
+        },
+        "http": {
+          "address": "api.twitter.com",
+          "port": 443,
+          "curr_http_version": "1.1",
+          "no_keepali    ve_server": false,
+          "close_on_empty_response": false,
+          "socket": null,
+          "started": false,
+          "open_timeout": 30,
+          "read_timeout": 30,
+          "continue_timeout": null,
+          "debug_output": null,
+          "use_ssl": true,
+          "ssl_context": {
+            "cert": null,
+            "key": null,
+            "client_ca": null,
+            "ca_file": "/etc/ssl/certs/ca-certificates.crt",
+            "    ca_path": null,
+            "timeout": null,
+            "verify_mode": 1,
+            "verify_depth": 5,
+            "verify_callback": null,
+            "options": -2147479553,
+            "cert_store": null,
+            "extra_chain_cert": null,
+            "client_cert_cb": null,
+            "tmp_dh_callback": null,
+            "session_id_context": null,
+            "session_get_cb": null,
+            "session_new_cb": null,
+            "session_remo    ve_cb": null,
+            "servername_cb": null
+          },
+          "enable_post_connection_check": true,
+          "compression": null,
+          "sspi_enabled": false,
+          "ssl_version": null,
+          "key": null,
+          "cert": null,
+          "ca_file": "/etc/ssl/certs/ca-certificates.crt",
+          "ca_path": null,
+          "cert_store": null,
+          "ciphers": null,
+          "verify_mode": 1,
+          "verify_callba    ck": null,
+          "verify_depth": 5,
+          "ssl_timeout": null
+        },
+        "http_method": "post",
+        "uri": {
+          "scheme": "https",
+          "user": null,
+          "password": null,
+          "host": "api.twitter.com",
+          "port": 443,
+          "path": "",
+          "query": null,
+          "opaque": null,
+          "registry": null,
+          "fragment": null,
+          "parser": null
+        }
+      },
+      "params": {
+        "oauth_token": "279418691-Tj    P5EFmnrWmRHRTP6yJBrE0BLu4fEnc3oVTyvnla",
+        "oauth_token_secret": "gu09XRTDliWn0TYHGrnfecY7HTnX4eqnhwQ4HiPFFY",
+        "user_id": "279418691",
+        "screen_name": "squidarth"
+      },
+      "response": {
+        "date": ["Fri, 08 Mar 2013 01:45:13 GMT"],
+        "status": ["200 OK"],
+        "x-access-level": ["read"],
+        "expires": ["Tue, 31 Mar     1981 05:00:00 GMT"],
+        "content-length": ["3384"],
+        "x-frame-options": ["SAMEORIGIN"],
+        "last-modified": ["Fri, 08 Mar 2013 01:45:13 GMT"],
+        "x-mid": ["197cd1d45307264c66f77e89511913ecb7794eff"],
+        "etag": ["7eb1440240667ce58ce1669a602c5087"],
+        "x-runtime": ["0.03348"],
+        "x-transaction": ["db0a3d    5ea573c30e"],
+        "cache-control": ["no-cache, no-store, must-revalidate, pre-check=0, post-check=0"],
+        "content-type": ["application/json; charset=utf-8"],
+        "x-transaction-mask": ["a6183ffa5f8ca943ff1b53b5644ef114e4d6ccd8"],
+        "pragma": ["no-cache"],
+        "set-cookie": [
+          "k=10.36.22.133.136270711338    1945; path=/; expires=Fri, 15-Mar-13 01:45:13 GMT; domain=.twitter.com",
+          "dnt=; domain=.twitter.com; path=/; expires=Thu, 01-Jan-1970 00:00:00 GMT",
+          "lang=en; path=/",
+          "lang=en; path=/",
+          "lang=en; path=/",
+          "twid=u%3D279418691%7Cp8chm%2FApoDr%2BMn4AIIRmy2uNN5g%3D; domain=.twitter.co    m; path=/; secure",
+          "_twitter_sess=BAh7CToMY3NyZl9pZCIlNmExMmQ0ZmQ0NzQzOTViMGU5YjkyYzYzYTE3ZDlk%250AOGMiCmZsYXNoSUM6J0FjdGlvbkNvbnRyb2xsZXI6OkZsYXNoOjpGbGFzaEhh%250Ac2h7AAY6CkB1c2VkewA6D2NyZWF0ZWRfYXRsKwi0ZaxHPQE6B2lkIiViY2Ey%250ANzcxMmU5NmMzZTg3NGU5OWYyZDQzMGYzY2U1Mg%253D%253D    --d7c5b5caebeacf45ed8fafa129b8d108ba184630; domain=.twitter.com; path=/; HttpOnly",
+          "guest_id=v1%3A136270711337512996; Domain=.twitter.com; Path=/; Expires=Sun, 08-Mar-2015 01:45:13 UTC"
+        ],
+        "vary": ["Accept-Encoding"],
+        "x-rate-limit-limit": ["15"],
+        "x-rate-limit-remaining": ["12"],
+        "x-    rate-limit-reset": ["1362707885"],
+        "server": ["tfe"],
+        "connection": ["close"]
+      }
+    },
+    "raw_info": {
+      "id": 279418691,
+      "created_at": "Sat Apr 09 06:50:16 +0000 2011",
+      "statuses_count": 170,
+      "entities": {
+        "url": {
+          "urls": [
+            {
+              "url": "http://sidshanker.com",
+              "indices": [0, 21],
+              "display_url": null,
+              "expanded_url": null
+            }
+          ]
+        },
+        "description": {
+          "urls": [
+            {
+              "expanded_url": "http://gumroad.com",
+              "indices": [33, 55],
+              "url": "http://t.co/W53meNp0EW",
+              "display_url": "gumroad.com"
+            }
+          ]
+        }
+      },
+      "default_profile_image": false,
+      "profile_use_background_image": true,
+      "friends_count": 279,
+      "url": "http://sidshanker.com",
+      "profile_te    xt_color": "333333",
+      "favourites_count": 38,
+      "id_str": "279418691",
+      "follow_request_sent": false,
+      "utc_offset": -25200,
+      "name": "Sidharth Shanker",
+      "lang": "en",
+      "notifications": false,
+      "profile_sidebar_border_color": "eeeeee",
+      "screen_name": "squidarth",
+      "protected": false,
+      "location": "San Francis    co, California",
+      "profile_image_url_https": "https://twimg0-a.akamaihd.net/profile_images/2558224937/e167q3wxfcfzrl4qfka1_normal.png",
+      "profile_background_tile": true,
+      "followers_count": 183,
+      "default_profile": false,
+      "profile_sidebar_fill_color": "efefef",
+      "following": false,
+      "verified": false,
+      "is_translator": false,
+      "profile_background_color": "131516",
+      "listed_count": 1,
+      "profile_background_image_url_https": "https://twimg0-a.akamaihd.net/images/themes/theme14/bg.gif",
+      "contributors_enabled": false,
+      "time_zone": "Arizona",
+      "profile_image_url": "http://pbs.twimg.com/profile_images/444434188952158208/YD4wuEbp_normal.jpeg",
+      "status": {
+        "entities": {
+          "user_mentions": [
+            {
+              "screen_name": "Eminem",
+              "name": "Marshall Mathers",
+              "indices": [3, 10],
+              "id_str": "22940219",
+              "id": 22940219
+            }
+          ],
+          "hashtags": [
+            {
+              "indices": [96, 110],
+              "text": "DetroitRubber"
+            }
+          ],
+          "urls": [
+            {
+              "url": "http://t.co/N5iF67y5lq",
+              "indices": [112, 134],
+              "display_url": "bit.ly/XMjuXx",
+              "expanded_url": "http://bit.ly/XMjuXx"
+            }
+          ]
+        },
+        "favorited": false,
+        "possibly_sensitive_editable": true,
+        "retweeted_status": {
+          "entities": {
+            "user_mentions": [],
+            "hashtags": [
+              {
+                "indices": [84, 98],
+                "text": "DetroitRubber"
+              }
+            ],
+            "urls": [
+              {
+                "url": "http://t.co/N5iF67y5lq",
+                "indices": [100, 122],
+                "display_url": "bit.ly/XMjuXx",
+                "expanded_url": "http://bit.ly/XMjuXx"
+              }
+            ]
+          },
+          "favorited": false,
+          "possibly_sensitive_editable": true,
+          "place": null,
+          "geo": null,
+          "retweet_count": 1152,
+          "in_reply_to_status_id_str": null,
+          "coordinates": null,
+          "in_repl    y_to_user_id_str": null,
+          "contributors": null,
+          "in_reply_to_screen_name": null,
+          "in_reply_to_user_id": null,
+          "id_str": "309441627829698561",
+          "retweeted": true,
+          "truncated": false,
+          "text": "Shady Records collab with Burn Rubber for this limited tee to celebrate Season 1 of #DetroitRubber: htt    p://t.co/N5iF67y5lq",
+          "in_reply_to_status_id": null,
+          "source": "web",
+          "possibly_sensitive": false,
+          "id": 309441627829698561,
+          "created_at": "Wed Mar 06 23:13:27 +0000 2013"
+        },
+        "place": null,
+        "geo": null,
+        "retweet_count": 1152,
+        "in_reply_to_status_id_str": null,
+        "coordinates": null,
+        "in_reply_to_user    _id_str": null,
+        "contributors": null,
+        "in_reply_to_screen_name": null,
+        "in_reply_to_user_id": null,
+        "id_str": "309443553027842048",
+        "retweeted": true,
+        "truncated": false,
+        "text": "RT @Eminem: Shady Records collab with Burn Rubber for this limited tee to celebrate Season 1 of #DetroitRubber:     http://t.co/N5iF67y5lq",
+        "in_reply_to_status_id": null,
+        "source": "web",
+        "possibly_sensitive": false,
+        "id": 309443553027842048,
+        "created_at": "Wed Mar 06 23:21:06 +0000 2013"
+      },
+      "profile_background_image_url": "http://a0.twimg.com/images/themes/theme14/bg.gif",
+      "description": "formerly @columbia, now @gumroad http://t.co/W53meNp0EW",
+      "profile_link_color": "009999",
+      "geo_enabled": true
+    }
+  }
+}

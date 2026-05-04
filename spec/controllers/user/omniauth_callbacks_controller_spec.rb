@@ -316,6 +316,138 @@ describe User::OmniauthCallbacksController do
     end
   end
 
+  describe "#twitter" do
+    before do
+      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
+      request.env["omniauth.auth"] = fetch_json("twitter")
+      request.env["omniauth.params"] = { "state" => true }
+    end
+
+    it "creates user if none exists", :vcr do
+      expect do
+        post :twitter
+      end.to change { User.count }.by(1)
+
+      user = User.last
+      expect(user.name).to match "Sidharth Shanker"
+      expect(user.email).to eq nil
+      expect(user.global_affiliate).to be_present
+    end
+
+    context "when user is admin" do
+      it "does not allow user to login" do
+        allow(User).to receive(:new).and_return(create(:admin_user))
+
+        post :twitter
+
+        expect(flash[:alert]).to eq "You're an admin, you can't login with Twitter."
+        expect(response).to redirect_to login_path
+      end
+    end
+
+    context "when user is marked as deleted" do
+      let!(:user) { create(:user, twitter_user_id: "279418691", deleted_at: Time.current) }
+
+      it "does not allow user to login" do
+        post :twitter
+
+        expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
+        expect(response).to redirect_to login_path
+      end
+    end
+
+    context "when user has 2FA" do
+      let!(:user) { create(:user, twitter_user_id: "279418691", email: "sps2133@example.com", two_factor_authentication_enabled: true) }
+
+      it "does not allow user to login with Twitter only" do
+        post :twitter
+        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: dashboard_path))
+      end
+
+      it "keeps referral intact" do
+        post :twitter, params: { referer: balance_path }
+        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: balance_path))
+      end
+    end
+
+    describe "linking account" do
+      it "links twitter account to existing account", :vcr do
+        @user = create(:user, name: "Tim Lupton", bio: "A regular guy")
+        request.env["omniauth.params"] = { "state" => "link_twitter_account" }
+        OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
+        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
+        allow(controller).to receive(:current_user).and_return(@user)
+        post :twitter
+        @user.reload
+        expect(@user.name).to eq "Tim Lupton"
+        expect(@user.bio).to eq "A regular guy"
+        expect(@user.twitter_oauth_token).to_not be(nil)
+        expect(@user.twitter_oauth_secret).to_not be(nil)
+        expect(@user.twitter_handle).to_not be(nil)
+      end
+
+      it "updates the Twitter OAuth credentials on account creation", :vcr do
+        user = create(:user)
+        allow(User).to receive(:new).and_return(user)
+
+        OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
+        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
+
+        post :twitter
+
+        user.reload
+        expect(user.twitter_oauth_token).to be_present
+        expect(user.twitter_oauth_secret).to be_present
+      end
+    end
+
+    describe "has no 2FA email" do
+      before do
+        user = create(:user)
+        allow(User).to receive(:new).and_return(user)
+        user.email = nil
+        user.save!(validate: false)
+      end
+
+      it "redirects to the settings page and ignores referrer", :vcr do
+        post :twitter, params: { referer: balance_path }
+
+        expect(flash[:warning]).to eq "Please enter an email address!"
+        expect(response).to redirect_to settings_main_path
+      end
+    end
+
+    context "when the user has unconfirmed email" do
+      before do
+        user = create(:user)
+        allow(User).to receive(:new).and_return(user)
+        user.email = nil
+        user.unconfirmed_email = "test@gumroad.com"
+        user.save!(validate: false)
+      end
+
+      it "redirects to the settings page with the correct warning flash message", :vcr do
+        post :twitter
+
+        expect(flash[:warning]).to eq "Please confirm your email address"
+        expect(response).to redirect_to settings_main_path
+      end
+    end
+
+    context "when user is not created" do
+      before do
+        allow(User).to receive(:find_or_create_for_twitter_oauth!).and_return(User.new)
+      end
+
+      it "redirects to the signup page with an error flash message" do
+        post :twitter
+
+        expect(flash[:alert]).to eq "Sorry, something went wrong. Please try again."
+        expect(response).to redirect_to signup_path
+      end
+    end
+  end
+
   describe "#google_oauth2" do
     before do
       OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new fetch_json("google")

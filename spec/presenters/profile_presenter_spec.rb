@@ -39,6 +39,7 @@ describe ProfilePresenter do
           avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
           external_id: seller.external_id,
           name: seller.name,
+          twitter_handle: nil,
           subdomain: seller.subdomain,
           is_verified: false,
         }
