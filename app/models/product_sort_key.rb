@@ -19,5 +19,4 @@ class ProductSortKey
   REVENUE_DESCENDING = "sales_volume_desc"
   IS_RECOMMENDABLE_ASCENDING = "recommendable_asc"
   IS_RECOMMENDABLE_DESCENDING = "recommendable_desc"
-  RANDOM = "random"
 end

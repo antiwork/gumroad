@@ -70,10 +70,4 @@ describe "GET /dollar-store", type: :request do
     end
   end
 
-  it "exposes the random_seed used for ordering so the client can keep paginated results stable" do
-    get "/dollar-store", headers: { "X-Inertia" => "true" }
-    seed = JSON.parse(response.body)["props"]["random_seed"]
-    expect(seed).to be_a(Integer)
-    expect(seed).to be > 0
-  end
 end
