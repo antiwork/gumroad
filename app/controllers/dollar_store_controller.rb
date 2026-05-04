@@ -3,8 +3,6 @@
 class DollarStoreController < ApplicationController
   MAX_PRICE_DOLLARS = 1
   PAGE_SIZE = 36
-  PRICE_MODES = %w[paid free_and_paid include_pwyw].freeze
-  DEFAULT_PRICE_MODE = "free_and_paid"
 
   include RecommendationType, SearchProducts, AffiliateCookie
 
@@ -15,10 +13,7 @@ class DollarStoreController < ApplicationController
   def index
     format_search_params!
 
-    price_mode = PRICE_MODES.include?(params[:price_mode]) ? params[:price_mode] : DEFAULT_PRICE_MODE
-
     params[:max_price] = MAX_PRICE_DOLLARS
-    params[:min_price] = 0.01 if price_mode == "paid"
     params[:sort] = ProductSortKey::HIGHEST_RATED
     params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
     params[:size] = PAGE_SIZE
@@ -45,7 +40,6 @@ class DollarStoreController < ApplicationController
     render inertia: "DollarStore", props: {
       search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
-      price_mode:,
       search_offset: params[:from] || 0,
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
       selected_taxonomy_path: selected_taxonomy_path,

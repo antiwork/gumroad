@@ -18,12 +18,9 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 
 import merchandiseIcon from "$assets/images/discover/merchandise.svg";
 
-type PriceMode = "paid" | "free_and_paid" | "include_pwyw";
-
 type Props = {
   search_results: SearchResults;
   currency_code: CurrencyCode;
-  price_mode: PriceMode;
   search_offset: number;
   taxonomies: Taxonomy[];
   selected_taxonomy_path: string | null;
@@ -115,7 +112,22 @@ const EmptyState = ({ taxonomies, selectedPath, selectedLabel }: EmptyStateProps
   const rootSlug = getRootTaxonomy(selectedPath ?? undefined);
   const iconUrl = rootSlug ? getRootTaxonomyImage(rootSlug) : merchandiseIcon;
 
-  const segments = selectedPath?.split("/") ?? [];
+  if (selectedPath === null) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-6 px-4 py-24 text-center">
+        <img src={iconUrl} aria-hidden alt="" className="h-32 w-auto opacity-60" />
+        <p className="text-2xl text-black">No dollar store products available right now</p>
+        <a
+          href={Routes.discover_path()}
+          className="border-b border-black text-xl text-black hover:opacity-70"
+        >
+          Browse Gumroad
+        </a>
+      </div>
+    );
+  }
+
+  const segments = selectedPath.split("/");
   const isLeaf = segments.length > 1;
 
   let suggestionLabel: string;

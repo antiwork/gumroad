@@ -32,35 +32,10 @@ describe "GET /dollar-store", type: :request do
     expect(JSON.parse(response.body)["component"]).to eq("DollarStore")
   end
 
-  context "when price_mode is omitted" do
-    it "includes products priced at or below one dollar plus free products and excludes more expensive products" do
-      product_ids = fetch_products.map { |p| p["id"] }
-      expect(product_ids).to include(cheap_product.external_id, dollar_product.external_id, free_product.external_id)
-      expect(product_ids).not_to include(expensive_product.external_id)
-    end
-  end
-
-  context "when price_mode is paid" do
-    it "excludes free products and products above one dollar" do
-      product_ids = fetch_products(price_mode: "paid").map { |p| p["id"] }
-      expect(product_ids).to include(cheap_product.external_id, dollar_product.external_id)
-      expect(product_ids).not_to include(free_product.external_id, expensive_product.external_id)
-    end
-  end
-
-  context "when price_mode is free_and_paid" do
-    it "includes free products" do
-      product_ids = fetch_products(price_mode: "free_and_paid").map { |p| p["id"] }
-      expect(product_ids).to include(free_product.external_id)
-    end
-  end
-
-  context "when price_mode is unrecognised" do
-    it "falls back to the default price_mode" do
-      product_ids = fetch_products(price_mode: "totally-bogus").map { |p| p["id"] }
-      expect(product_ids).to include(free_product.external_id, cheap_product.external_id)
-      expect(product_ids).not_to include(expensive_product.external_id)
-    end
+  it "includes products priced at or below one dollar plus free products and excludes more expensive products" do
+    product_ids = fetch_products.map { |p| p["id"] }
+    expect(product_ids).to include(cheap_product.external_id, dollar_product.external_id, free_product.external_id)
+    expect(product_ids).not_to include(expensive_product.external_id)
   end
 
   context "with adult products" do
