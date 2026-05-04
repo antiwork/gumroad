@@ -60,6 +60,16 @@ describe IbanBankAccount do
       expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
 
+    it "rejects IBANs from countries Stripe does not support (AD, VA)" do
+      ad_account = build(:bulgaria_bank_account, account_number: "AD1400080001001234567890")
+      expect(ad_account).not_to be_valid
+      expect(ad_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      va_account = build(:bulgaria_bank_account, account_number: "VA59001123000012345678")
+      expect(va_account).not_to be_valid
+      expect(va_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
+
     it "rejects an IBAN with an invalid format" do
       bank_account = build(:bulgaria_bank_account, account_number: "BG12345")
       expect(bank_account).not_to be_valid
