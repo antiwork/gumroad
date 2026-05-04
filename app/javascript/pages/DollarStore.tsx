@@ -40,7 +40,7 @@ function DollarStore() {
   const [state, dispatch] = useSearchReducer({ params: initialParams, results: props.search_results });
   const products = state.results?.products ?? [];
   const total = state.results?.total ?? 0;
-  const showLoadMore = total > (state.offset ?? 0) + products.length;
+  const showLoadMore = total >= (state.offset ?? 1) + products.length;
   const isEmpty = !state.loading && products.length === 0;
 
   return (

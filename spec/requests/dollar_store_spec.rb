@@ -5,11 +5,11 @@ require "spec_helper"
 describe "GET /dollar-store", type: :request do
   let(:seller) { create(:compliant_user) }
 
-  let!(:cheap_product) { create(:product, :recommendable, user: seller, name: "fifty cent thing", price_cents: 50) }
+  let!(:cheap_product) { create(:product, :recommendable, user: seller, name: "ninety nine cent thing", price_cents: 99) }
   let!(:dollar_product) { create(:product, :recommendable, user: seller, name: "exactly one dollar", price_cents: 100) }
   let!(:expensive_product) { create(:product, :recommendable, user: seller, name: "five dollar thing", price_cents: 500) }
   let!(:free_product) { create(:product, :recommendable, user: seller, name: "free thing", price_cents: 0) }
-  let!(:adult_product) { create(:product, :recommendable, user: seller, name: "adult cheap thing", price_cents: 50, is_adult: true) }
+  let!(:adult_product) { create(:product, :recommendable, user: seller, name: "adult cheap thing", price_cents: 99, is_adult: true) }
 
   before do
     host! DOMAIN

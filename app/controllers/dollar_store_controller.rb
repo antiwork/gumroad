@@ -40,7 +40,7 @@ class DollarStoreController < ApplicationController
     render inertia: "DollarStore", props: {
       search_results:,
       currency_code: logged_in_user&.currency_type || "usd",
-      search_offset: params[:from] || 0,
+      search_offset: params[:from] || 1,
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
       selected_taxonomy_path: selected_taxonomy_path,
       selected_taxonomy_label: selected_taxonomy_label
