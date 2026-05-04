@@ -65,7 +65,10 @@ function DollarStore() {
           />
         ) : (
           <>
-            <ProductCardGrid className="lg:hidden [&_article]:border-black! [&_article]:bg-white! [&_article]:text-black! [&_article_*]:border-black/15!">
+            <ProductCardGrid
+              className="lg:hidden [&_article]:border-black! [&_article]:bg-white! [&_article]:text-black!"
+              style={{ "--color-border": "rgb(0 0 0 / 0.15)" }}
+            >
               {products.map((product) => (
                 <Card key={product.id} product={product} />
               ))}

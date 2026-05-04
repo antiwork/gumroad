@@ -25,19 +25,20 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
   const [drillKey, setDrillKey] = React.useState<string | null>(null);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
 
+  const closeAndReset = React.useCallback(() => {
+    setIsOpen(false);
+    setDrillKey(null);
+  }, []);
+
   React.useEffect(() => {
     if (!isOpen) return;
     const handleClick = (event: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setDrillKey(null);
+        closeAndReset();
       }
     };
     const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-        setDrillKey(null);
-      }
+      if (event.key === "Escape") closeAndReset();
     };
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleEsc);
@@ -45,7 +46,7 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
       document.removeEventListener("mousedown", handleClick);
       document.removeEventListener("keydown", handleEsc);
     };
-  }, [isOpen]);
+  }, [isOpen, closeAndReset]);
 
   const taxonomyByKey = React.useMemo(() => new Map(taxonomies.map((t) => [t.key, t])), [taxonomies]);
   const roots = React.useMemo(
@@ -67,8 +68,7 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
   const navigate = (path: string | null) => {
     const data = path ? { taxonomy: path } : {};
     router.get(Routes.dollar_store_path(), data, { preserveScroll: true, preserveState: false });
-    setIsOpen(false);
-    setDrillKey(null);
+    closeAndReset();
   };
 
   const drillTaxonomy = drillKey ? taxonomyByKey.get(drillKey) : null;
@@ -83,57 +83,66 @@ export const CategoryFilter = ({ taxonomies, selectedPath, selectedLabel }: Prop
   const cornerSlug = drilledRootSlug ?? selectedRootSlug;
   const cornerIconUrl = cornerSlug ? getRootTaxonomyImage(cornerSlug) : merchandiseIcon;
 
-  return (
-    <div className="hidden items-center justify-center gap-3 px-4 pt-2 pb-8 text-xl text-black lg:flex">
-      <span>Showing</span>
-      <div className="relative" ref={wrapperRef}>
-        <button
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((v) => !v)}
-          className="inline-flex cursor-pointer items-center gap-2 rounded border-2 border-black bg-white px-3 py-1 text-xl text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition-all duration-200 ease-out hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_rgba(0,0,0,1)] active:translate-x-0 active:translate-y-0 active:shadow-[2px_2px_0_0_rgba(0,0,0,1)]"
-        >
-          <span>{triggerLabel}</span>
-          <ChevronDown className="size-5" />
-        </button>
+  const drawerContent = drillTaxonomy ? (
+    <SubcategoryView
+      root={drillTaxonomy}
+      subItems={subItems}
+      onBack={() => setDrillKey(null)}
+      onSelect={(path) => navigate(path)}
+      buildPath={buildPath}
+      selectedPath={selectedPath}
+    />
+  ) : (
+    <RootView
+      roots={roots}
+      onSelectAll={() => navigate(null)}
+      onSelectRoot={(t) => {
+        if (hasChildren(t.key)) {
+          setDrillKey(t.key);
+        } else {
+          navigate(buildPath(t));
+        }
+      }}
+      isAllSelected={!selectedPath}
+      selectedRootKey={selectedPath ? findRootKey(selectedPath, roots) : null}
+      hasChildren={hasChildren}
+    />
+  );
 
-        {isOpen ? (
-          <div
-            role="menu"
-            className="absolute top-[calc(100%+8px)] left-1/2 z-40 w-[720px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden border-2 border-black bg-dark-gray text-gray shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
+  return (
+    <>
+      {selectedLabel ? (
+        <p className="px-4 pt-2 pb-6 text-center text-xl text-black lg:hidden">
+          Showing {selectedLabel} products
+        </p>
+      ) : null}
+      <div className="hidden flex-wrap items-center justify-center gap-3 px-4 pt-2 pb-8 text-xl text-black lg:flex">
+        <span>Showing</span>
+        <div className="relative" ref={wrapperRef}>
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={isOpen}
+            onClick={() => setIsOpen((v) => !v)}
+            className="inline-flex cursor-pointer items-center gap-2 rounded border-2 border-black bg-white px-3 py-1 text-xl text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition-all duration-200 ease-out hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_rgba(0,0,0,1)] active:translate-x-0 active:translate-y-0 active:shadow-[2px_2px_0_0_rgba(0,0,0,1)]"
           >
-            {drillTaxonomy ? (
-              <SubcategoryView
-                root={drillTaxonomy}
-                subItems={subItems}
-                onBack={() => setDrillKey(null)}
-                onSelect={(path) => navigate(path)}
-                buildPath={buildPath}
-                selectedPath={selectedPath}
-              />
-            ) : (
-              <RootView
-                roots={roots}
-                onSelectAll={() => navigate(null)}
-                onSelectRoot={(t) => {
-                  if (hasChildren(t.key)) {
-                    setDrillKey(t.key);
-                  } else {
-                    navigate(buildPath(t));
-                  }
-                }}
-                isAllSelected={!selectedPath}
-                selectedRootKey={selectedPath ? findRootKey(selectedPath, roots) : null}
-                hasChildren={hasChildren}
-              />
-            )}
-            <CornerIcon iconUrl={cornerIconUrl} />
-          </div>
-        ) : null}
+            <span>{triggerLabel}</span>
+            <ChevronDown className="size-5" />
+          </button>
+
+          {isOpen ? (
+            <div
+              role="menu"
+              className="absolute top-[calc(100%+8px)] left-1/2 z-40 w-[720px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden border-2 border-black bg-dark-gray text-gray shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
+            >
+              {drawerContent}
+              <CornerIcon iconUrl={cornerIconUrl} />
+            </div>
+          ) : null}
+        </div>
+        <span>products</span>
       </div>
-      <span>products</span>
-    </div>
+    </>
   );
 };
 
