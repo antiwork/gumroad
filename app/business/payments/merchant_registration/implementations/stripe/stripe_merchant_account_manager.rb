@@ -449,8 +449,8 @@ module StripeMerchantAccountManager
           currency: bank_account.stripe_external_account_currency,
           account_number: account_number_for_stripe
         }
-        if bank_account.routing_number.present?
-          routing_number = bank_account.routing_number
+        routing_number = bank_account.stripe_external_account_routing_number
+        if routing_number.present?
           routing_number = routing_number.gsub(/[ -]/, "") if country_code == Compliance::Countries::GIB.alpha2
           bank_account_hash[:routing_number] = routing_number
         end

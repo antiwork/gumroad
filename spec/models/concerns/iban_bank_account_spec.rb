@@ -42,6 +42,23 @@ describe IbanBankAccount do
     end
   end
 
+  describe "#stripe_external_account_routing_number" do
+    it "returns nil when the IBAN is cross-border within SEPA, so a home-country BIC is not paired with a foreign IBAN" do
+      bank_account = build(:san_marino_bank_account, account_number: "IT60X0542811101000000123456")
+      expect(bank_account.stripe_external_account_routing_number).to be_nil
+    end
+
+    it "returns the account's routing_number when the IBAN matches the home country" do
+      bank_account = build(:san_marino_bank_account, account_number: "SM86U0322509800000000270100")
+      expect(bank_account.stripe_external_account_routing_number).to eq("AAAASMSMXXX")
+    end
+
+    it "returns nil for SEPA models that have no routing_number, regardless of cross-border status" do
+      expect(build(:bulgaria_bank_account, account_number: "LT121000011101001000").stripe_external_account_routing_number).to be_nil
+      expect(build(:bulgaria_bank_account, account_number: "BG80BNBG96611020345678").stripe_external_account_routing_number).to be_nil
+    end
+  end
+
   describe "#validate_account_number" do
     before { allow(Rails.env).to receive(:production?).and_return(true) }
 

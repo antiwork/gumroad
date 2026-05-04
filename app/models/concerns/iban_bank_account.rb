@@ -17,6 +17,10 @@ module IbanBankAccount
     cross_border_sepa_payout? ? Currency::EUR : currency
   end
 
+  def stripe_external_account_routing_number
+    cross_border_sepa_payout? ? nil : routing_number
+  end
+
   private
     def iban_country_code
       return if account_number_decrypted.blank?
