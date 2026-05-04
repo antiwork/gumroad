@@ -1042,6 +1042,7 @@ Rails.application.routes.draw do
     get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
+    get "/dollar-store", to: "dollar_store#index", as: :dollar_store
 
     root to: "public#home"
 

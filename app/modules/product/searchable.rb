@@ -380,6 +380,18 @@ module Product::Searchable
         end
       end
 
+      if params[:sort] == ProductSortKey::RANDOM
+        inner_query = search_options[:query]
+        search_options[:query] = {
+          function_score: {
+            query: inner_query,
+            random_score: { seed: params[:random_seed].to_i, field: "_seq_no" },
+            boost_mode: "replace"
+          }
+        }
+        search_options[:sort] = [{ _score: { order: "desc" } }]
+      end
+
       search_options
     end
 
