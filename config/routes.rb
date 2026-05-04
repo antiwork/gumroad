@@ -342,6 +342,12 @@ Rails.application.routes.draw do
               post :list
               post :pause
               post :resume
+              post :issue
+              post :scheduled_list
+            end
+            member do
+              post :scheduled_execute
+              post :scheduled_cancel
             end
           end
         end

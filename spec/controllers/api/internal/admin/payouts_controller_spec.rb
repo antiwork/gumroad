@@ -274,4 +274,274 @@ describe Api::Internal::Admin::PayoutsController do
       )
     end
   end
+
+  describe "POST issue" do
+    include_examples "admin api authorization required", :post, :issue
+
+    it "returns 400 when email is missing" do
+      post :issue, params: { payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :issue, params: { email: "missing@example.com", payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 400 when payout_processor is invalid" do
+      post :issue, params: { email: user.email, payout_processor: "ach", payout_period_end_date: 1.day.ago.to_date.to_s }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to eq("payout_processor must be stripe or paypal")
+    end
+
+    it "returns 400 when payout_period_end_date is missing" do
+      post :issue, params: { email: user.email, payout_processor: "stripe" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to eq("payout_period_end_date is required")
+    end
+
+    it "returns 400 when payout_period_end_date is invalid" do
+      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: "not-a-date" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to eq("payout_period_end_date is invalid")
+    end
+
+    it "issues a stripe payout via Payouts.create_payments_for_balances_up_to_date_for_users" do
+      payment = create(:payment_completed, user:)
+      date = 1.day.ago.to_date
+
+      expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).with(
+        date, PayoutProcessorType::STRIPE, [user], from_admin: true
+      ).and_return([[payment]])
+
+      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "payout" => hash_including("external_id" => payment.external_id, "state" => "completed")
+      )
+    end
+
+    it "sets should_paypal_payout_be_split when paypal split is requested" do
+      payment = create(:payment_completed, user:, processor: PayoutProcessorType::PAYPAL)
+      date = 1.day.ago.to_date
+
+      allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[payment]])
+
+      expect do
+        post :issue, params: { email: user.email, payout_processor: "paypal", payout_period_end_date: date.to_s, should_split_the_amount: "true" }
+      end.to change { user.reload.should_paypal_payout_be_split? }.from(false).to(true)
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 422 when no payment is created" do
+      date = 1.day.ago.to_date
+      allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([])
+
+      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to include("success" => false, "message" => "Payment was not sent.")
+    end
+
+    it "returns 422 when the payment failed" do
+      failed_payment = create(:payment_failed, user:)
+      failed_payment.errors.add(:base, "Insufficient funds")
+      date = 1.day.ago.to_date
+      allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[failed_payment]])
+
+      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("Insufficient funds")
+    end
+
+    it "writes an admin audit log" do
+      payment = create(:payment_completed, user:)
+      date = 1.day.ago.to_date
+      allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[payment]])
+
+      expect do
+        post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "payouts.issue",
+        target_type: "User",
+        target_id: user.id,
+        response_status: 200
+      )
+    end
+  end
+
+  describe "POST scheduled_list" do
+    include_examples "admin api authorization required", :post, :scheduled_list
+
+    it "returns scheduled payouts ordered by id desc" do
+      first = create(:scheduled_payout, user:)
+      second = create(:scheduled_payout, user: create(:user))
+
+      post :scheduled_list
+
+      expect(response).to have_http_status(:ok)
+      payload = response.parsed_body
+      expect(payload["success"]).to be(true)
+      expect(payload["scheduled_payouts"].map { _1["external_id"] }).to eq([second.external_id, first.external_id])
+    end
+
+    it "filters by status when provided" do
+      flagged = create(:scheduled_payout, user:, status: "flagged")
+      create(:scheduled_payout, user: create(:user), status: "pending")
+
+      post :scheduled_list, params: { status: "flagged" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([flagged.external_id])
+    end
+
+    it "returns 400 when status is invalid" do
+      post :scheduled_list, params: { status: "bogus" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "status is invalid" }.as_json)
+    end
+
+    it "caps the limit at SCHEDULED_PAYOUTS_MAX_LIMIT" do
+      post :scheduled_list, params: { limit: 9999 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["limit"]).to eq(50)
+    end
+
+    it "uses the default limit when limit is missing or non-positive" do
+      post :scheduled_list
+
+      expect(response.parsed_body["limit"]).to eq(20)
+
+      post :scheduled_list, params: { limit: 0 }
+
+      expect(response.parsed_body["limit"]).to eq(20)
+    end
+  end
+
+  describe "POST scheduled_execute" do
+    include_examples "admin api authorization required", :post, :scheduled_execute, { id: "abc" }
+
+    it "returns 404 when the scheduled payout is not found" do
+      post :scheduled_execute, params: { id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "executes a pending scheduled payout" do
+      scheduled_payout = create(:scheduled_payout, user:)
+      allow_any_instance_of(ScheduledPayout).to receive(:execute!).and_return(:executed)
+
+      post :scheduled_execute, params: { id: scheduled_payout.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true, "result" => "executed")
+    end
+
+    it "promotes a flagged scheduled payout to pending before executing" do
+      scheduled_payout = create(:scheduled_payout, user:, status: "flagged")
+      allow_any_instance_of(ScheduledPayout).to receive(:execute!).and_return(:executed)
+
+      expect do
+        post :scheduled_execute, params: { id: scheduled_payout.external_id }
+      end.to change { scheduled_payout.reload.status }.from("flagged").to("pending")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["result"]).to eq("executed")
+    end
+
+    it "returns 422 when the scheduled payout is already executed" do
+      scheduled_payout = create(:scheduled_payout, user:, status: "executed")
+
+      post :scheduled_execute, params: { id: scheduled_payout.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("Cannot execute a executed scheduled payout.")
+    end
+
+    it "returns 422 and the error message when execute! raises" do
+      scheduled_payout = create(:scheduled_payout, user:)
+      allow_any_instance_of(ScheduledPayout).to receive(:execute!).and_raise("nope")
+
+      post :scheduled_execute, params: { id: scheduled_payout.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to include("success" => false, "message" => "nope")
+    end
+
+    it "writes an admin audit log targeting the scheduled payout" do
+      scheduled_payout = create(:scheduled_payout, user:)
+      allow_any_instance_of(ScheduledPayout).to receive(:execute!).and_return(:executed)
+
+      expect do
+        post :scheduled_execute, params: { id: scheduled_payout.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "payouts.scheduled_execute",
+        target_type: "ScheduledPayout",
+        target_id: scheduled_payout.id,
+        target_external_id: scheduled_payout.external_id,
+        response_status: 200
+      )
+    end
+  end
+
+  describe "POST scheduled_cancel" do
+    include_examples "admin api authorization required", :post, :scheduled_cancel, { id: "abc" }
+
+    it "returns 404 when the scheduled payout is not found" do
+      post :scheduled_cancel, params: { id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "cancels a pending scheduled payout" do
+      scheduled_payout = create(:scheduled_payout, user:)
+
+      expect do
+        post :scheduled_cancel, params: { id: scheduled_payout.external_id }
+      end.to change { scheduled_payout.reload.status }.from("pending").to("cancelled")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "returns 422 and the error message when cancel! raises" do
+      scheduled_payout = create(:scheduled_payout, user:)
+      allow_any_instance_of(ScheduledPayout).to receive(:cancel!).and_raise("already executed")
+
+      post :scheduled_cancel, params: { id: scheduled_payout.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to include("success" => false, "message" => "already executed")
+    end
+
+    it "writes an admin audit log targeting the scheduled payout" do
+      scheduled_payout = create(:scheduled_payout, user:)
+
+      expect do
+        post :scheduled_cancel, params: { id: scheduled_payout.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "payouts.scheduled_cancel",
+        target_type: "ScheduledPayout",
+        target_id: scheduled_payout.id,
+        response_status: 200
+      )
+    end
+  end
 end

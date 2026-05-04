@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseController
-  before_action :fetch_user
+  SCHEDULED_PAYOUTS_DEFAULT_LIMIT = 20
+  SCHEDULED_PAYOUTS_MAX_LIMIT = 50
+  private_constant :SCHEDULED_PAYOUTS_DEFAULT_LIMIT, :SCHEDULED_PAYOUTS_MAX_LIMIT
+
+  before_action :fetch_user, only: [:list, :pause, :resume, :issue]
+  before_action :fetch_scheduled_payout, only: [:scheduled_execute, :scheduled_cancel]
 
   def list
     payouts = @user.payments.order(created_at: :desc).limit(5).map { serialize_payout(_1) }
@@ -76,11 +81,114 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
     end
   end
 
+  def issue
+    processor_param = params[:payout_processor].to_s.upcase
+    unless PayoutProcessorType.all.include?(processor_param)
+      return render json: { success: false, message: "payout_processor must be stripe or paypal" }, status: :bad_request
+    end
+
+    if params[:payout_period_end_date].blank?
+      return render json: { success: false, message: "payout_period_end_date is required" }, status: :bad_request
+    end
+
+    begin
+      date = Date.parse(params[:payout_period_end_date].to_s)
+    rescue ArgumentError
+      return render json: { success: false, message: "payout_period_end_date is invalid" }, status: :bad_request
+    end
+
+    record_admin_write(action: "payouts.issue", target: @user) do
+      if processor_param == PayoutProcessorType::PAYPAL && ActiveModel::Type::Boolean.new.cast(params[:should_split_the_amount])
+        @user.update!(should_paypal_payout_be_split: true)
+      end
+
+      payments = Payouts.create_payments_for_balances_up_to_date_for_users(date, processor_param, [@user], from_admin: true)
+      payment = payments.first&.first
+
+      if payment.blank? || payment.failed?
+        render json: {
+          success: false,
+          message: payment&.errors&.full_messages&.first || "Payment was not sent."
+        }, status: :unprocessable_entity
+      else
+        render json: { success: true, payout: serialize_payout(payment) }
+      end
+    end
+  end
+
+  def scheduled_list
+    scope = ScheduledPayout.includes(:user, :created_by).order(id: :desc)
+    if params[:status].present?
+      unless ScheduledPayout::STATUSES.include?(params[:status])
+        return render json: { success: false, message: "status is invalid" }, status: :bad_request
+      end
+      scope = scope.where(status: params[:status])
+    end
+
+    limit = params[:limit].to_i
+    limit = SCHEDULED_PAYOUTS_DEFAULT_LIMIT if limit <= 0
+    limit = [limit, SCHEDULED_PAYOUTS_MAX_LIMIT].min
+
+    scheduled_payouts = scope.limit(limit).map { serialize_scheduled_payout(_1) }
+
+    render json: { success: true, scheduled_payouts:, limit: }
+  end
+
+  def scheduled_execute
+    record_admin_write(action: "payouts.scheduled_execute", target: @scheduled_payout) do
+      unless @scheduled_payout.pending? || @scheduled_payout.flagged?
+        next render json: {
+          success: false,
+          message: "Cannot execute a #{@scheduled_payout.status} scheduled payout."
+        }, status: :unprocessable_entity
+      end
+
+      @scheduled_payout.update!(status: "pending") if @scheduled_payout.flagged?
+
+      result = @scheduled_payout.execute!
+      message = case result
+                when :held then "Payout is now on hold for manual release."
+                when :flagged then "Payout was flagged for review instead of executing."
+      end
+
+      render json: {
+        success: true,
+        result: result.to_s,
+        message:,
+        scheduled_payout: serialize_scheduled_payout(@scheduled_payout)
+      }
+    rescue => e
+      render_scheduled_payout_error(e)
+    end
+  end
+
+  def scheduled_cancel
+    record_admin_write(action: "payouts.scheduled_cancel", target: @scheduled_payout) do
+      @scheduled_payout.cancel!
+      render json: { success: true, scheduled_payout: serialize_scheduled_payout(@scheduled_payout) }
+    rescue => e
+      render_scheduled_payout_error(e)
+    end
+  end
+
   private
     def fetch_user
       return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
 
       @user = User.alive.by_email(params[:email]).first
       render json: { success: false, message: "User not found" }, status: :not_found if @user.blank?
+    end
+
+    def fetch_scheduled_payout
+      @scheduled_payout = ScheduledPayout.includes(:user, :created_by).find_by_external_id(params[:id])
+      render json: { success: false, message: "Scheduled payout not found" }, status: :not_found if @scheduled_payout.blank?
+    end
+
+    def serialize_scheduled_payout(scheduled_payout)
+      Admin::ScheduledPayoutPresenter.new(scheduled_payout:).props
+    end
+
+    def render_scheduled_payout_error(error)
+      render json: { success: false, message: error.message }, status: :unprocessable_entity
     end
 end
