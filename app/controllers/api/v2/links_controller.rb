@@ -208,16 +208,16 @@ class Api::V2::LinksController < Api::V2::BaseController
   def suggest_tags
     begin
       seller = doorkeeper_token.present? ? current_resource_owner : current_seller
-      return render_response(false, message: "The product was not found.") if seller.blank?
+      return render json: { error: "Product not found" }, status: 404 if seller.blank?
 
       doorkeeper_authorize! :edit_products if doorkeeper_token.present?
 
       product = seller.links.find_by_external_id(params[:id]) || seller.links.find_by(unique_permalink: params[:id])
-      return render_response(false, message: "The product was not found.") if product.blank?
+      return render json: { error: "Product not found" }, status: 404 if product.blank?
 
       service = Ai::TagSuggestionsService.new(current_seller: seller)
       tags = service.generate_tags(product_name: product.name, description: product.plaintext_description)
-      render json: { tags: }
+      render json: { tags: tags }
     rescue => e
       ErrorNotifier.notify(e)
       render json: { error: "Failed to suggest tags. Please try again." }, status: 500
