@@ -207,15 +207,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     pages.length > 1 || selectedPage?.title || renamingPageId != null || product.native_type === "commission";
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
   const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedPageId]);
-  const isSelectedPageEmpty =
-    !selectedPage?.description ||
-    (typeof selectedPage.description === "object" &&
-      "content" in selectedPage.description &&
-      Array.isArray(selectedPage.description.content) &&
-      selectedPage.description.content.every(
-        (node: { type?: string; content?: unknown[] }) =>
-          node.type === "paragraph" && (!node.content || node.content.length === 0),
-      ));
 
   const onSelectFiles = (ids: string[]) => {
     if (!editor) return;
@@ -973,7 +964,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         >
           <NodeVisibilityProvider scrollRef={scrollContainerRef}>
             <div className="relative h-full flex-1">
-              {isSelectedPageEmpty ? (
+              {editor?.isEmpty ? (
                 <div className="pointer-events-none absolute inset-0 flex items-start">
                   <p className="flex flex-wrap items-center gap-1 text-muted">
                     <span>Enter the content you want to sell.</span>

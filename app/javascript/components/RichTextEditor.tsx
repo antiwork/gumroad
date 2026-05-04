@@ -322,16 +322,20 @@ export const useRichTextEditor = ({
 
   React.useEffect(() => editor?.setOptions({ editable }), [editable]);
 
-  React.useLayoutEffect(() => {
-    // discard any history from before content was reset
-    editor?.view.updateState(
-      EditorState.create({
-        doc: createDocument(content, editor.state.schema),
-        schema: editor.schema,
-        plugins: editor.state.plugins,
+  React.useEffect(
+    () =>
+      queueMicrotask(() => {
+        // discard any history from before content was reset
+        editor?.view.updateState(
+          EditorState.create({
+            doc: createDocument(content, editor.state.schema),
+            schema: editor.schema,
+            plugins: editor.state.plugins,
+          }),
+        );
       }),
-    );
-  }, [content]);
+    [content],
+  );
 
   return editor ?? null;
 };
