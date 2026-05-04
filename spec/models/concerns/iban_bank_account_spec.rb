@@ -54,6 +54,14 @@ describe IbanBankAccount do
       expect(build(:denmark_bank_account, account_number: "LT121000011101001000")).to be_valid
     end
 
+    it "accepts IBANs from SEPA countries that joined recently (AL, MD, ME, MK, RS)" do
+      expect(build(:bulgaria_bank_account, account_number: "AL35202111090000000001234567")).to be_valid
+      expect(build(:bulgaria_bank_account, account_number: "MD24AG000225100013104168")).to be_valid
+      expect(build(:bulgaria_bank_account, account_number: "ME25505000012345678951")).to be_valid
+      expect(build(:bulgaria_bank_account, account_number: "MK07250120000058984")).to be_valid
+      expect(build(:bulgaria_bank_account, account_number: "RS35260005601001611379")).to be_valid
+    end
+
     it "rejects an IBAN from a country outside the SEPA zone" do
       bank_account = build(:bulgaria_bank_account, account_number: "SA0380000000608010167519")
       expect(bank_account).not_to be_valid
