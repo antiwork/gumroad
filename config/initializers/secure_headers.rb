@@ -180,6 +180,11 @@ SecureHeaders::Configuration.default do |config|
   config.csp[:connect_src] << "#{DOMAIN}"
   config.csp[:script_src] << "#{DOMAIN}"
 
+  if ENV["CUSTOM_DOMAIN"].present?
+    config.csp[:connect_src] << ENV["CUSTOM_DOMAIN"]
+    config.csp[:script_src] << ENV["CUSTOM_DOMAIN"]
+  end
+
   # Required by AnyCable
   config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}"
 
