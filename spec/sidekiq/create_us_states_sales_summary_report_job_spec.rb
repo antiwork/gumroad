@@ -7,6 +7,25 @@ describe CreateUsStatesSalesSummaryReportJob do
   let(:month) { 8 }
   let(:year) { 2022 }
 
+  it "is configured with retry: 3" do
+    expect(described_class.sidekiq_options["retry"]).to eq(3)
+  end
+
+  describe "sidekiq_retries_exhausted" do
+    it "emails payments notification with the failure context" do
+      msg = { "args" => [["WA", "WI"], 4, 2026] }
+      exception = ActiveRecord::StatementTimeout.new("maximum statement execution time exceeded")
+      mailer = double("mailer")
+
+      expect(AccountingMailer).to receive(:us_states_sales_summary_report_failed)
+        .with(["WA", "WI"], 4, 2026, "ActiveRecord::StatementTimeout", "maximum statement execution time exceeded")
+        .and_return(mailer)
+      expect(mailer).to receive(:deliver_later)
+
+      described_class.sidekiq_retries_exhausted_block.call(msg, exception)
+    end
+  end
+
   it "raises an argument error if the year is out of bounds" do
     expect { described_class.new.perform(subdivision_codes, month, 2013) }.to raise_error(ArgumentError)
   end

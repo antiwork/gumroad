@@ -99,6 +99,17 @@ class AccountingMailer < ApplicationMailer
          subject: "Outstanding balances"
   end
 
+  def us_states_sales_summary_report_failed(subdivision_codes, month, year, error_class, error_message)
+    @subdivision_codes = subdivision_codes
+    @month = month
+    @year = year
+    @error_class = error_class
+    @error_message = error_message
+
+    mail subject: "#{SUBJECT_PREFIX}US States Sales Summary Report failed - #{month}/#{year}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def global_sales_tax_summary_report(month, year, s3_read_url)
     @subject_and_title = "Global Sales Tax Summary Report for #{month}/#{year}"
     @s3_url = s3_read_url

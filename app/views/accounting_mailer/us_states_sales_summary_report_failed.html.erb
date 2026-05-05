@@ -1,0 +1,10 @@
+<%= header_section("US States Sales Summary Report failed - #{@month}/#{@year}") %>
+<div>
+  <p><code>CreateUsStatesSalesSummaryReportJob</code> exhausted Sidekiq retries and did not produce the report.</p>
+  <ul>
+    <li>Period: <%= @month %>/<%= @year %></li>
+    <li>Subdivision codes: <%= Array(@subdivision_codes).join(", ") %></li>
+    <li>Error: <%= @error_class %>: <%= @error_message %></li>
+  </ul>
+  <p>See Sentry and Sidekiq dead set for more details.</p>
+</div>
