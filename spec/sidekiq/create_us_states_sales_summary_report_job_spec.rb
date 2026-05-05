@@ -13,7 +13,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
   describe "sidekiq_retries_exhausted" do
     it "emails payments notification with the failure context" do
-      msg = { "args" => [["WA", "WI"], 4, 2026] }
+      job = { "args" => [["WA", "WI"], 4, 2026] }
       exception = ActiveRecord::StatementTimeout.new("maximum statement execution time exceeded")
       mailer = double("mailer")
 
@@ -22,7 +22,7 @@ describe CreateUsStatesSalesSummaryReportJob do
         .and_return(mailer)
       expect(mailer).to receive(:deliver_later)
 
-      described_class.sidekiq_retries_exhausted_block.call(msg, exception)
+      described_class.sidekiq_retries_exhausted_block.call(job, exception)
     end
   end
 
