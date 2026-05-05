@@ -83,6 +83,29 @@ describe ProductFilesUtilityController, :vcr do
 
       expect(response).to redirect_to("https://example.com/file.srt")
     end
+
+    context "when the S3 file is missing" do
+      let!(:file) { create(:product_file, link: product) }
+
+      before do
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file)
+          .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+      end
+
+      it "returns a not_found JSON response for JSON requests" do
+        get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["error"]).to eq("The file is no longer available.")
+      end
+
+      it "redirects to the product edit page with a warning flash for HTML requests" do
+        get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
+
+        expect(response).to redirect_to(edit_link_url(product.unique_permalink))
+        expect(flash[:warning]).to eq("The file is no longer available.")
+      end
+    end
   end
 
   describe "GET download_folder_archive" do

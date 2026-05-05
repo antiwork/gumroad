@@ -31,6 +31,13 @@ class ProductFilesUtilityController < ApplicationController
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       redirect_to(url_redirect.signed_location_for_file(product_files.first), allow_other_host: true)
     end
+  rescue Aws::S3::Errors::NotFound
+    if request.format.json?
+      render(json: { error: "The file is no longer available." }, status: :not_found)
+    else
+      flash[:warning] = "The file is no longer available."
+      redirect_to(edit_link_url(@product.unique_permalink))
+    end
   end
 
   def download_folder_archive
