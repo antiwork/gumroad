@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class IndonesiaBankAccount < BankAccount
+  include StrippedFields
+
   BANK_ACCOUNT_TYPE = "ID"
 
   BANK_CODE_FORMAT_REGEX = /\A[0-9a-zA-Z]{3,4}\z/
@@ -10,6 +12,8 @@ class IndonesiaBankAccount < BankAccount
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
+
+  stripped_fields :account_holder_full_name, remove_duplicate_spaces: false, nilify_blanks: false
 
   validate :validate_bank_code
   validate :validate_account_number

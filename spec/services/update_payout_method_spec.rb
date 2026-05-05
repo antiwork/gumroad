@@ -77,6 +77,28 @@ describe UpdatePayoutMethod do
 
           expect(bank_account.reload.account_holder_full_name).to eq("Japanese Creator")
         end
+
+        {
+          VietnamBankAccount => :vietnam_bank_account,
+          IndonesiaBankAccount => :indonesia_bank_account,
+        }.each do |klass, factory|
+          it "does not enqueue HandleNewBankAccountWorker for #{klass.name.gsub('BankAccount', '')} when the submitted name differs only by surrounding whitespace" do
+            user = create(:named_user)
+            bank_account = create(factory, user:, account_holder_full_name: "Pham Minh")
+            create(:user_compliance_info, user:, country: klass == VietnamBankAccount ? "Vietnam" : "Indonesia")
+
+            params = ActionController::Parameters.new(
+              bank_account: { type: klass.name, account_holder_full_name: "Pham Minh " }
+            )
+
+            expect do
+              result = described_class.new(user_params: params, seller: user).process
+              expect(result).to eq(success: true)
+            end.not_to change { HandleNewBankAccountWorker.jobs.size }
+
+            expect(bank_account.reload.account_holder_full_name).to eq("Pham Minh")
+          end
+        end
       end
 
       context "when the seller is in a country that does NOT sync holder name to Stripe" do
