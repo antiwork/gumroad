@@ -2,7 +2,7 @@
 
 class CreateUsStatesSalesSummaryReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  sidekiq_options retry: 3, queue: :default, lock: :until_executed
 
   attr_reader :taxjar_api
 
