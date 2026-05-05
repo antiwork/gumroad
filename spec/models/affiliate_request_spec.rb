@@ -81,6 +81,12 @@ describe AffiliateRequest do
         expect(affiliate_request).to be_invalid
         expect(affiliate_request.errors.full_messages.first).to eq("You cannot request to become an affiliate of yourself.")
       end
+
+      it "doesn't allow the creator to become an affiliate of oneself when email casing differs" do
+        affiliate_request = build(:affiliate_request, seller: creator, email: creator.email.upcase)
+        expect(affiliate_request).to be_invalid
+        expect(affiliate_request.errors.full_messages.first).to eq("You cannot request to become an affiliate of yourself.")
+      end
     end
   end
 
@@ -301,6 +307,17 @@ describe AffiliateRequest do
             end.to_not change { creator.direct_affiliates.count }
           end.to_not have_enqueued_mail(AffiliateRequestMailer, :notify_requester_of_request_approval)
         end.to have_enqueued_mail(AffiliateRequestMailer, :notify_unregistered_requester_of_request_approval)
+      end
+    end
+
+    context "when the requester user is the seller" do
+      it "does not make the seller an affiliate of themselves" do
+        affiliate_request = build(:affiliate_request, email: creator.email.upcase, seller: creator, state: :approved)
+        affiliate_request.save!(validate: false)
+
+        expect do
+          affiliate_request.make_requester_an_affiliate!
+        end.to_not change { creator.direct_affiliates.count }
       end
     end
 

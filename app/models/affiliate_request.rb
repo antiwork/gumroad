@@ -68,6 +68,7 @@ class AffiliateRequest < ApplicationRecord
                             .deliver_later(queue: "default", wait: 3.seconds)
       return
     end
+    return if requester == seller
 
     affiliate = seller.direct_affiliates.alive.find_by(affiliate_user_id: requester.id)
     affiliate ||= seller.direct_affiliates.new
@@ -115,7 +116,7 @@ class AffiliateRequest < ApplicationRecord
 
     def requester_is_not_seller
       return unless seller_id
-      return if email != seller.email
+      return if email&.downcase != seller.email&.downcase
 
       errors.add(:base, "You cannot request to become an affiliate of yourself.")
     end
