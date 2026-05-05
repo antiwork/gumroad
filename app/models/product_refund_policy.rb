@@ -118,13 +118,6 @@ class ProductRefundPolicy < RefundPolicy
     end
 
     def ask_ai(prompt)
-      OpenAI::Client.new.chat(
-        parameters: {
-          messages: [{ role: "user", content: prompt }],
-          model: "gpt-4o-mini",
-          temperature: 0.0,
-          max_tokens: 10
-        }
-      )
+      Ai::RefundPolicyClassifierService.new.classify(prompt:)
     end
 end
