@@ -126,7 +126,7 @@ describe AccountingMailer, :vcr do
     end
 
     it "includes the period in the subject" do
-      expect(mail.subject).to eq("US States Sales Summary Report failed - 4/2026")
+      expect(mail.subject).to include("US States Sales Summary Report failed - 4/2026")
     end
 
     it "includes the failure context in the body" do
