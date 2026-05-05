@@ -938,10 +938,10 @@ const BankAccountSection = ({
     if (!holderNameTouched) return null;
     const name = bankAccount?.account_holder_full_name?.trim() ?? "";
     if (name === "") return null;
-    const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000]+$/u.test(name);
+    const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000 ]+$/u.test(name);
     const isLatinOnly = /^[A-Za-z ]+$/u.test(name);
     if (isKatakanaOnly || isLatinOnly) return null;
-    return "Use either katakana or Latin letters — not both. If using katakana, separate names with a full-width space.";
+    return "Use either katakana or Latin letters — not both.";
   })();
 
   return (

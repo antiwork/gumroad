@@ -9429,7 +9429,7 @@ describe StripeMerchantAccountManager, :vcr do
     let(:stripe_account) { double(id: "acct_123", external_accounts: [stripe_external_account]) }
 
     before do
-      bank_account.update_columns(account_holder_full_name: "ハルナ マサシ")
+      bank_account.update_columns(account_holder_full_name: "Haruna マサシ")
     end
 
     it "persists Stripe metadata without revalidating a legacy invalid holder name" do

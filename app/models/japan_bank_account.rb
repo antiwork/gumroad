@@ -22,7 +22,13 @@ class JapanBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  stripped_fields :account_holder_full_name, remove_duplicate_spaces: false, nilify_blanks: false
+  stripped_fields :account_holder_full_name,
+                  remove_duplicate_spaces: false,
+                  nilify_blanks: false,
+                  transform: ->(value) {
+                    full_width = value.tr(" ", "　")
+                    KATAKANA_NAME_FORMAT_REGEX.match?(full_width) ? full_width : value
+                  }
 
   validate :validate_bank_code
   validate :validate_branch_code
@@ -77,6 +83,6 @@ class JapanBankAccount < BankAccount
 
     def validate_account_holder_full_name
       return if KATAKANA_NAME_FORMAT_REGEX.match?(account_holder_full_name) || LATIN_NAME_FORMAT_REGEX.match?(account_holder_full_name)
-      errors.add :account_holder_full_name, "must be written in either katakana or Latin letters — not both. If using katakana, separate names with a full-width space."
+      errors.add :account_holder_full_name, "must be written in either katakana or Latin letters — not both."
     end
 end

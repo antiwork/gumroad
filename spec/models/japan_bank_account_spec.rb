@@ -98,10 +98,16 @@ describe JapanBankAccount do
       expect(build(:japan_bank_account, account_holder_full_name: "ﾋﾟｰﾀｰ")).to be_valid
     end
 
-    it "rejects katakana mixed with ASCII space (the incident case)" do
+    it "normalizes ASCII spaces to full-width when the rest is katakana (the incident case)" do
       account = build(:japan_bank_account, account_holder_full_name: "ハルナ マサシ")
-      expect(account).to_not be_valid
-      expect(account.errors[:account_holder_full_name]).to be_present
+      expect(account).to be_valid
+      expect(account.account_holder_full_name).to eq("ハルナ　マサシ")
+    end
+
+    it "leaves ASCII spaces alone when the name is Latin-only" do
+      account = build(:japan_bank_account, account_holder_full_name: "Masashi Haruna")
+      expect(account).to be_valid
+      expect(account.account_holder_full_name).to eq("Masashi Haruna")
     end
 
     it "rejects scripts outside the two allowed variants" do
@@ -119,7 +125,7 @@ describe JapanBankAccount do
 
     it "does not run on soft-delete so pre-validator invalid names can still be marked deleted" do
       account = create(:japan_bank_account)
-      account.update_columns(account_holder_full_name: "ハルナ マサシ")
+      account.update_columns(account_holder_full_name: "Haruna マサシ")
 
       expect { account.mark_deleted! }.not_to raise_error
       expect(account.reload.deleted_at).to be_present

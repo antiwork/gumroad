@@ -24,20 +24,20 @@ describe UpdatePayoutMethod do
           expect(bank_account.reload.account_holder_full_name).to eq("ヤマダ\u3000タロウ")
         end
 
-        it "returns a validation error and does not enqueue HandleNewBankAccountWorker when the new name mixes scripts" do
+        it "normalizes ASCII spaces to full-width and enqueues HandleNewBankAccountWorker" do
           params = ActionController::Parameters.new(
             bank_account: { type: JapanBankAccount.name, account_holder_full_name: "ハルナ マサシ" }
           )
 
           expect do
             result = described_class.new(user_params: params, seller: user).process
-            expect(result[:error]).to eq(:bank_account_error)
-          end.not_to change { HandleNewBankAccountWorker.jobs.size }
+            expect(result).to eq(success: true)
+          end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
 
-          expect(bank_account.reload.account_holder_full_name).to eq("Japanese Creator")
+          expect(bank_account.reload.account_holder_full_name).to eq("ハルナ　マサシ")
         end
 
-        it "surfaces a validation error when the submitted name equals a pre-validator invalid stored name" do
+        it "syncs a pre-validator invalid stored ASCII-space name when the seller re-saves it" do
           bank_account.update_columns(account_holder_full_name: "ハルナ マサシ")
 
           params = ActionController::Parameters.new(
@@ -46,8 +46,23 @@ describe UpdatePayoutMethod do
 
           expect do
             result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
+
+          expect(bank_account.reload.account_holder_full_name).to eq("ハルナ　マサシ")
+        end
+
+        it "returns a validation error and does not enqueue HandleNewBankAccountWorker when the name mixes scripts" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: JapanBankAccount.name, account_holder_full_name: "Haruna マサシ" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
             expect(result[:error]).to eq(:bank_account_error)
           end.not_to change { HandleNewBankAccountWorker.jobs.size }
+
+          expect(bank_account.reload.account_holder_full_name).to eq("Japanese Creator")
         end
 
         it "does not enqueue HandleNewBankAccountWorker when the submitted name differs only by surrounding whitespace" do
@@ -131,7 +146,6 @@ describe UpdatePayoutMethod do
           expect(ErrorNotifier).not_to have_received(:notify)
         end
       end
-
     end
 
     describe "when account number exceeds maximum length" do

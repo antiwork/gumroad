@@ -216,16 +216,9 @@ class UpdatePayoutMethod
       current_active = user.active_bank_account
       return { success: true } if current_active.blank? || current_active.is_a?(CardBankAccount)
 
-      submitted_holder_name = params[:bank_account][:account_holder_full_name].to_s.strip
-      if current_active.account_holder_full_name == submitted_holder_name
-        current_active.valid?
-        return bank_account_error_for_attribute(current_active, :account_holder_full_name) if current_active.errors[:account_holder_full_name].any?
-        return { success: true }
-      end
-
       current_active.account_holder_full_name = params[:bank_account][:account_holder_full_name]
-      return bank_account_error_for(current_active) unless current_active.valid?
-      current_active.save!
+      return bank_account_error_for(current_active) unless current_active.save
+      return { success: true } if current_active.previous_changes["account_holder_full_name"].nil?
 
       if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
         after_commit { HandleNewBankAccountWorker.perform_in(5.seconds, current_active.id) }
@@ -283,10 +276,6 @@ class UpdatePayoutMethod
 
     def bank_account_error_for(record)
       { error: :bank_account_error, data: record.errors.full_messages.to_sentence }
-    end
-
-    def bank_account_error_for_attribute(record, attribute)
-      { error: :bank_account_error, data: record.errors.full_messages_for(attribute).to_sentence }
     end
 
     def bank_account_params_for_bank_account_type
