@@ -96,14 +96,14 @@ describe ProductFilesUtilityController, :vcr do
         get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 
         expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body["error"]).to eq("The file is no longer available.")
+        expect(response.parsed_body["error"]).to eq("This file is no longer available. Please re-upload it.")
       end
 
       it "redirects to the product edit page with a warning flash for HTML requests" do
         get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 
         expect(response).to redirect_to(edit_link_url(product.unique_permalink))
-        expect(flash[:warning]).to eq("The file is no longer available.")
+        expect(flash[:warning]).to eq("This file is no longer available. Please re-upload it.")
       end
     end
   end

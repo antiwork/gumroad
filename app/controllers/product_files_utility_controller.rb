@@ -32,10 +32,11 @@ class ProductFilesUtilityController < ApplicationController
       redirect_to(url_redirect.signed_location_for_file(product_files.first), allow_other_host: true)
     end
   rescue Aws::S3::Errors::NotFound
+    message = "This file is no longer available. Please re-upload it."
     if request.format.json?
-      render(json: { error: "The file is no longer available." }, status: :not_found)
+      render(json: { error: message }, status: :not_found)
     else
-      flash[:warning] = "The file is no longer available."
+      flash[:warning] = message
       redirect_to(edit_link_url(@product.unique_permalink))
     end
   end
