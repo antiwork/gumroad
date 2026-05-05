@@ -31,7 +31,8 @@ class ProductFilesUtilityController < ApplicationController
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       redirect_to(url_redirect.signed_location_for_file(product_files.first), allow_other_host: true)
     end
-  rescue Aws::S3::Errors::NotFound
+  rescue Aws::S3::Errors::NotFound => e
+    ErrorNotifier.notify(e, context: { product_id: @product.id, product_file_ids: params[:product_file_ids] })
     message = "This file is no longer available. Please re-upload it."
     if request.format.json?
       render(json: { error: message }, status: :not_found)

@@ -93,6 +93,11 @@ describe ProductFilesUtilityController, :vcr do
       end
 
       it "returns a not_found JSON response for JSON requests" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(Aws::S3::Errors::NotFound),
+          context: { product_id: product.id, product_file_ids: [file.external_id] }
+        )
+
         get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 
         expect(response).to have_http_status(:not_found)
@@ -100,6 +105,11 @@ describe ProductFilesUtilityController, :vcr do
       end
 
       it "redirects to the product edit page with a warning flash for HTML requests" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(Aws::S3::Errors::NotFound),
+          context: { product_id: product.id, product_file_ids: [file.external_id] }
+        )
+
         get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 
         expect(response).to redirect_to(edit_link_url(product.unique_permalink))
