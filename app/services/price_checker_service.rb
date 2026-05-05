@@ -3,7 +3,7 @@
 class PriceCheckerService
   CACHE_TTL = 1.hour
   CACHE_VERSION = "v1"
-  MIN_MATCHES = 10
+  MIN_MATCHES = 5
   TARGET_BIN_COUNT = 12
   MAX_PRICE_CENTS = 10_000_000
   NICE_INTERVALS_CENTS = [
@@ -11,12 +11,13 @@ class PriceCheckerService
     100_000, 250_000, 500_000, 1_000_000, 2_500_000
   ].freeze
 
-  def self.call(product:, force_refresh: false)
-    new(product:, force_refresh:).call
+  def self.call(product:, overrides: {}, force_refresh: false)
+    new(product:, overrides:, force_refresh:).call
   end
 
-  def initialize(product:, force_refresh: false)
+  def initialize(product:, overrides: {}, force_refresh: false)
     @product = product
+    @overrides = overrides
     @force_refresh = force_refresh
   end
 
@@ -29,8 +30,29 @@ class PriceCheckerService
   private
     attr_reader :product
 
+    def effective_name
+      @overrides.fetch(:name, product.name)
+    end
+
+    def effective_description
+      @overrides.fetch(:description, product.description)
+    end
+
+    def effective_taxonomy_id
+      @overrides.fetch(:taxonomy_id, product.taxonomy_id)
+    end
+
+    def effective_native_type
+      @overrides.fetch(:native_type, product.native_type)
+    end
+
+    def effective_taxonomy
+      return product.taxonomy unless @overrides.key?(:taxonomy_id)
+      effective_taxonomy_id ? Taxonomy.find_by(id: effective_taxonomy_id) : nil
+    end
+
     def compute
-      if product.taxonomy_id.present?
+      if effective_taxonomy_id.present?
         result = run_distribution(include_taxonomy: true)
         return decorate(result, tier: "with_taxonomy") if result[:match_count] >= MIN_MATCHES
       end
@@ -92,7 +114,7 @@ class PriceCheckerService
         status: "ok",
         tier:,
         match_count: result[:match_count],
-        taxonomy_label: tier == "with_taxonomy" ? taxonomy_label_for(product.taxonomy) : nil,
+        taxonomy_label: tier == "with_taxonomy" ? taxonomy_label_for(effective_taxonomy) : nil,
         currency_code: product.price_currency_type,
         current_price_cents: product.price_cents,
         summary: {
@@ -147,13 +169,14 @@ class PriceCheckerService
     end
 
     def base_query(include_taxonomy:)
-      should_clauses = []
+      must_clauses = []
       if relevance_query.present?
-        should_clauses << {
+        must_clauses << {
           multi_match: {
             query: relevance_query,
             fields: ["name^3", "description"],
             operator: "or",
+            minimum_should_match: "30%",
           },
         }
       end
@@ -164,11 +187,11 @@ class PriceCheckerService
         { term: { is_subscription: product.is_recurring_billing } },
         { term: { is_bundle: false } },
         { term: { customizable_price: false } },
-        { term: { native_type: product.native_type } },
+        { term: { native_type: effective_native_type } },
         { term: { price_currency_type: product.price_currency_type } },
         { range: { price_cents: { gt: 0, lte: MAX_PRICE_CENTS } } },
       ]
-      if include_taxonomy && product.taxonomy_id
+      if include_taxonomy && effective_taxonomy_id
         filter_clauses << { terms: { taxonomy_id: taxonomy_descendant_ids } }
       end
 
@@ -179,12 +202,12 @@ class PriceCheckerService
           { term: { _id: product.id } },
         ],
       }
-      bool[:should] = should_clauses if should_clauses.any?
+      bool[:must] = must_clauses if must_clauses.any?
       { bool: }
     end
 
     def relevance_query
-      @relevance_query ||= [product.name.to_s, product.description.to_s.first(1_000)]
+      @relevance_query ||= [effective_name.to_s, effective_description.to_s.first(1_000)]
         .map { |s| ActionController::Base.helpers.strip_tags(s).strip }
         .reject(&:blank?)
         .join(" ")
@@ -192,7 +215,7 @@ class PriceCheckerService
     end
 
     def taxonomy_descendant_ids
-      @taxonomy_descendant_ids ||= Taxonomy.find(product.taxonomy_id).self_and_descendants.pluck(:id)
+      @taxonomy_descendant_ids ||= Taxonomy.find(effective_taxonomy_id).self_and_descendants.pluck(:id)
     end
 
     def taxonomy_label_for(taxonomy)
@@ -209,12 +232,12 @@ class PriceCheckerService
     def cache_key
       fingerprint = Digest::MD5.hexdigest(
         [
-          product.name,
-          product.description.to_s.first(500),
-          product.native_type,
+          effective_name,
+          effective_description.to_s.first(500),
+          effective_native_type,
           product.is_recurring_billing,
           product.price_currency_type,
-          product.taxonomy_id,
+          effective_taxonomy_id,
         ].join("|")
       )
       "price_checker:#{CACHE_VERSION}:#{product.id}:#{fingerprint}"

@@ -46,13 +46,24 @@ export type PriceDistribution =
       computed_at: string;
     };
 
+export type PriceCheckOverrides = {
+  name: string;
+  description: string;
+  taxonomy_id: string | null;
+  native_type: string;
+};
+
 export const fetchPriceDistribution = async (
   uniquePermalink: string,
-  { refresh = false, signal }: { refresh?: boolean; signal?: AbortSignal } = {},
+  { refresh = false, overrides, signal }: { refresh?: boolean; overrides: PriceCheckOverrides; signal?: AbortSignal },
 ): Promise<PriceDistribution> => {
-  const baseUrl = Routes.price_check_product_path(uniquePermalink);
-  const url = refresh ? `${baseUrl}?refresh=1` : baseUrl;
-  const response = await request({ method: "GET", accept: "json", url, abortSignal: signal });
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.price_check_product_path(uniquePermalink),
+    data: { refresh, overrides },
+    abortSignal: signal,
+  });
   if (!response.ok) throw new ResponseError();
   return cast<PriceDistribution>(await response.json());
 };

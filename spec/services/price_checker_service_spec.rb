@@ -24,7 +24,7 @@ describe PriceCheckerService do
   end
 
   describe ".call" do
-    context "with at least 10 same-taxonomy matches" do
+    context "with at least 5 same-taxonomy matches" do
       before do
         12.times do |i|
           create(
@@ -44,7 +44,7 @@ describe PriceCheckerService do
 
         expect(result[:status]).to eq("ok")
         expect(result[:tier]).to eq("with_taxonomy")
-        expect(result[:match_count]).to be >= 10
+        expect(result[:match_count]).to be >= 5
         expect(result[:currency_code]).to eq("usd")
         expect(result[:current_price_cents]).to eq(1_500)
         expect(result[:summary][:median_cents]).to be > 0
@@ -55,9 +55,9 @@ describe PriceCheckerService do
       end
     end
 
-    context "when taxonomy has fewer than 10 matches but broader pool has at least 10" do
+    context "when taxonomy has fewer than 5 matches but broader pool has at least 5" do
       before do
-        4.times do |i|
+        2.times do |i|
           create(
             :product,
             user: create(:user),
@@ -70,8 +70,8 @@ describe PriceCheckerService do
           create(
             :product,
             user: create(:user),
-            name: "Design asset #{i}",
-            description: "A design asset.",
+            name: "Documentary widgets #{i}",
+            description: "A documentary about widgets.",
             price_cents: 300 + i * 200,
             taxonomy: design_taxonomy,
           )
@@ -84,12 +84,12 @@ describe PriceCheckerService do
 
         expect(result[:status]).to eq("ok")
         expect(result[:tier]).to eq("broadened")
-        expect(result[:match_count]).to be >= 10
+        expect(result[:match_count]).to be >= 5
         expect(result[:taxonomy_label]).to be_nil
       end
     end
 
-    context "with fewer than 10 matches even broadened" do
+    context "with fewer than 5 matches even broadened" do
       before do
         2.times do |i|
           create(:product, user: create(:user), price_cents: 999 + i, taxonomy: films_taxonomy)
@@ -105,6 +105,60 @@ describe PriceCheckerService do
         expect(result[:summary]).to be_nil
         expect(result[:histogram]).to be_nil
         expect(result[:current_price_cents]).to eq(1_500)
+      end
+    end
+
+    context "with override fields" do
+      before do
+        12.times do |i|
+          create(
+            :product,
+            user: create(:user),
+            taxonomy: design_taxonomy,
+            price_cents: 4_000 + i * 200,
+            name: "Design template kit #{i}",
+            description: "A design template for designers.",
+          )
+        end
+        index_model_records(Link)
+      end
+
+      it "uses override taxonomy_id, name, and description for matching" do
+        result = described_class.call(
+          product:,
+          overrides: {
+            taxonomy_id: design_taxonomy.id,
+            name: "Design template kit",
+            description: "A design template for designers.",
+          },
+        )
+
+        expect(result[:status]).to eq("ok")
+        expect(result[:tier]).to eq("with_taxonomy")
+        expect(result[:summary][:median_cents]).to be_between(4_000, 6_400)
+      end
+    end
+
+    context "when relevance filter excludes unrelated products" do
+      before do
+        12.times do |i|
+          create(
+            :product,
+            user: create(:user),
+            name: "Quantum widget #{i}",
+            description: "Crystal latte tutorial.",
+            price_cents: 500 + i * 100,
+            taxonomy: films_taxonomy,
+          )
+        end
+        index_model_records(Link)
+      end
+
+      it "treats unrelated names as insufficient_data" do
+        result = described_class.call(product:)
+
+        expect(result[:status]).to eq("insufficient_data")
+        expect(result[:tier]).to eq("insufficient")
       end
     end
 
@@ -132,16 +186,27 @@ describe PriceCheckerService do
     end
 
     context "exclusion rules" do
+      let(:matching_attrs) do
+        { name: "Film masterpiece", description: "A documentary about widgets in the wild." }
+      end
+
       before do
-        create(:product, user: seller, price_cents: 5_000, taxonomy: films_taxonomy) # same seller
-        create(:product, :is_subscription, user: create(:user), price_cents: 700, taxonomy: films_taxonomy) # subscription
+        create(:product, **matching_attrs, user: seller, price_cents: 5_000, taxonomy: films_taxonomy) # same seller
+        create(:product, :is_subscription, **matching_attrs, user: create(:user), price_cents: 700, taxonomy: films_taxonomy)
         create(:product, :bundle, user: create(:user), price_cents: 800, taxonomy: films_taxonomy)
-        create(:product, user: create(:user), customizable_price: true, price_cents: 900, taxonomy: films_taxonomy) # PWYW
-        create(:product, user: create(:user), price_currency_type: "eur", price_cents: 1_100, taxonomy: films_taxonomy) # different currency
-        create(:product, :is_physical, user: create(:user), price_cents: 1_200, taxonomy: films_taxonomy) # different native_type
+        create(:product, **matching_attrs, user: create(:user), customizable_price: true, price_cents: 900, taxonomy: films_taxonomy) # PWYW
+        create(:product, **matching_attrs, user: create(:user), price_currency_type: "eur", price_cents: 1_100, taxonomy: films_taxonomy)
+        create(:product, :is_physical, **matching_attrs, user: create(:user), price_cents: 1_200, taxonomy: films_taxonomy)
 
         12.times do |i|
-          create(:product, user: create(:user), taxonomy: films_taxonomy, price_cents: 600 + i * 100)
+          create(
+            :product,
+            user: create(:user),
+            taxonomy: films_taxonomy,
+            price_cents: 600 + i * 100,
+            name: "Film masterpiece #{i}",
+            description: "A documentary about widgets in the wild.",
+          )
         end
         index_model_records(Link)
       end
@@ -157,7 +222,14 @@ describe PriceCheckerService do
     context "caching" do
       before do
         12.times do |i|
-          create(:product, user: create(:user), taxonomy: films_taxonomy, price_cents: 500 + i * 100)
+          create(
+            :product,
+            user: create(:user),
+            taxonomy: films_taxonomy,
+            price_cents: 500 + i * 100,
+            name: "Film masterpiece #{i}",
+            description: "A documentary about widgets in the wild.",
+          )
         end
         index_model_records(Link)
       end

@@ -304,6 +304,7 @@ class LinksController < ApplicationController
 
     result = PriceCheckerService.call(
       product: @product,
+      overrides: sanitized_price_check_overrides,
       force_refresh: params[:refresh].present?,
     )
     render json: result
@@ -520,6 +521,38 @@ class LinksController < ApplicationController
   end
 
   private
+    NAME_OVERRIDE_MAX = 250
+    DESCRIPTION_OVERRIDE_MAX = 5_000
+
+    def sanitized_price_check_overrides
+      raw = params.permit(overrides: [:name, :description, :taxonomy_id, :native_type])[:overrides]
+      return {} unless raw.is_a?(ActionController::Parameters) || raw.is_a?(Hash)
+      overrides = {}
+
+      if raw.key?(:name) || raw.key?("name")
+        candidate = raw[:name].to_s.strip
+        overrides[:name] = candidate if candidate.length <= NAME_OVERRIDE_MAX
+      end
+      if raw.key?(:description) || raw.key?("description")
+        candidate = raw[:description].to_s
+        overrides[:description] = candidate if candidate.length <= DESCRIPTION_OVERRIDE_MAX
+      end
+      if raw.key?(:taxonomy_id) || raw.key?("taxonomy_id")
+        candidate = raw[:taxonomy_id]
+        if candidate.nil? || candidate.to_s.empty?
+          overrides[:taxonomy_id] = nil
+        else
+          taxonomy_id = candidate.to_i
+          overrides[:taxonomy_id] = taxonomy_id if taxonomy_id > 0 && Taxonomy.exists?(id: taxonomy_id)
+        end
+      end
+      if raw.key?(:native_type) || raw.key?("native_type")
+        candidate = raw[:native_type].to_s
+        overrides[:native_type] = candidate if Link::NATIVE_TYPES.include?(candidate)
+      end
+      overrides
+    end
+
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end

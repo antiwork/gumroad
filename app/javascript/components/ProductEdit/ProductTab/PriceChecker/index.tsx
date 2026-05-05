@@ -11,7 +11,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Checklist } from "./Checklist";
-import { DistributionChart } from "./DistributionChart";
+import { DistributionChart, type PriceMarker } from "./DistributionChart";
 import { EmptyState } from "./EmptyState";
 import { TierSubhead } from "./TierSubhead";
 
@@ -38,6 +38,31 @@ const checklistFingerprint = (product: Product) =>
 
 type Status = "idle" | "loading" | "ok" | "insufficient" | "error";
 
+const VARIANT_LABEL_MAX = 12;
+
+const truncateLabel = (raw: string) =>
+  raw.length > VARIANT_LABEL_MAX ? `${raw.slice(0, VARIANT_LABEL_MAX).trimEnd()}…` : raw;
+
+const buildPriceMarkers = (product: Product): PriceMarker[] => {
+  if (product.native_type === "membership") {
+    return [{ id: "base", label: "Your price", valueCents: product.price_cents }];
+  }
+  const paidVariants = product.variants.filter(
+    (variant) => "price_difference_cents" in variant && (variant.price_difference_cents ?? 0) > 0,
+  );
+  if (paidVariants.length === 0) {
+    return [{ id: "base", label: "Your price", valueCents: product.price_cents }];
+  }
+  return [
+    { id: "base", label: "Base price", valueCents: product.price_cents },
+    ...paidVariants.map((variant) => ({
+      id: variant.id ?? variant.name ?? `variant-${variant.price_difference_cents ?? 0}`,
+      label: truncateLabel(variant.name?.trim() || "Variant"),
+      valueCents: product.price_cents + (variant.price_difference_cents ?? 0),
+    })),
+  ];
+};
+
 export const PriceCheckerCard = () => {
   const { uniquePermalink, product, currencyType } = useProductEditContext();
 
@@ -52,7 +77,13 @@ export const PriceCheckerCard = () => {
       setStatus("loading");
       const fingerprintAtRequest = checklistFingerprint(product);
       try {
-        const result = await fetchPriceDistribution(uniquePermalink, { refresh, signal });
+        const overrides = {
+          name: product.name,
+          description: product.description,
+          taxonomy_id: product.taxonomy_id,
+          native_type: product.native_type,
+        };
+        const result = await fetchPriceDistribution(uniquePermalink, { refresh, overrides, signal });
         if (signal.aborted) return;
         setData(result);
         setStatus(result.status === "ok" ? "ok" : "insufficient");
@@ -68,7 +99,7 @@ export const PriceCheckerCard = () => {
         setStatus("error");
       }
     },
-    [uniquePermalink, product],
+    [uniquePermalink, product, currencyType],
   );
 
   const triggerLoad = React.useCallback(
@@ -81,6 +112,7 @@ export const PriceCheckerCard = () => {
   );
 
   const productTypeLabel = labelFor(product.native_type);
+  const priceMarkers = React.useMemo(() => buildPriceMarkers(product), [product]);
 
   const isLoading = status === "loading";
   const hasResult = data !== null;
@@ -106,8 +138,18 @@ export const PriceCheckerCard = () => {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="inline-flex font-normal">Price checker</span>
-          <WithTooltip position="top" tip={tooltipContent} tooltipProps={{ className: "w-72 max-w-[20rem]" }}>
-            <InfoCircle className="size-5" aria-label="Match accuracy details" />
+          <WithTooltip
+            position="bottom"
+            tip={tooltipContent}
+            tooltipProps={{ className: "w-64 max-w-[calc(100vw-2rem)]" }}
+          >
+            <button
+              type="button"
+              aria-label="Match accuracy details"
+              className="inline-flex appearance-none items-center justify-center border-0 bg-transparent p-0 text-current [-webkit-tap-highlight-color:transparent] focus:outline-none"
+            >
+              <InfoCircle className="size-5" />
+            </button>
           </WithTooltip>
         </div>
         {showRecheck ? (
@@ -152,7 +194,7 @@ export const PriceCheckerCard = () => {
               histogram={hasOk && data?.status === "ok" ? data.histogram : null}
               summary={hasOk && data?.status === "ok" ? data.summary : null}
               currencyCode={currencyType}
-              currentPriceCents={product.price_cents}
+              priceMarkers={priceMarkers}
             />
             {showCtaOverlay ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4">

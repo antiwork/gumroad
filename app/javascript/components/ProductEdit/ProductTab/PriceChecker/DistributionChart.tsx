@@ -11,20 +11,31 @@ const PLACEHOLDER_INTERVAL = 1000;
 const MAX_X_TICKS = 6;
 const LABEL_FONT_SIZE = 13;
 const LINE_GAP = 2;
-const PAD_X = 4;
+const PAD_X_TIGHT = 1;
+const PAD_X_COMFORTABLE = 4;
 const PAD_Y = 3;
-const EDGE_THRESHOLD = 0.05;
+const EDGE_THRESHOLD = 0.1;
 const PLACEHOLDER_MIN_OPACITY = 0.01;
 const PLACEHOLDER_MAX_OPACITY = 0.08;
 const PLACEHOLDER_TOP_RESERVE = 4;
 const REAL_TOP_BREATHING = 4;
 const LABEL_GAP = 16;
+const ESTIMATED_PLOT_WIDTH_PX = 500;
+const CLUSTER_BUFFER_RATIO = 0.02;
+const CHAR_WIDTH_RATIO = 0.55;
+const MIN_LABEL_WIDTH = 30;
+const MAX_LABELED_PER_CLUSTER = 4;
+const LABEL_RADIUS = 3;
+const BASE_FILL = "color-mix(in oklab, var(--color-success), var(--color-foreground) 15%)";
+const VARIANT_FILL = "color-mix(in oklab, var(--color-success), var(--color-background) 15%)";
 
 const fmtShort = (currencyCode: CurrencyCode, cents: number) =>
   formatPriceCentsWithCurrencySymbol(currencyCode, cents, { symbolFormat: "short" });
 
 const fmtPrecise = (currencyCode: CurrencyCode, cents: number) =>
   formatPriceCentsWithCurrencySymbol(currencyCode, cents, { symbolFormat: "short", noCentsIfWhole: false });
+
+export type PriceMarker = { id: string; label: string; valueCents: number };
 
 type ChartRow = {
   key: number;
@@ -91,9 +102,9 @@ const computeTicks = (rows: ChartRow[]): number[] => {
   return sampled;
 };
 
-const approxLabelWidth = (lines: string[]) => {
+const approxLabelWidth = (lines: string[], padX: number = PAD_X_TIGHT) => {
   const longest = lines.reduce((acc, l) => Math.max(acc, l.length), 0);
-  return Math.max(50, longest * (LABEL_FONT_SIZE * 0.65) + PAD_X * 2);
+  return Math.max(MIN_LABEL_WIDTH, longest * (LABEL_FONT_SIZE * CHAR_WIDTH_RATIO) + padX * 2);
 };
 
 const labelHeight = (lineCount: number) => lineCount * LABEL_FONT_SIZE + (lineCount - 1) * LINE_GAP + PAD_Y * 2;
@@ -114,6 +125,27 @@ const placeholderOpacity = (index: number, total: number) => {
   return PLACEHOLDER_MIN_OPACITY + (PLACEHOLDER_MAX_OPACITY - PLACEHOLDER_MIN_OPACITY) * distance;
 };
 
+type CornerOmit = "bl" | "br" | null;
+
+const labelPath = (x: number, y: number, w: number, h: number, r: number, omit: CornerOmit) => {
+  const x2 = x + w;
+  const y2 = y + h;
+  const blR = omit === "bl" ? 0 : r;
+  const brR = omit === "br" ? 0 : r;
+  return [
+    `M ${x + r} ${y}`,
+    `H ${x2 - r}`,
+    `Q ${x2} ${y} ${x2} ${y + r}`,
+    `V ${y2 - brR}`,
+    brR ? `Q ${x2} ${y2} ${x2 - brR} ${y2}` : `L ${x2} ${y2}`,
+    `H ${x + blR}`,
+    blR ? `Q ${x} ${y2} ${x} ${y2 - blR}` : `L ${x} ${y2}`,
+    `V ${y + r}`,
+    `Q ${x} ${y} ${x + r} ${y}`,
+    "Z",
+  ].join(" ");
+};
+
 type RefLineLabelProps = {
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
   title: string;
@@ -122,7 +154,7 @@ type RefLineLabelProps = {
   textColor: string;
   yOffset?: number;
   xShift?: number;
-  partialLineColor?: string;
+  padX?: number;
 };
 
 const RefLineLabel: React.FC<RefLineLabelProps> = ({
@@ -133,31 +165,23 @@ const RefLineLabel: React.FC<RefLineLabelProps> = ({
   textColor,
   yOffset = 0,
   xShift = 0,
-  partialLineColor,
+  padX = PAD_X_TIGHT,
 }) => {
   if (!viewBox || viewBox.x === undefined || viewBox.y === undefined) return null;
   const lines = value !== undefined ? [title, value] : [title];
-  const width = approxLabelWidth(lines);
+  const width = approxLabelWidth(lines, padX);
   const height = labelHeight(lines.length);
   const cx = viewBox.x + xShift;
   const top = viewBox.y - height + yOffset;
-  const labelCenterY = top + height / 2;
-  const plotBottom = viewBox.y + (viewBox.height ?? 0);
   const lineYs = lines.map((_, i) => top + PAD_Y + LABEL_FONT_SIZE / 2 + i * (LABEL_FONT_SIZE + LINE_GAP));
+  const omitCorner: CornerOmit = xShift > 0 ? "bl" : xShift < 0 ? "br" : null;
   return (
     <g pointerEvents="none">
-      {partialLineColor ? (
-        <line
-          x1={viewBox.x}
-          x2={viewBox.x}
-          y1={labelCenterY}
-          y2={plotBottom}
-          stroke={partialLineColor}
-          strokeWidth={2}
-          strokeDasharray="4 4"
-        />
-      ) : null}
-      <rect x={cx - width / 2} y={top} width={width} height={height} rx={3} fill={fillColor} stroke="none" />
+      <path
+        d={labelPath(cx - width / 2, top, width, height, LABEL_RADIUS, omitCorner)}
+        fill={fillColor}
+        stroke="none"
+      />
       {lines.map((line, i) => (
         <text
           key={i}
@@ -176,18 +200,85 @@ const RefLineLabel: React.FC<RefLineLabelProps> = ({
   );
 };
 
+type PartialDashedLineProps = {
+  viewBox?: { x?: number; y?: number; width?: number; height?: number };
+  color: string;
+  yOffset?: number;
+  labelHeightPx: number;
+  fromBottom?: boolean;
+};
+
+const PartialDashedLine: React.FC<PartialDashedLineProps> = ({
+  viewBox,
+  color,
+  yOffset = 0,
+  labelHeightPx,
+  fromBottom = false,
+}) => {
+  if (!viewBox || viewBox.x === undefined || viewBox.y === undefined) return null;
+  const top = viewBox.y - labelHeightPx + yOffset;
+  const startY = fromBottom ? top + labelHeightPx : top + labelHeightPx / 2;
+  const plotBottom = viewBox.y + (viewBox.height ?? 0);
+  return (
+    <g pointerEvents="none">
+      <line
+        x1={viewBox.x}
+        x2={viewBox.x}
+        y1={startY}
+        y2={plotBottom}
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray="4 4"
+      />
+    </g>
+  );
+};
+
+type LayoutMarker = PriceMarker & { stackIndex: number; renderLabel: boolean };
+
+const labelWidthInDomain = (label: string, domainRange: number) =>
+  (approxLabelWidth([label]) / ESTIMATED_PLOT_WIDTH_PX) * domainRange;
+
+const layoutMarkers = (markers: PriceMarker[], minBin: number, maxBin: number): LayoutMarker[] => {
+  if (markers.length === 0) return [];
+  const range = Math.max(1, maxBin - minBin);
+  const buffer = range * CLUSTER_BUFFER_RATIO;
+  const sorted = [...markers].sort((a, b) => a.valueCents - b.valueCents);
+  const clusters: PriceMarker[][] = [];
+  for (const marker of sorted) {
+    const lastCluster = clusters[clusters.length - 1];
+    const lastMember = lastCluster?.[lastCluster.length - 1];
+    if (lastCluster && lastMember) {
+      const minDistance =
+        (labelWidthInDomain(lastMember.label, range) + labelWidthInDomain(marker.label, range)) / 2 + buffer;
+      if (marker.valueCents - lastMember.valueCents < minDistance) {
+        lastCluster.push(marker);
+        continue;
+      }
+    }
+    clusters.push([marker]);
+  }
+  return clusters.flatMap((cluster) =>
+    cluster.map((marker, indexInCluster) => ({
+      ...marker,
+      stackIndex: indexInCluster,
+      renderLabel: indexInCluster < MAX_LABELED_PER_CLUSTER,
+    })),
+  );
+};
+
 export const DistributionChart = ({
   mode,
   histogram,
   summary,
   currencyCode,
-  currentPriceCents,
+  priceMarkers,
 }: {
   mode: "placeholder" | "real";
   histogram: PriceDistributionHistogram | null;
   summary: PriceDistributionSummary | null;
   currencyCode: CurrencyCode;
-  currentPriceCents: number;
+  priceMarkers: PriceMarker[];
 }) => {
   const animatedOnceRef = React.useRef(false);
   const isFirstRealRender = mode === "real" && !animatedOnceRef.current;
@@ -205,18 +296,18 @@ export const DistributionChart = ({
   const maxBin = data[data.length - 1]?.toCents ?? PLACEHOLDER_INTERVAL * PLACEHOLDER_BIN_COUNT;
   const domain: [number, number] = [minBin, maxBin];
 
-  const yourPriceLines = ["Your price"];
-  const yourPriceWidth = approxLabelWidth(yourPriceLines);
-  const yourPriceHeight = labelHeight(yourPriceLines.length);
-  const yourPriceShift = computeXShift(currentPriceCents, minBin, maxBin, yourPriceWidth / 2);
+  const sampleMarkerLines = ["Your price"];
+  const markerLabelHeight = labelHeight(sampleMarkerLines.length);
 
   const medianValueText = summary ? fmtPrecise(currencyCode, summary.median_cents) : "";
   const medianLines = summary ? ["Median", medianValueText] : ["Median"];
   const medianHeight = labelHeight(medianLines.length);
-  const medianWidth = approxLabelWidth(medianLines);
+  const medianWidth = approxLabelWidth(medianLines, PAD_X_COMFORTABLE);
   const medianShift = summary ? computeXShift(summary.median_cents, minBin, maxBin, medianWidth / 2) : 0;
   const medianYOffset = medianHeight + LABEL_GAP;
-  const topReserve = mode === "real" ? yourPriceHeight + REAL_TOP_BREATHING : PLACEHOLDER_TOP_RESERVE;
+  const topReserve = mode === "real" ? markerLabelHeight + REAL_TOP_BREATHING : PLACEHOLDER_TOP_RESERVE;
+
+  const layout = mode === "real" ? layoutMarkers(priceMarkers, minBin, maxBin) : [];
 
   return (
     <ResponsiveContainer width="100%" aspect={2.4}>
@@ -268,16 +359,49 @@ export const DistributionChart = ({
             return <Cell key={row.key} className={hoveredIndex === i ? "fill-accent/60" : "fill-accent/40"} />;
           })}
         </Bar>
-        {mode === "real" ? (
+        {/* Dashed-line layer — all lines render before any label */}
+        {layout.map((marker) => {
+          const fillColor = marker.id === "base" ? BASE_FILL : VARIANT_FILL;
+          const yOffset = marker.renderLabel ? marker.stackIndex * (markerLabelHeight + LINE_GAP * 2) : 0;
+          const isOffset = marker.renderLabel && yOffset > 0;
+          if (isOffset) {
+            return (
+              <ReferenceLine
+                key={`marker-line-${marker.id}`}
+                x={marker.valueCents}
+                stroke="none"
+                ifOverflow="extendDomain"
+                isFront
+                label={
+                  <PartialDashedLine color={fillColor} yOffset={yOffset} labelHeightPx={markerLabelHeight} fromBottom />
+                }
+              />
+            );
+          }
+          return (
+            <ReferenceLine
+              key={`marker-line-${marker.id}`}
+              x={marker.valueCents}
+              stroke={fillColor}
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              ifOverflow="extendDomain"
+              isFront
+            />
+          );
+        })}
+        {mode === "real" && summary ? (
           <ReferenceLine
-            x={currentPriceCents}
-            stroke="var(--color-success)"
-            strokeWidth={2}
-            strokeDasharray="4 4"
+            x={summary.median_cents}
+            stroke="none"
             ifOverflow="extendDomain"
-            isFront={false}
+            isFront
+            label={
+              <PartialDashedLine color="var(--color-foreground)" yOffset={medianYOffset} labelHeightPx={medianHeight} />
+            }
           />
         ) : null}
+        {/* Label layer — every label renders after every line */}
         {mode === "real" && summary ? (
           <ReferenceLine
             x={summary.median_cents}
@@ -292,27 +416,38 @@ export const DistributionChart = ({
                 textColor="var(--color-background)"
                 yOffset={medianYOffset}
                 xShift={medianShift}
-                partialLineColor="var(--color-foreground)"
+                padX={PAD_X_COMFORTABLE}
               />
             }
           />
         ) : null}
-        {mode === "real" ? (
-          <ReferenceLine
-            x={currentPriceCents}
-            stroke="none"
-            ifOverflow="extendDomain"
-            isFront
-            label={
-              <RefLineLabel
-                title="Your price"
-                fillColor="var(--color-success)"
-                textColor="var(--color-success-foreground)"
-                xShift={yourPriceShift}
+        {layout
+          .filter((marker) => marker.renderLabel)
+          .map((marker) => {
+            const labelLines = [marker.label];
+            const halfWidth = approxLabelWidth(labelLines) / 2;
+            const xShift = computeXShift(marker.valueCents, minBin, maxBin, halfWidth);
+            const yOffset = marker.stackIndex * (markerLabelHeight + LINE_GAP * 2);
+            const fillColor = marker.id === "base" ? BASE_FILL : VARIANT_FILL;
+            return (
+              <ReferenceLine
+                key={`marker-label-${marker.id}`}
+                x={marker.valueCents}
+                stroke="none"
+                ifOverflow="extendDomain"
+                isFront
+                label={
+                  <RefLineLabel
+                    title={marker.label}
+                    fillColor={fillColor}
+                    textColor="var(--color-background)"
+                    xShift={xShift}
+                    yOffset={yOffset}
+                  />
+                }
               />
-            }
-          />
-        ) : null}
+            );
+          })}
       </BarChart>
     </ResponsiveContainer>
   );
