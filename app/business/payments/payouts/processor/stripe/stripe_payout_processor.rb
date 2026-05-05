@@ -198,24 +198,6 @@ class StripePayoutProcessor
     # However, Stripe treats KRW as a single-unit currency. So we convert the value here.
     payment.amount_cents = payment.amount_cents * 100 if payment.currency == Currency::KRW
 
-    # Catch the divergence case where the gross USD ledger of the balances admits the payout
-    # (`Payouts.is_user_payable` validates `Balance#amount_cents` >= MIN_AMOUNT_CENTS) but the wire
-    # amount derived from `Balance#holding_amount_cents` lands below the minimum — e.g. when a Credit
-    # row carries `amount_cents: 0` with a non-zero `holding_amount_cents`. We deliberately do not
-    # enforce the floor when the gross USD ledger is already below MIN: that path is reserved for
-    # admin-triggered or direct `Payouts.create_payment` calls that intentionally bypass the floor.
-    gross_usd_cents = balances.sum(&:amount_cents)
-    payout_amount_usd_cents = get_usd_cents(payment.currency, payment.amount_cents)
-    if payout_amount_usd_cents < Payouts::MIN_AMOUNT_CENTS && gross_usd_cents >= Payouts::MIN_AMOUNT_CENTS
-      payment.mark_failed!
-      # If the Gumroad-held branch above already executed `transfer_funds_to_account`, money has been
-      # moved into the seller's Stripe Connect account. `mark_failed!` only resets the source balances;
-      # it does not undo the transfer. Mirror the failure pattern in `perform_payment` and the payout
-      # webhook handlers — `reverse_internal_transfer!` is a safe no-op when no transfer ran.
-      reverse_internal_transfer!(payment)
-      return ["Cannot process payout: wire amount #{payment.amount_cents} #{payment.currency} (~#{payout_amount_usd_cents} USD cents) is below minimum payout threshold of #{Payouts::MIN_AMOUNT_CENTS}, but the gross USD ledger of these balances was #{gross_usd_cents} cents — refusing to ship a divergent below-minimum payout."]
-    end
-
     # For instant payouts, the amount has to be net of instant payout fees.
     if payment.payout_type == Payouts::PAYOUT_TYPE_INSTANT
       payment.amount_cents = (payment.amount_cents * 100.0 / (100 + INSTANT_PAYOUT_FEE_PERCENT)).floor
