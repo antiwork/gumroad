@@ -231,19 +231,20 @@ describe StripePayoutProcessor, :vcr do
 
   describe "prepare_payment_and_set_amount" do
     let(:user) { create(:user) }
-    let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
-    let(:merchant_account) { create(:merchant_account_stripe_canada, user:) }
-
-    before do
-      user
-      bank_account
-      merchant_account
-      bank_account.reload
-      user.reload
+    let(:cad_merchant_account) do
+      create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                currency: Currency::CAD, country: "CA")
     end
-
-    let(:balance_1) { create(:balance, user:, date: Date.today - 1, currency: Currency::USD, amount_cents: 100_00, holding_currency: Currency::USD, holding_amount_cents: 100_00) }
-    let(:balance_2) { create(:balance, user:, date: Date.today - 2, currency: Currency::USD, amount_cents: 200_00, holding_currency: Currency::USD, holding_amount_cents: 200_00) }
+    let(:balance_1) do
+      create(:balance, user:, merchant_account: cad_merchant_account, date: Date.today - 1,
+                       currency: Currency::USD, amount_cents: 100_00,
+                       holding_currency: Currency::CAD, holding_amount_cents: 100_00)
+    end
+    let(:balance_2) do
+      create(:balance, user:, merchant_account: cad_merchant_account, date: Date.today - 2,
+                       currency: Currency::USD, amount_cents: 200_00,
+                       holding_currency: Currency::CAD, holding_amount_cents: 200_00)
+    end
     let(:payment) do
       payment = create(:payment, user:, currency: nil, amount_cents: nil)
       payment.balances << balance_1
@@ -252,6 +253,8 @@ describe StripePayoutProcessor, :vcr do
     end
 
     before do
+      allow(described_class).to receive(:get_payout_details)
+        .and_return([cad_merchant_account, [], [balance_1, balance_2]])
       described_class.prepare_payment_and_set_amount(payment, [balance_1, balance_2])
     end
 
@@ -447,28 +450,55 @@ describe StripePayoutProcessor, :vcr do
       allow(dest).to receive(:balance_transaction).and_return(balance_transaction_below_minimum)
       dest
     end
-    let(:balance) do
-      # USD ledger reads $50 (well below $100), but the Gumroad-internal balance_transaction
-      # mocked to also return $50, so wire amount = $50.
+    let(:divergent_balance) do
+      # USD ledger reads $200 (above the $100 minimum, so the gross-USD check would have admitted
+      # this payout), but the mocked balance_transaction.amount returns only $50 — modeling a
+      # divergence between `Balance#amount_cents` and what actually moves through Stripe.
       create(:balance, user:, merchant_account: gumroad_merchant_account,
-                       amount_cents: 50_00, holding_amount_cents: 50_00)
+                       amount_cents: 200_00, holding_amount_cents: 200_00)
     end
 
     before do
       allow(described_class).to receive(:get_payout_details)
-        .and_return([user_merchant_account, [balance], []])
+        .and_return([user_merchant_account, [divergent_balance], []])
       allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_return(internal_transfer)
       allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+      # Stub the reversal so tests do not hit live Stripe; assertions on the call are made below.
+      allow(described_class).to receive(:reverse_internal_transfer!)
     end
 
-    it "fails the payment rather than wiring an amount below the $100 minimum" do
-      # The earlier `Payouts.is_user_payable` check is on the seller's gross USD ledger; the actual
-      # wire amount is computed from `holding_amount_cents` and can land below the floor. Defend
-      # against that here so a payout admitted by the gross check cannot silently ship below it.
-      errors = described_class.prepare_payment_and_set_amount(payment, [balance])
+    it "fails the payment rather than wiring a below-minimum amount when the gross USD ledger admitted the payout" do
+      errors = described_class.prepare_payment_and_set_amount(payment, [divergent_balance])
 
       expect(errors.first).to match(/below minimum payout threshold/)
       expect(payment.reload.state).to eq("failed")
+    end
+
+    it "reverses the Gumroad-held internal transfer so the moved funds do not strand on the seller's Connect account" do
+      # The internal transfer ran (mocked to set `stripe_internal_transfer_id`), so the failure path
+      # must call `reverse_internal_transfer!` — otherwise money sits in the seller's Stripe Connect
+      # account with no offsetting record.
+      described_class.prepare_payment_and_set_amount(payment, [divergent_balance])
+
+      expect(described_class).to have_received(:reverse_internal_transfer!).with(payment)
+    end
+
+    it "does not enforce the floor when the gross USD ledger was already below the minimum (admin / direct create_payment path)" do
+      # `Payouts.create_payment` is also called directly by admin tooling and tests with sub-minimum
+      # amounts — the floor is not meant to be enforced in that path.
+      sub_minimum_balance = create(:balance, user:, merchant_account: gumroad_merchant_account,
+                                             amount_cents: 30_00, holding_amount_cents: 30_00)
+      allow(described_class).to receive(:get_payout_details)
+        .and_return([user_merchant_account, [sub_minimum_balance], []])
+      allow(balance_transaction_below_minimum).to receive(:amount).and_return(30_00)
+
+      errors = described_class.prepare_payment_and_set_amount(payment, [sub_minimum_balance])
+
+      # No reload here: payment is in-memory only on the success path (callers persist later).
+      expect(errors).to eq([])
+      expect(payment.state).not_to eq("failed")
+      expect(payment.amount_cents).to eq(30_00)
+      expect(described_class).not_to have_received(:reverse_internal_transfer!)
     end
   end
 
