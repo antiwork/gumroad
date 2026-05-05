@@ -133,6 +133,7 @@ class StripePayoutProcessor
   #   * Setting the amount_cents.
   # Returns an array of errors.
   def self.prepare_payment_and_set_amount(payment, balances)
+    failed = false
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
 
     if merchant_account.nil?
@@ -229,6 +230,8 @@ class StripePayoutProcessor
   # Public: Actually sends the money.
   # Returns an array of errors.
   def self.perform_payment(payment)
+    failed = false
+    failure_reason = nil
     # We have transferred the balance held by gumroad to the connected Stripe standard account.
     # No payout needs to be issued in this case.
     merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
@@ -291,8 +294,10 @@ class StripePayoutProcessor
     Rails.logger.info("Payouts: Payout of #{payment.amount_cents} attempted for user with id: #{payment.user_id}")
     if failed
       payment.mark_failed!(failure_reason)
-      reverse_internal_transfer!(payment)
+      # Mark the bank account deleted before the reversal so a transient Stripe error
+      # in `reverse_internal_transfer!` cannot leave a dead bank reference alive for the next nightly run.
       payment.bank_account&.mark_deleted! if failure_reason == Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
+      reverse_internal_transfer!(payment)
     end
   end
 

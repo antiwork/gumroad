@@ -840,7 +840,6 @@ describe StripePayoutProcessor, :vcr do
         expect(errors.first).to match(/You have insufficient funds in your Stripe account for this transfer/)
       end
     end
-
   end
 
   describe "perform_payment for a US account with instant payout method type" do
@@ -3665,6 +3664,18 @@ describe StripePayoutProcessor, :vcr do
         expect { described_class.perform_payment(payment) }
           .to change { user.comments.with_type_payout_note.count }.by(1)
         expect(user.comments.with_type_payout_note.last.content).to include("Re-add the bank account in payout settings")
+      end
+
+      context "and the internal transfer reversal raises a transient Stripe error afterwards" do
+        before do
+          payment.update!(stripe_internal_transfer_id: "tr_test_xxx")
+          allow(Stripe::Transfer).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("connection refused"))
+        end
+
+        it "still marks the bank account deleted before the reversal runs" do
+          expect { described_class.perform_payment(payment) }.to raise_error(Stripe::APIConnectionError)
+          expect(bank_account.reload.deleted_at).to be_present
+        end
       end
     end
 
