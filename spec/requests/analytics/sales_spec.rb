@@ -23,7 +23,7 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
     it "clamps the URL when the requested range exceeds 366 days" do
       visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
-      expect(page).to have_current_path(sales_dashboard_path(from: "2023-05-31", to: "2024-06-01"))
+      expect(page).to have_current_path(sales_dashboard_path(from: "2023-06-01", to: "2024-06-01"))
     end
 
     it "hides All time and any preset wider than 366 days" do
