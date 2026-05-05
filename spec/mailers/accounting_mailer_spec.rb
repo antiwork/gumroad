@@ -129,6 +129,17 @@ describe AccountingMailer, :vcr do
       expect(mail.subject).to include("US States Sales Summary Report failed - 4/2026")
     end
 
+    it "does not tag non-TaxJar errors in the subject" do
+      expect(mail.subject).not_to include("[TaxJar]")
+    end
+
+    it "tags TaxJar errors in the subject" do
+      taxjar_mail = AccountingMailer.us_states_sales_summary_report_failed(
+        ["WA", "WI"], 4, 2026, "Taxjar::Error::ServerError", "Couldn't parse response as JSON."
+      )
+      expect(taxjar_mail.subject).to include("[TaxJar] US States Sales Summary Report failed - 4/2026")
+    end
+
     it "includes the failure context in the body" do
       body = mail.body.encoded
       expect(body).to include("4/2026")

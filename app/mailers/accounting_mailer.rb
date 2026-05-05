@@ -106,7 +106,8 @@ class AccountingMailer < ApplicationMailer
     @error_class = error_class
     @error_message = error_message
 
-    mail subject: "#{SUBJECT_PREFIX}US States Sales Summary Report failed - #{month}/#{year}",
+    error_tag = error_class.to_s.start_with?("Taxjar::") ? "[TaxJar] " : ""
+    mail subject: "#{SUBJECT_PREFIX}#{error_tag}US States Sales Summary Report failed - #{month}/#{year}",
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
