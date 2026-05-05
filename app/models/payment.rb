@@ -28,6 +28,7 @@ class Payment < ApplicationRecord
   attr_json_data_accessor :arrival_date
   attr_json_data_accessor :payout_type
   attr_json_data_accessor :gumroad_fee_cents
+  attr_json_data_accessor :error_message
 
   # Payment state transitions:
   #

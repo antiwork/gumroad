@@ -55,6 +55,18 @@ describe Payment::FailureReason do
           end
         end
 
+        context "when failure reason is bank_account_not_found_at_stripe" do
+          it "adds a payout note explaining the bank account needs to be re-added" do
+            expect do
+              payment.mark_failed!(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+            end.to change { payment.user.comments.count }.by(1)
+
+            payout_note = "Payout via Stripe on #{payment.created_at} failed because the bank account on file at Stripe was replaced, so payouts can no longer be sent to the saved reference. "
+            payout_note += "Solution: Re-add the bank account in payout settings to refresh the saved reference."
+            expect(payment.user.comments.last.content).to eq payout_note
+          end
+        end
+
         context "when solution is not present" do
           it "doesn't add payout note to the user" do
             expect do

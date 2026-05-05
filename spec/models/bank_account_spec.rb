@@ -63,6 +63,27 @@ describe BankAccount do
         it "returns false" do
           expect(bank_account.supports_instant_payouts?).to be false
         end
+
+        it "notifies the error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
+          bank_account.supports_instant_payouts?
+        end
+      end
+
+      context "when stripe says the bank account has been deleted" do
+        before do
+          allow(Stripe::Account).to receive(:retrieve_external_account)
+            .and_raise(Stripe::InvalidRequestError.new("The bank account ba_xxx has been deleted and can no longer be used.", "external_account"))
+        end
+
+        it "returns false" do
+          expect(bank_account.supports_instant_payouts?).to be false
+        end
+
+        it "does not notify the error tracker" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          bank_account.supports_instant_payouts?
+        end
       end
     end
   end

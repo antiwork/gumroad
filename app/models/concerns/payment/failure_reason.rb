@@ -6,6 +6,7 @@ module Payment::FailureReason
   CANNOT_PAY = "cannot_pay"
   DEBIT_CARD_LIMIT = "debit_card_limit"
   INSUFFICIENT_FUNDS = "insufficient_funds"
+  BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
 
   PAYPAL_MASS_PAY = {
     "PAYPAL 1000" => "Unknown error",
@@ -81,6 +82,10 @@ module Payment::FailureReason
     "account_frozen" => {
       reason: "the bank account has been frozen",
       solution: "Use another bank account",
+    },
+    "bank_account_not_found_at_stripe" => {
+      reason: "the bank account on file at Stripe was replaced, so payouts can no longer be sent to the saved reference",
+      solution: "Re-add the bank account in payout settings to refresh the saved reference",
     },
     "bank_account_restricted" => {
       reason: "the bank account has restrictions on either the type, or the number, of payouts allowed. This normally indicates that the bank account is a savings or other non-checking account",

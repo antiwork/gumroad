@@ -97,7 +97,7 @@ class BankAccount < ApplicationRecord
 
       external_account.available_payout_methods.include?("instant")
     rescue Stripe::StripeError => e
-      ErrorNotifier.notify(e)
+      ErrorNotifier.notify(e) unless e.message.to_s.include?("has been deleted and can no longer be used")
       false
     end
   end
