@@ -12,6 +12,7 @@ import { assertDefined } from "$app/utils/assert";
 import { AbortError } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
+import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
 import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { ReferrersTable } from "$app/components/Analytics/ReferrersTable";
@@ -26,6 +27,8 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
+
+const MAX_DATE_RANGE_DAYS = 366;
 
 export type Product = {
   name: string;
@@ -107,7 +110,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
   const [aggregateBy, setAggregateBy] = React.useState<"daily" | "monthly">("daily");
-  const dateRange = useAnalyticsDateRange();
+  const dateRange = useAnalyticsDateRange({ maxRangeDays: MAX_DATE_RANGE_DAYS });
   const [data, setData] = React.useState<{
     byReferral: AnalyticsDataByReferral;
     byState: AnalyticsDataByState;
@@ -162,8 +165,9 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
-              <DateRangePicker {...dateRange} />
+              <DateRangePicker {...dateRange} maxRangeDays={MAX_DATE_RANGE_DAYS} />
             </div>
+            <ExportSalesPopover />
           </>
         ) : null
       }

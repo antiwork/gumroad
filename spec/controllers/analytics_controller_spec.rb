@@ -122,11 +122,11 @@ describe AnalyticsController do
       let(:policy_method) { :index? }
     end
 
-    it "clamps the date range to #{AnalyticsController::MAX_BY_STATE_DATE_RANGE_DAYS} days" do
+    it "clamps the date range to #{AnalyticsController::MAX_DATE_RANGE_DAYS} days" do
       start_time = "Mon Jan 01 2024 00:00:00 GMT-0000"
       end_time = "Tue Dec 31 2025 00:00:00 GMT-0000"
       expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(
-        Date.new(2025, 12, 31) - AnalyticsController::MAX_BY_STATE_DATE_RANGE_DAYS.days,
+        Date.new(2025, 12, 31) - AnalyticsController::MAX_DATE_RANGE_DAYS.days,
         Date.new(2025, 12, 31),
         by: :state
       ).and_return({})
@@ -153,11 +153,11 @@ describe AnalyticsController do
       let(:policy_method) { :index? }
     end
 
-    it "clamps the date range to #{AnalyticsController::MAX_BY_REFERRAL_DATE_RANGE_DAYS} days" do
+    it "clamps the date range to #{AnalyticsController::MAX_DATE_RANGE_DAYS} days" do
       start_time = "Mon Jan 01 2024 00:00:00 GMT-0000"
       end_time = "Tue Dec 31 2025 00:00:00 GMT-0000"
       expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(
-        Date.new(2025, 12, 31) - AnalyticsController::MAX_BY_REFERRAL_DATE_RANGE_DAYS.days,
+        Date.new(2025, 12, 31) - AnalyticsController::MAX_DATE_RANGE_DAYS.days,
         Date.new(2025, 12, 31),
         by: :referral
       ).and_return({})

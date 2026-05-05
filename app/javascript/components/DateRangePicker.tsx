@@ -1,5 +1,6 @@
 import { ChevronDown } from "@boxicons/react";
 import {
+  differenceInDays,
   endOfMonth,
   endOfQuarter,
   endOfYear,
@@ -26,11 +27,13 @@ export const DateRangePicker = ({
   to,
   setFrom,
   setTo,
+  maxRangeDays,
 }: {
   from: Date;
   to: Date;
   setFrom: (from: Date) => void;
   setTo: (to: Date) => void;
+  maxRangeDays?: number;
 }) => {
   const today = new Date();
   const uid = React.useId();
@@ -42,6 +45,36 @@ export const DateRangePicker = ({
     setTo(to);
     setOpen(false);
   };
+  const presets = [
+    { label: "Last 30 days", from: subDays(today, 30), to: today },
+    { label: "This month", from: startOfMonth(today), to: today },
+    {
+      label: "Last month",
+      from: startOfMonth(subMonths(today, 1)),
+      to: endOfMonth(subMonths(today, 1)),
+    },
+    {
+      label: "Last 3 months",
+      from: startOfMonth(subMonths(today, 3)),
+      to: endOfMonth(subMonths(today, 1)),
+    },
+    { label: "This quarter", from: startOfQuarter(today), to: today },
+    {
+      label: "Last quarter",
+      from: startOfQuarter(subQuarters(today, 1)),
+      to: endOfQuarter(subQuarters(today, 1)),
+    },
+    { label: "This year", from: startOfYear(today), to: today },
+    {
+      label: "Last year",
+      from: startOfYear(subYears(today, 1)),
+      to: endOfYear(subYears(today, 1)),
+    },
+    { label: "All time", from: new Date("2012-10-13"), to: today },
+  ];
+  const visiblePresets =
+    maxRangeDays != null ? presets.filter((p) => differenceInDays(p.to, p.from) <= maxRangeDays) : presets;
+  const customRangeExceedsMax = maxRangeDays != null && differenceInDays(to, from) > maxRangeDays;
   return (
     <Popover
       open={open}
@@ -76,7 +109,7 @@ export const DateRangePicker = ({
                 }}
               />
             </Fieldset>
-            <Fieldset state={to < from ? "danger" : undefined}>
+            <Fieldset state={to < from || customRangeExceedsMax ? "danger" : undefined}>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-to`}>To (including)</Label>
               </FieldsetTitle>
@@ -86,45 +119,22 @@ export const DateRangePicker = ({
                 onChange={(date) => {
                   if (date) setTo(date);
                 }}
-                aria-invalid={to < from}
+                aria-invalid={to < from || customRangeExceedsMax}
               />
-              {to < from ? <FieldsetDescription>Must be after from date</FieldsetDescription> : null}
+              {to < from ? (
+                <FieldsetDescription>Must be after from date</FieldsetDescription>
+              ) : customRangeExceedsMax ? (
+                <FieldsetDescription>Range can be at most {maxRangeDays} days</FieldsetDescription>
+              ) : null}
             </Fieldset>
           </div>
         ) : (
           <Menu>
-            <MenuItem onClick={() => quickSet(subDays(today, 30), today)}>Last 30 days</MenuItem>
-            <MenuItem onClick={() => quickSet(startOfMonth(today), today)}>This month</MenuItem>
-            <MenuItem
-              onClick={() => {
-                const lastMonth = subMonths(today, 1);
-                quickSet(startOfMonth(lastMonth), endOfMonth(lastMonth));
-              }}
-            >
-              Last month
-            </MenuItem>
-            <MenuItem onClick={() => quickSet(startOfMonth(subMonths(today, 3)), endOfMonth(subMonths(today, 1)))}>
-              Last 3 months
-            </MenuItem>
-            <MenuItem onClick={() => quickSet(startOfQuarter(today), today)}>This quarter</MenuItem>
-            <MenuItem
-              onClick={() => {
-                const lastQuarter = subQuarters(today, 1);
-                quickSet(startOfQuarter(lastQuarter), endOfQuarter(lastQuarter));
-              }}
-            >
-              Last quarter
-            </MenuItem>
-            <MenuItem onClick={() => quickSet(startOfYear(today), today)}>This year</MenuItem>
-            <MenuItem
-              onClick={() => {
-                const lastYear = subYears(today, 1);
-                quickSet(startOfYear(lastYear), endOfYear(lastYear));
-              }}
-            >
-              Last year
-            </MenuItem>
-            <MenuItem onClick={() => quickSet(new Date("2012-10-13"), today)}>All time</MenuItem>
+            {visiblePresets.map((preset) => (
+              <MenuItem key={preset.label} onClick={() => quickSet(preset.from, preset.to)}>
+                {preset.label}
+              </MenuItem>
+            ))}
             <MenuItem onClick={() => setIsCustom(true)}>Custom range...</MenuItem>
           </Menu>
         )}

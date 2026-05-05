@@ -1,10 +1,10 @@
 import { router } from "@inertiajs/react";
-import { lightFormat, parseISO, subMonths } from "date-fns";
+import { differenceInDays, lightFormat, parseISO, subDays, subMonths } from "date-fns";
 import * as React from "react";
 
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-export const useAnalyticsDateRange = () => {
+export const useAnalyticsDateRange = ({ maxRangeDays }: { maxRangeDays?: number } = {}) => {
   const location = useOriginalLocation();
   const url = new URL(location);
 
@@ -15,7 +15,14 @@ export const useAnalyticsDateRange = () => {
     return isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const [from, setFrom] = React.useState(() => tryParseDateParam("from") ?? subMonths(new Date(), 1));
+  const [from, setFrom] = React.useState(() => {
+    const fromParsed = tryParseDateParam("from") ?? subMonths(new Date(), 1);
+    const toParsed = tryParseDateParam("to") ?? new Date();
+    const correctedTo = toParsed < fromParsed ? fromParsed : toParsed;
+    return maxRangeDays != null && differenceInDays(correctedTo, fromParsed) > maxRangeDays
+      ? subDays(correctedTo, maxRangeDays)
+      : fromParsed;
+  });
   const [to, setTo] = React.useState(() => {
     const value = tryParseDateParam("to") ?? new Date();
     return value < from ? from : value;
