@@ -1,0 +1,5296 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=7809210839506&metadata[tos_agreement_id]=qNDOQZuxI0P3WTbxbAl6DA%3D%3D&metadata[user_compliance_info_id]=qNDOQZuxI0P3WTbxbAl6DA%3D%3D&metadata[bank_account_id]=wygTdty1aOkJhRQiTDcevQ%3D%3D&tos_acceptance[date]=1777969151&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar70c81abf_17%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_C0USBhRrp6d9u6","request_duration_ms":674}}'
+      Idempotency-Key:
+      - 6801ce4a-2e61-475e-94a9-246e2c9aaec5
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:17 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6856'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Idempotency-Key:
+      - 6801ce4a-2e61-475e-94a9-246e2c9aaec5
+      Original-Request:
+      - req_VaZBkygi1Z3VCj
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_VaZBkygi1Z3VCj
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:17 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_VaZBkygi1Z3VCj","request_duration_ms":5436}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:18 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2204'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_6zA8yN31VLvgwz
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+              "object": "person",
+              "account": "acct_1TTeCCRGLUWdbjAX",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "San Francisco",
+                "country": "US",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "94107",
+                "state": "California"
+              },
+              "created": 1777969153,
+              "dob": {
+                "day": 1,
+                "month": 1,
+                "year": 1901
+              },
+              "email": "edgar70c81abf_17@gumroad.com",
+              "first_name": "Chuck",
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "metadata": {},
+              "phone": "+10000000000",
+              "relationship": {
+                "authorizer": false,
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": false,
+                "percent_ownership": null,
+                "representative": true,
+                "title": null
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": [
+                  "address.city",
+                  "address.line1",
+                  "address.postal_code",
+                  "address.state",
+                  "id_number",
+                  "verification.document"
+                ]
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": null,
+                "details_code": null,
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "status": "pending"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/persons"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:18 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX/persons/person_1TTeCDRGLUWdbjAXjGEzTjOS
+    body:
+      encoding: UTF-8
+      string: verification[document][front]=file_identity_document_success
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_6zA8yN31VLvgwz","request_duration_ms":471}}'
+      Idempotency-Key:
+      - bfab59f6-2ade-4324-856a-cfeacc3f5a7e
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:20 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1783'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Idempotency-Key:
+      - bfab59f6-2ade-4324-856a-cfeacc3f5a7e
+      Original-Request:
+      - req_Lv9ksAx8CrPDfU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_Lv9ksAx8CrPDfU
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+          "object": "person",
+          "account": "acct_1TTeCCRGLUWdbjAX",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "San Francisco",
+            "country": "US",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "94107",
+            "state": "California"
+          },
+          "created": 1777969153,
+          "dob": {
+            "day": 1,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "edgar70c81abf_17@gumroad.com",
+          "first_name": "Chuck",
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "metadata": {},
+          "phone": "+10000000000",
+          "relationship": {
+            "authorizer": false,
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": false,
+            "percent_ownership": null,
+            "representative": true,
+            "title": null
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": [
+              "address.city",
+              "address.line1",
+              "address.postal_code",
+              "address.state",
+              "id_number",
+              "verification.document"
+            ]
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+            },
+            "status": "pending"
+          }
+        }
+  recorded_at: Tue, 05 May 2026 08:19:20 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Lv9ksAx8CrPDfU","request_duration_ms":2720}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:21 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6883'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_N3dp06DfEb4Xk3
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:21 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_N3dp06DfEb4Xk3","request_duration_ms":699}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:32 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6883'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_JPEmK0CP8Ix0Yl
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:32 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_JPEmK0CP8Ix0Yl","request_duration_ms":806}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:43 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6883'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_TePT0Mp3RMaLzA
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:43 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_TePT0Mp3RMaLzA","request_duration_ms":693}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:19:53 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6883'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_R10yTFgQs8Wdgb
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:19:53 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_R10yTFgQs8Wdgb","request_duration_ms":689}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:04 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6883'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_FXjPXTjPUttLDA
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:04 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_FXjPXTjPUttLDA","request_duration_ms":777}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:15 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_t9Ld3auwodnnoo
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:15 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_t9Ld3auwodnnoo","request_duration_ms":755}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:26 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_ZCQOiXfL1D81RA
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:26 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_ZCQOiXfL1D81RA","request_duration_ms":687}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:37 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_uEOGzdmMHiPNpG
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:36 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_uEOGzdmMHiPNpG","request_duration_ms":762}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:47 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_NFhQpHdPHZi3lT
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:47 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NFhQpHdPHZi3lT","request_duration_ms":706}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:20:58 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_ef2Ot4oZlFhPq9
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:20:58 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_ef2Ot4oZlFhPq9","request_duration_ms":717}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:21:09 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_bal7az2wx6farj
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:21:09 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_bal7az2wx6farj","request_duration_ms":716}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:21:19 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_uBtwYbzKRZx6mT
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:21:19 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1TTeCCRGLUWdbjAX
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_uBtwYbzKRZx6mT","request_duration_ms":782}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
+        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 05 May 2026 08:21:30 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6502'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=2Wupd11I2P45xNxk11S43J0fc6QM1VWmrFQspSb4_b-mHOhjBdiQDTGPsIihN2lMymNIZrIWpDeRdFbU&t=1"
+      Request-Id:
+      - req_cs8H8Quns8Jxia
+      Stripe-Account:
+      - acct_1TTeCCRGLUWdbjAX
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1TTeCCRGLUWdbjAX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": null,
+            "minority_owned_business_designation": null,
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "active"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1777969154,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1TTeCCRGLUWdbjAXUFkJS1vd",
+                "object": "bank_account",
+                "account": "acct_1TTeCCRGLUWdbjAX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1TTeCCRGLUWdbjAX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1TTeCDRGLUWdbjAXjGEzTjOS",
+            "object": "person",
+            "account": "acct_1TTeCCRGLUWdbjAX",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1777969153,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar70c81abf_17@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1TTeCJRGLUWdbjAXqNH9Uijm"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "wygTdty1aOkJhRQiTDcevQ==",
+            "tos_agreement_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
+            "user_id": "7809210839506"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1777969151,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 05 May 2026 08:21:30 GMT
+recorded_with: VCR 6.2.0

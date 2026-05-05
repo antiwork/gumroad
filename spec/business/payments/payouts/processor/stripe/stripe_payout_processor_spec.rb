@@ -242,8 +242,8 @@ describe StripePayoutProcessor, :vcr do
       user.reload
     end
 
-    let(:balance_1) { create(:balance, user:, date: Date.today - 1, currency: Currency::USD, amount_cents: 10_00, holding_currency: Currency::USD, holding_amount_cents: 10_00) }
-    let(:balance_2) { create(:balance, user:, date: Date.today - 2, currency: Currency::USD, amount_cents: 20_00, holding_currency: Currency::CAD, holding_amount_cents: 20_00) }
+    let(:balance_1) { create(:balance, user:, date: Date.today - 1, currency: Currency::USD, amount_cents: 100_00, holding_currency: Currency::USD, holding_amount_cents: 100_00) }
+    let(:balance_2) { create(:balance, user:, date: Date.today - 2, currency: Currency::USD, amount_cents: 200_00, holding_currency: Currency::USD, holding_amount_cents: 200_00) }
     let(:payment) do
       payment = create(:payment, user:, currency: nil, amount_cents: nil)
       payment.balances << balance_1
@@ -260,7 +260,7 @@ describe StripePayoutProcessor, :vcr do
     end
 
     it "sets the amount as the sum of the balances" do
-      expect(payment.amount_cents).to eq(30_00)
+      expect(payment.amount_cents).to eq(300_00)
     end
   end
 
@@ -288,7 +288,7 @@ describe StripePayoutProcessor, :vcr do
       MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
         create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
     end
-    let(:balance_held_by_gumroad) { create(:balance, user:, merchant_account: gumroad_merchant_account, state: "processing", amount_cents: 10_00, holding_amount_cents: 10_00) }
+    let(:balance_held_by_gumroad) { create(:balance, user:, merchant_account: gumroad_merchant_account, state: "processing", amount_cents: 200_00, holding_amount_cents: 200_00) }
     let(:payment) do
       payment = create(:payment, user:, currency: nil, amount_cents: nil, state: "processing")
       payment.balances << balance_held_by_gumroad
@@ -311,7 +311,7 @@ describe StripePayoutProcessor, :vcr do
 
     let(:balance_transaction) do
       bt = double
-      allow(bt).to receive(:amount).and_return(10_00)
+      allow(bt).to receive(:amount).and_return(200_00)
       bt
     end
 
@@ -350,7 +350,125 @@ describe StripePayoutProcessor, :vcr do
       expect(errors).to eq([])
       expect(Stripe::Charge).to have_received(:retrieve).twice
       expect(described_class).to have_received(:sleep).with(2).once
-      expect(payment.amount_cents).to eq(10_00)
+      expect(payment.amount_cents).to eq(200_00)
+    end
+  end
+
+  describe "prepare_payment_and_set_amount with currency-mismatched balances" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }
+    let(:gumroad_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:user_merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD) }
+
+    context "when a Gumroad-held balance has holding_currency != usd" do
+      # Reproduces the issue #333 failure mode: a stale VND-denominated balance carried over
+      # from a closed Vietnam Stripe Connect account gets summed into a USD payout, treating
+      # foreign-currency cents as if they were USD cents and silently corrupting the wire amount.
+      let(:vnd_balance) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         amount_cents: 0, holding_currency: Currency::VND, holding_amount_cents: -11_727)
+      end
+      let(:usd_balance) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         amount_cents: 126_72, holding_currency: Currency::USD, holding_amount_cents: 126_72)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([user_merchant_account, [vnd_balance, usd_balance], []])
+      end
+
+      it "fails the payment with an explanatory error rather than summing across currencies" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [vnd_balance, usd_balance])
+
+        expect(errors.first).to match(/holding_currency that does not match the payout currency/)
+        expect(errors.first).to include(vnd_balance.id.to_s)
+        expect(payment.reload.state).to eq("failed")
+      end
+
+      it "does not silently produce a $9.45 wire amount from $126.72 of seller balance" do
+        described_class.prepare_payment_and_set_amount(payment, [vnd_balance, usd_balance])
+
+        expect(payment.amount_cents).not_to eq(9_45)
+      end
+    end
+
+    context "when a Stripe-held balance has holding_currency != merchant_account.currency" do
+      let(:cad_merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::CAD, country: "CA") }
+      let(:cad_balance) do
+        create(:balance, user:, merchant_account: cad_merchant_account,
+                         amount_cents: 200_00, holding_currency: Currency::CAD, holding_amount_cents: 200_00)
+      end
+      let(:mismatched_balance) do
+        create(:balance, user:, merchant_account: cad_merchant_account,
+                         amount_cents: 0, holding_currency: Currency::USD, holding_amount_cents: -50_00)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([cad_merchant_account, [], [cad_balance, mismatched_balance]])
+      end
+
+      it "fails the payment with an explanatory error" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [cad_balance, mismatched_balance])
+
+        expect(errors.first).to match(/holding_currency that does not match the payout currency/)
+        expect(errors.first).to include(mismatched_balance.id.to_s)
+        expect(payment.reload.state).to eq("failed")
+      end
+    end
+  end
+
+  describe "prepare_payment_and_set_amount when wire amount falls below minimum payout threshold" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }
+    let(:gumroad_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:user_merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD) }
+    let(:internal_transfer) do
+      transfer = double
+      allow(transfer).to receive(:id).and_return("tr_1234")
+      allow(transfer).to receive(:destination_payment).and_return("py_1234")
+      transfer
+    end
+    let(:balance_transaction_below_minimum) do
+      bt = double
+      allow(bt).to receive(:amount).and_return(50_00)
+      bt
+    end
+    let(:destination_payment) do
+      dest = double
+      allow(dest).to receive(:id).and_return("py_1234")
+      allow(dest).to receive(:balance_transaction).and_return(balance_transaction_below_minimum)
+      dest
+    end
+    let(:balance) do
+      # USD ledger reads $50 (well below $100), but the Gumroad-internal balance_transaction
+      # mocked to also return $50, so wire amount = $50.
+      create(:balance, user:, merchant_account: gumroad_merchant_account,
+                       amount_cents: 50_00, holding_amount_cents: 50_00)
+    end
+
+    before do
+      allow(described_class).to receive(:get_payout_details)
+        .and_return([user_merchant_account, [balance], []])
+      allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_return(internal_transfer)
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+    end
+
+    it "fails the payment rather than wiring an amount below the $100 minimum" do
+      # The earlier `Payouts.is_user_payable` check is on the seller's gross USD ledger; the actual
+      # wire amount is computed from `holding_amount_cents` and can land below the floor. Defend
+      # against that here so a payout admitted by the gross check cannot silently ship below it.
+      errors = described_class.prepare_payment_and_set_amount(payment, [balance])
+
+      expect(errors.first).to match(/below minimum payout threshold/)
+      expect(payment.reload.state).to eq("failed")
     end
   end
 

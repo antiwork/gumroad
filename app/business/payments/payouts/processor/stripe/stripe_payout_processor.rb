@@ -140,6 +140,18 @@ class StripePayoutProcessor
       return ["Cannot process payout: no valid merchant account found for user."]
     end
 
+    # Refuse to sum `holding_amount_cents` across balances whose `holding_currency` differs from the
+    # destination it will be summed into. Without this guard, a stale foreign-currency balance (e.g. a
+    # VND-denominated row carried in from a closed merchant account) gets added to a USD payout as if its
+    # cents were USD cents, silently corrupting the wire amount.
+    mismatched_stripe_balances = balances_held_by_stripe.reject { |b| b.holding_currency == merchant_account.currency }
+    mismatched_gumroad_balances = balances_held_by_gumroad.reject { |b| b.holding_currency == Currency::USD }
+    if mismatched_stripe_balances.any? || mismatched_gumroad_balances.any?
+      mismatched_ids = (mismatched_stripe_balances + mismatched_gumroad_balances).map(&:id)
+      payment.mark_failed!
+      return ["Cannot process payout: balances #{mismatched_ids} have holding_currency that does not match the payout currency."]
+    end
+
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
@@ -185,6 +197,18 @@ class StripePayoutProcessor
     # Our currencies.yml assumes KRW to have 100 subunits, and that's how we store them in the database.
     # However, Stripe treats KRW as a single-unit currency. So we convert the value here.
     payment.amount_cents = payment.amount_cents * 100 if payment.currency == Currency::KRW
+
+    # Re-validate the wire amount against the minimum payout threshold. The earlier
+    # `Payouts.is_user_payable` check is on `Balance#amount_cents` (USD ledger), but the wire amount
+    # is computed from `Balance#holding_amount_cents` and the two can diverge (e.g. when a Credit row
+    # sets `amount_cents: 0` with non-zero `holding_amount_cents`, or when only some of the user's
+    # unpaid balances are payable on this processor). Without this re-check, a payout that was admitted
+    # by the gross-USD floor can still ship below the floor in actual money.
+    payout_amount_usd_cents = get_usd_cents(payment.currency, payment.amount_cents)
+    if payout_amount_usd_cents < Payouts::MIN_AMOUNT_CENTS
+      payment.mark_failed!
+      return ["Cannot process payout: amount #{payment.amount_cents} #{payment.currency} (~#{payout_amount_usd_cents} USD cents) is below minimum payout threshold of #{Payouts::MIN_AMOUNT_CENTS}."]
+    end
 
     # For instant payouts, the amount has to be net of instant payout fees.
     if payment.payout_type == Payouts::PAYOUT_TYPE_INSTANT
