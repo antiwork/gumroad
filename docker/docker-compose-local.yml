@@ -113,6 +113,7 @@ services:
 
   nginx:
     image: nginx:1.23.3
+    profiles: [nginx]
     volumes:
       - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf:Z
       - ./local-nginx/helperai_dev.conf:/etc/nginx/conf.d/helperai_dev.conf:Z
