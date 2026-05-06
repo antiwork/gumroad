@@ -14,11 +14,20 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     create(:purchase, is_original_subscription_purchase: true, link: @product, subscription: @canceled_subscription, created_at: 60.days.ago)
   end
 
-  it "schedules a worker for each canceled subscription at deactivated_at + delay" do
+  it "schedules a worker immediately for past cancellations whose deactivated_at + delay is in the past" do
     described_class.new.perform(@installment.id)
 
     expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-    expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, @canceled_subscription.id).at(@canceled_subscription.deactivated_at + @rule.delayed_delivery_time)
+    expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, @canceled_subscription.id).immediately
+  end
+
+  it "schedules a worker at deactivated_at + delay when that time is in the future" do
+    recent = create(:subscription, link: @product, cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+    create(:purchase, is_original_subscription_purchase: true, link: @product, subscription: recent, created_at: 2.hours.ago)
+
+    described_class.new.perform(@installment.id)
+
+    expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, recent.id).at(recent.deactivated_at + @rule.delayed_delivery_time)
   end
 
   it "does nothing when the workflow has been deleted" do
