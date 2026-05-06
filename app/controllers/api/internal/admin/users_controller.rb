@@ -166,6 +166,53 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  def watch
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
+
+    user = find_user_or_render(params[:email])
+    return unless user
+
+    record_admin_write(action: "users.watch", target: user) do
+      threshold_cents = parse_threshold_cents(params[:revenue_threshold])
+      return render json: { success: false, message: "revenue_threshold must be a positive number" }, status: :bad_request if threshold_cents.nil?
+
+      if user.active_watched_user.present?
+        return render json: { success: false, message: "User is already being watched" }, status: :unprocessable_entity
+      end
+
+      watched_user = user.watched_users.create!(
+        revenue_threshold_cents: threshold_cents,
+        notes: params[:notes].presence,
+        created_by_id: current_admin_actor_id
+      )
+      watched_user.sync!
+
+      render json: {
+        success: true,
+        message: "User added to watchlist",
+        watched_user: serialize_watched_user(watched_user)
+      }
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+    end
+  end
+
+  def unwatch
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+
+    user = find_user_or_render(params[:email])
+    return unless user
+
+    record_admin_write(action: "users.unwatch", target: user) do
+      watched_user = user.active_watched_user
+      return render json: { success: false, message: "User is not currently being watched" }, status: :unprocessable_entity if watched_user.nil?
+
+      watched_user.mark_deleted!
+      render json: { success: true, message: "User removed from watchlist" }
+    end
+  end
+
   private
     def find_user_or_render(email)
       user = User.alive.by_email(email).first
@@ -261,5 +308,24 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def render_invalid_comment(comment)
       render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
+    def parse_threshold_cents(raw)
+      cents = (BigDecimal(raw.to_s) * 100).round
+      cents.positive? ? cents : nil
+    rescue ArgumentError
+      nil
+    end
+
+    def serialize_watched_user(watched_user)
+      {
+        id: watched_user.external_id,
+        revenue_threshold_cents: watched_user.revenue_threshold_cents,
+        revenue_cents: watched_user.revenue_cents,
+        unpaid_balance_cents: watched_user.unpaid_balance_cents,
+        notes: watched_user.notes,
+        created_at: watched_user.created_at.iso8601,
+        last_synced_at: watched_user.last_synced_at&.iso8601
+      }
     end
 end
