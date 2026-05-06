@@ -326,7 +326,7 @@ export const ProductTab = () => {
                       ) : null}
                     </div>
                     {product.customizable_price ? null : (
-                      <div className="xl:flex xl:flex-1 xl:flex-col xl:self-stretch">
+                      <div className="@container xl:flex-1">
                         <PriceCheckerCard />
                       </div>
                     )}

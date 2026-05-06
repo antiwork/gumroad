@@ -9,7 +9,6 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext, type Product } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
-import { Placeholder } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Checklist } from "./Checklist";
@@ -38,6 +37,8 @@ const checklistFingerprint = (product: Product) =>
   JSON.stringify([product.native_type, product.name, product.description, product.taxonomy_id]);
 
 type Status = "idle" | "loading" | "ok" | "insufficient" | "error";
+
+const CARD_MIN_HEIGHT = "min-h-[calc((100cqw-34px)/2.4+126px)]";
 
 const VARIANT_LABEL_MAX = 12;
 
@@ -134,9 +135,14 @@ export const PriceCheckerCard = () => {
 
   if (!hasResult) {
     return (
-      <Placeholder className="xl:my-auto">
+      <div
+        className={classNames(
+          "grid content-center justify-items-center gap-3 rounded-sm border border-dashed border-border bg-background p-4 text-center",
+          CARD_MIN_HEIGHT,
+        )}
+      >
         <h2>Price checker</h2>
-        How your price compares to similar {productTypeLabel} on Gumroad.
+        <p>How your price compares to similar {productTypeLabel} on Gumroad.</p>
         <Button color="primary" onClick={() => triggerLoad(false)} disabled={isLoading}>
           {isLoading ? (
             <>
@@ -147,7 +153,7 @@ export const PriceCheckerCard = () => {
             "Check prices"
           )}
         </Button>
-      </Placeholder>
+      </div>
     );
   }
 
@@ -195,13 +201,17 @@ export const PriceCheckerCard = () => {
       ) : null}
 
       {isInsufficient && data?.status === "insufficient_data" ? (
-        <div className="grid gap-3 rounded-sm border border-dashed border-border bg-background p-4">
+        <div
+          className={classNames(
+            "grid content-between gap-3 rounded-sm border border-dashed border-border bg-background p-4",
+            CARD_MIN_HEIGHT,
+          )}
+        >
           <div className="flex items-start justify-between gap-2">
             <div className="grid min-w-0 flex-1 gap-1 text-sm">
               <div className="font-medium text-foreground">Not enough comparable products yet</div>
               <div className="text-muted">
-                We found {data.match_count} similar {productTypeLabel} on Gumroad. Filling in the missing fields below
-                may improve match quality next time you check.
+                We found {data.match_count} similar {productTypeLabel} on Gumroad.
               </div>
             </div>
             <WithTooltip tip="Refresh" className="shrink-0">
@@ -219,7 +229,12 @@ export const PriceCheckerCard = () => {
           />
         </div>
       ) : hasOk && data?.status === "ok" ? (
-        <div className="grid gap-3 rounded-sm border border-border bg-background p-4">
+        <div
+          className={classNames(
+            "grid content-start gap-3 rounded-sm border border-border bg-background p-4",
+            CARD_MIN_HEIGHT,
+          )}
+        >
           {chartHeaderRow}
           <DistributionChart
             histogram={data.histogram}

@@ -54,7 +54,7 @@ export const Checklist = ({
   ];
 
   return (
-    <div className="grid gap-2 text-left">
+    <div className="grid gap-1.5 text-left">
       {tagline ? <div className="text-sm">{tagline}</div> : null}
       <div className="text-xs tracking-wide uppercase opacity-70">Match accuracy</div>
       <ul className="m-0 grid list-none gap-1.5 p-0">
