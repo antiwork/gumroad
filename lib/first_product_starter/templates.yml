@@ -1,0 +1,388 @@
+# Universal product templates for the empty-input path of FirstProductStarter.
+# Bracketed [tokens] are the seller's edit surface — the placeholder shows
+# them what to fill in. No real brand or author names are used here.
+#
+# Shape for each entry:
+#   id, native_type, price_cents, name, rationale_one_line, description
+# `is_primary` is assigned at runtime by the service.
+
+templates:
+  - id: app_license
+    native_type: digital
+    price_cents: 1900
+    name: "[Your app name] — lifetime license"
+    rationale_one_line: "Native utilities are a top-selling category — small, focused, no subscription."
+    description: |
+      <p>You want a small, native app that does one thing and gets out of your way.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>The full [Your app name], signed and notarized for [your platform]</li>
+        <li>License valid for life on up to [3] devices</li>
+        <li>Free updates for [12] months after purchase</li>
+        <li>Quick-start guide and a cheatsheet of every keyboard shortcut</li>
+        <li>[Optional power-user mode] — turn it on or off anytime</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People who want [the one job your app does] without a monthly fee, login screen, or telemetry.</p>
+      <p>Buy once, install in a minute, use it the same day. 30-day money-back guarantee.</p>
+
+  - id: productivity_template
+    native_type: digital
+    price_cents: 4900
+    name: "The [Your system] productivity template"
+    rationale_one_line: "Productivity templates are one of the highest-volume tags on Gumroad."
+    description: |
+      <p>You want to stop juggling tabs, sticky notes, and half-finished docs. One template, one place, all of it.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>The full [Your system] template, ready to drop into [your knowledge tool]</li>
+        <li>[Tasks, projects, notes, and a journal] linked to one dashboard</li>
+        <li>A walkthrough video showing how to use it day to day</li>
+        <li>[50] starter [journal prompts / weekly reviews / dashboard views]</li>
+        <li>Free updates whenever the template improves</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People who tried five productivity systems and want one that finally sticks.</p>
+      <p>Duplicate it once, drop in [your projects], start the same hour. 30-day money-back guarantee.</p>
+
+  - id: typeface
+    native_type: digital
+    price_cents: 1900
+    name: "[Your font name] — variable typeface, [number] styles"
+    rationale_one_line: "Independent type designers consistently sell fonts as one-off licenses."
+    description: |
+      <p>You want a typeface that earns its place in the work — bold, distinctive, not another safe sans-serif.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Your font name] in [number] styles, including a variable typeface</li>
+        <li>OTF, TTF, and WOFF2 files for every weight</li>
+        <li>Web-font license for use on [up to 3] domains</li>
+        <li>Style specimen PDF and a printable poster</li>
+        <li>Personal and commercial license — no attribution required</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Designers and brand teams who pick fonts on character, not safety.</p>
+      <p>Drop it into [your design tool] and ship the same week.</p>
+
+  - id: ai_prompt_pack
+    native_type: digital
+    price_cents: 1900
+    name: "[Number]+ [your domain] prompts for AI chatbots"
+    rationale_one_line: "Curated prompt packs sell well even at pay-what-you-want."
+    description: |
+      <p>You want prompts that already work. Not "tips," not "tricks" — a library you can paste and ship.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number]+ tested prompts across [your domain]</li>
+        <li>Categorized by use case: [marketing, support, research, writing]</li>
+        <li>Notes on which model each prompt works best with</li>
+        <li>Quarterly updates whenever new techniques emerge</li>
+        <li>Lifetime updates — no recurring fee</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People who use AI chatbots every day and are tired of starting from scratch.</p>
+      <p>Bookmark it, copy a prompt, paste, ship. Refund within 30 days, no questions asked.</p>
+
+  - id: brand_kit
+    native_type: digital
+    price_cents: 3900
+    name: "[Your brand] identity package — logo files, mockups, and guidelines"
+    rationale_one_line: "Brand designers package handoff outputs into a single buyable kit."
+    description: |
+      <p>You want a logo package that feels finished — every variation, every size, every file your client will ever ask for.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Your brand] full logo, mark, and wordmark — [number] lockups in total</li>
+        <li>Color, black, white, inverted, and grayscale versions of each</li>
+        <li>Vector files: AI, EPS, PDF, SVG. Raster: PNG, JPG.</li>
+        <li>Brand guidelines PDF — color, type, spacing, do's and don'ts</li>
+        <li>Mockup gallery: business cards, signage, social posts, web</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Designers handing off a brand and clients who want one zip with everything inside.</p>
+      <p>Hand it over, get paid, move to the next project.</p>
+
+  - id: color_preset_pack
+    native_type: digital
+    price_cents: 1900
+    name: "[Your style] color preset pack for [your video editor]"
+    rationale_one_line: "LUT and preset packs are a steady seller for video creators."
+    description: |
+      <p>You shoot good footage. Color is what makes it look like something. This pack saves the hour of grading every clip from scratch.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number] presets in the [Your style] family — cinematic, warm, neutral, contrast-heavy</li>
+        <li>.cube files compatible with [your video editor]</li>
+        <li>Before-and-after clips so you can see what each preset does</li>
+        <li>Short PDF on layering presets without crushing the highlights</li>
+        <li>Lifetime updates as new looks get added</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Editors and creators who want a consistent look across [your channel].</p>
+      <p>Drop a preset on the timeline, finish the cut, post the same day.</p>
+
+  - id: motion_preset_pack
+    native_type: digital
+    price_cents: 3900
+    name: "[Number]+ motion presets for [your motion graphics editor]"
+    rationale_one_line: "Preset packs scale with quantity hooks — '1,400 presets' beats 'lots of presets'."
+    description: |
+      <p>You want clean transitions and motion that doesn't look like every YouTube tutorial. This pack gets you there in one drag.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number]+ presets: cuts, overlays, transitions, glitch, light leaks</li>
+        <li>Drop-in compatibility with [your motion graphics editor] [version and newer]</li>
+        <li>Each preset is fully editable — duration, color, motion blur</li>
+        <li>Project files for the most-used effects so you can study the rigging</li>
+        <li>Sound design pack as a free bonus</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Editors who'd rather assemble than build from scratch.</p>
+      <p>Install once, use forever. 14-day money-back guarantee.</p>
+
+  - id: software_addon
+    native_type: digital
+    price_cents: 2900
+    name: "[Your add-on name] for [your 3D tool] — [what it does]"
+    rationale_one_line: "Power-tool add-ons sell at higher price points than other one-off digital products."
+    description: |
+      <p>You spend more time fighting your software than using it. [Your add-on name] does the [tedious part] in one click.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Your add-on name] — installable .zip for [your 3D tool] [version and newer]</li>
+        <li>[Constraint sketching / retopo / UV unwrap / rigging] tools that work non-destructively</li>
+        <li>Sample files showing the workflow start to finish</li>
+        <li>Documentation and a 5-minute getting-started video</li>
+        <li>Lifetime updates and access to a beta channel</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Modelers who hit the same wall every project and want a tool, not a workaround.</p>
+      <p>Install in under a minute, run the demo file, see if it earns its place.</p>
+
+  - id: illustration_kit
+    native_type: digital
+    price_cents: 3900
+    name: "[Your kit name] — hand-drawn illustration library"
+    rationale_one_line: "Illustration kits convert when source files cover every common design tool."
+    description: |
+      <p>You want characters in your designs, not stock photos. Hand-drawn, mixable, on-brand.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number] illustrated characters with mix-and-match parts</li>
+        <li>Source files for [your design tool] — components, color tokens, variants</li>
+        <li>Flat SVG and PNG exports for the web</li>
+        <li>[Expressions, poses, accessories, hair] you can swap freely</li>
+        <li>Personal and commercial license, no attribution required</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Product designers, marketers, and indie founders who want their landing pages to feel human.</p>
+      <p>Drop a character into [your hero section] and ship.</p>
+
+  - id: niche_playbook
+    native_type: ebook
+    price_cents: 2900
+    name: "How to start and grow a [your niche] business"
+    rationale_one_line: "Numbers-first niche playbooks consistently outperform abstract advice."
+    description: |
+      <p>You're tired of generic "start a business" guides. You want the specific [your niche] thing — what to charge, who to call, where the first dollar comes from.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number]-page playbook covering setup, first customer, and scaling to [your goal]</li>
+        <li>The exact pricing I used and what I'd charge today</li>
+        <li>The customer-acquisition method that landed [number] of my first clients</li>
+        <li>Equipment, tools, and software list with current costs</li>
+        <li>Real numbers: revenue, expenses, margins from my first [time period]</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People stuck on the first step of a [your niche] business and tired of theory.</p>
+      <p>Read it in an evening, take action by the end of the week.</p>
+
+  - id: walkthrough_course
+    native_type: course
+    price_cents: 5900
+    name: "Make a [your project] in [your tool] — even if you've never opened it"
+    rationale_one_line: "'Make-this-thing' walkthroughs outperform abstract instruction for first-time creators."
+    description: |
+      <p>You want to make [your project] but every tutorial stops at the boring part. This course goes all the way through, and assumes nothing.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number] short videos — under [10] minutes each, downloadable forever</li>
+        <li>Project files for every lesson, including the final result</li>
+        <li>Access to a community channel where I answer questions weekly</li>
+        <li>A starter kit so you can skip past setup and get to the work</li>
+        <li>Lifetime updates as [your tool] evolves</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People who've never opened [your tool] and want to ship something real, not a "hello world."</p>
+      <p>Spend an hour a day for a week and walk away with [your project] you can show.</p>
+
+  - id: practice_bundle
+    native_type: digital
+    price_cents: 1900
+    name: "[Your skill] practice bundle — [number] cards and a tracker"
+    rationale_one_line: "Practice bundles convert when paired with a habit tracker."
+    description: |
+      <p>You want to practice [your skill] consistently, not in unfocused 10-minute bursts.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number]+ practice cards in PDF and PNG, sorted by difficulty</li>
+        <li>A 30-day habit tracker so you can see the streak build</li>
+        <li>[Number]-page guide on the principles behind every prompt</li>
+        <li>Warm-up exercises for short days and deep sessions for long ones</li>
+        <li>Lifetime access and free updates whenever new cards drop</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Beginner and intermediate [your discipline] practitioners who care about reps over perfection.</p>
+      <p>Print it, tape it to your wall, do one a day.</p>
+
+  - id: homeschool_curriculum
+    native_type: digital
+    price_cents: 9900
+    name: "[Grade level] [subject] curriculum — full bundle"
+    rationale_one_line: "Curriculum bundles sustain $50-200 price points on the discover page."
+    description: |
+      <p>You want a curriculum your kid asks to come back to. Wonder, discovery, and just enough structure to keep the year moving.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>Complete parent guide for [grade level] [subject] — [number] weeks of lessons</li>
+        <li>Student notebooks for [language arts, science, art, nature]</li>
+        <li>Book lists, copywork, and project ideas with materials lists</li>
+        <li>Printables, weekly planners, and progress trackers</li>
+        <li>[Bonus] seasonal units you can drop in throughout the year</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Homeschool parents who want a secular, hands-on curriculum without burning evenings on prep.</p>
+      <p>PDF download — print, bind, start Monday.</p>
+
+  - id: avatar_pack
+    native_type: digital
+    price_cents: 1900
+    name: "[Your avatar name] — [style] avatar for [your virtual world platform]"
+    rationale_one_line: "Avatar and 3D-asset packs are the largest category by tag volume."
+    description: |
+      <p>You want an avatar that stands out in worlds full of defaults. [Style] vibe, ready to rig, ready to wear.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Your avatar name] base mesh, fully rigged for [your virtual world platform]</li>
+        <li>[Number] outfit variants and accessories included</li>
+        <li>Texture files in PSD so you can recolor anything</li>
+        <li>Setup video showing upload and visemes step by step</li>
+        <li>Personal-use license — wear it on any account you own</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People in [your virtual world platform] who care how they show up.</p>
+      <p>Download, upload, log in. The lobby will notice.</p>
+
+  - id: trading_course
+    native_type: course
+    price_cents: 9900
+    name: "[Your strategy] trading — full walkthrough"
+    rationale_one_line: "Trading and finance courses anchor at $99-149."
+    description: |
+      <p>You want a clear method, not another influencer feed. Real setups, real risk management, real screen time.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number] hours of recorded lessons, sectioned by topic</li>
+        <li>Live walk-throughs of the [Your strategy] setup on real charts</li>
+        <li>A risk-management framework with a position-size calculator</li>
+        <li>The [number] indicators I actually use and the rest you can ignore</li>
+        <li>Access to a private channel where I post setups during market hours</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Traders who want process, not promises. Educational only — no signals, no guarantees.</p>
+      <p>Watch a module, paper-trade the setup for a week, decide if it fits your style.</p>
+
+  - id: community_monthly
+    native_type: membership
+    price_cents: 1900
+    name: "[Your community name] — monthly membership"
+    rationale_one_line: "A small, active room beats a big audience for ongoing revenue."
+    description: |
+      <p>You want a room of people doing the same thing as you, who pick up the phone when you ask.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>Active membership in [Your community name] — pay monthly, cancel anytime</li>
+        <li>[Weekly] live calls with guest speakers from [your field]</li>
+        <li>A members-only channel that's actually active, not a graveyard</li>
+        <li>Members-only archive of every past session</li>
+        <li>Brainstorming threads where members share work for feedback</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Operators in [your space] who'd rather invest in one room than chase ten newsletters.</p>
+      <p>Cancel anytime, no contract, no upsells.</p>
+
+  - id: monthly_drops
+    native_type: membership
+    price_cents: 900
+    name: "[Your audience] — monthly [drops/templates/assets]"
+    rationale_one_line: "Low-friction monthly drops scale with backlog — every past month adds value."
+    description: |
+      <p>You want fresh material every month without thinking about it. Show up, find something new, get to work.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>[Number] new [templates / assets / drops] every month</li>
+        <li>Members-only archive of every past drop, downloadable forever</li>
+        <li>A short note from me on how each one was made and why</li>
+        <li>Members vote on next month's theme — I build what wins</li>
+        <li>Cancel anytime, keep what you've already downloaded</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>People in [your audience] who'd rather pay a few dollars a month than scroll for inspiration.</p>
+      <p>Subscribe, log in once a month, leave with [your next thing] ready to use.</p>
+
+  - id: research_subscription
+    native_type: membership
+    price_cents: 7900
+    name: "[Your market] research and signals — monthly"
+    rationale_one_line: "Research subscriptions sit in the $29-99/month band on the discover page."
+    description: |
+      <p>You want one clear voice on [your market] every day, not a feed of thirty.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>Daily research note delivered before [your market] opens</li>
+        <li>Weekly long-form deep dive on a single setup or theme</li>
+        <li>Live Q&amp;A every [Friday] — I answer whatever's on your screen</li>
+        <li>Members-only archive of every note, searchable and tagged</li>
+        <li>Educational only — no recommendations, no signals service</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Independent investors and traders who care about process and want one source they can trust.</p>
+      <p>Try the first month, cancel anytime. You keep everything you've already read.</p>
+
+  - id: office_hours
+    native_type: membership
+    price_cents: 2900
+    name: "[Your topic] office hours — monthly Q&A"
+    rationale_one_line: "Q&A formats monetize expertise without a course backlog."
+    description: |
+      <p>You want one hour a month with someone who's been there. No course, no ebook — just answers to your specific questions.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>Monthly group office hours — bring your problem, get a real answer</li>
+        <li>A private channel where I answer asynchronously between sessions</li>
+        <li>Recorded sessions of every past Q&amp;A, searchable by topic</li>
+        <li>A monthly write-up of the most useful threads</li>
+        <li>Cancel anytime, keep what you've downloaded</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Independent operators in [your topic] who want feedback from someone who's shipped what they're building.</p>
+      <p>Subscribe, send the question you've been sitting on, hear back the same week.</p>
+
+  - id: power_user_paywall
+    native_type: membership
+    price_cents: 1500
+    name: "Power users of [your main product] — direct line and early access"
+    rationale_one_line: "Tool-makers monetize their power users via Q&A and early-access tiers."
+    description: |
+      <p>You bought [my main product] and want to get more out of it — directly from the person who made it.</p>
+      <h3>What's included</h3>
+      <ul>
+        <li>A private channel where I answer questions, usually within a day</li>
+        <li>Early access to new versions and features before public release</li>
+        <li>Short walk-throughs of advanced and lesser-known features</li>
+        <li>A vote on what gets built next — your wishlist matters here</li>
+        <li>Cancel anytime, no contract, no minimum</li>
+      </ul>
+      <h3>Who this is for</h3>
+      <p>Power users of [my main product] who want a direct line to the person building it.</p>
+      <p>Subscribe, ask the question you've been sitting on, get an answer.</p>

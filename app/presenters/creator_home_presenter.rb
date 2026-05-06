@@ -33,6 +33,8 @@ class CreatorHomePresenter
       }
     end
 
+    first_product_starter_enabled = seller.eligible_for_first_product_starter?
+
     today = Time.now.in_time_zone(seller.timezone).to_date
     analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
     top_sales_data = analytics[:by_date][:sales]
@@ -106,7 +108,8 @@ class CreatorHomePresenter
       stripe_verification_message:,
       tax_forms:,
       show_1099_download_notice:,
-      tax_center_enabled:
+      tax_center_enabled:,
+      first_product_starter_enabled:,
     }
   end
 

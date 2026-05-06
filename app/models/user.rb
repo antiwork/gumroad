@@ -1073,6 +1073,14 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
+  def eligible_for_first_product_starter?
+    return false unless Feature.active?(:first_product_starter, self)
+    return true if Rails.env.development?
+    return false unless confirmed?
+    return false if suspended?
+    true
+  end
+
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated

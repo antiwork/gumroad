@@ -28,6 +28,8 @@ if seller.blank?
   seller.save!(validate: false)
 end
 
+Feature.activate_user(:first_product_starter, seller)
+
 TeamMembership::ROLES.excluding(TeamMembership::ROLE_OWNER).each do |role|
   email = "seller+#{role}@gumroad.com"
   user = User.find_by(email:)

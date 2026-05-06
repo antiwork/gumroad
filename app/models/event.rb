@@ -10,6 +10,7 @@ class Event < ApplicationRecord
   PERMITTED_NAMES = %w[
     audience_callout_dismissal
     chargeback
+    first_product_starter_drafted
     first_purchase_on_profile_visit
     post_view
     product_refund_policy_fine_print_view

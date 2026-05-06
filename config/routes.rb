@@ -569,6 +569,11 @@ Rails.application.routes.draw do
       resource :dismiss_ai_product_generation_promo, only: [:create]
     end
 
+    resource :first_product_starter, only: [], controller: "first_product_starter" do
+      post :options
+      post :draft
+    end
+
     namespace :checkout do
       resources :discounts, only: %i[index create update destroy] do
         get :paged, on: :collection
