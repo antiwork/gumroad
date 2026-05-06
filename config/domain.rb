@@ -78,7 +78,7 @@ config              = configuration_by_env[environment]
 
 PROTOCOL            = config[:protocol]
 DOMAIN              = custom_domain || config[:domain]
-ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || custom_domain || config[:asset_domain]
+ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || config[:asset_domain]
 ROOT_DOMAIN         = custom_domain || config[:root_domain]
 SHORT_DOMAIN        = custom_short_domain || config[:short_domain]
 API_DOMAIN          = config[:api_domain]
