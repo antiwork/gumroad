@@ -192,5 +192,9 @@ FactoryBot.define do
     trait :flagged_for_tos_violation do
       user_risk_state { "flagged_for_tos_violation" }
     end
+
+    trait :eligible_sender do
+      user_risk_state { "compliant" }
+    end
   end
 end
