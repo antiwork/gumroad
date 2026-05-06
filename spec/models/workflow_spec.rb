@@ -150,10 +150,29 @@ describe Workflow do
       expect(SendWorkflowPostEmailsJob.jobs).to be_empty
     end
 
-    it "does nothing when workflow has a trigger" do
-      @workflow.update!(workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+    it "does nothing when workflow has a member_cancellation trigger and send_to_past_customers is false" do
+      @workflow.update!(workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER, send_to_past_customers: false)
       @workflow.schedule_installment(@post)
       expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+      expect(SendWorkflowEmailsToPastCanceledMembersJob.jobs).to be_empty
+    end
+
+    context "when workflow has a member_cancellation trigger and send_to_past_customers is true" do
+      before do
+        @workflow.update!(workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER, send_to_past_customers: true)
+      end
+
+      it "enqueues SendWorkflowEmailsToPastCanceledMembersJob on first publish" do
+        @workflow.schedule_installment(@post)
+        expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(@post.id)
+        expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+      end
+
+      it "does nothing when called from an installment rule edit (old_delayed_delivery_time is set)" do
+        @workflow.schedule_installment(@post, old_delayed_delivery_time: 1.day.to_i)
+        expect(SendWorkflowEmailsToPastCanceledMembersJob.jobs).to be_empty
+        expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+      end
     end
 
     it "does nothing if the post is only for new recipients and it hasn't been scheduled before" do

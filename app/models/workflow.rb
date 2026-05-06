@@ -91,8 +91,16 @@ class Workflow < ApplicationRecord
   def schedule_installment(installment, old_delayed_delivery_time: nil)
     return if installment.abandoned_cart_type?
     return unless alive?
-    return unless new_customer_trigger?
     return unless installment.published?
+
+    if member_cancellation_trigger?
+      if send_to_past_customers? && old_delayed_delivery_time.nil?
+        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id)
+      end
+      return
+    end
+
+    return unless new_customer_trigger?
     # don't schedule the installment if it is only for new customers/followers and it hasn't been scheduled before (old_delayed_delivery_time is nil)
     return if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
 
