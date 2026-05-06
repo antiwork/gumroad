@@ -24,6 +24,20 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     end
   end
 
+  if Rails.env.development?
+    # Allow XHRs across *.localhost subdomains (e.g. localhost:3000 fetching
+    # seller.localhost:3000) since each subdomain is its own browser origin.
+    # In production the equivalent path doesn't run cross-origin in normal flows,
+    # so this rule intentionally stays dev-only.
+    allow do
+      origins(/\Ahttps?:\/\/(?:[a-z0-9-]+\.)*localhost(?::\d+)?\z/)
+      resource "*",
+               headers: :any,
+               methods: [:get, :post, :put, :patch, :delete, :options],
+               credentials: true
+    end
+  end
+
   if ENV["CUSTOM_DOMAIN"].present?
     allow do
       origins ENV["CUSTOM_DOMAIN"]
