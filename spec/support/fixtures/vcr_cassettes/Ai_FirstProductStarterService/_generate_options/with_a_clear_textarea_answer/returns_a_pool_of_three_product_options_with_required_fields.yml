@@ -1,0 +1,210 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-5.4-nano","messages":[{"role":"system","content":"# Task\n\nYou
+        are a sales coach for new sellers on **gumroad.com** — the marketplace where
+        independent creators sell digital downloads, courses, ebooks, and memberships.
+        Turn the seller''s two-or-more-word input into 3 publishable first-product
+        drafts that fit what actually sells on gumroad.com (browse the discover page
+        in your training data: macOS utilities, Notion templates, fonts, AI prompt
+        packs, Lightroom presets, AE/Premiere preset packs, VRChat avatars, Blender
+        add-ons, illustration kits, niche playbook ebooks, \"make this thing\" courses,
+        lifetime communities, monthly drops, signal subscriptions). Return strict
+        JSON. Do not ask follow-up questions, do not narrate your reasoning, and do
+        not output anything outside the JSON schema.\n\n# Output contract — apply
+        before reasoning about content\n\n1. Return EXACTLY 3 options.\n2. EXACTLY
+        1 has `is_primary: true`. The frontend shows it first — make it the strongest
+        fit.\n3. AT LEAST 1 is `native_type: \"membership\"` (the subscription twin
+        at position 2).\n4. Mix the types — 3 distinct shapes if possible. Never all
+        3 the same shape.\n5. Order the array as: [primary, subscription twin (membership),
+        adjacent course/ebook]. Position 1 is the strongest fit; positions 2 and 3
+        expand the angle.\n6. No two names share a primary brand or topic word (e.g.,
+        if one says \"Notion\", no other can). Same for: Figma, Blender, Lightroom,
+        VRChat, Premiere, Photoshop, Canva, Obsidian, Unity, Unreal, and any platform/tool
+        name.\n7. Each option:\n   - `name`: 1-80 chars, sentence case, concrete.
+        No emojis.\n   - `native_type`: `digital` | `course` | `ebook` | `membership`.\n   -
+        `price_cents`: integer ≥ 0, anchored to the reference ranges below. `0` (PWW)
+        only for explicit lead-magnet intent.\n   - `description`: 80-130 words of
+        structured HTML using only `\u003cp\u003e`, `\u003ch3\u003e`, `\u003cul\u003e`,
+        `\u003cli\u003e`, `\u003cstrong\u003e`, `\u003cem\u003e`, in this order:\n     -
+        Opening `\u003cp\u003e` (1 sentence): the buyer''s outcome. Use \"you\", never
+        \"I\".\n     - `\u003ch3\u003eWhat''s included\u003c/h3\u003e` + `\u003cul\u003e`
+        of 3-4 concrete deliverables (5-12 words each).\n     - `\u003ch3\u003eWho
+        this is for\u003c/h3\u003e` + 1 sentence in `\u003cp\u003e`.\n     - Closing
+        `\u003cp\u003e` (1 sentence): what the buyer does with it.\n   - `rationale_one_line`:
+        ≤ 120 chars. Plain text.\n\n# Picking native_type\n\nAsk: \"what does the
+        buyer get next month after their first purchase?\"\n\n- **digital** — one-time
+        downloads: app licenses, fonts, presets, plugins, templates, swipe files,
+        asset packs.\n- **course** — video walkthroughs with multiple modules.\n-
+        **ebook** — written guides under ~100 pages.\n- **membership** — ongoing access:
+        newsletters, communities, monthly drops, recurring Q\u0026A, signal/research
+        subs, premium support tiers, early-access tiers.\n\nIf the buyer keeps receiving
+        things on a schedule → membership. If they get one file and that''s it → digital/course/ebook.\n\n#
+        Subscription twin (position 2 of the pool)\n\nWhatever the seller sells, design
+        ONE membership as the recurring shape of the same domain. Examples:\n\n- App
+        license → power-user community for that app\n- Notion template → monthly template
+        drops\n- Newsletter → premium tier with deeper analysis\n- Course → student
+        community / office hours\n- Music album → monthly stems/sample drops\n- Plugin
+        → early-access tier\n- Preset pack → monthly preset drops\n- Niche playbook
+        → mastermind community\n- Trading walkthrough → daily research subscription\n-
+        3D model pack → monthly model drops\n\nThe subscription twin must appear at
+        position 2 of the returned array.\n\n# Picking the primary (position 1)\n\nIf
+        the seller named a concrete artifact (app, book, template, music, add-on,
+        font, course, avatar, preset pack, podcast, newsletter), the primary IS that
+        artifact, packaged for direct sale. Don''t substitute content *about* the
+        artifact.\n\n| Seller input | ✅ Primary | ❌ Wrong primary |\n|---|---|---|\n|
+        \"sell the app\" | App license ($19-49 digital) | \"App launch toolkit\" course
+        |\n| \"I wrote a book\" | Book as ebook ($9-29) | \"Course on writing books\"
+        |\n| \"I made a Notion template\" | The template ($10-49) | \"Notion productivity
+        course\" |\n| \"I make ambient music\" | Album / track pack | \"Music production
+        course\" |\n| \"I built a Figma plugin\" | Plugin license ($15-49) | \"Plugin
+        development course\" |\n\nIf they described themselves but named no artifact,
+        build the primary around their craft, domain, or audience.\n\n# Step order
+        — design the pool in this sequence\n\n1. Read the seller''s input. Identify
+        the concrete artifact (app, book, template, music, plugin, course recording,
+        avatar pack, podcast, newsletter, etc.). If there''s no artifact, identify
+        the seller''s craft, audience, or domain.\n2. Design **position 1 (primary)**:
+        that artifact packaged for direct sale. If the artifact is itself recurring
+        (newsletter, community), the primary is `native_type: membership`. Otherwise
+        use the matching one-time type.\n3. Design **position 2 (subscription twin)**:
+        a `native_type: membership` that is the recurring shape of the same domain
+        — see \"Subscription twin\" section.\n4. Design **position 3**: an adjacent
+        `course` or `ebook` that teaches how the primary works, or a behind-the-scenes
+        companion.\n5. Apply the brand-uniqueness rule: no two names share a primary
+        brand or topic word.\n6. Verify the contract before returning: count is 3,
+        exactly 1 has `is_primary: true`, at least 1 has `native_type: \"membership\"`,
+        types are mixed.\n\n# Edge case behavior\n\n- **Off-topic input** (food complaint,
+        weather, gibberish that hints at no product): build the pool around the closest
+        sellable interpretation a Gumroad seller could reasonably ship — generic productivity,
+        creative templates, or a niche playbook.\n- **Harmful, illegal, or regulated
+        request** (weapons, drugs, financial advice promising returns): pivot to a
+        legitimate adjacent niche and ignore the harmful intent. Do not refuse outright
+        — the seller still gets 3 publishable drafts.\n- **Very vague input** (\"help
+        me sell something\"): pick three loosely connected domains the seller could
+        plausibly own and design the 3 options across them, with the strongest fit
+        as primary.\n- **Ambiguity about native_type**: apply the \"what does the
+        buyer get next month\" test (see \"Picking native_type\"). Do not ask the
+        seller to clarify.\n\n# One correct example\n\nUser input: `sell the app`\n\nReturned
+        in this order. Your real output must contain 3 with all fields present.\n\n```json\n{\n  \"options\":
+        [\n    {\n      \"name\": \"App license — lifetime download\",\n      \"native_type\":
+        \"digital\",\n      \"price_cents\": 2900,\n      \"description\": \"\u003cp\u003eYou
+        found a focused app that does one thing without subscriptions or bloat.\u003c/p\u003e\u003ch3\u003eWhat''s
+        included\u003c/h3\u003e\u003cul\u003e\u003cli\u003eThe full app, signed and
+        notarized for macOS\u003c/li\u003e\u003cli\u003eLicense valid for life on
+        up to 3 devices\u003c/li\u003e\u003cli\u003eFree minor-version updates for
+        12 months\u003c/li\u003e\u003cli\u003eQuick-start guide and changelog\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eWho
+        this is for\u003c/h3\u003e\u003cp\u003ePeople who want a focused tool with
+        no login, telemetry, or upsell.\u003c/p\u003e\u003cp\u003eBuy once and start
+        using it the same day.\u003c/p\u003e\",\n      \"rationale_one_line\": \"The
+        seller already has the app — sell the app, not content about it.\",\n      \"is_primary\":
+        true\n    },\n    {\n      \"name\": \"Power users — monthly updates and Q\u0026A\",\n      \"native_type\":
+        \"membership\",\n      \"price_cents\": 900,\n      \"description\": \"\u003cp\u003eYou
+        bought the app and want to get more out of it directly from the developer.\u003c/p\u003e\u003ch3\u003eWhat''s
+        included\u003c/h3\u003e\u003cul\u003e\u003cli\u003eEarly access to new versions
+        before public release\u003c/li\u003e\u003cli\u003ePrivate channel where the
+        developer answers questions\u003c/li\u003e\u003cli\u003eShort walkthroughs
+        of advanced and lesser-known features\u003c/li\u003e\u003cli\u003eCancel anytime,
+        no contract\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eWho this is for\u003c/h3\u003e\u003cp\u003ePower
+        users who want a direct line to the maker.\u003c/p\u003e\u003cp\u003eSubscribe
+        and check the channel whenever you hit a wall — answers come within a day.\u003c/p\u003e\",\n      \"rationale_one_line\":
+        \"Subscription twin: recurring revenue from existing buyers without a new
+        artifact.\",\n      \"is_primary\": false\n    }\n  ]\n}\n```\n\n# Anti-patterns\n\n-
+        Substituting content *about* the artifact for the artifact itself.\n- Treating
+        the seller as a beginner when they''ve named what they have.\n- Slop openers:
+        \"Unlock the power of…\", \"Are you tired of…\", \"In today''s fast-paced
+        world…\".\n- Restating the seller''s input verbatim.\n- Service types (1:1
+        coaching, calls, commissions, Calendly bookings).\n- Physical products (hardware,
+        print, merch, coins).\n- Crypto presales, ICOs, regulated investments.\n-
+        All 3 options the same `native_type`.\n- Pricing 2x+ outside the reference
+        ranges.\n- Marking a recurring product as `digital` instead of `membership`.\n-
+        Padding the pool with near-duplicates of the primary.\n\n# Style\n\nPlain
+        language. Active voice. Short sentences. Cut every word that doesn''t earn
+        its place.\n\n# Price anchors — calibrated to gumroad.com discover-page top
+        sellers (USD, 2026)\n\n- **Digital one-time**: Mac apps $5-30, Notion templates
+        $10-49, Blender/CAD add-ons $15-70, fonts $10-40, AE/Premiere presets $20-80,
+        VRChat avatars / 3D models $10-30, AI prompt packs $9-49, logo/mockup packs
+        $20-80, LUT presets $10-30, stock illustration $19-49 (or PWW for lead-gen).\n-
+        **Practice/study bundles**: $19-49 (sketching/prompt decks), $50-200 (homeschool
+        grades), $39-99 (exam toolkits).\n- **Courses**: coding/design/fitness/finance
+        $29-149, \"make this thing\" walkthroughs $29-89.\n- **Niche-knowledge ebooks**:
+        industry playbooks $9-29, health/cycle/fitness $9-29.\n- **Memberships**:
+        monthly $5-29, annual $79-299, lifetime $150-500.\n- **Signal/research subs**:
+        $29-99/month.\n- **Bundles**: 2-5 related items at $19-99.\n- **PWW** (`price_cents
+        = 0`): deliberate lead-gen only.\n"},{"role":"user","content":"I''m a Figma
+        designer doing SaaS onboarding audits."}],"response_format":{"type":"json_schema","json_schema":{"name":"first_product_starter_options","strict":true,"schema":{"type":"object","additionalProperties":false,"required":["options"],"properties":{"options":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"object","additionalProperties":false,"required":["name","native_type","price_cents","description","rationale_one_line","is_primary"],"properties":{"name":{"type":"string","minLength":1,"maxLength":80},"native_type":{"type":"string","enum":["digital","course","ebook","membership"]},"price_cents":{"type":"integer","minimum":0},"description":{"type":"string","minLength":250,"maxLength":1000},"rationale_one_line":{"type":"string","maxLength":140},"is_primary":{"type":"boolean"}}}}}}}},"max_completion_tokens":3000,"prompt_cache_key":"first_product_starter:v7_pool3","user":"5709877056679"}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 30 Apr 2026 22:25:25 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 9f49f6379e8ac4a2-WAW
+      Cf-Cache-Status:
+      - DYNAMIC
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      X-Content-Type-Options:
+      - nosniff
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - user-aatqi7p66zl2bzexxdrtaaqv
+      Openai-Processing-Ms:
+      - '3962'
+      Openai-Project:
+      - proj_AQPsXPBmY0jywibofeA8tjAe
+      Openai-Version:
+      - '2020-10-01'
+      X-Openai-Proxy-Wasm:
+      - v0.1
+      X-Ratelimit-Limit-Requests:
+      - '500'
+      X-Ratelimit-Limit-Tokens:
+      - '200000'
+      X-Ratelimit-Remaining-Requests:
+      - '499'
+      X-Ratelimit-Remaining-Tokens:
+      - '197591'
+      X-Ratelimit-Reset-Requests:
+      - 120ms
+      X-Ratelimit-Reset-Tokens:
+      - 722ms
+      X-Request-Id:
+      - req_5e61e0fa1ce24f8c9b9b32b23fac0029
+      Set-Cookie:
+      - __cf_bm=0YGfRMgDb3e_gn93ZdyPPcYjhoqlFlNMlyaiCT0Mcrs-1777587920.575991-1.0.1.1-imneNH7mZ1zbSgQbJEOyiZpi5DTD.fkNI8OPdsHTjmgIMKQdJ9xiXyPTg_zG0ggckiHpUD5DDNMbreIYuMq411S.zgWOKpJrNfBZk5dEko0VDR4jaWeda3GZpOxrHa9K;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 30 Apr 2026
+        22:55:25 GMT
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        ewogICJpZCI6ICJjaGF0Y21wbC1EYVU2cjRseVdsb3FuQ0plRHpndXdGcW83NElJYiIsCiAgIm9iamVjdCI6ICJjaGF0LmNvbXBsZXRpb24iLAogICJjcmVhdGVkIjogMTc3NzU4NzkyMSwKICAibW9kZWwiOiAiZ3B0LTUuNC1uYW5vLTIwMjYtMDMtMTciLAogICJjaG9pY2VzIjogWwogICAgewogICAgICAiaW5kZXgiOiAwLAogICAgICAibWVzc2FnZSI6IHsKICAgICAgICAicm9sZSI6ICJhc3Npc3RhbnQiLAogICAgICAgICJjb250ZW50IjogIntcIm9wdGlvbnNcIjpbe1wibmFtZVwiOlwiRmlnbWEgb25ib2FyZGluZyBhdWRpdCB0ZW1wbGF0ZXMgcGFja1wiLFwibmF0aXZlX3R5cGVcIjpcImRpZ2l0YWxcIixcInByaWNlX2NlbnRzXCI6NDkwMCxcImRlc2NyaXB0aW9uXCI6XCI8cD5Zb3UgZ2V0IGEgcmVwZWF0YWJsZSBzeXN0ZW0gdG8gYXVkaXQgU2FhUyBvbmJvYXJkaW5nIGluIEZpZ21hIGFuZCB0dXJuIGlzc3VlcyBpbnRvIGNsZWFyIGZpeGVzLjwvcD48aDM+V2hhdCdzIGluY2x1ZGVkPC9oMz48dWw+PGxpPk9uYm9hcmRpbmcgYXVkaXQgY2hlY2tsaXN0IGJ5IGZ1bm5lbCBzdGFnZTwvbGk+PGxpPlVYIGhldXJpc3RpY3MgbWFwIGZvciBhY3RpdmF0aW9uIGFuZCByZXRlbnRpb248L2xpPjxsaT5Bbm5vdGF0ZWQgRmlnbWEgZnJhbWUgc2V0IGZvciBjb21tb24gcGF0dGVybnM8L2xpPjxsaT5Jc3N1ZS10by1maXggd29ya3NoZWV0IHdpdGggc2V2ZXJpdHkgc2NvcmluZzwvbGk+PC91bD48aDM+V2hvIHRoaXMgaXMgZm9yPC9oMz48cD5Qcm9kdWN0IGRlc2lnbmVycyBhbmQgVVggbGVhZHMgaW1wcm92aW5nIGFjdGl2YXRpb24gZm9yIHdlYiBTYWFTLjwvcD48cD5Vc2UgdGhlIHRlbXBsYXRlcyB0byBydW4gYXVkaXRzLCBkb2N1bWVudCBmaW5kaW5ncywgYW5kIHNoaXAgcHJpb3JpdGl6ZWQgb25ib2FyZGluZyBjaGFuZ2VzLjwvcD5cIixcInJhdGlvbmFsZV9vbmVfbGluZVwiOlwiU2VsbCB0aGUgRmlnbWEgdGVtcGxhdGUvYXJ0aWZhY3QgdXNlZCBmb3Igb25ib2FyZGluZyBhdWRpdHMuXCIsXCJpc19wcmltYXJ5XCI6dHJ1ZX0se1wibmFtZVwiOlwiT25ib2FyZGluZyBDbGluaWMgbWVtYmVyc2hpcCBmb3IgU2FhUyB0ZWFtc1wiLFwibmF0aXZlX3R5cGVcIjpcIm1lbWJlcnNoaXBcIixcInByaWNlX2NlbnRzXCI6MTcwMCxcImRlc2NyaXB0aW9uXCI6XCI8cD5Zb3Ugc3RheSBjdXJyZW50IG9uIG9uYm9hcmRpbmcgZml4ZXMgYW5kIHJldXNlIGF1ZGl0IHdvcmtmbG93cyBldmVyeSBtb250aC48L3A+PGgzPldoYXQncyBpbmNsdWRlZDwvaDM+PHVsPjxsaT5Nb250aGx5IG9uYm9hcmRpbmcgYXVkaXQgZnJhbWV3b3JrcyBhbmQgcGxheWJvb2tzPC9saT48bGk+TGl2ZSB0ZWFyZG93biBzZXNzaW9ucyB3aXRoIFEmQSBmb3IgbWVtYmVyczwvbGk+PGxpPkNvbW11bml0eSBmZWVkYmFjayBvbiB5b3VyIG9uYm9hcmRpbmcgc2NyZWVuczwvbGk+PGxpPk1lbWJlci1vbmx5IGNvcHktcGFzdGUgY2hlY2tsaXN0cyBhbmQgZXhhbXBsZXM8L2xpPjwvdWw+PGgzPldobyB0aGlzIGlzIGZvcjwvaDM+PHA+U2FhUyBkZXNpZ24gdGVhbXMgd2hvIHdhbnQgb25nb2luZyBoZWxwIGFwcGx5aW5nIG9uYm9hcmRpbmcgYmVzdCBwcmFjdGljZXMuPC9wPjxwPlN1YnNjcmliZSB0byBnZXQgbmV3IGF1ZGl0cyBhbmQgaW1wbGVtZW50IGltcHJvdmVtZW50cyBvbiBhIHN0ZWFkeSBzY2hlZHVsZS48L3A+XCIsXCJyYXRpb25hbGVfb25lX2xpbmVcIjpcIlN1YnNjcmlwdGlvbiB0d2luOiByZWN1cnJpbmcgb25ib2FyZGluZyBmcmFtZXdvcmtzLCB0ZWFyZG93bnMsIGFuZCBjb21tdW5pdHkgc3VwcG9ydC5cIixcImlzX3ByaW1hcnlcIjpmYWxzZX0se1wibmFtZVwiOlwiQWN0aXZhdGlvbi1maXJzdCBvbmJvYXJkaW5nIGF1ZGl0IG1pbmktY291cnNlXCIsXCJuYXRpdmVfdHlwZVwiOlwiY291cnNlXCIsXCJwcmljZV9jZW50c1wiOjY5MDAsXCJkZXNjcmlwdGlvblwiOlwiPHA+WW91IGxlYXJuIGhvdyB0byBydW4gYSBmYXN0LCBldmlkZW5jZS1iYXNlZCBvbmJvYXJkaW5nIGF1ZGl0IGFuZCBwcm9kdWNlIGFjdGlvbmFibGUgcmVjb21tZW5kYXRpb25zLjwvcD48aDM+V2hhdCdzIGluY2x1ZGVkPC9oMz48dWw+PGxpPkF1ZGl0IG1ldGhvZCBmcm9tIHJlc2VhcmNoIHRvIHByaW9yaXRpemVkIGZpeGVzPC9saT48bGk+V2hhdCB0byBtZWFzdXJlIGZvciBhY3RpdmF0aW9uIGFuZCBlYXJseSByZXRlbnRpb248L2xpPjxsaT5Ib3cgdG8gd3JpdGUgY2xlYXIsIHRlc3RhYmxlIGRlc2lnbiByZWNvbW1lbmRhdGlvbnM8L2xpPjxsaT5UZW1wbGF0ZXMgZm9yIHNldmVyaXR5LCBpbXBhY3QsIGFuZCBlZmZvcnQgbWFwcGluZzwvbGk+PC91bD48aDM+V2hvIHRoaXMgaXMgZm9yPC9oMz48cD5EZXNpZ25lcnMgbW92aW5nIGZyb20g4oCcb3BpbmlvbnPigJ0gdG8gc3RydWN0dXJlZCBvbmJvYXJkaW5nIGltcHJvdmVtZW50cy48L3A+PHA+V2F0Y2ggdGhlIGxlc3NvbnMsIGFwcGx5IHRoZSB3b3JrZmxvdyB0byB5b3VyIHByb2R1Y3QsIGFuZCBkb2N1bWVudCByZXN1bHRzLjwvcD5cIixcInJhdGlvbmFsZV9vbmVfbGluZVwiOlwiVGVhY2hlcyB0aGUgcHJvY2VzcyBiZWhpbmQgdGhlIEZpZ21hIGF1ZGl0IHRlbXBsYXRlIHBhY2suXCIsXCJpc19wcmltYXJ5XCI6ZmFsc2V9XX0iLAogICAgICAgICJyZWZ1c2FsIjogbnVsbCwKICAgICAgICAiYW5ub3RhdGlvbnMiOiBbXQogICAgICB9LAogICAgICAiZmluaXNoX3JlYXNvbiI6ICJzdG9wIgogICAgfQogIF0sCiAgInVzYWdlIjogewogICAgInByb21wdF90b2tlbnMiOiAyNDk3LAogICAgImNvbXBsZXRpb25fdG9rZW5zIjogNTUzLAogICAgInRvdGFsX3Rva2VucyI6IDMwNTAsCiAgICAicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjogewogICAgICAiY2FjaGVkX3Rva2VucyI6IDAsCiAgICAgICJhdWRpb190b2tlbnMiOiAwCiAgICB9LAogICAgImNvbXBsZXRpb25fdG9rZW5zX2RldGFpbHMiOiB7CiAgICAgICJyZWFzb25pbmdfdG9rZW5zIjogMCwKICAgICAgImF1ZGlvX3Rva2VucyI6IDAsCiAgICAgICJhY2NlcHRlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAsCiAgICAgICJyZWplY3RlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAKICAgIH0KICB9LAogICJzZXJ2aWNlX3RpZXIiOiAiZGVmYXVsdCIsCiAgInN5c3RlbV9maW5nZXJwcmludCI6IG51bGwKfQo=
+  recorded_at: Thu, 30 Apr 2026 22:25:25 GMT
+recorded_with: VCR 6.2.0

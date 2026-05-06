@@ -60,6 +60,7 @@ def configure_vcr
     config.configure_rspec_metadata!
     config.debug_logger = $stdout if ENV["VCR_DEBUG"]
     config.default_cassette_options[:record] = BUILDING_ON_CI ? :none : :once
+    config.filter_sensitive_data("<OPENAI_ACCESS_TOKEN>") { ENV["OPENAI_ACCESS_TOKEN"] }
     config.filter_sensitive_data("<AWS_ACCOUNT_ID>") { GlobalConfig.get("AWS_ACCOUNT_ID") }
     config.filter_sensitive_data("<AWS_ACCESS_KEY_ID>") { GlobalConfig.get("AWS_ACCESS_KEY_ID") }
     config.filter_sensitive_data("<STRIPE_PLATFORM_ACCOUNT_ID>") { GlobalConfig.get("STRIPE_PLATFORM_ACCOUNT_ID") }

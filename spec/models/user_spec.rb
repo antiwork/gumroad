@@ -3795,6 +3795,39 @@ describe User, :vcr do
     end
   end
 
+  describe "#eligible_for_first_product_starter?" do
+    let(:user) { create(:user) }
+
+    context "when the feature flag is off" do
+      it "returns false" do
+        expect(user.eligible_for_first_product_starter?).to be(false)
+      end
+    end
+
+    context "when the feature flag is on" do
+      before { Feature.activate_user(:first_product_starter, user) }
+
+      it "returns true for a confirmed, non-suspended user with zero sales" do
+        expect(user.eligible_for_first_product_starter?).to be(true)
+      end
+
+      it "returns false when the user is unconfirmed" do
+        user.update!(confirmed_at: nil)
+        expect(user.eligible_for_first_product_starter?).to be(false)
+      end
+
+      it "returns false when the user is suspended" do
+        user.update!(user_risk_state: "suspended_for_fraud")
+        expect(user.eligible_for_first_product_starter?).to be(false)
+      end
+
+      it "does NOT require past sales (independent of eligible_for_ai_product_generation?)" do
+        expect(user.sales_cents_total).to eq(0)
+        expect(user.eligible_for_first_product_starter?).to be(true)
+      end
+    end
+  end
+
   describe ".id?" do
     context "with valid numeric values" do
       it "returns true for integer 1" do

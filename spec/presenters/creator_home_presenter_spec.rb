@@ -387,5 +387,22 @@ describe CreatorHomePresenter do
         expect(props[:tax_center_enabled]).to be(false)
       end
     end
+
+    describe "first_product_starter_enabled" do
+      it "returns false when the flag is off" do
+        expect(presenter.creator_home_props[:first_product_starter_enabled]).to be(false)
+      end
+
+      it "returns true when the flag is on and the seller is eligible" do
+        Feature.activate_user(:first_product_starter, seller)
+        expect(presenter.creator_home_props[:first_product_starter_enabled]).to be(true)
+      end
+
+      it "returns false when the flag is on but the seller is suspended" do
+        Feature.activate_user(:first_product_starter, seller)
+        seller.update!(user_risk_state: "suspended_for_fraud")
+        expect(presenter.creator_home_props[:first_product_starter_enabled]).to be(false)
+      end
+    end
   end
 end
