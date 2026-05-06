@@ -250,6 +250,13 @@ Rails.application.routes.draw do
         resources :media_locations, only: [:create], format: :json
         resources :sessions, only: [:create], format: :json
         resources :feature_flags, only: [:show], format: :json
+        resources :emails, only: [:create, :index] do
+          collection do
+            get :audience_options
+          end
+        end
+        post "direct_uploads", to: "direct_uploads#create"
+        get "s3_utility/cdn_url_for_blob", to: "s3_utility#cdn_url_for_blob"
       end
 
       namespace :internal do

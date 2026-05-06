@@ -61,6 +61,41 @@ def create_mobile_purchase(seller:, buyer:, product:)
   purchase
 end
 
+def create_bulk_purchases(seller:, product:, count:)
+  count.times do |i|
+    buyer = User.find_or_create_by!(email: "mobile_synthetic_buyer_#{i}@gumroad.com") do |u|
+      u.name = "Synthetic Buyer #{i}"
+      u.username = "mobilesynthbuyer#{i}"
+      u.password = SecureRandom.hex(24)
+      u.user_risk_state = "compliant"
+      u.confirmed_at = Time.current
+    end
+    existing = Purchase.find_by(link_id: product.id, purchaser_id: buyer.id, purchase_state: "successful")
+    if existing
+      existing.__elasticsearch__.index_document
+      next
+    end
+
+    purchase = Purchase.new(
+      link_id: product.id,
+      seller_id: seller.id,
+      price_cents: product.price_cents,
+      displayed_price_cents: product.price_cents,
+      tax_cents: 0,
+      gumroad_tax_cents: 0,
+      total_transaction_cents: product.price_cents,
+      purchaser_id: buyer.id,
+      email: buyer.email,
+      card_country: "US",
+      ip_address: "199.241.200.176"
+    )
+    purchase.send(:calculate_fees)
+    purchase.save!
+    purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
+    purchase.reload.__elasticsearch__.index_document
+  end
+end
+
 seller1 = create_mobile_user(
   email: "mobile_seller1_do_not_edit@gumroad.com",
   name: "Mobile Seller 1",
@@ -97,3 +132,17 @@ create_mobile_purchase(seller: seller2, buyer: seller1, product: product2)
 
 create_mobile_purchase(seller: seller1, buyer: buyer, product: product1)
 create_mobile_purchase(seller: seller2, buyer: buyer, product: product2)
+
+create_bulk_purchases(seller: seller1, product: product1, count: 25)
+
+unless Payment.exists?(user_id: seller1.id, state: "completed")
+  payment = Payment.create!(
+    user: seller1,
+    amount_cents: 10_000,
+    currency: "usd",
+    processor: "PAYPAL",
+    payout_period_end_date: 1.week.ago.to_date,
+    correlation_id: "mobile-seed-payout-#{seller1.id}"
+  )
+  payment.update_columns(state: "completed")
+end
