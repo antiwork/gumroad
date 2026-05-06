@@ -37,7 +37,7 @@ class Discover::TagPageMetaPresenter
       default = opts.delete(:default) || ""
       str = DISCOVER_META_TAGS.dig(*(path.split(".")))
 
-      return default if str.blank?
+      return default if !str.is_a?(String) || str.blank?
 
       str % opts
     end

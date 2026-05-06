@@ -21,6 +21,20 @@ describe Discover::TagPageMetaPresenter do
         expect(described_class.new(["tag 1", "tag 2"], 1000).title).to eq("tag 1, tag 2")
       end
     end
+
+    context "when a single empty tag is provided" do
+      it "does not raise and returns the default title" do
+        expect { described_class.new([""], 1000).title }.not_to raise_error
+        expect(described_class.new([""], 1000).title).to eq("")
+      end
+    end
+
+    context "when a single whitespace-only tag is provided" do
+      it "does not raise and returns the default title" do
+        expect { described_class.new([" "], 1000).title }.not_to raise_error
+        expect(described_class.new([" "], 1000).title).to eq(" ")
+      end
+    end
   end
 
   describe "#meta_description" do
@@ -43,6 +57,18 @@ describe Discover::TagPageMetaPresenter do
         expect(described_class.new(["tag 1", "tag 2"], 1000).meta_description).to eq("Browse over 1,000 unique tag 1" \
           " and tag 2 products published by independent creators on Gumroad. Discover the best things to read, watch," \
           " create & more!")
+      end
+    end
+
+    context "when a single empty tag is provided" do
+      it "does not raise and returns the default meta description" do
+        expect { described_class.new([""], 1000).meta_description }.not_to raise_error
+      end
+    end
+
+    context "when a single whitespace-only tag is provided" do
+      it "does not raise and returns the default meta description" do
+        expect { described_class.new([" "], 1000).meta_description }.not_to raise_error
       end
     end
   end
