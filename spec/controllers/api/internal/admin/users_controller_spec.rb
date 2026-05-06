@@ -739,6 +739,15 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["message"]).to eq("revenue_threshold must be a positive number")
     end
 
+    it "returns bad request when revenue_threshold is non-finite" do
+      ["Infinity", "-Infinity", "NaN"].each do |revenue_threshold|
+        post :watch, params: { email: user.email, revenue_threshold: }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["message"]).to eq("revenue_threshold must be a positive number")
+      end
+    end
+
     it "returns not found when user does not exist" do
       post :watch, params: { email: "missing@example.com", revenue_threshold: "200" }
 

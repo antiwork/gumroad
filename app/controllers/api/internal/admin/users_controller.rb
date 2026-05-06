@@ -311,7 +311,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def parse_threshold_cents(raw)
-      cents = (BigDecimal(raw.to_s) * 100).round
+      threshold = BigDecimal(raw.to_s)
+      return nil unless threshold.finite?
+
+      cents = (threshold * 100).round
       cents.positive? ? cents : nil
     rescue ArgumentError
       nil
