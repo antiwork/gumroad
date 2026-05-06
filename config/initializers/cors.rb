@@ -23,4 +23,14 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
       resource "/assets/ABCFavorit-Regular*"
     end
   end
+
+  if ENV["CUSTOM_DOMAIN"].present?
+    allow do
+      origins ENV["CUSTOM_DOMAIN"]
+      resource "*",
+               headers: :any,
+               methods: [:get, :post, :put, :patch, :delete, :options],
+               credentials: true
+    end
+  end
 end

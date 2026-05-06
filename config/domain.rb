@@ -94,6 +94,7 @@ if custom_domain
   VALID_REQUEST_HOSTS << custom_domain
   VALID_API_REQUEST_HOSTS << "api.#{custom_domain}"
   VALID_API_REQUEST_HOSTS << custom_domain if ENV["BRANCH_DEPLOYMENT"].present? # Allow CORS to branch-apps's root domain
+  VALID_CORS_ORIGINS << custom_domain
   DISCOVER_DOMAIN = custom_domain
   VALID_DISCOVER_REQUEST_HOST = custom_domain
 else
