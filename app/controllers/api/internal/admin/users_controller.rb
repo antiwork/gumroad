@@ -198,6 +198,35 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  def update_watch
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
+
+    user = find_user_or_render(params[:email])
+    return unless user
+
+    record_admin_write(action: "users.update_watch", target: user) do
+      threshold_cents = parse_threshold_cents(params[:revenue_threshold])
+      return render json: { success: false, message: "revenue_threshold must be a positive number" }, status: :bad_request if threshold_cents.nil?
+
+      watched_user = user.active_watched_user
+      return render json: { success: false, message: "User is not currently being watched" }, status: :unprocessable_entity if watched_user.nil?
+
+      watched_user.update!(
+        revenue_threshold_cents: threshold_cents,
+        notes: params.key?(:notes) ? params[:notes].presence : watched_user.notes
+      )
+
+      render json: {
+        success: true,
+        message: "Watchlist updated",
+        watched_user: serialize_watched_user(watched_user)
+      }
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+    end
+  end
+
   def unwatch
     return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
 
