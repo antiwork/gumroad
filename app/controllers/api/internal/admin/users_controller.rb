@@ -262,6 +262,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
           compliant: user.compliant?,
           last_status_changed_at: last_status_changed_at(user)&.as_json
         },
+        active_watched_user: serialize_watched_user(user.active_watched_user),
         two_factor_authentication_enabled: user.two_factor_authentication_enabled?,
         payouts: {
           paused_internally: user.payouts_paused_internally?,
@@ -321,6 +322,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def serialize_watched_user(watched_user)
+      return nil unless watched_user
+
       {
         id: watched_user.external_id,
         revenue_threshold_cents: watched_user.revenue_threshold_cents,

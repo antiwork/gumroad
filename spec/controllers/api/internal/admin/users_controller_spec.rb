@@ -40,6 +40,7 @@ describe Api::Internal::Admin::UsersController do
         "name" => "Seller One",
         "username" => "sellerone",
         "deleted_at" => nil,
+        "active_watched_user" => nil,
         "two_factor_authentication_enabled" => false
       )
       expect(info["created_at"]).to eq(user.created_at.as_json)
@@ -183,6 +184,29 @@ describe Api::Internal::Admin::UsersController do
       stats = response.parsed_body["user"]["stats"]
       expect(stats["sales_count"]).to eq(2)
       expect(stats["total_earnings_formatted"]).to eq("$15.00")
+    end
+
+    it "includes the active watched user" do
+      user = create(:compliant_user, email: "watched@example.com")
+      watched_user = create(:watched_user,
+                            user:,
+                            revenue_threshold_cents: 20_000,
+                            revenue_cents: 12_500,
+                            unpaid_balance_cents: 2_500,
+                            notes: "Review again")
+      watched_user.update!(last_synced_at: 1.hour.ago)
+
+      post :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["active_watched_user"]).to eq(
+        "id" => watched_user.external_id,
+        "revenue_threshold_cents" => 20_000,
+        "revenue_cents" => 12_500,
+        "unpaid_balance_cents" => 2_500,
+        "notes" => "Review again",
+        "created_at" => watched_user.created_at.iso8601,
+        "last_synced_at" => watched_user.last_synced_at.iso8601
+      )
     end
   end
 
