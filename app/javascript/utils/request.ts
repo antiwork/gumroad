@@ -66,6 +66,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
     return response;
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw new AbortError();
+    if (e instanceof ResponseError) throw e;
     throw new ResponseError();
   } finally {
     --globalThis.__activeRequests;

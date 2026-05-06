@@ -9,6 +9,7 @@ import { request } from "$app/utils/request";
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { FirstProductStarter } from "$app/components/FirstProductStarter";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
 import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
@@ -70,6 +71,7 @@ export type DashboardPageProps = {
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
   tax_center_enabled: boolean;
+  first_product_starter_enabled: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
@@ -309,6 +311,7 @@ export const DashboardPage = ({
   tax_forms,
   show_1099_download_notice,
   tax_center_enabled,
+  first_product_starter_enabled,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
@@ -443,7 +446,8 @@ export const DashboardPage = ({
         : null}
 
       {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? (
-        <div className="p-4 md:p-8">
+        <div className="flex flex-col gap-6 px-4 pb-4 md:px-8 md:pb-8">
+          {first_product_starter_enabled ? <FirstProductStarter /> : null}
           <Greeter />
         </div>
       ) : null}
