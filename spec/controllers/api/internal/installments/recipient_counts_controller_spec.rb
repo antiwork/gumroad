@@ -67,6 +67,24 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
     end
 
+    it "ignores out-of-range year in created_before filter without raising a database error" do
+      get :show, params: { installment_type: "audience", created_before: "252026-05-06" }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+    end
+
+    it "ignores out-of-range year in created_after filter without raising a database error" do
+      get :show, params: { installment_type: "audience", created_after: "252026-05-06" }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+    end
+
+    it "ignores unparseable created_before filter without raising" do
+      get :show, params: { installment_type: "audience", created_before: "not-a-date" }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+    end
+
     it "returns counts for seller installment type with paid_more_than_cents filter" do
       product1_purchase2.update!(price_cents: 99)
       product1_purchase3.update!(price_cents: 500)

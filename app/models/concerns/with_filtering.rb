@@ -73,9 +73,11 @@ module WithFiltering
     self.bought_products = (!audience_type? && params[:bought_products].present?) ? Array.wrap(params[:bought_products]) : []
     self.not_bought_products = params[:not_bought_products].present? ? Array.wrap(params[:not_bought_products]) : []
     # created "on and after" this timestamp:
-    self.created_after = params[:created_after].present? ? Date.parse(params[:created_after]).in_time_zone(user.timezone) : nil
+    created_after_date = safe_parse_filter_date(params[:created_after])
+    self.created_after = created_after_date ? created_after_date.in_time_zone(user.timezone) : nil
     # created "on and before" this timestamp:
-    self.created_before = params[:created_before].present? ? Date.parse(params[:created_before]).in_time_zone(user.timezone).end_of_day : nil
+    created_before_date = safe_parse_filter_date(params[:created_before])
+    self.created_before = created_before_date ? created_before_date.in_time_zone(user.timezone).end_of_day : nil
     self.bought_from = seller_or_product_or_variant_type? ? params[:bought_from].presence : nil
     self.bought_variants = (!audience_type? && params[:bought_variants].present?) ? Array.wrap(params[:bought_variants]) : []
     self.not_bought_variants = params[:not_bought_variants].present? ? Array.wrap(params[:not_bought_variants]) : []
@@ -172,5 +174,17 @@ module WithFiltering
 
   def convert_to_date(date)
     date.is_a?(String) ? Date.parse(date) : date
+  end
+
+  # Parses a user-supplied date filter and rejects values outside MySQL's
+  # DATETIME range (years 1000-9999). Browser <input type="date"> fields can
+  # submit 6-digit years that Date.parse accepts but MySQL refuses.
+  def safe_parse_filter_date(value)
+    return nil if value.blank?
+    date = Date.parse(value.to_s)
+    return nil if date.year < 1000 || date.year > 9999
+    date
+  rescue Date::Error, TypeError
+    nil
   end
 end

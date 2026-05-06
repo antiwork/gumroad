@@ -768,8 +768,12 @@ class Installment < ApplicationRecord
     params[:not_bought_variant_ids] = not_bought_variants&.map { ObfuscateIds.decrypt(_1) }
     params[:paid_more_than_cents] = paid_more_than_cents.presence
     params[:paid_less_than_cents] = paid_less_than_cents.presence
-    params[:created_after] = Date.parse(created_after.to_s).in_time_zone(seller.timezone).iso8601 if created_after.present?
-    params[:created_before] = Date.parse(created_before.to_s).in_time_zone(seller.timezone).end_of_day.iso8601 if created_before.present?
+    if (date = safe_parse_filter_date(created_after))
+      params[:created_after] = date.in_time_zone(seller.timezone).iso8601
+    end
+    if (date = safe_parse_filter_date(created_before))
+      params[:created_before] = date.in_time_zone(seller.timezone).end_of_day.iso8601
+    end
     params[:bought_from] = bought_from if bought_from.present?
     params[:affiliate_product_ids] = seller.products.where(unique_permalink: affiliate_products).ids if affiliate_products.present?
 
