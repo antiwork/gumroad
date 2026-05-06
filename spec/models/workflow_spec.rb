@@ -168,9 +168,9 @@ describe Workflow do
         expect(SendWorkflowPostEmailsJob.jobs).to be_empty
       end
 
-      it "does nothing when called from an installment rule edit (old_delayed_delivery_time is set)" do
+      it "re-enqueues SendWorkflowEmailsToPastCanceledMembersJob when called from an installment rule edit so version-stale workers are replaced" do
         @workflow.schedule_installment(@post, old_delayed_delivery_time: 1.day.to_i)
-        expect(SendWorkflowEmailsToPastCanceledMembersJob.jobs).to be_empty
+        expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(@post.id)
         expect(SendWorkflowPostEmailsJob.jobs).to be_empty
       end
     end

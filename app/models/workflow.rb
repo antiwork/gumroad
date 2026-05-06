@@ -94,9 +94,7 @@ class Workflow < ApplicationRecord
     return unless installment.published?
 
     if member_cancellation_trigger?
-      if send_to_past_customers? && old_delayed_delivery_time.nil?
-        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id)
-      end
+      SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id) if send_to_past_customers?
       return
     end
 
