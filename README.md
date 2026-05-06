@@ -173,7 +173,7 @@ If you installed Docker Desktop (on a Mac or Windows machine), you can run the f
 make local
 ```
 
-If you are on Linux, or installed Docker via a package manager on a mac, you may have to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo make local` instead.
+If you are on Linux, or installed Docker via a package manager on a mac, you may need superuser access to expose container ports. To do that, use `sudo make local` instead.
 
 This command will not terminate. You run this in one tab and start the application in another tab.
 If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
@@ -196,7 +196,7 @@ bin/dev
 
 This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
-You can now access the application at `https://gumroad.dev`.
+You can now access the application at `http://localhost:3000`. Seller subdomains and the asset/api hosts use `*.localhost` (e.g. `http://seller.localhost:3000`, `http://api.localhost:3000`) — modern browsers auto-resolve these to 127.0.0.1, so no `/etc/hosts` edits are needed.
 
 ## Development
 

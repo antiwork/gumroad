@@ -19,6 +19,12 @@ session_cookie_name =
     else
       "#{base_cookie_name}_staging"
     end
+  when :development
+    # `domain: :all` resolves localhost to no Domain attribute, which breaks cookie
+    # sharing across *.localhost subdomains. Set Domain=localhost explicitly so the
+    # session cookie is visible to seller.localhost, app.localhost, etc.
+    domain = "localhost"
+    "#{base_cookie_name}_development"
   else
     "#{base_cookie_name}_#{Rails.env}"
   end

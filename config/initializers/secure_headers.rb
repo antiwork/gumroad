@@ -202,10 +202,12 @@ SecureHeaders::Configuration.default do |config|
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
-    config.csp[:script_src] << "gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "wss://gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8081" # Required by AnyCable
+    config.csp[:script_src] << "localhost:3035" # Required by webpack-dev-server
+    config.csp[:connect_src] << "localhost:3035" # Required by webpack-dev-server
+    config.csp[:connect_src] << "ws://localhost:3035" # Required by webpack-dev-server
+    cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
+    cable_port = PROTOCOL == "https" ? 8081 : 8080
+    config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable
     config.csp[:connect_src] << "helperai.dev" # Required by Helper widget
     config.csp[:connect_src] << "wss://supabase.helperai.dev" # Required by Helper widget
     config.csp[:connect_src] << "http:"

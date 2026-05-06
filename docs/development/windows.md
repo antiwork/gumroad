@@ -159,7 +159,7 @@ bin/rails db:prepare
 bin/dev
 ```
 
-Visit: [https://gumroad.dev](https://gumroad.dev)
+Visit: [http://localhost:3000](http://localhost:3000). Seller subdomains and the asset/api hosts use `*.localhost` (e.g. `http://seller.localhost:3000`, `http://api.localhost:3000`).
 
 ---
 
@@ -211,29 +211,9 @@ git config --local core.hooksPath .githooks
 
 ---
 
-## 🛑 Fixing HTTPS or Privacy Warnings in Chrome
-
-- On `Your connection is not private`, type: `thisisunsafe`
-- To clear HSTS:
-
-  - Go to `chrome://net-internals/#hsts`
-  - Under **Delete domain security policies**, enter `gumroad.dev`
-
----
-
 ## 🧭 /etc/hosts Setup
 
-Add this entry to your `/etc/hosts`:
-
-```bash
-127.0.0.1 gumroad.dev
-```
-
-Edit the file:
-
-```bash
-sudo nano /etc/hosts
-```
+`*.localhost` is auto-resolved to `127.0.0.1` by modern browsers and macOS, so no `/etc/hosts` edits are required for the standard development setup.
 
 ---
 

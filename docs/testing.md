@@ -184,7 +184,7 @@ If your code change causes a spec to follow a **new HTTP code path** (e.g., remo
 
 ## Previewing Emails
 
-You can preview emails locally at [/rails/mailers](https://gumroad.dev/rails/mailers)
+You can preview emails locally at [/rails/mailers](http://localhost:3000/rails/mailers)
 
 ## Custom domains
 
@@ -200,7 +200,7 @@ Use `domains-staging.gumroad.com` instead of `domains.gumroad.com` in the DNS re
    127.0.0.1 sample-custom-domain.example.com
    ```
 
-2. Configure sample-custom-domain.example.com as a custom domain in [gumroad.dev/settings/advanced](https://gumroad.dev/settings/advanced)
+2. Configure sample-custom-domain.example.com as a custom domain in [localhost:3000/settings/advanced](http://localhost:3000/settings/advanced)
 
 3. Remove `Rails.env.development? ||` part from this [line](https://github.com/antiwork/gumroad/blob/main/lib/gumroad_domain_constraint.rb#L5)
 
@@ -279,7 +279,7 @@ Ask someone who has payments credentials for an account for Braintree in either 
 
 The overlay and embed widgets both rely on iFrames and are best tested by running a host page on a separate web server. [Sinatra](https://www.sinatrarb.com/) is a great tool to get up and running quickly with a web page running on its own server.
 
-Both widgets now detect the Rails application environment automatically -- simply include the script from whichever environment you wish to investigate, e.g. `<script src="https://gumroad.dev/js/gumroad.js"/>`. The code snippets on the `/widgets` page also reflect the current environment.
+Both widgets now detect the Rails application environment automatically -- simply include the script from whichever environment you wish to investigate, e.g. `<script src="http://localhost:3000/js/gumroad.js"/>`. The code snippets on the `/widgets` page also reflect the current environment.
 
 ### Testing locally
 
