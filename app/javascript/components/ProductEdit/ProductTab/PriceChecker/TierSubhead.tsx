@@ -16,5 +16,5 @@ export const TierSubhead = ({
       ? `Based on ${matchCount} ${productTypeLabel} in ${taxonomyLabel}.`
       : `Based on ${matchCount} ${productTypeLabel} (broadened — set a category to refine).`;
 
-  return <p className="text-xs text-muted">{text}</p>;
+  return <small className="block text-muted">{text}</small>;
 };

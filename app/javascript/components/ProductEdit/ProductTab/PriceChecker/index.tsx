@@ -1,18 +1,19 @@
-import { InfoCircle } from "@boxicons/react";
+import { InfoCircle, RefreshCcw } from "@boxicons/react";
 import * as React from "react";
 
 import { fetchPriceDistribution, type PriceDistribution } from "$app/data/price_distribution";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext, type Product } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Checklist } from "./Checklist";
 import { DistributionChart, type PriceMarker } from "./DistributionChart";
-import { EmptyState } from "./EmptyState";
 import { TierSubhead } from "./TierSubhead";
 
 const NATIVE_TYPE_LABELS: Record<string, string> = {
@@ -118,8 +119,6 @@ export const PriceCheckerCard = () => {
   const hasResult = data !== null;
   const hasOk = data?.status === "ok";
   const isInsufficient = data?.status === "insufficient_data";
-  const showCtaOverlay = !hasResult && (status === "idle" || isLoading);
-  const showRecheck = hasResult;
   const recheckDisabled = isLoading || lastCheckedFingerprint === currentFingerprint;
 
   const tooltipContent = (
@@ -133,39 +132,57 @@ export const PriceCheckerCard = () => {
     />
   );
 
+  if (!hasResult) {
+    return (
+      <Placeholder className="xl:my-auto">
+        <h2>Price checker</h2>
+        How your price compares to similar {productTypeLabel} on Gumroad.
+        <Button color="primary" onClick={() => triggerLoad(false)} disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <LoadingSpinner className="size-4" />
+              Checking…
+            </>
+          ) : (
+            "Check prices"
+          )}
+        </Button>
+      </Placeholder>
+    );
+  }
+
+  const refreshButton = (
+    <WithTooltip tip="Refresh" className={classNames("shrink-0", { invisible: recheckDisabled })}>
+      <Button size="icon" onClick={() => triggerLoad(true)} aria-label="Refresh">
+        <RefreshCcw className="size-5" />
+      </Button>
+    </WithTooltip>
+  );
+
+  const chartHeaderRow = (
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex font-normal">Price checker</span>
+        <WithTooltip
+          position="bottom"
+          tip={tooltipContent}
+          tooltipProps={{ className: "w-64 max-w-[calc(100vw-2rem)]" }}
+        >
+          <button
+            type="button"
+            aria-label="Match accuracy details"
+            className="inline-flex appearance-none items-center justify-center border-0 bg-transparent p-0 text-current [-webkit-tap-highlight-color:transparent] focus:outline-none"
+          >
+            <InfoCircle className="size-5" />
+          </button>
+        </WithTooltip>
+      </div>
+      {refreshButton}
+    </div>
+  );
+
   return (
     <div className="grid gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex font-normal">Price checker</span>
-          <WithTooltip
-            position="bottom"
-            tip={tooltipContent}
-            tooltipProps={{ className: "w-64 max-w-[calc(100vw-2rem)]" }}
-          >
-            <button
-              type="button"
-              aria-label="Match accuracy details"
-              className="inline-flex appearance-none items-center justify-center border-0 bg-transparent p-0 text-current [-webkit-tap-highlight-color:transparent] focus:outline-none"
-            >
-              <InfoCircle className="size-5" />
-            </button>
-          </WithTooltip>
-        </div>
-        {showRecheck ? (
-          <Button
-            size="sm"
-            outline
-            onClick={() => triggerLoad(true)}
-            disabled={recheckDisabled}
-            aria-label="Recheck"
-            className="min-w-[5rem]"
-          >
-            {isLoading ? <LoadingSpinner className="size-4" /> : "Recheck"}
-          </Button>
-        ) : null}
-      </div>
-
       {status === "error" ? (
         <Alert variant="danger">
           <div className="flex items-center justify-between gap-2">
@@ -178,52 +195,46 @@ export const PriceCheckerCard = () => {
       ) : null}
 
       {isInsufficient && data?.status === "insufficient_data" ? (
-        <EmptyState
-          matchCount={data.match_count}
-          productTypeLabel={productTypeLabel}
-          productNativeType={product.native_type}
-          productName={product.name}
-          productDescription={product.description}
-          taxonomyId={product.taxonomy_id}
-        />
-      ) : (
-        <div className="grid gap-2">
-          <div className="relative">
-            <DistributionChart
-              mode={hasOk ? "real" : "placeholder"}
-              histogram={hasOk && data?.status === "ok" ? data.histogram : null}
-              summary={hasOk && data?.status === "ok" ? data.summary : null}
-              currencyCode={currencyType}
-              priceMarkers={priceMarkers}
-            />
-            {showCtaOverlay ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4">
-                <Button color="primary" onClick={() => triggerLoad(false)} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <LoadingSpinner className="size-4" />
-                      Checking…
-                    </>
-                  ) : (
-                    "Check prices"
-                  )}
-                </Button>
-                <p className="max-w-[18rem] text-center text-sm text-muted">
-                  How your price compares to similar {productTypeLabel} on Gumroad.
-                </p>
+        <div className="grid gap-3 rounded-sm border border-dashed border-border bg-background p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="grid min-w-0 flex-1 gap-1 text-sm">
+              <div className="font-medium text-foreground">Not enough comparable products yet</div>
+              <div className="text-muted">
+                We found {data.match_count} similar {productTypeLabel} on Gumroad. Filling in the missing fields below
+                may improve match quality next time you check.
               </div>
-            ) : null}
+            </div>
+            <WithTooltip tip="Refresh" className="shrink-0">
+              <Button size="icon" onClick={() => triggerLoad(true)} disabled={recheckDisabled} aria-label="Refresh">
+                <RefreshCcw className="size-5" />
+              </Button>
+            </WithTooltip>
           </div>
-          {hasOk && data?.status === "ok" ? (
-            <TierSubhead
-              matchCount={data.match_count}
-              tier={data.tier}
-              taxonomyLabel={data.taxonomy_label}
-              productTypeLabel={productTypeLabel}
-            />
-          ) : null}
+          <Checklist
+            productNativeType={product.native_type}
+            productName={product.name}
+            productDescription={product.description}
+            taxonomyId={product.taxonomy_id}
+            productTypeLabel={productTypeLabel}
+          />
         </div>
-      )}
+      ) : hasOk && data?.status === "ok" ? (
+        <div className="grid gap-3 rounded-sm border border-border bg-background p-4">
+          {chartHeaderRow}
+          <DistributionChart
+            histogram={data.histogram}
+            summary={data.summary}
+            currencyCode={currencyType}
+            priceMarkers={priceMarkers}
+          />
+          <TierSubhead
+            matchCount={data.match_count}
+            tier={data.tier}
+            taxonomyLabel={data.taxonomy_label}
+            productTypeLabel={productTypeLabel}
+          />
+        </div>
+      ) : null}
     </div>
   );
 };

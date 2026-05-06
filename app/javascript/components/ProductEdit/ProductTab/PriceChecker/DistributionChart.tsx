@@ -5,9 +5,6 @@ import type { PriceDistributionHistogram, PriceDistributionSummary } from "$app/
 import type { CurrencyCode } from "$app/utils/currency";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-const PLACEHOLDER_BIN_COUNT = 12;
-const PLACEHOLDER_HEIGHT = 1;
-const PLACEHOLDER_INTERVAL = 1000;
 const MAX_X_TICKS = 6;
 const LABEL_FONT_SIZE = 13;
 const LINE_GAP = 2;
@@ -15,9 +12,6 @@ const PAD_X_TIGHT = 1;
 const PAD_X_COMFORTABLE = 4;
 const PAD_Y = 3;
 const EDGE_THRESHOLD = 0.1;
-const PLACEHOLDER_MIN_OPACITY = 0.01;
-const PLACEHOLDER_MAX_OPACITY = 0.08;
-const PLACEHOLDER_TOP_RESERVE = 4;
 const REAL_TOP_BREATHING = 4;
 const LABEL_GAP = 16;
 const ESTIMATED_PLOT_WIDTH_PX = 500;
@@ -70,15 +64,6 @@ const ChartTooltip = ({
   );
 };
 
-const buildPlaceholderData = (): ChartRow[] =>
-  Array.from({ length: PLACEHOLDER_BIN_COUNT }, (_, i) => ({
-    key: i,
-    midpoint: i * PLACEHOLDER_INTERVAL + PLACEHOLDER_INTERVAL / 2,
-    count: PLACEHOLDER_HEIGHT,
-    fromCents: i * PLACEHOLDER_INTERVAL,
-    toCents: (i + 1) * PLACEHOLDER_INTERVAL,
-  }));
-
 const buildRealData = (histogram: PriceDistributionHistogram): ChartRow[] =>
   histogram.bins.map((bin, i) => ({
     key: i,
@@ -116,13 +101,6 @@ const computeXShift = (value: number, min: number, max: number, halfWidth: numbe
   if (t <= EDGE_THRESHOLD) return halfWidth;
   if (t >= 1 - EDGE_THRESHOLD) return -halfWidth;
   return 0;
-};
-
-const placeholderOpacity = (index: number, total: number) => {
-  if (total <= 1) return PLACEHOLDER_MAX_OPACITY;
-  const middle = (total - 1) / 2;
-  const distance = Math.abs(index - middle) / middle;
-  return PLACEHOLDER_MIN_OPACITY + (PLACEHOLDER_MAX_OPACITY - PLACEHOLDER_MIN_OPACITY) * distance;
 };
 
 type CornerOmit = "bl" | "br" | null;
@@ -268,59 +246,50 @@ const layoutMarkers = (markers: PriceMarker[], minBin: number, maxBin: number): 
 };
 
 export const DistributionChart = ({
-  mode,
   histogram,
   summary,
   currencyCode,
   priceMarkers,
 }: {
-  mode: "placeholder" | "real";
-  histogram: PriceDistributionHistogram | null;
-  summary: PriceDistributionSummary | null;
+  histogram: PriceDistributionHistogram;
+  summary: PriceDistributionSummary;
   currencyCode: CurrencyCode;
   priceMarkers: PriceMarker[];
 }) => {
   const animatedOnceRef = React.useRef(false);
-  const isFirstRealRender = mode === "real" && !animatedOnceRef.current;
+  const isFirstRender = !animatedOnceRef.current;
   React.useEffect(() => {
-    if (mode === "real") animatedOnceRef.current = true;
+    animatedOnceRef.current = true;
   });
 
   const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
 
-  const data: ChartRow[] = mode === "real" && histogram ? buildRealData(histogram) : buildPlaceholderData();
-  const showAxis = mode === "real";
-  const ticks: number[] = showAxis ? computeTicks(data) : [];
+  const data: ChartRow[] = buildRealData(histogram);
+  const ticks: number[] = computeTicks(data);
 
   const minBin = data[0]?.fromCents ?? 0;
-  const maxBin = data[data.length - 1]?.toCents ?? PLACEHOLDER_INTERVAL * PLACEHOLDER_BIN_COUNT;
+  const maxBin = data[data.length - 1]?.toCents ?? 0;
   const domain: [number, number] = [minBin, maxBin];
 
   const sampleMarkerLines = ["Your price"];
   const markerLabelHeight = labelHeight(sampleMarkerLines.length);
 
-  const medianValueText = summary ? fmtPrecise(currencyCode, summary.median_cents) : "";
-  const medianLines = summary ? ["Median", medianValueText] : ["Median"];
+  const medianValueText = fmtPrecise(currencyCode, summary.median_cents);
+  const medianLines = ["Median", medianValueText];
   const medianHeight = labelHeight(medianLines.length);
   const medianWidth = approxLabelWidth(medianLines, PAD_X_COMFORTABLE);
-  const medianShift = summary ? computeXShift(summary.median_cents, minBin, maxBin, medianWidth / 2) : 0;
+  const medianShift = computeXShift(summary.median_cents, minBin, maxBin, medianWidth / 2);
   const medianYOffset = medianHeight + LABEL_GAP;
-  const topReserve = mode === "real" ? markerLabelHeight + REAL_TOP_BREATHING : PLACEHOLDER_TOP_RESERVE;
+  const topReserve = markerLabelHeight + REAL_TOP_BREATHING;
 
-  const layout = mode === "real" ? layoutMarkers(priceMarkers, minBin, maxBin) : [];
+  const layout = layoutMarkers(priceMarkers, minBin, maxBin);
 
   return (
     <ResponsiveContainer width="100%" aspect={2.4}>
       <BarChart
         data={data}
-        margin={{
-          top: topReserve,
-          right: mode === "placeholder" ? 0 : 4,
-          bottom: 0,
-          left: mode === "placeholder" ? 0 : 4,
-        }}
+        margin={{ top: topReserve, right: 4, bottom: 0, left: 4 }}
         onMouseMove={(state: { activeTooltipIndex?: number; isTooltipActive?: boolean }) => {
-          if (mode !== "real") return;
           if (state.isTooltipActive && typeof state.activeTooltipIndex === "number") {
             setHoveredIndex(state.activeTooltipIndex);
           } else {
@@ -335,29 +304,24 @@ export const DistributionChart = ({
           domain={domain}
           ticks={ticks}
           tickLine={false}
-          axisLine={showAxis ? { stroke: "currentColor", opacity: 0.4 } : false}
-          tick={showAxis ? { fill: "currentColor", fontSize: 11 } : false}
+          axisLine={{ stroke: "currentColor", opacity: 0.4 }}
+          tick={{ fill: "currentColor", fontSize: "0.75rem" }}
           tickFormatter={(v: number) => fmtShort(currencyCode, v)}
-          height={showAxis ? 22 : 0}
+          height={22}
           interval="preserveStartEnd"
           padding={{ left: 0, right: 0 }}
         />
         <YAxis hide />
-        {mode === "real" ? <Tooltip cursor={false} content={<ChartTooltip currencyCode={currencyCode} />} /> : null}
+        <Tooltip cursor={false} content={<ChartTooltip currencyCode={currencyCode} />} />
         <Bar
           dataKey="count"
           radius={[4, 4, 0, 0]}
-          isAnimationActive={isFirstRealRender}
-          animationDuration={isFirstRealRender ? 350 : 0}
+          isAnimationActive={isFirstRender}
+          animationDuration={isFirstRender ? 350 : 0}
         >
-          {data.map((row, i) => {
-            if (mode === "placeholder") {
-              return (
-                <Cell key={row.key} style={{ fill: `rgb(var(--color) / ${placeholderOpacity(i, data.length)})` }} />
-              );
-            }
-            return <Cell key={row.key} className={hoveredIndex === i ? "fill-accent/60" : "fill-accent/40"} />;
-          })}
+          {data.map((row, i) => (
+            <Cell key={row.key} className={hoveredIndex === i ? "fill-accent/60" : "fill-accent/40"} />
+          ))}
         </Bar>
         {/* Dashed-line layer — all lines render before any label */}
         {layout.map((marker) => {
@@ -390,37 +354,33 @@ export const DistributionChart = ({
             />
           );
         })}
-        {mode === "real" && summary ? (
-          <ReferenceLine
-            x={summary.median_cents}
-            stroke="none"
-            ifOverflow="extendDomain"
-            isFront
-            label={
-              <PartialDashedLine color="var(--color-foreground)" yOffset={medianYOffset} labelHeightPx={medianHeight} />
-            }
-          />
-        ) : null}
+        <ReferenceLine
+          x={summary.median_cents}
+          stroke="none"
+          ifOverflow="extendDomain"
+          isFront
+          label={
+            <PartialDashedLine color="var(--color-foreground)" yOffset={medianYOffset} labelHeightPx={medianHeight} />
+          }
+        />
         {/* Label layer — every label renders after every line */}
-        {mode === "real" && summary ? (
-          <ReferenceLine
-            x={summary.median_cents}
-            stroke="none"
-            ifOverflow="extendDomain"
-            isFront
-            label={
-              <RefLineLabel
-                title="Median"
-                value={medianValueText}
-                fillColor="var(--color-foreground)"
-                textColor="var(--color-background)"
-                yOffset={medianYOffset}
-                xShift={medianShift}
-                padX={PAD_X_COMFORTABLE}
-              />
-            }
-          />
-        ) : null}
+        <ReferenceLine
+          x={summary.median_cents}
+          stroke="none"
+          ifOverflow="extendDomain"
+          isFront
+          label={
+            <RefLineLabel
+              title="Median"
+              value={medianValueText}
+              fillColor="var(--color-foreground)"
+              textColor="var(--color-background)"
+              yOffset={medianYOffset}
+              xShift={medianShift}
+              padX={PAD_X_COMFORTABLE}
+            />
+          }
+        />
         {layout
           .filter((marker) => marker.renderLabel)
           .map((marker) => {
