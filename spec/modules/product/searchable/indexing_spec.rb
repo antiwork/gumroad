@@ -182,6 +182,7 @@ describe "Product::Searchable - Indexing scenarios" do
 
       it "sends updated price_cents & available_price_cents fields on price_range change" do
         expect_product_update %w[price_cents available_price_cents]
+        expect_product_update %w[customizable_price]
 
         new_price = @product.price_cents + 100
         @product.update!(price_range: new_price)
@@ -207,8 +208,8 @@ describe "Product::Searchable - Indexing scenarios" do
         @product.update!(max_purchase_count: 100)
       end
 
-      it "sends updated is_call field when native_type changes to call" do
-        expect_product_update %w[is_call]
+      it "sends updated is_call & native_type fields when native_type changes to call" do
+        expect_product_update %w[is_call native_type]
 
         @product.native_type = Link::NATIVE_TYPE_CALL
         @product.save(validate: false)
