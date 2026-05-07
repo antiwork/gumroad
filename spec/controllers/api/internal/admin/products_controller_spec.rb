@@ -12,11 +12,11 @@ describe Api::Internal::Admin::ProductsController do
   describe "POST list" do
     include_examples "admin api authorization required", :post, :list
 
-    it "returns a bad request when email is missing" do
+    it "returns a bad request when neither email nor external_id is provided" do
       post :list
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -24,6 +24,42 @@ describe Api::Internal::Admin::ProductsController do
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "looks up the seller by external_id when provided" do
+      product = create(:product, user: seller)
+
+      post :list, params: { external_id: seller.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
+    end
+
+    it "returns not found when the external_id does not match any user" do
+      post :list, params: { external_id: "nonexistent" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "prefers external_id over email when both are provided" do
+      other_seller = create(:user, email: "other@example.com")
+      external_match = create(:product, user: seller, name: "via external_id")
+      create(:product, user: other_seller, name: "via email")
+
+      post :list, params: { email: other_seller.email, external_id: seller.external_id }
+
+      expect(response.parsed_body["products"].map { _1["name"] }).to eq([external_match.name])
+    end
+
+    it "returns products for a soft-deleted seller looked up by external_id" do
+      product = create(:product, user: seller)
+      seller.mark_deleted!
+
+      post :list, params: { external_id: seller.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
     end
 
     it "returns an empty list with pagination metadata when the seller has no products" do

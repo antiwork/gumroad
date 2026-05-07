@@ -5,13 +5,16 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
 
   DEFAULT_PER_PAGE = Admin::Users::ListPaginatedProducts::PRODUCTS_PER_PAGE
   MAX_PER_PAGE = 100
-  private_constant :DEFAULT_PER_PAGE, :MAX_PER_PAGE
+  SELLER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
+  private_constant :DEFAULT_PER_PAGE, :MAX_PER_PAGE, :SELLER_LOOKUP_BAD_REQUEST_MESSAGE
 
   def list
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    if params[:email].blank? && params[:external_id].blank?
+      return render json: { success: false, message: SELLER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
+    end
 
-    user = User.by_email(params[:email]).first
-    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
+    user = find_seller_or_render
+    return unless user
 
     products = user.products
       .includes(:product_files, :display_asset_previews, :thumbnail_alive)
@@ -34,6 +37,18 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   end
 
   private
+    def find_seller_or_render
+      user = if params[:external_id].present?
+        User.find_by(external_id: params[:external_id])
+      else
+        User.by_email(params[:email]).first
+      end
+      return user if user.present?
+
+      render json: { success: false, message: "User not found" }, status: :not_found
+      nil
+    end
+
     def per_page
       requested = params[:per_page].to_i
       return DEFAULT_PER_PAGE unless requested.positive?
