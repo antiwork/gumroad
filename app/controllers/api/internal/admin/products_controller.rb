@@ -74,7 +74,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
           id: product.user&.external_id,
           email: product.user&.email
         },
-        files: product.product_files.in_order.map { serialize_file(_1) }
+        files: product.product_files.sort_by { |f| [f.position || Float::INFINITY, f.id] }.map { serialize_file(_1) }
       }
     end
 
@@ -82,8 +82,8 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       {
         id: file.external_id,
         display_name: file.name_displayable,
-        file_name: file.s3_filename,
-        extension: file.s3_display_extension,
+        file_name: file.external_link? ? file.url : file.s3_filename,
+        extension: file.display_extension,
         filegroup: file.filegroup,
         file_size: file.size,
         created_at: file.created_at.iso8601,

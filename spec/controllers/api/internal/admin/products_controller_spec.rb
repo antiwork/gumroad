@@ -105,6 +105,46 @@ describe Api::Internal::Admin::ProductsController do
       expect(names).to eq(["New alive", "Old alive", "Deleted"])
     end
 
+    it "surfaces external-link files with their URL and a URL extension" do
+      product = create(:product, user: seller)
+      external = create(:external_link, link: product, display_name: "Telegram channel", url: "https://t.me/secret-channel")
+
+      post :list, params: { email: seller.email }
+
+      files = response.parsed_body["products"].first["files"]
+      payload = files.find { _1["id"] == external.external_id }
+      expect(payload).to include(
+        "display_name" => "Telegram channel",
+        "file_name" => "https://t.me/secret-channel",
+        "extension" => "URL",
+        "filegroup" => external.filegroup
+      )
+    end
+
+    it "preloads product files instead of issuing one query per product" do
+      3.times do
+        product = create(:product, user: seller)
+        create(:readable_document, link: product)
+        create(:readable_document, link: product)
+      end
+
+      product_files_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql]
+        next if sql.blank? || sql.start_with?("INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "SAVEPOINT", "RELEASE")
+        product_files_queries << sql if sql.include?("`product_files`") && sql.include?("SELECT")
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        post :list, params: { email: seller.email }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["products"].length).to eq(3)
+      expect(product_files_queries.length).to eq(1), "expected one product_files SELECT but got #{product_files_queries.length}:\n#{product_files_queries.join("\n")}"
+      expect(product_files_queries.first).to include("IN (")
+    end
+
     it "exposes file metadata including soft-deleted files" do
       product = create(:product, user: seller)
       alive_file = create(:readable_document, link: product, display_name: "Big guide", size: 1_048_576)
