@@ -1,6 +1,6 @@
 import { Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
-import { Link, router, usePage } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -20,7 +20,6 @@ type HelperSession = {
 type HelpCenterSharedProps = {
   helper_widget_host?: string | null;
   helper_session?: HelperSession | null;
-  recaptcha_site_key?: string | null;
 };
 
 type HelpCenterLayoutProps = {
@@ -30,12 +29,10 @@ type HelpCenterLayoutProps = {
 
 function HelpCenterHeader({
   hasHelperSession,
-  recaptchaSiteKey,
   showSearchButton = false,
   onOpenNewTicket,
 }: {
   hasHelperSession: boolean;
-  recaptchaSiteKey: string | null;
   showSearchButton?: boolean | undefined;
   onOpenNewTicket?: () => void;
 }) {
@@ -87,7 +84,7 @@ function HelpCenterHeader({
     if (isAnonymousUserOnHelpCenter) {
       return (
         <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
-          Contact support
+          Email support
         </Button>
       );
     }
@@ -95,7 +92,7 @@ function HelpCenterHeader({
     if (hasHelperSession) {
       return (
         <Button color="accent" onClick={() => onOpenNewTicket?.()}>
-          New ticket
+          Email support
         </Button>
       );
     }
@@ -123,7 +120,6 @@ function HelpCenterHeader({
           open={isUnauthenticatedNewTicketOpen}
           onClose={() => setIsUnauthenticatedNewTicketOpen(false)}
           onCreated={() => setIsUnauthenticatedNewTicketOpen(false)}
-          recaptchaSiteKey={recaptchaSiteKey}
         />
       ) : null}
     </>
@@ -141,11 +137,6 @@ function AuthenticatedHelpCenterContent({
 }) {
   const [isNewTicketOpen, setIsNewTicketOpen] = React.useState(false);
 
-  const onTicketCreated = (_slug: string) => {
-    setIsNewTicketOpen(false);
-    router.visit(Routes.support_index_path());
-  };
-
   return (
     <>
       <HelpCenterHeader
@@ -155,7 +146,7 @@ function AuthenticatedHelpCenterContent({
         onOpenNewTicket={() => setIsNewTicketOpen(true)}
       />
       <section className="p-4 md:p-8">{children}</section>
-      <NewTicketModal open={isNewTicketOpen} onClose={() => setIsNewTicketOpen(false)} onCreated={onTicketCreated} />
+      <NewTicketModal open={isNewTicketOpen} onClose={() => setIsNewTicketOpen(false)} />
     </>
   );
 }

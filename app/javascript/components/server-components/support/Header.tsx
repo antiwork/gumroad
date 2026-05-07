@@ -12,11 +12,9 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 export function SupportHeader({
   onOpenNewTicket,
   hasHelperSession = true,
-  recaptchaSiteKey,
 }: {
   onOpenNewTicket: () => void;
   hasHelperSession?: boolean;
-  recaptchaSiteKey?: string | null;
 }) {
   const { pathname, searchParams } = new URL(useOriginalLocation());
   const isHelpCenterHome = pathname === Routes.help_center_root_path();
@@ -52,11 +50,11 @@ export function SupportHeader({
             </Button>
           ) : isAnonymousUserOnHelpCenter ? (
               <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
-                Contact support
+                Email support
               </Button>
           ) : hasHelperSession ? (
               <Button color="accent" onClick={onOpenNewTicket}>
-                New ticket
+                Email support
               </Button>
           ) : null
         }
@@ -82,7 +80,6 @@ export function SupportHeader({
           open={isUnauthenticatedNewTicketOpen}
           onClose={() => setIsUnauthenticatedNewTicketOpen(false)}
           onCreated={() => setIsUnauthenticatedNewTicketOpen(false)}
-          recaptchaSiteKey={recaptchaSiteKey ?? null}
         />
       ) : null}
     </>
@@ -103,20 +100,15 @@ type WrapperProps = {
     currentToken?: string | null;
   } | null;
   new_ticket_url: string;
-  recaptcha_site_key?: string | null;
 };
 
-const Wrapper = ({ host, session, new_ticket_url, recaptcha_site_key }: WrapperProps) =>
+const Wrapper = ({ host, session, new_ticket_url }: WrapperProps) =>
   host && session ? (
     <HelperClientProvider host={host} session={session}>
       <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} />
     </HelperClientProvider>
   ) : (
-    <SupportHeader
-      onOpenNewTicket={() => (window.location.href = new_ticket_url)}
-      hasHelperSession={false}
-      recaptchaSiteKey={recaptcha_site_key ?? null}
-    />
+    <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} hasHelperSession={false} />
   );
 
 export default Wrapper;

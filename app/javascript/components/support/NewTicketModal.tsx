@@ -1,61 +1,27 @@
-import { Paperclip, Trash } from "@boxicons/react";
-import { useCreateConversation, useCreateMessage } from "@helperai/react";
 import React from "react";
 
-import FileUtils from "$app/utils/file";
-
 import { Button } from "$app/components/Button";
-import { useDomains } from "$app/components/DomainSettings";
-import { FileRowContent } from "$app/components/FileRowContent";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
 import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
 import { Input } from "$app/components/ui/Input";
-import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { Textarea } from "$app/components/ui/Textarea";
 
-export function NewTicketModal({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (slug: string) => void;
-}) {
-  const { apiDomain } = useDomains();
-  const { mutateAsync: createConversation } = useCreateConversation();
-  const { mutateAsync: createMessage } = useCreateMessage();
-
+export function NewTicketModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [subject, setSubject] = React.useState("");
   const [message, setMessage] = React.useState("");
-  const [attachments, setAttachments] = React.useState<File[]>([]);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const isFormValid = subject.trim() && message.trim();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isFormValid) return;
 
-    setIsSubmitting(true);
-    try {
-      const { conversationSlug } = await createConversation({ subject: subject.trim() });
-      await createMessage({
-        conversationSlug,
-        content: message.trim(),
-        attachments,
-        customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
-      });
-      onCreated(conversationSlug);
-    } catch (error) {
-      showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const url = `mailto:support@gumroad.com?subject=${encodeURIComponent(subject.trim())}&body=${encodeURIComponent(message.trim())}`;
+    window.location.href = url;
+    showAlert("Your email client should open shortly. Send the email to complete your support request.", "success");
+    onClose();
   };
 
   return (
@@ -64,30 +30,15 @@ export function NewTicketModal({
       onClose={onClose}
       title="How can we help you today?"
       footer={
-        <>
-          <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Paperclip className="size-5" /> Attach files
-          </Button>
-          <Button
-            color="accent"
-            onClick={() => formRef.current?.requestSubmit()}
-            disabled={isSubmitting || !isFormValid}
-          >
-            {isSubmitting ? "Sending..." : "Send message"}
-          </Button>
-        </>
+        <Button color="accent" onClick={() => formRef.current?.requestSubmit()} disabled={!isFormValid}>
+          Open email
+        </Button>
       }
     >
       <p>
         <SupportSlaMessage />
       </p>
-      <form
-        ref={formRef}
-        className="space-y-4 md:w-[700px]"
-        onSubmit={(e) => {
-          void handleSubmit(e);
-        }}
-      >
+      <form ref={formRef} className="space-y-4 md:w-[700px]" onSubmit={handleSubmit}>
         <label className="sr-only">Subject</label>
         <Input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} />
         <label className="sr-only">Message</label>
@@ -97,46 +48,6 @@ export function NewTicketModal({
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Tell us about your issue or question..."
         />
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={ALLOWED_ATTACHMENT_MIMETYPES}
-          className="sr-only"
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            if (files.length === 0) return;
-            setAttachments((prev) => [...prev, ...files]);
-            e.currentTarget.value = "";
-          }}
-        />
-        {attachments.length > 0 ? (
-          <Rows role="list" aria-label="Files">
-            {attachments.map((file, index) => (
-              <Row role="listitem" key={`${file.name}-${index}`}>
-                <RowContent>
-                  <FileRowContent
-                    name={FileUtils.getFileNameWithoutExtension(file.name)}
-                    extension={FileUtils.getFileExtension(file.name).toUpperCase()}
-                    externalLinkUrl={null}
-                    isUploading={false}
-                    details={<li>{FileUtils.getReadableFileSize(file.size)}</li>}
-                  />
-                </RowContent>
-                <RowActions>
-                  <Button
-                    outline
-                    color="danger"
-                    aria-label="Remove"
-                    onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
-                  >
-                    <Trash className="size-5" />
-                  </Button>
-                </RowActions>
-              </Row>
-            ))}
-          </Rows>
-        ) : null}
       </form>
     </Modal>
   );

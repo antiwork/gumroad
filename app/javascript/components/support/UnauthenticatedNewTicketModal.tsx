@@ -1,72 +1,39 @@
 import React from "react";
 
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
-
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
-import { useRecaptcha, RecaptchaCancelledError } from "$app/components/useRecaptcha";
 
 export function UnauthenticatedNewTicketModal({
   open,
   onClose,
   onCreated,
-  recaptchaSiteKey,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
-  recaptchaSiteKey: string | null;
 }) {
-  const { container: recaptchaContainer, execute: executeRecaptcha } = useRecaptcha({
-    siteKey: recaptchaSiteKey,
-  });
-
   const [email, setEmail] = React.useState("");
   const [subject, setSubject] = React.useState("");
   const [message, setMessage] = React.useState("");
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement | null>(null);
 
   const isFormValid = email.trim() && subject.trim() && message.trim();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isFormValid) return;
 
-    setIsSubmitting(true);
-    try {
-      const recaptchaResponse = recaptchaSiteKey ? await executeRecaptcha() : null;
-
-      const response = await request({
-        method: "POST",
-        url: "/support/create_unauthenticated_ticket",
-        accept: "json",
-        data: {
-          email: email.trim(),
-          subject: subject.trim(),
-          message: message.trim(),
-          "g-recaptcha-response": recaptchaResponse,
-        },
-      });
-
-      if (!response.ok) throw new ResponseError("Failed to create support ticket");
-
-      showAlert("Your support ticket has been created successfully! We'll get back to you via email.", "success");
-      onCreated();
-      setEmail("");
-      setSubject("");
-      setMessage("");
-    } catch (error) {
-      if (error instanceof RecaptchaCancelledError) return;
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const url = `mailto:support@gumroad.com?subject=${encodeURIComponent(subject.trim())}&body=${encodeURIComponent(`From: ${email.trim()}\n\n${message.trim()}`)}`;
+    window.location.href = url;
+    showAlert("Your email client should open shortly. Send the email to complete your support request.", "success");
+    onCreated();
+    setEmail("");
+    setSubject("");
+    setMessage("");
   };
 
   return (
@@ -80,22 +47,16 @@ export function UnauthenticatedNewTicketModal({
           onClick={() => {
             formRef.current?.requestSubmit();
           }}
-          disabled={isSubmitting || !isFormValid}
+          disabled={!isFormValid}
         >
-          {isSubmitting ? "Sending..." : "Send message"}
+          Open email
         </Button>
       }
     >
       <p>
         <SupportSlaMessage />
       </p>
-      <form
-        ref={formRef}
-        className="space-y-4 md:w-[700px] [&_.grecaptcha-badge]:invisible"
-        onSubmit={(e) => {
-          void handleSubmit(e);
-        }}
-      >
+      <form ref={formRef} className="space-y-4 md:w-[700px]" onSubmit={handleSubmit}>
         <div>
           <label className="sr-only">Email address</label>
           <Input
@@ -120,19 +81,6 @@ export function UnauthenticatedNewTicketModal({
             required
           />
         </div>
-        {recaptchaContainer}
-        {/* We hide the reCAPTCHA badge to avoid it overlapping the modal content and show this standard disclaimer instead (see https://developers.google.com/recaptcha/docs/faq#id-like-to-hide-the-recaptcha-badge.-what-is-allowed) */}
-        <p className="text-sm text-muted">
-          This site is protected by reCAPTCHA and the Google{" "}
-          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
-            Privacy Policy
-          </a>{" "}
-          and{" "}
-          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">
-            Terms of Service
-          </a>{" "}
-          apply.
-        </p>
       </form>
     </Modal>
   );
