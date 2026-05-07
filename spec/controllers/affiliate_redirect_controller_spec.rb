@@ -75,6 +75,19 @@ describe AffiliateRedirectController do
       end
     end
 
+    context "when destination URL has leading/trailing whitespace" do
+      it "strips whitespace and redirects successfully" do
+        direct_affiliate.update_column(:destination_url, " https://example.gumroad.com/l/abc ")
+        direct_affiliate.apply_to_all_products = true
+        direct_affiliate.save!(validate: false)
+
+        get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric }
+
+        expect(response).to be_redirect
+        expect(response.location).to include("example.gumroad.com")
+      end
+    end
+
     it_behaves_like "AffiliateCookie concern" do
       subject(:make_request) { get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric } }
     end
