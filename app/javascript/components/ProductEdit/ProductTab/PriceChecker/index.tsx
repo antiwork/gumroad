@@ -38,8 +38,6 @@ const checklistFingerprint = (product: Product) =>
 
 type Status = "idle" | "loading" | "ok" | "insufficient" | "error";
 
-const CARD_MIN_HEIGHT = "min-h-[calc((100cqw-34px)/2.4+126px)]";
-
 const VARIANT_LABEL_MAX = 12;
 
 const truncateLabel = (raw: string) =>
@@ -135,12 +133,7 @@ export const PriceCheckerCard = () => {
 
   if (!hasResult) {
     return (
-      <div
-        className={classNames(
-          "grid content-center justify-items-center gap-3 rounded-sm border border-dashed border-border bg-background p-4 text-center",
-          CARD_MIN_HEIGHT,
-        )}
-      >
+      <div className="grid min-h-64 content-center justify-items-center gap-3 rounded-sm border border-dashed border-border bg-background p-4 text-center xl:min-h-80">
         <h2>Price checker</h2>
         <p>How your price compares to similar {productTypeLabel} on Gumroad.</p>
         <Button color="primary" onClick={() => triggerLoad(false)} disabled={isLoading}>
@@ -201,12 +194,7 @@ export const PriceCheckerCard = () => {
       ) : null}
 
       {isInsufficient && data?.status === "insufficient_data" ? (
-        <div
-          className={classNames(
-            "grid content-between gap-3 rounded-sm border border-dashed border-border bg-background p-4",
-            CARD_MIN_HEIGHT,
-          )}
-        >
+        <div className="grid min-h-64 content-between gap-3 rounded-sm border border-dashed border-border bg-background p-4 xl:min-h-80">
           <div className="flex items-start justify-between gap-2">
             <div className="grid min-w-0 flex-1 gap-1 text-sm">
               <div className="font-medium text-foreground">Not enough comparable products yet</div>
@@ -229,12 +217,7 @@ export const PriceCheckerCard = () => {
           />
         </div>
       ) : hasOk && data?.status === "ok" ? (
-        <div
-          className={classNames(
-            "grid content-start gap-3 rounded-sm border border-border bg-background p-4",
-            CARD_MIN_HEIGHT,
-          )}
-        >
+        <div className="grid min-h-64 grid-rows-[auto_1fr_auto] gap-3 rounded-sm border border-border bg-background p-4 xl:min-h-80">
           {chartHeaderRow}
           <DistributionChart
             histogram={data.histogram}

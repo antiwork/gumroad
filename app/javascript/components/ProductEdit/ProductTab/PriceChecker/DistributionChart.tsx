@@ -285,7 +285,7 @@ export const DistributionChart = ({
   const layout = layoutMarkers(priceMarkers, minBin, maxBin);
 
   return (
-    <ResponsiveContainer width="100%" aspect={2.4}>
+    <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={data}
         margin={{ top: topReserve, right: 4, bottom: 0, left: 4 }}
