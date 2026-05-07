@@ -194,6 +194,19 @@ describe Api::Internal::Admin::ProductsController do
       expect(response.parsed_body["pagination"]).to include("page" => 2, "next" => nil)
     end
 
+    it "treats non-positive or non-numeric page as page 1 (rather than raising 500)" do
+      product = create(:product, user: seller)
+
+      ["0", "-5", "abc", ""].each do |bad_page|
+        post :list, params: { email: seller.email, page: bad_page }
+
+        expect(response).to have_http_status(:ok), "page=#{bad_page.inspect} returned #{response.status}"
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["pagination"]["page"]).to eq(1)
+        expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
+      end
+    end
+
     it "returns an empty page in the JSON envelope when page is past the end (rather than raising 500)" do
       create(:product, user: seller)
 

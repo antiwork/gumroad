@@ -20,7 +20,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       .includes(:product_files, :display_asset_previews, :thumbnail_alive)
       .order(Admin::Users::ListPaginatedProducts::PRODUCTS_ORDER)
 
-    pagination, paginated = pagy(products, page: params[:page], limit: per_page, overflow: :empty_page)
+    pagination, paginated = pagy(products, page: requested_page, limit: per_page, overflow: :empty_page)
 
     render json: {
       success: true,
@@ -54,6 +54,10 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       return DEFAULT_PER_PAGE unless requested.positive?
 
       [requested, MAX_PER_PAGE].min
+    end
+
+    def requested_page
+      [params[:page].to_i, 1].max
     end
 
     def serialize_product(product)
