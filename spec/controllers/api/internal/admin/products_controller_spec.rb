@@ -194,6 +194,30 @@ describe Api::Internal::Admin::ProductsController do
       expect(response.parsed_body["pagination"]).to include("page" => 2, "next" => nil)
     end
 
+    it "returns an empty page in the JSON envelope when page is past the end (rather than raising 500)" do
+      create(:product, user: seller)
+
+      post :list, params: { email: seller.email, page: 99 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["products"]).to eq([])
+      expect(response.parsed_body["pagination"]["next"]).to be_nil
+    end
+
+    it "orders product files with NULL position first to match MySQL ORDER BY ASC" do
+      product = create(:product, user: seller)
+      first = create(:readable_document, link: product, display_name: "First (null pos)")
+      second = create(:readable_document, link: product, display_name: "Second", position: 0)
+      third = create(:readable_document, link: product, display_name: "Third", position: 1)
+      first.update_column(:position, nil)
+
+      post :list, params: { email: seller.email }
+
+      ids = response.parsed_body["products"].first["files"].map { _1["id"] }
+      expect(ids).to eq([first.external_id, second.external_id, third.external_id])
+    end
+
     it "honors per_page and caps it at the maximum" do
       create_list(:product, 5, user: seller)
 

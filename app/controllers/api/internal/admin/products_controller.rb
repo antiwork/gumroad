@@ -20,7 +20,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       .includes(:product_files, :display_asset_previews, :thumbnail_alive)
       .order(Admin::Users::ListPaginatedProducts::PRODUCTS_ORDER)
 
-    pagination, paginated = pagy(products, page: params[:page], limit: per_page)
+    pagination, paginated = pagy(products, page: params[:page], limit: per_page, overflow: :empty_page)
 
     render json: {
       success: true,
@@ -74,7 +74,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
           id: product.user&.external_id,
           email: product.user&.email
         },
-        files: product.product_files.sort_by { |f| [f.position || Float::INFINITY, f.id] }.map { serialize_file(_1) }
+        files: product.product_files.sort_by { |f| [f.position.nil? ? 0 : 1, f.position.to_i, f.id] }.map { serialize_file(_1) }
       }
     end
 
