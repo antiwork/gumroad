@@ -5,6 +5,25 @@ require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::PayoutsController do
   let(:user) { create(:compliant_user) }
+  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
+
+  shared_examples "requires user_id for payout mutation" do |action, extra_params: {}|
+    it "returns 400 when only email is provided" do
+      post action, params: extra_params.merge(email: user.email)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+  end
+
+  shared_examples "checks expected_email for payout mutation" do |action, extra_params: {}|
+    it "rejects mismatched expected_email without mutating payouts" do
+      post action, params: extra_params.merge(user_id: user.external_id, expected_email: "other@example.com")
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email does not match the user's current email" }.as_json)
+    end
+  end
 
   before do
     stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
@@ -30,6 +49,7 @@ describe Api::Internal::Admin::PayoutsController do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
       expect(response.parsed_body["next_payout_date"]).to eq(Date.tomorrow.to_s)
       expect(response.parsed_body["balance_for_next_payout"]).to eq("$100.00")
       expect(response.parsed_body["payout_note"]).to eq(payout_note)
@@ -54,11 +74,11 @@ describe Api::Internal::Admin::PayoutsController do
       expect(payouts.map { _1["external_id"] }).not_to include(payment6.external_id)
     end
 
-    it "returns a bad request when email is missing" do
+    it "returns a bad request when email and user_id are missing" do
       post :list
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -67,32 +87,40 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
+
+    it "lists payouts by user_id" do
+      post :list, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
   end
 
   describe "POST pause" do
     include_examples "admin api authorization required", :post, :pause
 
-    it "returns 400 when email is missing" do
+    it "returns 400 when user_id is missing" do
       post :pause
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
     end
 
     it "returns 404 when the user does not exist" do
-      post :pause, params: { email: "missing@example.com" }
+      post :pause, params: { user_id: "missing" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
 
     it "pauses payouts and records the admin as the pause source" do
-      expect { post :pause, params: { email: user.email } }.to change { user.reload.payouts_paused_internally? }.from(false).to(true)
+      expect { post :pause, params: { user_id: user.external_id } }.to change { user.reload.payouts_paused_internally? }.from(false).to(true)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
-        "message" => "Payouts paused for #{user.email}",
+        "user_id" => user.external_id,
+        "message" => "Payouts paused for #{user.external_id}",
         "payouts_paused" => true
       )
       expect(user.reload.payouts_paused_by.to_s).to eq(GUMROAD_ADMIN_ID.to_s)
@@ -101,7 +129,7 @@ describe Api::Internal::Admin::PayoutsController do
     it "creates a COMMENT_TYPE_PAYOUTS_PAUSED comment when reason is provided" do
       reason = "Payouts paused due to verification"
 
-      expect { post :pause, params: { email: user.email, reason: reason } }
+      expect { post :pause, params: { user_id: user.external_id, reason: reason } }
         .to change { user.comments.with_type_payouts_paused.count }.by(1)
 
       comment = user.comments.with_type_payouts_paused.last
@@ -113,7 +141,7 @@ describe Api::Internal::Admin::PayoutsController do
       legacy_admin_token = AdminApiToken.find_by!(token_hash: AdminApiToken.hash_token("test-admin-token"))
 
       expect do
-        post :pause, params: { email: user.email, reason: "Manual review" }
+        post :pause, params: { user_id: user.external_id, expected_email: user.email, reason: "Manual review" }
       end.to change { AdminApiAuditLog.count }.by(1)
 
       audit_log = AdminApiAuditLog.last
@@ -127,7 +155,8 @@ describe Api::Internal::Admin::PayoutsController do
         response_status: 200
       )
       expect(audit_log.params_snapshot).to include(
-        "email" => "[REDACTED]",
+        "user_id" => user.external_id,
+        "expected_email" => "[REDACTED]",
         "reason" => "Manual review"
       )
     end
@@ -138,7 +167,7 @@ describe Api::Internal::Admin::PayoutsController do
       admin_api_token = AdminApiToken.find_by!(actor_user: actor, token_hash: AdminApiToken.hash_token(plaintext_token))
       request.headers["Authorization"] = "Bearer #{plaintext_token}"
 
-      post :pause, params: { email: user.email, reason: "Actor review" }
+      post :pause, params: { user_id: user.external_id, reason: "Actor review" }
 
       expect(response).to have_http_status(:ok)
       expect(user.comments.with_type_payouts_paused.last).to have_attributes(
@@ -154,7 +183,7 @@ describe Api::Internal::Admin::PayoutsController do
     end
 
     it "does not create a comment when reason is blank" do
-      expect { post :pause, params: { email: user.email, reason: "   " } }
+      expect { post :pause, params: { user_id: user.external_id, reason: "   " } }
         .not_to change { user.comments.count }
 
       expect(response).to have_http_status(:ok)
@@ -164,12 +193,13 @@ describe Api::Internal::Admin::PayoutsController do
     it "short-circuits when payouts are already paused by admin" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
 
-      expect { post :pause, params: { email: user.email, reason: "again" } }
+      expect { post :pause, params: { user_id: user.external_id, reason: "again" } }
         .not_to change { user.comments.count }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
+        "user_id" => user.external_id,
         "status" => "already_paused",
         "message" => "Payouts are already paused by admin",
         "payouts_paused" => true
@@ -180,7 +210,7 @@ describe Api::Internal::Admin::PayoutsController do
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       reason = "Manual review pending"
 
-      expect { post :pause, params: { email: user.email, reason: reason } }
+      expect { post :pause, params: { user_id: user.external_id, reason: reason } }
         .to change { user.comments.with_type_payouts_paused.count }.by(1)
 
       expect(response).to have_http_status(:ok)
@@ -193,25 +223,28 @@ describe Api::Internal::Admin::PayoutsController do
     it "asserts admin attribution when payouts were previously paused by Stripe" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
 
-      post :pause, params: { email: user.email, reason: "Stripe escalation" }
+      post :pause, params: { user_id: user.external_id, reason: "Stripe escalation" }
 
       expect(response).to have_http_status(:ok)
       expect(user.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
     end
+
+    include_examples "requires user_id for payout mutation", :pause
+    include_examples "checks expected_email for payout mutation", :pause
   end
 
   describe "POST resume" do
     include_examples "admin api authorization required", :post, :resume
 
-    it "returns 400 when email is missing" do
+    it "returns 400 when user_id is missing" do
       post :resume
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
     end
 
     it "returns 404 when the user does not exist" do
-      post :resume, params: { email: "missing@example.com" }
+      post :resume, params: { user_id: "missing" }
 
       expect(response).to have_http_status(:not_found)
     end
@@ -219,14 +252,15 @@ describe Api::Internal::Admin::PayoutsController do
     it "resumes payouts, clears payouts_paused_by, and records a resume comment" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
 
-      expect { post :resume, params: { email: user.email } }
+      expect { post :resume, params: { user_id: user.external_id } }
         .to change { user.reload.payouts_paused_internally? }.from(true).to(false)
         .and change { user.comments.with_type_payouts_resumed.count }.by(1)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
-        "message" => "Payouts resumed for #{user.email}",
+        "user_id" => user.external_id,
+        "message" => "Payouts resumed for #{user.external_id}",
         "payouts_paused" => false
       )
       expect(user.reload.payouts_paused_by).to be_nil
@@ -239,7 +273,7 @@ describe Api::Internal::Admin::PayoutsController do
     it "reports payouts_paused: true after admin resume when the seller is still self-paused" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID, payouts_paused_by_user: true)
 
-      post :resume, params: { email: user.email }
+      post :resume, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -249,12 +283,13 @@ describe Api::Internal::Admin::PayoutsController do
     end
 
     it "short-circuits when payouts are not paused by admin" do
-      expect { post :resume, params: { email: user.email } }
+      expect { post :resume, params: { user_id: user.external_id } }
         .not_to change { user.comments.count }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
+        "user_id" => user.external_id,
         "status" => "not_paused",
         "message" => "Payouts are not paused by admin",
         "payouts_paused" => false
@@ -264,48 +299,53 @@ describe Api::Internal::Admin::PayoutsController do
     it "reports payouts_paused: true on short-circuit when the seller has self-paused" do
       user.update!(payouts_paused_by_user: true)
 
-      post :resume, params: { email: user.email }
+      post :resume, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
+        "user_id" => user.external_id,
         "status" => "not_paused",
         "payouts_paused" => true
       )
     end
+
+    include_examples "requires user_id for payout mutation", :resume
+    include_examples "checks expected_email for payout mutation", :resume
   end
 
   describe "POST issue" do
     include_examples "admin api authorization required", :post, :issue
 
-    it "returns 400 when email is missing" do
+    it "returns 400 when user_id is missing" do
       post :issue, params: { payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
     end
 
     it "returns 404 when the user does not exist" do
-      post :issue, params: { email: "missing@example.com", payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
+      post :issue, params: { user_id: "missing", payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
 
       expect(response).to have_http_status(:not_found)
     end
 
     it "returns 400 when payout_processor is invalid" do
-      post :issue, params: { email: user.email, payout_processor: "ach", payout_period_end_date: 1.day.ago.to_date.to_s }
+      post :issue, params: { user_id: user.external_id, payout_processor: "ach", payout_period_end_date: 1.day.ago.to_date.to_s }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["message"]).to eq("payout_processor must be stripe or paypal")
     end
 
     it "returns 400 when payout_period_end_date is missing" do
-      post :issue, params: { email: user.email, payout_processor: "stripe" }
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["message"]).to eq("payout_period_end_date is required")
     end
 
     it "returns 400 when payout_period_end_date is invalid" do
-      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: "not-a-date" }
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: "not-a-date" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["message"]).to eq("payout_period_end_date is invalid")
@@ -314,7 +354,7 @@ describe Api::Internal::Admin::PayoutsController do
     it "returns 400 without writing an audit row when payout_period_end_date is today or in the future" do
       [Date.current, Date.current + 1].each do |date|
         expect do
-          post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+          post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
         end.not_to change { AdminApiAuditLog.count }
 
         expect(response).to have_http_status(:bad_request)
@@ -330,11 +370,12 @@ describe Api::Internal::Admin::PayoutsController do
         date, PayoutProcessorType::STRIPE, [user], from_admin: true
       ).and_return([[payment]])
 
-      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
+        "user_id" => user.external_id,
         "payout" => hash_including("external_id" => payment.external_id, "state" => "completed")
       )
     end
@@ -346,7 +387,7 @@ describe Api::Internal::Admin::PayoutsController do
       allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[payment]])
 
       expect do
-        post :issue, params: { email: user.email, payout_processor: "paypal", payout_period_end_date: date.to_s, should_split_the_amount: "true" }
+        post :issue, params: { user_id: user.external_id, payout_processor: "paypal", payout_period_end_date: date.to_s, should_split_the_amount: "true" }
       end.to change { user.reload.should_paypal_payout_be_split? }.from(false).to(true)
 
       expect(response).to have_http_status(:ok)
@@ -356,7 +397,7 @@ describe Api::Internal::Admin::PayoutsController do
       date = 1.day.ago.to_date
       allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([])
 
-      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to include("success" => false, "message" => "Payment was not sent.")
@@ -368,7 +409,7 @@ describe Api::Internal::Admin::PayoutsController do
       date = 1.day.ago.to_date
       allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[failed_payment]])
 
-      post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["message"]).to eq("Insufficient funds")
@@ -380,7 +421,7 @@ describe Api::Internal::Admin::PayoutsController do
       allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_return([[payment]])
 
       expect do
-        post :issue, params: { email: user.email, payout_processor: "stripe", payout_period_end_date: date.to_s }
+        post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
       end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(AdminApiAuditLog.last).to have_attributes(
@@ -390,6 +431,9 @@ describe Api::Internal::Admin::PayoutsController do
         response_status: 200
       )
     end
+
+    include_examples "requires user_id for payout mutation", :issue, extra_params: { payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
+    include_examples "checks expected_email for payout mutation", :issue, extra_params: { payout_processor: "stripe", payout_period_end_date: 1.day.ago.to_date.to_s }
   end
 
   describe "POST scheduled_list" do

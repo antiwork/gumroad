@@ -1,61 +1,44 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseController
-  USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
-
   def info
-    return unless require_user_lookup_params!
-
-    user = find_user_or_render(include_deleted: true)
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user
 
-    render json: { success: true, user: serialize_user_info(user) }
+    render json: internal_admin_user_success_payload(user, user: serialize_user_info(user))
   end
 
   def suspension
-    return unless require_user_lookup_params!
-
-    user = find_user_or_render
+    user = find_internal_admin_user_for_read_or_render
     return unless user
 
-    render json: {
-      success: true,
-      status: suspension_status(user),
-      updated_at: last_status_changed_at(user)&.as_json,
-      appeal_url: nil
-    }
+    render json: internal_admin_user_success_payload(user, {
+                                                       status: suspension_status(user),
+                                                       updated_at: last_status_changed_at(user)&.as_json,
+                                                       appeal_url: nil
+                                                     })
   end
 
   def reset_password
-    return unless require_user_lookup_params!
-    if params[:external_id].blank? && params[:email].present? && !EmailFormatValidator.valid?(params[:email])
-      return render json: { success: false, message: "Invalid email format" }, status: :bad_request
-    end
-
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.reset_password", target: user) do
       user.send_reset_password_instructions
-      render json: { success: true, message: "Reset password instructions sent" }
+      render json: internal_admin_user_success_payload(user, message: "Reset password instructions sent")
     end
   end
 
   def update_email
-    if (params[:current_email].blank? && params[:external_id].blank?) || params[:new_email].blank?
-      return render json: { success: false, message: "current_email (or external_id) and new_email are required" }, status: :bad_request
-    end
+    return render_internal_admin_user_id_required if params[:user_id].blank?
+    return render json: { success: false, message: "new_email is required" }, status: :bad_request if params[:new_email].blank?
 
     unless EmailFormatValidator.valid?(params[:new_email])
       return render json: { success: false, message: "Invalid new email format" }, status: :bad_request
     end
 
-    user = if params[:external_id].present?
-      User.alive.find_by(external_id: params[:external_id])
-    else
-      User.alive.by_email(params[:current_email]).first
-    end
-    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
 
     record_admin_write(action: "users.update_email", target: user) do
       if user.email.to_s.casecmp(params[:new_email].to_s).zero?
@@ -68,28 +51,25 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       end
 
       if user.unconfirmed_email.present?
-        render json: {
-          success: true,
-          message: "Email change pending confirmation. Confirmation email sent to #{user.unconfirmed_email}.",
-          unconfirmed_email: user.unconfirmed_email,
-          pending_confirmation: true
-        }
+        render json: internal_admin_user_success_payload(user, {
+                                                           message: "Email change pending confirmation. Confirmation email sent to #{user.unconfirmed_email}.",
+                                                           unconfirmed_email: user.unconfirmed_email,
+                                                           pending_confirmation: true
+                                                         })
       else
-        render json: {
-          success: true,
-          message: "Email updated.",
-          email: user.email,
-          pending_confirmation: false
-        }
+        render json: internal_admin_user_success_payload(user, {
+                                                           message: "Email updated.",
+                                                           email: user.email,
+                                                           pending_confirmation: false
+                                                         })
       end
     end
   end
 
   def two_factor_authentication
-    return unless require_user_lookup_params!
     return render json: { success: false, message: "enabled is required" }, status: :bad_request if params[:enabled].to_s.blank?
 
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.two_factor_authentication", target: user) do
@@ -98,11 +78,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       if user.save
         user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
-        render json: {
-          success: true,
-          message: "Two-factor authentication #{enabled ? "enabled" : "disabled"}",
-          two_factor_authentication_enabled: user.two_factor_authentication_enabled?
-        }
+        render json: internal_admin_user_success_payload(user, {
+                                                           message: "Two-factor authentication #{enabled ? "enabled" : "disabled"}",
+                                                           two_factor_authentication_enabled: user.two_factor_authentication_enabled?
+                                                         })
       else
         render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
       end
@@ -110,18 +89,17 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def create_comment
-    return unless require_user_lookup_params!
     return render json: { success: false, message: "content is required" }, status: :bad_request if params[:content].blank?
     return render json: { success: false, message: "idempotency_key is required" }, status: :bad_request if params[:idempotency_key].blank?
 
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.create_comment", target: user) do
       comment = User::CreateAdminCommentService.new(user:, content: params[:content], idempotency_key: params[:idempotency_key], author_id: current_admin_actor_id).perform
 
       if comment.persisted?
-        render json: { success: true, comment: serialize_comment(comment) }
+        render json: internal_admin_user_success_payload(user, comment: serialize_comment(comment))
       else
         render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
       end
@@ -131,14 +109,12 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def mark_compliant
-    return unless require_user_lookup_params!
-
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.mark_compliant", target: user) do
       if user.compliant?
-        return render json: { success: true, status: "already_compliant", message: "User is already compliant" }
+        return render json: internal_admin_user_success_payload(user, status: "already_compliant", message: "User is already compliant")
       end
 
       note = build_admin_note(user, params[:note]) if params[:note].present?
@@ -146,21 +122,19 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       user.mark_compliant!(author_id: current_admin_actor_id)
       note&.save!
-      render json: { success: true, status: "marked_compliant", message: "User marked compliant" }
+      render json: internal_admin_user_success_payload(user, status: "marked_compliant", message: "User marked compliant")
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
   end
 
   def suspend_for_fraud
-    return unless require_user_lookup_params!
-
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.suspend_for_fraud", target: user) do
       if user.suspended_for_fraud?
-        return render json: { success: true, status: "already_suspended", message: "User is already suspended for fraud" }
+        return render json: internal_admin_user_success_payload(user, status: "already_suspended", message: "User is already suspended for fraud")
       end
 
       suspension_note = build_suspension_note(user) if params[:suspension_note].present?
@@ -168,17 +142,16 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       user.suspend_for_fraud!(author_id: current_admin_actor_id)
       suspension_note&.save!
-      render json: { success: true, status: "suspended_for_fraud", message: "User suspended for fraud" }
+      render json: internal_admin_user_success_payload(user, status: "suspended_for_fraud", message: "User suspended for fraud")
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
   end
 
   def watch
-    return unless require_user_lookup_params!
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.watch", target: user) do
@@ -196,21 +169,19 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       )
       watched_user.sync!
 
-      render json: {
-        success: true,
-        message: "User added to watchlist",
-        watched_user: serialize_watched_user(watched_user)
-      }
+      render json: internal_admin_user_success_payload(user, {
+                                                         message: "User added to watchlist",
+                                                         watched_user: serialize_watched_user(watched_user)
+                                                       })
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_entity
     end
   end
 
   def update_watch
-    return unless require_user_lookup_params!
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.update_watch", target: user) do
@@ -225,20 +196,17 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         notes: params.key?(:notes) ? params[:notes].presence : watched_user.notes
       )
 
-      render json: {
-        success: true,
-        message: "Watchlist updated",
-        watched_user: serialize_watched_user(watched_user)
-      }
+      render json: internal_admin_user_success_payload(user, {
+                                                         message: "Watchlist updated",
+                                                         watched_user: serialize_watched_user(watched_user)
+                                                       })
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_entity
     end
   end
 
   def unwatch
-    return unless require_user_lookup_params!
-
-    user = find_user_or_render
+    user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.unwatch", target: user) do
@@ -246,31 +214,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       return render json: { success: false, message: "User is not currently being watched" }, status: :unprocessable_entity if watched_user.nil?
 
       watched_user.mark_deleted!
-      render json: { success: true, message: "User removed from watchlist" }
+      render json: internal_admin_user_success_payload(user, message: "User removed from watchlist")
     end
   end
 
   private
-    def require_user_lookup_params!
-      return true if params[:email].present? || params[:external_id].present?
-
-      render json: { success: false, message: USER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
-      false
-    end
-
-    def find_user_or_render(include_deleted: false)
-      scope = include_deleted ? User : User.alive
-      user = if params[:external_id].present?
-        scope.find_by(external_id: params[:external_id])
-      else
-        scope.by_email(params[:email]).first
-      end
-      return user if user.present?
-
-      render json: { success: false, message: "User not found" }, status: :not_found
-      nil
-    end
-
     def suspension_status(user)
       if user.suspended?
         "Suspended"

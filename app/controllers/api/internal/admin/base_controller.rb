@@ -12,6 +12,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.reassign
     purchases.resend_all_receipts
   ].freeze
+  USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or user_id is required"
+  USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
+    "Use /internal/admin/users/info to look up the user_id by email."
+  private_constant :USER_LOOKUP_BAD_REQUEST_MESSAGE, :USER_ID_REQUIRED_MESSAGE
 
   skip_before_action :verify_authenticity_token
   before_action :verify_authorization_header!
@@ -63,6 +67,45 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
 
     def current_admin_actor_id
       Current.admin_actor.id
+    end
+
+    def find_internal_admin_user_for_read_or_render(include_deleted: false)
+      unless params[:email].present? || internal_admin_user_id_param.present?
+        render json: { success: false, message: USER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
+        return
+      end
+
+      user = internal_admin_user_for(include_deleted:)
+      return user if user.present?
+
+      render json: { success: false, message: "User not found" }, status: :not_found
+      nil
+    end
+
+    def find_internal_admin_user_for_write_or_render
+      if params[:user_id].blank?
+        render_internal_admin_user_id_required
+        return
+      end
+
+      user = User.alive.find_by(external_id: params[:user_id])
+      if user.blank?
+        render json: { success: false, message: "User not found" }, status: :not_found
+        return
+      end
+
+      return user if params[:expected_email].blank? || user.email.to_s.casecmp(params[:expected_email].to_s).zero?
+
+      render json: { success: false, message: "expected_email does not match the user's current email" }, status: :conflict
+      nil
+    end
+
+    def internal_admin_user_success_payload(user, payload = {})
+      { success: true, user_id: user.external_id }.merge(payload)
+    end
+
+    def render_internal_admin_user_id_required
+      render json: { success: false, message: USER_ID_REQUIRED_MESSAGE }, status: :bad_request
     end
 
     def record_admin_write(action:, target: nil)
@@ -153,6 +196,19 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     def admin_audit_redacted_param_key?(key, action:)
       key.to_s.match?(ADMIN_AUDIT_REDACTED_PARAM_PATTERN) ||
         ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS.fetch(action, []).include?(key.to_s)
+    end
+
+    def internal_admin_user_id_param
+      params[:user_id].presence || params[:external_id].presence
+    end
+
+    def internal_admin_user_for(include_deleted:)
+      scope = include_deleted ? User : User.alive
+      if internal_admin_user_id_param.present?
+        scope.find_by(external_id: internal_admin_user_id_param)
+      else
+        scope.by_email(params[:email]).first
+      end
     end
 
     def serialize_purchase(purchase)
