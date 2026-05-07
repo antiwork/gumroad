@@ -84,7 +84,7 @@ const NavButton = ({
   }
 
   const className = classNames(
-    "flex w-full items-center justify-center h-full border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:py-2 lg:px-6",
+    "flex w-full items-center justify-center h-full border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:py-2 lg:px-6 whitespace-nowrap",
     modifier1,
     modifier2,
   );
