@@ -350,6 +350,15 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({ success: true, message: "Reset password instructions sent" }.as_json)
     end
 
+    it "skips the email-format check when external_id is provided alongside a malformed email" do
+      expect_any_instance_of(User).to receive(:send_reset_password_instructions)
+
+      post :reset_password, params: { external_id: user.external_id, email: "garbage" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ success: true, message: "Reset password instructions sent" }.as_json)
+    end
+
     context "with a user lookup helper stubbed" do
       before { allow_any_instance_of(User).to receive(:send_reset_password_instructions) }
 

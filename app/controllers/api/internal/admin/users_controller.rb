@@ -28,7 +28,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
   def reset_password
     return unless require_user_lookup_params!
-    if params[:email].present? && !EmailFormatValidator.valid?(params[:email])
+    if params[:external_id].blank? && params[:email].present? && !EmailFormatValidator.valid?(params[:email])
       return render json: { success: false, message: "Invalid email format" }, status: :bad_request
     end
 
