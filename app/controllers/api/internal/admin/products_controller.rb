@@ -17,7 +17,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
     return unless user
 
     products = user.products
-      .includes(:product_files, :display_asset_previews, :thumbnail_alive)
+      .includes(:product_files, :display_asset_previews)
       .order(Admin::Users::ListPaginatedProducts::PRODUCTS_ORDER)
 
     pagination, paginated = pagy(products, page: requested_page, limit: per_page, overflow: :empty_page)
