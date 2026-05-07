@@ -212,13 +212,13 @@ describe Api::Internal::Helper::UsersController do
   describe "POST create_comment" do
     include_examples "helper api authorization required", :post, :create_comment
 
-    context "when email parameter is missing" do
+    context "when neither email nor external_id is provided" do
       it "returns a bad request error" do
         post :create_comment, params: { content: "Test", idempotency_key: SecureRandom.uuid }
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
+        expect(response.parsed_body["error_message"]).to eq("'email' or 'external_id' parameter is required")
       end
     end
 
@@ -248,7 +248,43 @@ describe Api::Internal::Helper::UsersController do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email or external_id.")
+      end
+    end
+
+    context "when external_id parameter is used" do
+      it "creates a comment when external_id matches an alive user" do
+        post :create_comment, params: { external_id: user.external_id, content: "via external_id", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to be true
+        expect(user.comments.last.content).to eq("via external_id")
+      end
+
+      it "returns 422 when external_id does not match any user" do
+        post :create_comment, params: { external_id: "999999999999", content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email or external_id.")
+      end
+
+      it "returns 422 when external_id matches a soft-deleted user" do
+        user.mark_deleted!
+
+        post :create_comment, params: { external_id: user.external_id, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email or external_id.")
+      end
+
+      it "prefers external_id over email when both are provided" do
+        other_user = create(:user)
+
+        post :create_comment, params: { external_id: user.external_id, email: other_user.email, content: "via external_id", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:success)
+        expect(user.comments.last.content).to eq("via external_id")
+        expect(other_user.comments.count).to eq(0)
       end
     end
 

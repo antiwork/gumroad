@@ -6,6 +6,29 @@ require "shared_examples/authorized_admin_api_method"
 describe Api::Internal::Admin::UsersController do
   let(:admin_user) { create(:admin_user) }
 
+  shared_examples "supports user lookup by external_id" do |action, build_user: -> { create(:user) }, extra_params: {}, success_status: :ok|
+    describe "external_id lookup" do
+      it "looks up the user by external_id" do
+        user = instance_exec(&build_user)
+        post action, params: extra_params.merge(external_id: user.external_id)
+        expect(response).to have_http_status(success_status)
+      end
+
+      it "returns 404 when external_id does not match any user" do
+        post action, params: extra_params.merge(external_id: "999999999999")
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+      end
+
+      it "prefers external_id over email when both are provided" do
+        target = instance_exec(&build_user)
+        other = instance_exec(&build_user)
+        post action, params: extra_params.merge(external_id: target.external_id, email: other.email)
+        expect(response).to have_http_status(success_status)
+      end
+    end
+  end
+
   describe "POST info" do
     include_examples "admin api authorization required", :post, :info
 
@@ -15,7 +38,7 @@ describe Api::Internal::Admin::UsersController do
       post :info
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -156,6 +179,20 @@ describe Api::Internal::Admin::UsersController do
       expect(info["deleted_at"]).to eq(user.reload.deleted_at.as_json)
     end
 
+    it "looks up a soft-deleted user by external_id" do
+      user = create(:compliant_user, email: "deleted-by-id@example.com")
+      user.mark_deleted!
+
+      post :info, params: { external_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      info = response.parsed_body["user"]
+      expect(info["id"]).to eq(user.external_id)
+      expect(info["deleted_at"]).to eq(user.reload.deleted_at.as_json)
+    end
+
+    include_examples "supports user lookup by external_id", :info, build_user: -> { create(:compliant_user) }
+
     it "uses the latest risk-state comment for last_status_changed_at, including on_probation transitions" do
       user = create(:compliant_user, email: "probation@example.com")
       create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_COMPLIANT, created_at: 1.month.ago)
@@ -246,7 +283,7 @@ describe Api::Internal::Admin::UsersController do
       post :suspension
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -255,6 +292,18 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
+
+    it "returns not found when external_id matches a soft-deleted user" do
+      user = create(:compliant_user)
+      user.mark_deleted!
+
+      post :suspension, params: { external_id: user.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    include_examples "supports user lookup by external_id", :suspension, build_user: -> { create(:compliant_user) }
   end
 
   describe "POST reset_password" do
@@ -266,7 +315,7 @@ describe Api::Internal::Admin::UsersController do
       post :reset_password
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns 400 when email is malformed" do
@@ -291,6 +340,21 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({ success: true, message: "Reset password instructions sent" }.as_json)
     end
+
+    it "skips the email-format check when only external_id is provided" do
+      expect_any_instance_of(User).to receive(:send_reset_password_instructions)
+
+      post :reset_password, params: { external_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ success: true, message: "Reset password instructions sent" }.as_json)
+    end
+
+    context "with a user lookup helper stubbed" do
+      before { allow_any_instance_of(User).to receive(:send_reset_password_instructions) }
+
+      include_examples "supports user lookup by external_id", :reset_password
+    end
   end
 
   describe "POST update_email" do
@@ -303,14 +367,14 @@ describe Api::Internal::Admin::UsersController do
       post :update_email, params: { new_email: new_email }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "Both current_email and new_email are required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "current_email (or external_id) and new_email are required" }.as_json)
     end
 
     it "returns 400 when new_email is missing" do
       post :update_email, params: { current_email: user.email }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "Both current_email and new_email are required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "current_email (or external_id) and new_email are required" }.as_json)
     end
 
     it "returns 400 when new_email is malformed" do
@@ -361,6 +425,40 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["message"]).to eq("New email is the same as the current email")
     end
+
+    it "looks up the user by external_id and updates the email" do
+      post :update_email, params: { external_id: user.external_id, new_email: new_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.unconfirmed_email).to eq(new_email)
+    end
+
+    it "returns 400 when neither current_email nor external_id is provided" do
+      post :update_email, params: { new_email: new_email }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "current_email (or external_id) and new_email are required" }.as_json)
+    end
+
+    it "returns 404 when external_id matches a soft-deleted user" do
+      user.mark_deleted!
+
+      post :update_email, params: { external_id: user.external_id, new_email: new_email }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "prefers external_id over current_email when both are provided" do
+      other_user = create(:user)
+
+      post :update_email, params: { external_id: user.external_id, current_email: other_user.email, new_email: new_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload.unconfirmed_email).to eq(new_email)
+      expect(other_user.reload.unconfirmed_email).to be_nil
+    end
   end
 
   describe "POST two_factor_authentication" do
@@ -372,7 +470,7 @@ describe Api::Internal::Admin::UsersController do
       post :two_factor_authentication, params: { enabled: true }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns 400 when enabled is missing" do
@@ -439,6 +537,8 @@ describe Api::Internal::Admin::UsersController do
       expect(user.reload.two_factor_authentication_enabled?).to be(false)
       expect(TotpCredential.where(id: totp_credential.id)).to be_empty
     end
+
+    include_examples "supports user lookup by external_id", :two_factor_authentication, extra_params: { enabled: true }
   end
 
   describe "POST create_comment" do
@@ -453,7 +553,7 @@ describe Api::Internal::Admin::UsersController do
       post :create_comment, params: { content: "hi", idempotency_key: idempotency_key }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns 400 when content is missing" do
@@ -541,6 +641,8 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to be(false)
     end
+
+    include_examples "supports user lookup by external_id", :create_comment, extra_params: { content: "via external_id", idempotency_key: SecureRandom.uuid }
   end
 
   describe "POST mark_compliant" do
@@ -552,7 +654,7 @@ describe Api::Internal::Admin::UsersController do
       post :mark_compliant
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns 404 when the user does not exist" do
@@ -632,6 +734,8 @@ describe Api::Internal::Admin::UsersController do
         message: "User is already compliant"
       }.as_json)
     end
+
+    include_examples "supports user lookup by external_id", :mark_compliant, build_user: -> { create(:user, user_risk_state: "suspended_for_fraud") }
   end
 
   describe "POST suspend_for_fraud" do
@@ -643,7 +747,7 @@ describe Api::Internal::Admin::UsersController do
       post :suspend_for_fraud
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns 404 when the user does not exist" do
@@ -735,6 +839,8 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["success"]).to be(false)
       expect(user.reload).to be_compliant
     end
+
+    include_examples "supports user lookup by external_id", :suspend_for_fraud, build_user: -> { create(:compliant_user) }
   end
 
   describe "POST watch" do
@@ -746,7 +852,7 @@ describe Api::Internal::Admin::UsersController do
       post :watch, params: { revenue_threshold: "200" }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body["message"]).to eq("email is required")
+      expect(response.parsed_body["message"]).to eq("email or external_id is required")
     end
 
     it "returns bad request when revenue_threshold is missing" do
@@ -799,6 +905,8 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["message"]).to eq("User is already being watched")
     end
+
+    include_examples "supports user lookup by external_id", :watch, extra_params: { revenue_threshold: "200" }
   end
 
   describe "POST unwatch" do
@@ -810,7 +918,7 @@ describe Api::Internal::Admin::UsersController do
       post :unwatch
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body["message"]).to eq("email is required")
+      expect(response.parsed_body["message"]).to eq("email or external_id is required")
     end
 
     it "returns not found when user does not exist" do
@@ -835,6 +943,8 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["message"]).to eq("User is not currently being watched")
     end
+
+    include_examples "supports user lookup by external_id", :unwatch, build_user: -> { user = create(:user); create(:watched_user, user:); user }
   end
 
   describe "POST update_watch" do
@@ -846,7 +956,7 @@ describe Api::Internal::Admin::UsersController do
       post :update_watch, params: { revenue_threshold: "200" }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body["message"]).to eq("email is required")
+      expect(response.parsed_body["message"]).to eq("email or external_id is required")
     end
 
     it "returns bad request when revenue_threshold is missing" do
@@ -910,5 +1020,9 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:ok)
       expect(watched_user.reload.notes).to be_nil
     end
+
+    include_examples "supports user lookup by external_id", :update_watch,
+                     build_user: -> { user = create(:user); create(:watched_user, user:); user },
+                     extra_params: { revenue_threshold: "200" }
   end
 end

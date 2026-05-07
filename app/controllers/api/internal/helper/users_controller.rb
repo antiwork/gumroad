@@ -108,8 +108,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   end
 
   def create_comment
-    if params[:email].blank?
-      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+    if params[:email].blank? && params[:external_id].blank?
+      return render json: { success: false, error_message: "'email' or 'external_id' parameter is required" }, status: :bad_request
     end
     if params[:content].blank?
       return render json: { success: false, error_message: "'content' parameter is required" }, status: :bad_request
@@ -118,9 +118,13 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "'idempotency_key' parameter is required" }, status: :bad_request
     end
 
-    user = User.alive.by_email(params[:email]).first
+    user = if params[:external_id].present?
+      User.alive.find_by(external_id: params[:external_id])
+    else
+      User.alive.by_email(params[:email]).first
+    end
     if user.blank?
-      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "An account does not exist with that email or external_id." }, status: :unprocessable_entity
     end
 
     comment = User::CreateAdminCommentService.new(user:, content: params[:content], idempotency_key: params[:idempotency_key]).perform

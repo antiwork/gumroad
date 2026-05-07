@@ -1,19 +1,21 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseController
-  def info
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+  USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
 
-    user = User.by_email(params[:email]).first
-    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
+  def info
+    return unless require_user_lookup_params!
+
+    user = find_user_or_render(include_deleted: true)
+    return unless user
 
     render json: { success: true, user: serialize_user_info(user) }
   end
 
   def suspension
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     render json: {
@@ -25,10 +27,12 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def reset_password
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
-    return render json: { success: false, message: "Invalid email format" }, status: :bad_request unless EmailFormatValidator.valid?(params[:email])
+    return unless require_user_lookup_params!
+    if params[:email].present? && !EmailFormatValidator.valid?(params[:email])
+      return render json: { success: false, message: "Invalid email format" }, status: :bad_request
+    end
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.reset_password", target: user) do
@@ -38,16 +42,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def update_email
-    if params[:current_email].blank? || params[:new_email].blank?
-      return render json: { success: false, message: "Both current_email and new_email are required" }, status: :bad_request
+    if (params[:current_email].blank? && params[:external_id].blank?) || params[:new_email].blank?
+      return render json: { success: false, message: "current_email (or external_id) and new_email are required" }, status: :bad_request
     end
 
     unless EmailFormatValidator.valid?(params[:new_email])
       return render json: { success: false, message: "Invalid new email format" }, status: :bad_request
     end
 
-    user = find_user_or_render(params[:current_email])
-    return unless user
+    user = if params[:external_id].present?
+      User.alive.find_by(external_id: params[:external_id])
+    else
+      User.alive.by_email(params[:current_email]).first
+    end
+    return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
 
     record_admin_write(action: "users.update_email", target: user) do
       if user.email.to_s.casecmp(params[:new_email].to_s).zero?
@@ -78,10 +86,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def two_factor_authentication
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
     return render json: { success: false, message: "enabled is required" }, status: :bad_request if params[:enabled].to_s.blank?
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.two_factor_authentication", target: user) do
@@ -102,11 +110,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def create_comment
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
     return render json: { success: false, message: "content is required" }, status: :bad_request if params[:content].blank?
     return render json: { success: false, message: "idempotency_key is required" }, status: :bad_request if params[:idempotency_key].blank?
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.create_comment", target: user) do
@@ -123,9 +131,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def mark_compliant
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.mark_compliant", target: user) do
@@ -145,9 +153,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def suspend_for_fraud
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.suspend_for_fraud", target: user) do
@@ -167,10 +175,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def watch
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.watch", target: user) do
@@ -199,10 +207,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def update_watch
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.update_watch", target: user) do
@@ -228,9 +236,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   def unwatch
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    return unless require_user_lookup_params!
 
-    user = find_user_or_render(params[:email])
+    user = find_user_or_render
     return unless user
 
     record_admin_write(action: "users.unwatch", target: user) do
@@ -243,8 +251,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   private
-    def find_user_or_render(email)
-      user = User.alive.by_email(email).first
+    def require_user_lookup_params!
+      return true if params[:email].present? || params[:external_id].present?
+
+      render json: { success: false, message: USER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
+      false
+    end
+
+    def find_user_or_render(include_deleted: false)
+      scope = include_deleted ? User : User.alive
+      user = if params[:external_id].present?
+        scope.find_by(external_id: params[:external_id])
+      else
+        scope.by_email(params[:email]).first
+      end
       return user if user.present?
 
       render json: { success: false, message: "User not found" }, status: :not_found
