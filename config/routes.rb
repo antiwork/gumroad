@@ -353,6 +353,12 @@ Rails.application.routes.draw do
               post :scheduled_cancel
             end
           end
+
+          resources :products, only: [:show] do
+            collection do
+              post :list
+            end
+          end
         end
 
         namespace :grmc do

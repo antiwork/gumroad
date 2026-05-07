@@ -24,4 +24,9 @@ describe "internal admin API routing" do
     expect(route_for("/internal/admin/users/update_watch", :post)).to include(controller: "api/internal/admin/users", action: "update_watch")
     expect(route_for("/internal/admin/users/unwatch", :post)).to include(controller: "api/internal/admin/users", action: "unwatch")
   end
+
+  it "routes the products endpoints" do
+    expect(route_for("/internal/admin/products/list", :post)).to include(controller: "api/internal/admin/products", action: "list")
+    expect(route_for("/internal/admin/products/abc123", :get)).to include(controller: "api/internal/admin/products", action: "show", id: "abc123")
+  end
 end
