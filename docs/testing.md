@@ -315,7 +315,7 @@ Add a payment method to your browser (Eg: for Chrome, add the Stripe `4242 4242 
 #### Apple Pay
 
 1. You need to [set up Apple Pay](https://support.apple.com/en-us/HT204506) with a real card on an iPhone or touch bar Macbook. This card will not be charged on local and staging environments.
-2. Add the domain to [Stripe's list of Apple Pay Domains](https://dashboard.stripe.com/settings/payments/apple_pay) if testing on deploy branch. For staging and main, `discover.gumroad.dev`, `creator.gumroad.dev`, `discover.staging.gumroad.com` are already added.
+2. Add the domain to [Stripe's list of Apple Pay Domains](https://dashboard.stripe.com/settings/payments/apple_pay) if testing on a deploy branch. `discover.staging.gumroad.com` is already added for staging. For local development see [Apple Pay docs](apple_pay.md) — the app must be exposed over HTTPS (e.g. via ngrok) since Stripe requires HTTPS for Apple Pay domain registration.
 
 #### Google Pay
 
