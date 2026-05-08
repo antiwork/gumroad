@@ -61,12 +61,8 @@ development:
     # For running dev server with https, set `server: https`.
     # You may use `https: true` instead but notice that it is deprecated in favor of `server: https`
     # Ensure only one of these entries is set.
-    server:
-      type: https
-      options:
-        key: './docker/local-nginx/certs/gumroad_dev.key'
-        cert: './docker/local-nginx/certs/gumroad_dev.crt'
-    host: gumroad.dev
+    server: http
+    host: localhost
     port: 3035
     # Hot Module Replacement updates modules while the application is running without a full reload
     # Used instead of the `hot` key in https://webpack.js.org/configuration/dev-server/#devserverhot

@@ -12,7 +12,6 @@ For the versions required to match the docker setup, checkout `docker/docker-com
 - Redis
 - MongoDB
 - Elasticsearch
-- Nginx
 
 #### MySQL
 
@@ -71,40 +70,4 @@ brew install mongodb/brew/mongodb-community@3.6
     export discovery.type=single-node
     ```
 
-#### Nginx
-
-1. ```
-   brew install nginx
-   ```
-
-2. `cd` into the main repository directory:
-
-   ```
-   cd /path/to/gumroad/web
-   ```
-
-3. Copy the `docs/setup_without_docker/gumroad_dev.conf` file from this repository into Nginx's `servers/` directory.
-   ```
-   sudo cp ${PWD}/docs/setup_without_docker/gumroad_dev.conf /usr/local/etc/nginx/servers/
-   ```
-4. Symlink the SSL certificate and private key configured for `gumroad.dev` and `*.gumroad.dev` domains to `/etc/ssl/certs` directory.
-
-   ```
-   sudo mkdir -p /etc/ssl/certs
-   sudo ln -s ${PWD}/docker/local-nginx/certs/gumroad_dev.crt /etc/ssl/certs/gumroad_dev.crt
-   sudo ln -s ${PWD}/docker/local-nginx/certs/gumroad_dev.key /etc/ssl/certs/gumroad_dev.key
-   ```
-
-5. Check if the config is OK with the following command -
-
-   ```
-   sudo nginx -t
-   ```
-
-6. Restart Nginx
-
-   ```
-   brew services restart nginx
-   ```
-
-Now follow the rest of the [README.md](https://github.com/antiwork/gumroad/blob/main/README.md) for the installation process. Once done open https://gumroad.dev after running the `foreman` command and it should point to your Gumroad server!
+Now follow the rest of the [README.md](https://github.com/antiwork/gumroad/blob/main/README.md) for the installation process. Once done open http://localhost:3000 after running the `foreman` command and it should point to your Gumroad server. Seller subdomains and the asset/api hosts use `*.localhost` (e.g. `http://seller.localhost:3000`, `http://api.localhost:3000`) — modern browsers auto-resolve these to 127.0.0.1, so no `/etc/hosts` edits are needed.

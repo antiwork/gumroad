@@ -6,6 +6,7 @@ FactoryBot.define do
     account_number { "000123456789" }
     account_number_last_four { "6789" }
     bank_code { "AAAAGYGGXYZ" }
+    branch_code { "12345678" }
     account_holder_full_name { "Guyana Creator" }
   end
 end

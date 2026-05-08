@@ -4947,6 +4947,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Guyana Creator")
         fill_in("SWIFT / BIC Code", with: "AAAAGYGGXYZ")
+        fill_in("Branch code", with: "12345678")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
 
@@ -4956,7 +4957,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
-        expect(page).to have_content("SWIFT / BIC code")
+        expect(page).to have_content("SWIFT/BIC and branch code")
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Guyana")
         expect(compliance_info.last_name).to eq("Creator")
@@ -4966,7 +4967,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+5926291234")
         expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
-        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGYGGXYZ")
+        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGYGGXYZ-12345678")
       end
     end
 

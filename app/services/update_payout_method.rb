@@ -53,7 +53,7 @@ class UpdatePayoutMethod
     JordanBankAccount.name => { class: JordanBankAccount, permitted_params: [:bank_code] },
     EthiopiaBankAccount.name => { class: EthiopiaBankAccount, permitted_params: [:bank_code] },
     BruneiBankAccount.name => { class: BruneiBankAccount, permitted_params: [:bank_code] },
-    GuyanaBankAccount.name => { class: GuyanaBankAccount, permitted_params: [:bank_code] },
+    GuyanaBankAccount.name => { class: GuyanaBankAccount, permitted_params: [:bank_code, :branch_code] },
     GuatemalaBankAccount.name => { class: GuatemalaBankAccount, permitted_params: [:bank_code] },
     NigeriaBankAccount.name => { class: NigeriaBankAccount, permitted_params: [:bank_code] },
     SerbiaBankAccount.name => { class: SerbiaBankAccount, permitted_params: [:bank_code] },

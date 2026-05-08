@@ -19,6 +19,8 @@ session_cookie_name =
     else
       "#{base_cookie_name}_staging"
     end
+  when :development
+    "#{base_cookie_name}_development"
   else
     "#{base_cookie_name}_#{Rails.env}"
   end

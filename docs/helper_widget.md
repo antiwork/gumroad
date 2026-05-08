@@ -16,4 +16,4 @@ Once you have Helper working, you can run it alongside Gumroad by doing the foll
 4. Run `bin/dev` in Gumroad.
 5. Run `pnpm dev` in Helper.
 
-The Helper app will be available at `https://helperai.dev`, and the integrated support portal will be available at `https://gumroad.dev/support`.
+The Helper app will be available at `https://helperai.dev`, and the integrated support portal will be available at `http://localhost:3000/support`.

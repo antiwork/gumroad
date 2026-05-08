@@ -173,7 +173,7 @@ If you installed Docker Desktop (on a Mac or Windows machine), you can run the f
 make local
 ```
 
-If you are on Linux, or installed Docker via a package manager on a mac, you may have to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo make local` instead.
+If you are on Linux, or installed Docker via a package manager on a mac, you may need superuser access to expose container ports. To do that, use `sudo make local` instead.
 
 This command will not terminate. You run this in one tab and start the application in another tab.
 If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
@@ -196,7 +196,14 @@ bin/dev
 
 This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
-You can now access the application at `https://gumroad.dev`.
+You can now access the application at `http://localhost:3000`. Seller subdomains and the asset/api hosts use `*.localhost` (e.g. `http://seller.localhost:3000`, `http://api.localhost:3000`) — modern browsers auto-resolve these to 127.0.0.1, so no `/etc/hosts` edits are needed.
+
+##### Local dev limitations
+
+`*.localhost` over HTTP is treated as a secure context by browsers (so Stripe.js, Stripe Elements, and other secure-context APIs work), but a couple of features that need either HTTPS or a registrable cookie domain don't work in this setup:
+
+- **Apple Pay** — Stripe requires HTTPS for Apple Pay domain registration. Workaround: expose the app over HTTPS with [ngrok](https://ngrok.com/) (`ngrok http 3000`) and register the resulting hostname in the [Stripe Apple Pay dashboard](https://dashboard.stripe.com/settings/payments/apple_pay).
+- **Cross-subdomain cookies** (affiliate attribution, `_gumroad_guid`, multi-account "switch seller", session) — browsers reject `Domain=localhost`, so cookies set on `localhost:3000` aren't sent to `seller.localhost:3000`. Test these flows on a single host, or front the app with a local HTTPS reverse proxy on a registrable hostname (e.g. `gumroad.test` via mkcert) where `Domain=.gumroad.test` works.
 
 ## Development
 

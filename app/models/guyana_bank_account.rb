@@ -3,8 +3,9 @@
 class GuyanaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "GY"
 
-  BANK_CODE_FORMAT_REGEX = /^[0-9a-zA-Z]{8,11}$/
-  private_constant :BANK_CODE_FORMAT_REGEX
+  BANK_CODE_FORMAT_REGEX = /^[0-9a-zA-Z]{11}$/
+  BRANCH_CODE_FORMAT_REGEX = /^\d{8}$/
+  private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /^[0-9a-zA-Z]{1,32}$/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
@@ -12,10 +13,11 @@ class GuyanaBankAccount < BankAccount
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
+  validate :validate_branch_code
   validate :validate_account_number
 
   def routing_number
-    "#{bank_code}"
+    "#{bank_code}-#{branch_code}"
   end
 
   def bank_account_type
@@ -44,8 +46,15 @@ class GuyanaBankAccount < BankAccount
 
   private
     def validate_bank_code
+      return unless new_record? || bank_number_changed?
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
+    end
+
+    def validate_branch_code
+      return unless new_record? || branch_code_changed?
+      return if BRANCH_CODE_FORMAT_REGEX.match?(branch_code)
+      errors.add :base, "The branch code is invalid."
     end
 
     def validate_account_number
