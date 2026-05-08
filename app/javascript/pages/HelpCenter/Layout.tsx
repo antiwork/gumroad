@@ -12,7 +12,7 @@ type HelpCenterLayoutProps = {
   showSearchButton?: boolean;
 };
 
-function HelpCenterHeader({ showSearchButton = false }: { showSearchButton?: boolean }) {
+function HelpCenterHeader({ showSearchButton = false }: { showSearchButton?: boolean | undefined }) {
   const renderActions = () => {
     if (showSearchButton) {
       return (
