@@ -774,7 +774,7 @@ const Payouts = ({
               {instant_payout.payable_balances.some(
                 (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
               ) ? (
-                <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
+                <a href={"mailto:support@gumroad.com"}>Contact us for an instant payout</a>
               ) : (
                 <Button
                   size="sm"

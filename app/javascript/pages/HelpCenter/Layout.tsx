@@ -5,7 +5,6 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 const SUPPORT_EMAIL = "mailto:support@gumroad.com";
 
