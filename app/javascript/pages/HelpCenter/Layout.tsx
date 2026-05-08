@@ -4,12 +4,10 @@ import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { NewTicketModal } from "$app/components/support/NewTicketModal";
-import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
-import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+
+const SUPPORT_EMAIL = "mailto:support@gumroad.com";
 
 type HelperSession = {
   email?: string | null;
@@ -28,48 +26,10 @@ type HelpCenterLayoutProps = {
 };
 
 function HelpCenterHeader({
-  hasHelperSession,
   showSearchButton = false,
-  onOpenNewTicket,
 }: {
-  hasHelperSession: boolean;
   showSearchButton?: boolean | undefined;
-  onOpenNewTicket?: () => void;
 }) {
-  const originalLocation = useOriginalLocation();
-  const originalUrl = new URL(originalLocation);
-  const isHelpCenterHome = originalUrl.pathname === Routes.help_center_root_path();
-  const hasNewTicketParam = originalUrl.searchParams.has("new_ticket");
-  const isAnonymousUserOnHelpCenter = !hasHelperSession && isHelpCenterHome;
-
-  const [isUnauthenticatedNewTicketOpen, setIsUnauthenticatedNewTicketOpen] = React.useState(
-    isAnonymousUserOnHelpCenter && hasNewTicketParam,
-  );
-
-  React.useEffect(() => {
-    if (!hasNewTicketParam || typeof window === "undefined") return;
-
-    const cleanupUrl = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("new_ticket");
-      history.replaceState(null, "", url.toString());
-    };
-
-    if (isAnonymousUserOnHelpCenter && !isUnauthenticatedNewTicketOpen) {
-      cleanupUrl();
-    } else if (hasHelperSession && isHelpCenterHome) {
-      onOpenNewTicket?.();
-      cleanupUrl();
-    }
-  }, [
-    hasNewTicketParam,
-    isUnauthenticatedNewTicketOpen,
-    isAnonymousUserOnHelpCenter,
-    hasHelperSession,
-    isHelpCenterHome,
-    onOpenNewTicket,
-  ]);
-
   const renderActions = () => {
     if (showSearchButton) {
       return (
@@ -81,71 +41,14 @@ function HelpCenterHeader({
       );
     }
 
-    if (isAnonymousUserOnHelpCenter) {
-      return (
-        <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
-          Email support
-        </Button>
-      );
-    }
-
-    if (hasHelperSession) {
-      return (
-        <Button color="accent" onClick={() => onOpenNewTicket?.()}>
-          Email support
-        </Button>
-      );
-    }
-
-    return null;
+    return (
+      <Button color="accent" asChild>
+        <a href={SUPPORT_EMAIL}>Email support</a>
+      </Button>
+    );
   };
 
-  return (
-    <>
-      <PageHeader title="Help Center" actions={renderActions()}>
-        {hasHelperSession ? (
-          <Tabs>
-            <Tab asChild isSelected>
-              <Link href={Routes.help_center_root_path()}>Articles</Link>
-            </Tab>
-            <Tab href={Routes.support_index_path()} isSelected={false} className="flex items-center gap-2">
-              Support tickets
-              <UnreadTicketsBadge />
-            </Tab>
-          </Tabs>
-        ) : null}
-      </PageHeader>
-      {isAnonymousUserOnHelpCenter ? (
-        <UnauthenticatedNewTicketModal
-          open={isUnauthenticatedNewTicketOpen}
-          onClose={() => setIsUnauthenticatedNewTicketOpen(false)}
-          onCreated={() => setIsUnauthenticatedNewTicketOpen(false)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function AuthenticatedHelpCenterContent({
-  children,
-  showSearchButton,
-}: {
-  children: React.ReactNode;
-  showSearchButton?: boolean | undefined;
-}) {
-  const [isNewTicketOpen, setIsNewTicketOpen] = React.useState(false);
-
-  return (
-    <>
-      <HelpCenterHeader
-        hasHelperSession
-        showSearchButton={showSearchButton}
-        onOpenNewTicket={() => setIsNewTicketOpen(true)}
-      />
-      <section className="p-4 md:p-8">{children}</section>
-      <NewTicketModal open={isNewTicketOpen} onClose={() => setIsNewTicketOpen(false)} />
-    </>
-  );
+  return <PageHeader title="Help Center" actions={renderActions()} />;
 }
 
 export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayoutProps) {
@@ -156,21 +59,15 @@ export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayou
   if (hasHelperSession) {
     return (
       <HelperClientProvider host={helper_widget_host} session={helper_session}>
-        <AuthenticatedHelpCenterContent
-          showSearchButton={showSearchButton}
-        >
-          {children}
-        </AuthenticatedHelpCenterContent>
+        <HelpCenterHeader showSearchButton={showSearchButton} />
+        <section className="p-4 md:p-8">{children}</section>
       </HelperClientProvider>
     );
   }
 
   return (
     <>
-      <HelpCenterHeader
-        hasHelperSession={false}
-        showSearchButton={showSearchButton}
-      />
+      <HelpCenterHeader showSearchButton={showSearchButton} />
       <section className="p-4 md:p-8">{children}</section>
     </>
   );

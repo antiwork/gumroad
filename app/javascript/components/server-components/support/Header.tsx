@@ -3,86 +3,32 @@ import { HelperClientProvider } from "@helperai/react";
 import React from "react";
 
 import { Button } from "$app/components/Button";
-import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
-import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-export function SupportHeader({
-  onOpenNewTicket,
-  hasHelperSession = true,
-}: {
-  onOpenNewTicket: () => void;
-  hasHelperSession?: boolean;
-}) {
-  const { pathname, searchParams } = new URL(useOriginalLocation());
-  const isHelpCenterHome = pathname === Routes.help_center_root_path();
-  const isHelpArticle = pathname.startsWith(Routes.help_center_root_path()) && !isHelpCenterHome;
-  const isAnonymousUserOnHelpCenter = !hasHelperSession && isHelpCenterHome;
+const SUPPORT_EMAIL = "mailto:support@gumroad.com";
 
-  const [isUnauthenticatedNewTicketOpen, setIsUnauthenticatedNewTicketOpen] = React.useState(
-    isAnonymousUserOnHelpCenter && !!searchParams.get("new_ticket"),
-  );
-
-  React.useEffect(() => {
-    const url = new URL(location.href);
-    if (url.searchParams.get("new_ticket")) {
-      if (isAnonymousUserOnHelpCenter && !isUnauthenticatedNewTicketOpen) {
-        url.searchParams.delete("new_ticket");
-        history.replaceState(null, "", url.toString());
-      } else if (hasHelperSession && isHelpCenterHome) {
-        onOpenNewTicket();
-      }
-    }
-  }, [isUnauthenticatedNewTicketOpen, isAnonymousUserOnHelpCenter]);
+export function SupportHeader({ hasHelperSession = true }: { hasHelperSession?: boolean }) {
+  const { pathname } = new URL(useOriginalLocation());
+  const isHelpArticle = pathname.startsWith(Routes.help_center_root_path()) && pathname !== Routes.help_center_root_path();
 
   return (
-    <>
-      <PageHeader
-        title="Help Center"
-        actions={
-          isHelpArticle ? (
-            <Button asChild>
-              <a href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-                <Search className="size-5" />
-              </a>
-            </Button>
-          ) : isAnonymousUserOnHelpCenter ? (
-              <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
-                Email support
-              </Button>
-          ) : hasHelperSession ? (
-              <Button color="accent" onClick={onOpenNewTicket}>
-                Email support
-              </Button>
-          ) : null
-        }
-      >
-        {hasHelperSession ? (
-          <Tabs>
-            <Tab href={Routes.help_center_root_path()} isSelected={pathname.startsWith(Routes.help_center_root_path())}>
-              Articles
-            </Tab>
-            <Tab
-              href={Routes.support_index_path()}
-              isSelected={pathname.startsWith(Routes.support_index_path())}
-              className="flex items-center gap-2"
-            >
-              Support tickets
-              <UnreadTicketsBadge />
-            </Tab>
-          </Tabs>
-        ) : null}
-      </PageHeader>
-      {isAnonymousUserOnHelpCenter ? (
-        <UnauthenticatedNewTicketModal
-          open={isUnauthenticatedNewTicketOpen}
-          onClose={() => setIsUnauthenticatedNewTicketOpen(false)}
-          onCreated={() => setIsUnauthenticatedNewTicketOpen(false)}
-        />
-      ) : null}
-    </>
+    <PageHeader
+      title="Help Center"
+      actions={
+        isHelpArticle ? (
+          <Button asChild>
+            <a href={Routes.help_center_root_path()} aria-label="Search" title="Search">
+              <Search className="size-5" />
+            </a>
+          </Button>
+        ) : (
+          <Button color="accent" asChild>
+            <a href={SUPPORT_EMAIL}>Email support</a>
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -102,13 +48,13 @@ type WrapperProps = {
   new_ticket_url: string;
 };
 
-const Wrapper = ({ host, session, new_ticket_url }: WrapperProps) =>
+const Wrapper = ({ host, session }: WrapperProps) =>
   host && session ? (
     <HelperClientProvider host={host} session={session}>
-      <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} />
+      <SupportHeader />
     </HelperClientProvider>
   ) : (
-    <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} hasHelperSession={false} />
+    <SupportHeader hasHelperSession={false} />
   );
 
 export default Wrapper;

@@ -17,58 +17,14 @@ describe "Help Center", type: :system, js: true do
         body: { token: "mock_helper_token" }.to_json,
         headers: { "Content-Type" => "application/json" }
       )
-
-    stub_request(:post, "https://helper.test/api/chat/conversation")
-      .to_return(
-        status: 200,
-        body: { conversationSlug: "test-conversation-123" }.to_json,
-        headers: { "Content-Type" => "application/json" }
-      )
-
-    stub_request(:post, "https://helper.test/api/chat/conversation/test-conversation-123/message")
-      .to_return(
-        status: 200,
-        body: { success: true }.to_json,
-        headers: { "Content-Type" => "application/json" }
-      )
   end
 
   describe "the user is unauthenticated" do
-    it "shows the contact support button and support modal" do
+    it "shows the email support button" do
       visit "/help"
 
-      expect(page).to have_button("Contact support")
+      expect(page).to have_link("Email support", href: "mailto:support@gumroad.com")
       expect(page).not_to have_link("Report a bug")
-
-      click_on "Contact support"
-
-      expect(page).to have_content("How can we help you today?")
-      expect(page).to have_field("Your email address")
-      expect(page).to have_field("Subject")
-      expect(page).to have_field("Tell us about your issue or question...")
-    end
-
-    it "opens the new ticket modal when the new ticket parameter is present" do
-      visit "/help?new_ticket=true"
-      within_modal "How can we help you today?" do
-        expect(page).to have_field("Your email address")
-        expect(page).to have_field("Subject")
-        expect(page).to have_field("Tell us about your issue or question...")
-      end
-    end
-
-    it "successfully submits a support ticket form" do
-      visit "/help"
-
-      click_on "Contact support"
-
-      fill_in "Your email address", with: "test@example.com"
-      fill_in "Subject", with: "Need help with my account"
-      fill_in "Tell us about your issue or question...", with: "I'm having trouble accessing my dashboard and need assistance."
-
-      click_on "Send message"
-      expect(page).to have_content("Your support ticket has been created successfully!")
-      expect(page).not_to have_content("How can we help you today?")
     end
   end
 
@@ -77,20 +33,11 @@ describe "Help Center", type: :system, js: true do
       sign_in seller
     end
 
-    it "shows the new ticket button" do
+    it "shows the email support button" do
       visit "/help"
 
-      expect(page).to have_button("New ticket")
+      expect(page).to have_link("Email support", href: "mailto:support@gumroad.com")
       expect(page).not_to have_link("Report a bug")
-    end
-
-    it "opens the new ticket modal when the new ticket parameter is present" do
-      visit "/help?new_ticket=true"
-      within_modal "How can we help you today?" do
-        expect(page).not_to have_field("Your email address")
-        expect(page).to have_field("Subject")
-        expect(page).to have_field("Tell us about your issue or question...")
-      end
     end
   end
 end
