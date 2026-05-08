@@ -315,10 +315,28 @@ describe LinksController, :vcr, inertia: true do
     describe "POST price_check" do
       let(:product) { create(:product, user: seller) }
 
+      before { Flipper.enable(:price_checker) }
+
       it_behaves_like "authorize called for action", :post, :price_check do
         let(:record) { product }
         let(:policy_method) { :edit? }
         let(:request_params) { { id: product.unique_permalink } }
+      end
+
+      it "returns 404 when the price_checker feature flag is disabled" do
+        Flipper.disable(:price_checker)
+
+        post :price_check, params: { id: product.unique_permalink }
+
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "returns 504 when the service raises TimeoutError" do
+        expect(PriceCheckerService).to receive(:call).and_raise(PriceCheckerService::TimeoutError)
+
+        post :price_check, params: { id: product.unique_permalink }
+
+        expect(response).to have_http_status(:gateway_timeout)
       end
 
       it "returns the price distribution payload as JSON" do

@@ -16,6 +16,7 @@ describe("Product Edit Price Checker Scenario", type: :system, js: true) do
   end
 
   before :each do
+    Flipper.enable(:price_checker)
     @product = create(:product, **matching_attrs, user: seller, price_cents: 1_000)
     allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
   end

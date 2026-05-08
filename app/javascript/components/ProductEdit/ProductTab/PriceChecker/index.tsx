@@ -88,6 +88,15 @@ export const PriceCheckerCard = () => {
         setData(result);
         setStatus(result.status === "ok" ? "ok" : "insufficient");
         setLastCheckedFingerprint(fingerprintAtRequest);
+        if (typeof gtag !== "undefined") {
+          gtag("event", "price_check_run", {
+            tier: result.tier,
+            match_count: result.match_count,
+            native_type: product.native_type,
+            currency_code: result.currency_code,
+            send_to: "gumroad",
+          });
+        }
       } catch (e) {
         if (signal.aborted) return;
         try {

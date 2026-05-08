@@ -175,7 +175,7 @@ describe PriceCheckerService do
         aggregations_double = double(
           dig: { "5.0" => nil, "25.0" => nil, "50.0" => nil, "75.0" => nil, "95.0" => nil }
         )
-        response_double = double(results: results_double, aggregations: aggregations_double)
+        response_double = double(results: results_double, aggregations: aggregations_double, response: { "timed_out" => false })
         allow(Link).to receive(:search).and_return(response_double)
 
         expect { described_class.call(product:) }.not_to raise_error
@@ -244,7 +244,62 @@ describe PriceCheckerService do
 
       it "stores the result under a stable cache key" do
         first_result = described_class.call(product:)
-        expect(Rails.cache.read("price_checker:v1:#{product.id}:#{Digest::MD5.hexdigest([product.name, product.description.to_s.first(500), product.native_type, product.is_recurring_billing, product.price_currency_type, product.taxonomy_id].join('|'))}")).to eq(first_result)
+        expect(Rails.cache.read("price_checker:v2:#{product.id}:#{Digest::MD5.hexdigest([product.name, product.native_type, product.is_recurring_billing, product.price_currency_type, product.taxonomy_id].join('|'))}")).to eq(first_result)
+      end
+    end
+
+    context "when the product is in the 'other' taxonomy" do
+      let(:other_taxonomy) { Taxonomy.find_or_create_by(slug: "other") }
+      let(:product) do
+        create(
+          :product,
+          user: seller,
+          name: "My film masterpiece",
+          description: "A documentary about widgets in the wild.",
+          price_cents: 1_500,
+          taxonomy: other_taxonomy,
+        )
+      end
+
+      before do
+        12.times do |i|
+          create(
+            :product,
+            user: create(:user),
+            taxonomy: other_taxonomy,
+            price_cents: 500 + i * 100,
+            name: "Film masterpiece #{i}",
+            description: "A documentary about widgets in the wild.",
+          )
+        end
+        index_model_records(Link)
+      end
+
+      it "returns a nil taxonomy_label so the UI does not show a misleading badge" do
+        result = described_class.call(product:)
+
+        expect(result[:status]).to eq("ok")
+        expect(result[:tier]).to eq("with_taxonomy")
+        expect(result[:taxonomy_label]).to be_nil
+      end
+    end
+
+    context "when an ES query times out" do
+      it "raises TimeoutError when the response has timed_out: true" do
+        results_double = double(total: 12)
+        aggregations_double = double(dig: {})
+        response_double = double(results: results_double, aggregations: aggregations_double, response: { "timed_out" => true })
+        allow(Link).to receive(:search).and_return(response_double)
+
+        expect { described_class.call(product:) }.to raise_error(PriceCheckerService::TimeoutError)
+      end
+
+      it "raises TimeoutError when the Ruby-level Timeout fires" do
+        allow(Link).to receive(:search) do
+          sleep 5
+        end
+
+        expect { described_class.call(product:) }.to raise_error(PriceCheckerService::TimeoutError)
       end
     end
   end

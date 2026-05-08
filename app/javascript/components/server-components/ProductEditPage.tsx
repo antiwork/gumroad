@@ -82,6 +82,7 @@ type Props = {
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
+  price_checker_enabled: boolean;
   ai_generated: boolean;
 };
 
@@ -119,6 +120,7 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
+  priceCheckerEnabled: props.price_checker_enabled,
   contentUpdates: null,
   setContentUpdates: () => {},
   aiGenerated: props.ai_generated,

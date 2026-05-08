@@ -63,6 +63,7 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    priceCheckerEnabled,
     aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
@@ -325,11 +326,11 @@ export const ProductTab = () => {
                         </p>
                       ) : null}
                     </div>
-                    {product.customizable_price ? null : (
+                    {priceCheckerEnabled && !product.customizable_price && product.native_type !== "bundle" ? (
                       <div className="xl:flex-1">
                         <PriceCheckerCard />
                       </div>
-                    )}
+                    ) : null}
                   </section>
                   {product.native_type === "call" ? (
                     <>

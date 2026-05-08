@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
 class PriceCheckerService
+  class TimeoutError < StandardError; end
+
   CACHE_TTL = 1.hour
-  CACHE_VERSION = "v1"
+  CACHE_VERSION = "v2"
   MIN_MATCHES = 5
   TARGET_BIN_COUNT = 12
   MAX_PRICE_CENTS = 10_000_000
+  ES_QUERY_TIMEOUT_MS = 2_000
+  ES_HARD_TIMEOUT_S = 2.5
   NICE_INTERVALS_CENTS = [
     100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000,
     100_000, 250_000, 500_000, 1_000_000, 2_500_000
@@ -23,8 +27,10 @@ class PriceCheckerService
 
   def call
     Rails.cache.fetch(cache_key, expires_in: CACHE_TTL, force: @force_refresh) do
-      compute
+      Timeout.timeout(ES_HARD_TIMEOUT_S) { compute }
     end
+  rescue Timeout::Error
+    raise TimeoutError
   end
 
   private
@@ -74,7 +80,7 @@ class PriceCheckerService
     end
 
     def run_distribution(include_taxonomy:)
-      percentiles_response = Link.search(percentiles_body(include_taxonomy:))
+      percentiles_response = run_search(percentiles_body(include_taxonomy:))
       match_count = percentiles_response.results.total
       return { match_count:, percentiles: nil, histogram: nil, mean: nil } if match_count < MIN_MATCHES
 
@@ -89,7 +95,7 @@ class PriceCheckerService
       return { match_count: 0, percentiles: nil, histogram: nil, mean: nil } if [p5, p25, p50, p75, p95].any?(&:nil?)
 
       interval = nice_interval(p5, p95)
-      histogram_response = Link.search(histogram_body(include_taxonomy:, interval:, p5:, p95:))
+      histogram_response = run_search(histogram_body(include_taxonomy:, interval:, p5:, p95:))
       buckets = histogram_response.aggregations.dig("price_clipped", "price_histogram", "buckets") || []
 
       bins = buckets.map do |b|
@@ -110,11 +116,12 @@ class PriceCheckerService
     end
 
     def decorate(result, tier:)
+      generic_taxonomy = effective_taxonomy&.slug == "other"
       {
         status: "ok",
         tier:,
         match_count: result[:match_count],
-        taxonomy_label: tier == "with_taxonomy" ? taxonomy_label_for(effective_taxonomy) : nil,
+        taxonomy_label: tier == "with_taxonomy" && !generic_taxonomy ? taxonomy_label_for(effective_taxonomy) : nil,
         currency_code: product.price_currency_type,
         current_price_cents: product.price_cents,
         summary: {
@@ -128,9 +135,16 @@ class PriceCheckerService
       }
     end
 
+    def run_search(body)
+      response = Link.search(body)
+      raise TimeoutError if response.response.dig("timed_out")
+      response
+    end
+
     def percentiles_body(include_taxonomy:)
       {
         size: 0,
+        timeout: "#{ES_QUERY_TIMEOUT_MS}ms",
         track_total_hits: true,
         query: base_query(include_taxonomy:),
         aggs: {
@@ -146,6 +160,7 @@ class PriceCheckerService
 
       {
         size: 0,
+        timeout: "#{ES_QUERY_TIMEOUT_MS}ms",
         track_total_hits: true,
         query: base_query(include_taxonomy:),
         aggs: {
@@ -233,7 +248,6 @@ class PriceCheckerService
       fingerprint = Digest::MD5.hexdigest(
         [
           effective_name,
-          effective_description.to_s.first(500),
           effective_native_type,
           product.is_recurring_billing,
           product.price_currency_type,

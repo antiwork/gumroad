@@ -301,12 +301,18 @@ class LinksController < ApplicationController
   def price_check
     fetch_product_by_unique_permalink
     authorize @product, :edit?
+    return head :not_found unless Feature.active?(:price_checker, current_seller)
 
-    result = PriceCheckerService.call(
-      product: @product,
-      overrides: sanitized_price_check_overrides,
-      force_refresh: params[:refresh].present?,
-    )
+    begin
+      result = PriceCheckerService.call(
+        product: @product,
+        overrides: sanitized_price_check_overrides,
+        force_refresh: params[:refresh].present?,
+      )
+    rescue PriceCheckerService::TimeoutError
+      return render json: { error: "timeout" }, status: :gateway_timeout
+    end
+
     render json: result
   end
 
