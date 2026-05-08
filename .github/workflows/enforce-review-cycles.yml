@@ -91,11 +91,8 @@ jobs:
               );
 
               if (recentNag) {
-                const nagHoursAgo = businessHoursSince(recentNag.created_at);
-                if (nagHoursAgo < THRESHOLD_BUSINESS_HOURS) {
-                  core.info(`#${pr.number} — already nagged ${nagHoursAgo} business hours ago`);
-                  continue;
-                }
+                core.info(`#${pr.number} — already nagged, skipping (max one reminder per PR)`);
+                continue;
               }
 
               let body;
