@@ -387,6 +387,9 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "GuyanaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
+    if (form.data.bank_account.type === "GuyanaBankAccount" && !form.data.bank_account.branch_code) {
+      markFieldInvalid("branch_code");
+    }
     if (form.data.bank_account.type === "GuatemalaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }

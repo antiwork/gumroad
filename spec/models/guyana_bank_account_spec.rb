@@ -79,6 +79,37 @@ describe GuyanaBankAccount do
     end
   end
 
+  describe "validations on legacy records" do
+    it "skips bank_code and branch_code checks when neither has changed" do
+      ba = create(:guyana_bank_account)
+      ba.update_columns(bank_number: "AAAAGYGG", branch_code: nil)
+      ba.reload
+
+      ba.account_holder_full_name = "Renamed Creator"
+      expect(ba.save).to eq(true)
+    end
+
+    it "validates branch_code when it changes on a legacy record" do
+      ba = create(:guyana_bank_account)
+      ba.update_columns(branch_code: nil)
+      ba.reload
+
+      ba.branch_code = "123"
+      expect(ba).to_not be_valid
+      expect(ba.errors.full_messages.to_sentence).to eq("The branch code is invalid.")
+    end
+
+    it "validates bank_code when it changes on a legacy record" do
+      ba = create(:guyana_bank_account)
+      ba.update_columns(bank_number: "AAAAGYGG")
+      ba.reload
+
+      ba.bank_code = "TOOSHORT"
+      expect(ba).to_not be_valid
+      expect(ba.errors.full_messages.to_sentence).to eq("The bank code is invalid.")
+    end
+  end
+
   describe "#validate_account_number" do
     it "allows records that match the required account number regex" do
       expect(build(:guyana_bank_account)).to be_valid

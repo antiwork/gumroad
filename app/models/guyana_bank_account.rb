@@ -46,11 +46,13 @@ class GuyanaBankAccount < BankAccount
 
   private
     def validate_bank_code
+      return unless new_record? || bank_number_changed?
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
     end
 
     def validate_branch_code
+      return unless new_record? || branch_code_changed?
       return if BRANCH_CODE_FORMAT_REGEX.match?(branch_code)
       errors.add :base, "The branch code is invalid."
     end
