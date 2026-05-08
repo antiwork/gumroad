@@ -129,11 +129,9 @@ function HelpCenterHeader({
 function AuthenticatedHelpCenterContent({
   children,
   showSearchButton,
-  recaptchaSiteKey,
 }: {
   children: React.ReactNode;
   showSearchButton?: boolean | undefined;
-  recaptchaSiteKey: string | null;
 }) {
   const [isNewTicketOpen, setIsNewTicketOpen] = React.useState(false);
 
@@ -141,7 +139,6 @@ function AuthenticatedHelpCenterContent({
     <>
       <HelpCenterHeader
         hasHelperSession
-        recaptchaSiteKey={recaptchaSiteKey}
         showSearchButton={showSearchButton}
         onOpenNewTicket={() => setIsNewTicketOpen(true)}
       />
@@ -152,7 +149,7 @@ function AuthenticatedHelpCenterContent({
 }
 
 export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayoutProps) {
-  const { helper_widget_host, helper_session, recaptcha_site_key } = usePage<HelpCenterSharedProps>().props;
+  const { helper_widget_host, helper_session } = usePage<HelpCenterSharedProps>().props;
 
   const hasHelperSession = !!(helper_widget_host && helper_session);
 
@@ -161,7 +158,6 @@ export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayou
       <HelperClientProvider host={helper_widget_host} session={helper_session}>
         <AuthenticatedHelpCenterContent
           showSearchButton={showSearchButton}
-          recaptchaSiteKey={recaptcha_site_key ?? null}
         >
           {children}
         </AuthenticatedHelpCenterContent>
@@ -173,7 +169,6 @@ export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayou
     <>
       <HelpCenterHeader
         hasHelperSession={false}
-        recaptchaSiteKey={recaptcha_site_key ?? null}
         showSearchButton={showSearchButton}
       />
       <section className="p-4 md:p-8">{children}</section>
