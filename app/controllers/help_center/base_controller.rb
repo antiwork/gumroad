@@ -15,8 +15,7 @@ class HelpCenter::BaseController < ApplicationController
   inertia_share do
     {
       helper_widget_host: helper_widget_host,
-      helper_session: helper_session,
-      recaptcha_site_key: user_signed_in? ? nil : GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
+      helper_session: helper_session
     }
   end
 
