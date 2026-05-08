@@ -965,7 +965,6 @@ Rails.application.routes.draw do
 
     resources :reviews, only: [:index]
 
-    resources :support, only: [:index]
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :url_redirect_expired_page
