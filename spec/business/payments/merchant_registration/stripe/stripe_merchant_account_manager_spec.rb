@@ -4399,7 +4399,7 @@ describe StripeMerchantAccountManager, :vcr do
             country: "GY",
             currency: "gyd",
             account_number: "000123456789",
-            routing_number: "AAAAGYGGXYZ"
+            routing_number: "AAAAGYGGXYZ-12345678"
           },
           settings: {
             payouts: {
