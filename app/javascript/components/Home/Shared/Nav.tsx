@@ -6,6 +6,8 @@ import { LoggedInUser } from "$app/types/user";
 import { classNames } from "$app/utils/classNames";
 import { request } from "$app/utils/request";
 
+import { useFeatureFlags } from "$app/components/FeatureFlags";
+
 import logoSvg from "$assets/images/logo.svg";
 
 type PageProps = {
@@ -136,6 +138,7 @@ export const HomeNav = () => {
   const [stars, setStars] = React.useState<string | null>(null);
   const { url, props } = usePage<PageProps>();
   const user = props.current_user;
+  const { career_pages } = useFeatureFlags();
 
   const toggleMobileMenu = () => setMobileMenuOpen((prev) => !prev);
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -161,6 +164,12 @@ export const HomeNav = () => {
     if (path === Routes.gumroad_blog_root_path()) {
       return url.startsWith(path);
     }
+    if (path === Routes.careers_path()) {
+      return url.startsWith(path);
+    }
+    if (path === Routes.about_path()) {
+      return url === path || url === Routes.root_path();
+    }
     return url === path;
   };
 
@@ -170,6 +179,7 @@ export const HomeNav = () => {
     { href: Routes.pricing_path(), label: "Pricing" },
     { href: Routes.features_path(), label: "Features" },
     { href: Routes.about_path(), label: "About" },
+    ...(career_pages ? [{ href: Routes.careers_path(), label: "Jobs" }] : []),
   ];
 
   return (
