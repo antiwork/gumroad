@@ -5,10 +5,11 @@ require "shared_examples/authorize_called"
 
 describe("Payments Settings Scenario", type: :system, js: true) do
   def change_masked_tax_field(label)
-    field = find_field(label, disabled: true)
-    field.ancestor(".flex.flex-col").find("button", text: "Change").click
-  rescue Capybara::ElementNotFound
-    # Field is not masked/disabled, nothing to do
+    if has_field?(label, disabled: true, wait: 0)
+      field = find_field(label, disabled: true)
+      container = field.find(:xpath, "./ancestor::div[.//button[text()='Change']][1]")
+      container.find("button", text: "Change", match: :first).click
+    end
   end
 
   describe "PayPal section" do
