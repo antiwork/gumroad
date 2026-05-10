@@ -376,6 +376,13 @@ const AccountDetailsSection = ({
     );
   };
 
+  const getMaskedValue = (placeholder: string, lastFour: string | null, showLastFour: boolean): string => {
+    const fullyMasked = placeholder.replace(/[a-zA-Z0-9]/g, "\u2022");
+    if (!showLastFour || !lastFour) return fullyMasked;
+    const maskPrefix = fullyMasked.slice(0, -lastFour.length);
+    return maskPrefix + lastFour;
+  };
+
   const businessTypes = getBusinessTypes();
   const businessStateConfig = getBusinessStateConfig();
   const individualStateConfig = getIndividualStateConfig();
@@ -731,7 +738,7 @@ const AccountDetailsSection = ({
                     <Input
                       id={`${uid}-${businessTaxIdConfig.idSuffix}`}
                       type="text"
-                      value={showBusinessTaxId && user.business_tax_id_last_four ? `••••••${user.business_tax_id_last_four}` : "••••••••••"}
+                      value={getMaskedValue(businessTaxIdConfig.placeholder, user.business_tax_id_last_four, showBusinessTaxId)}
                       disabled
                       readOnly
                     />
@@ -1229,15 +1236,11 @@ const AccountDetailsSection = ({
                   <Input
                     id={`${uid}-${individualTaxIdConfig.idSuffix}`}
                     type="text"
-                    value={
-                      showIndividualTaxId && user.individual_tax_id_last_four
-                        ? complianceInfo.country === "US"
-                          ? `•••-••-${user.individual_tax_id_last_four}`
-                          : `•••••${user.individual_tax_id_last_four}`
-                        : complianceInfo.country === "US"
-                          ? "•••-••-••••"
-                          : "•••••••••"
-                    }
+                    value={getMaskedValue(
+                      complianceInfo.country === "US" ? "•••-••-••••" : individualTaxIdConfig.placeholder,
+                      user.individual_tax_id_last_four,
+                      showIndividualTaxId,
+                    )}
                     disabled
                     readOnly
                   />
