@@ -467,6 +467,31 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_ach_account).to eq(old_ach_account)
       end
 
+      it "shows masked SSN with eye icon toggle when tax ID has been entered" do
+        visit settings_payments_path
+
+        # Should show masked field, not an empty input
+        ssn_field = find_field("Last 4 digits of SSN", disabled: true)
+        expect(ssn_field.value).to eq("•••-••-••••")
+        expect(ssn_field).to be_disabled
+
+        # Toggle eye icon to reveal last 4 digits
+        find("button[aria-label='Show last 4 digits']").click
+        ssn_field = find_field("Last 4 digits of SSN", disabled: true)
+        expect(ssn_field.value).to eq("•••-••-1234")
+
+        # Toggle back to hide
+        find("button[aria-label='Hide tax ID']").click
+        ssn_field = find_field("Last 4 digits of SSN", disabled: true)
+        expect(ssn_field.value).to eq("•••-••-••••")
+
+        # Click Change to re-enable editing
+        click_on("Change")
+        ssn_field = find_field("Last 4 digits of SSN")
+        expect(ssn_field).not_to be_disabled
+        expect(ssn_field.value).to eq("")
+      end
+
       it "allows the creator to edit their personal info that is locked at Stripe after account verification, and displays an error" do
         error_message = "You cannot change legal_entity[first_name] via API if an account is verified. Please contact us via https://support.stripe.com/contact if you need to change the information associated with this account."
         param = "legal_entity[first_name]"
