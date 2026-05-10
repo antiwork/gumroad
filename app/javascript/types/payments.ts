@@ -9,7 +9,9 @@ export type User = {
   is_from_europe: boolean;
   individual_tax_id_needed_countries: string[];
   individual_tax_id_entered: boolean;
+  individual_tax_id_last_four: string | null;
   business_tax_id_entered: boolean;
+  business_tax_id_last_four: string | null;
   requires_credit_card: boolean;
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;

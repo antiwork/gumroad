@@ -505,7 +505,9 @@ describe SettingsPresenter do
                                                Compliance::Countries::PRY.alpha2,
                                                Compliance::Countries::PAK.alpha2],
           individual_tax_id_entered: false,
+          individual_tax_id_last_four: nil,
           business_tax_id_entered: false,
+          business_tax_id_last_four: nil,
           requires_credit_card: false,
           can_connect_stripe: false,
           is_charged_paypal_payout_fee: true,
@@ -643,6 +645,7 @@ describe SettingsPresenter do
                                                                                         Compliance::Countries::PRY.alpha2,
                                                                                         Compliance::Countries::PAK.alpha2],
                                                    individual_tax_id_entered: true,
+                                                   individual_tax_id_last_four: "0000",
                                                  })
 
         @compliance_info_details = @base_props[:compliance_info].merge({
