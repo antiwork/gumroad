@@ -29,7 +29,7 @@ describe Api::Internal::Admin::PayoutsController do
     stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
   end
 
-  describe "POST list" do
+  describe "GET list" do
     include_examples "admin api authorization required", :post, :list
 
     it "returns the user's recent payouts and next payout information" do
@@ -38,14 +38,13 @@ describe Api::Internal::Admin::PayoutsController do
       create(:payment, user:, created_at: 3.days.ago)
       create(:payment_completed, user:, created_at: 4.days.ago)
       payment5 = create(:payment_completed, user:, created_at: 5.days.ago, processor: PayoutProcessorType::PAYPAL, payment_address: "payme@example.com")
-      payment6 = create(:payment_completed, user:, created_at: 6.days.ago)
       payout_note = "Payout paused due to verification"
       user.add_payout_note(content: payout_note)
 
       allow_any_instance_of(User).to receive(:next_payout_date).and_return(Date.tomorrow)
       allow_any_instance_of(User).to receive(:formatted_balance_for_next_payout_date).and_return("$100.00")
 
-      post :list, params: { email: user.email }
+      get :list, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -53,8 +52,10 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body["next_payout_date"]).to eq(Date.tomorrow.to_s)
       expect(response.parsed_body["balance_for_next_payout"]).to eq("$100.00")
       expect(response.parsed_body["payout_note"]).to eq(payout_note)
+      expect(response.parsed_body["scheduled_payouts"]).to eq([])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 20 })
 
-      payouts = response.parsed_body["last_payouts"]
+      payouts = response.parsed_body["recent_payouts"]
       expect(payouts.length).to eq(5)
       expect(payouts.first).to include(
         "external_id" => payment1.external_id,
@@ -71,25 +72,96 @@ describe Api::Internal::Admin::PayoutsController do
         "bank_account_visual" => nil,
         "paypal_email" => "payme@example.com"
       )
-      expect(payouts.map { _1["external_id"] }).not_to include(payment6.external_id)
+    end
+
+    it "paginates recent payouts with a cursor" do
+      newest = create(:payment_completed, user:, created_at: 1.hour.ago)
+      middle = create(:payment_completed, user:, created_at: 2.hours.ago)
+      oldest = create(:payment_completed, user:, created_at: 3.hours.ago)
+
+      get :list, params: { user_id: user.external_id, limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["recent_payouts"].map { _1["external_id"] }).to eq([newest.external_id, middle.external_id])
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+
+      get :list, params: { user_id: user.external_id, limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["recent_payouts"].map { _1["external_id"] }).to eq([oldest.external_id])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      get :list, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    it "scopes recent payouts to the requested user" do
+      mine = create(:payment_completed, user:, created_at: 1.hour.ago)
+      create(:payment_completed, user: create(:user), created_at: 2.hours.ago)
+
+      get :list, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["recent_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
+    end
+
+    it "lists scheduled payouts on hold or flagged and excludes pending, executed, cancelled, or other users' rows" do
+      create(:scheduled_payout, user:, status: "executed", executed_at: Time.current)
+      create(:scheduled_payout, user:, status: "cancelled")
+      flagged = create(:scheduled_payout, user:, status: "flagged", payout_amount_cents: 250_000)
+      create(:scheduled_payout, user: create(:user), status: "held")
+
+      get :list, params: { user_id: user.external_id }
+
+      scheduled = response.parsed_body["scheduled_payouts"]
+      expect(scheduled.map { _1["external_id"] }).to eq([flagged.external_id])
+      expect(scheduled.first).to include(
+        "external_id" => flagged.external_id,
+        "status" => "flagged",
+        "action" => "payout",
+        "payout_amount_cents" => 250_000
+      )
+      expect(scheduled.first["user"]).to include("external_id" => user.external_id)
+    end
+
+    it "lists held scheduled payouts" do
+      held = create(:scheduled_payout, user:, status: "held", action: "hold")
+
+      get :list, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([held.external_id])
+      expect(response.parsed_body["scheduled_payouts"].first).to include("status" => "held", "action" => "hold")
+    end
+
+    it "excludes pending scheduled payouts even though they are in progress" do
+      create(:scheduled_payout, user:, status: "pending")
+
+      get :list, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["scheduled_payouts"]).to eq([])
     end
 
     it "returns a bad request when email and user_id are missing" do
-      post :list
+      get :list
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
-      post :list, params: { email: "missing@example.com" }
+      get :list, params: { email: "missing@example.com" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
 
     it "lists payouts by user_id" do
-      post :list, params: { user_id: user.external_id }
+      get :list, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["user_id"]).to eq(user.external_id)

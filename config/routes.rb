@@ -343,7 +343,7 @@ Rails.application.routes.draw do
 
           resources :payouts, only: [] do
             collection do
-              post :list
+              get :list
               post :pause
               post :resume
               post :issue

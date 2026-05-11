@@ -1,24 +1,29 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseController
+  include Api::Internal::Admin::CursorPaginated
+
   SCHEDULED_PAYOUTS_DEFAULT_LIMIT = 20
   SCHEDULED_PAYOUTS_MAX_LIMIT = 50
-  private_constant :SCHEDULED_PAYOUTS_DEFAULT_LIMIT, :SCHEDULED_PAYOUTS_MAX_LIMIT
+  SCHEDULED_PAYOUT_REVIEW_STATUSES = %w[held flagged].freeze
+  private_constant :SCHEDULED_PAYOUTS_DEFAULT_LIMIT, :SCHEDULED_PAYOUTS_MAX_LIMIT, :SCHEDULED_PAYOUT_REVIEW_STATUSES
 
   before_action :fetch_user_for_read, only: [:list]
   before_action :fetch_user_for_write, only: [:pause, :resume, :issue]
   before_action :fetch_scheduled_payout, only: [:scheduled_execute, :scheduled_cancel]
 
   def list
-    payouts = @user.payments.order(created_at: :desc).limit(5).map { serialize_payout(_1) }
+    records, pagination = paginate_with_cursor(@user.payments.includes(:bank_account), order: [[:created_at, :desc], [:id, :desc]])
     payout_note = @user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last&.content
 
     render json: {
       success: true,
       user_id: @user.external_id,
-      last_payouts: payouts,
+      recent_payouts: records.map { serialize_payout(_1) },
+      pagination:,
       next_payout_date: @user.next_payout_date,
       balance_for_next_payout: @user.formatted_balance_for_next_payout_date,
+      scheduled_payouts: scheduled_payouts_for_review(@user).map { serialize_scheduled_payout(_1) },
       payout_note:
     }
   end
@@ -200,6 +205,14 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
     def serialize_scheduled_payout(scheduled_payout, enrichment: nil)
       enrichment ||= Admin::ScheduledPayoutEnrichmentService.new([scheduled_payout]).call[scheduled_payout.user_id] || {}
       Admin::ScheduledPayoutPresenter.new(scheduled_payout:, enrichment:).props
+    end
+
+    def scheduled_payouts_for_review(user)
+      ScheduledPayout
+        .for_user(user)
+        .where(status: SCHEDULED_PAYOUT_REVIEW_STATUSES)
+        .includes(:user, :created_by)
+        .order(id: :desc)
     end
 
     def render_scheduled_payout_error(error)
