@@ -73,6 +73,9 @@ SecureHeaders::Configuration.default do |config|
       "analytics.google.com",
       "*.analytics.google.com",
 
+      # tiktok pixel
+      "analytics.tiktok.com",
+
       # cloudfront
       FILE_DOWNLOAD_DISTRIBUTION_URL,
       HLS_DISTRIBUTION_URL,
@@ -153,6 +156,9 @@ SecureHeaders::Configuration.default do |config|
 
       # twitter
       "analytics.twitter.com",
+
+      # tiktok pixel
+      "analytics.tiktok.com",
 
       # helper widget
       "help.gumroad.com",
