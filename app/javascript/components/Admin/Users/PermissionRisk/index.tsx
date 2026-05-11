@@ -5,6 +5,7 @@ import Bio from "$app/components/Admin/Users/PermissionRisk/Bio";
 import CompliantStatus from "$app/components/Admin/Users/PermissionRisk/CompliantStatus";
 import UserGuids from "$app/components/Admin/Users/PermissionRisk/Guids";
 import LatestPosts from "$app/components/Admin/Users/PermissionRisk/LatestPosts";
+import RadarSignals from "$app/components/Admin/Users/PermissionRisk/RadarSignals";
 import SchedulePayout from "$app/components/Admin/Users/PermissionRisk/SchedulePayout";
 import SuspendForFraud from "$app/components/Admin/Users/PermissionRisk/SuspendForFraud";
 import WatchedUser from "$app/components/Admin/Users/PermissionRisk/WatchedUser";
@@ -24,6 +25,7 @@ const AdminUserPermissionRisk = ({ user }: AdminUserPermissionRiskProps) => (
     </div>
 
     <SuspendForFraud user={user} />
+    <RadarSignals user={user} />
     <SchedulePayout user={user} />
     <WatchedUser user={user} />
     <UserGuids user_external_id={user.external_id} />
