@@ -3,14 +3,11 @@
 class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseController
   include Api::Internal::Admin::CursorPaginated
 
-  SCHEDULED_PAYOUTS_DEFAULT_LIMIT = 20
-  SCHEDULED_PAYOUTS_MAX_LIMIT = 50
   SCHEDULED_PAYOUT_REVIEW_STATUSES = %w[held flagged].freeze
-  private_constant :SCHEDULED_PAYOUTS_DEFAULT_LIMIT, :SCHEDULED_PAYOUTS_MAX_LIMIT, :SCHEDULED_PAYOUT_REVIEW_STATUSES
+  private_constant :SCHEDULED_PAYOUT_REVIEW_STATUSES
 
   before_action :fetch_user_for_read, only: [:index]
   before_action :fetch_user_for_write, only: [:pause, :resume, :issue]
-  before_action :fetch_scheduled_payout, only: [:scheduled_execute, :scheduled_cancel]
 
   def index
     records, pagination = paginate_with_cursor(@user.payments.includes(:bank_account), order: [[:created_at, :desc], [:id, :desc]])
@@ -23,7 +20,7 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       pagination:,
       next_payout_date: @user.next_payout_date,
       balance_for_next_payout: @user.formatted_balance_for_next_payout_date,
-      scheduled_payouts: scheduled_payouts_for_review(@user).map { serialize_scheduled_payout(_1) },
+      scheduled_payouts: scheduled_payouts_for_review(@user).map { Admin::ScheduledPayoutPresenter.new(scheduled_payout: _1).props },
       payout_note:
     }
   end
@@ -131,63 +128,6 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
     end
   end
 
-  def scheduled_list
-    scope = ScheduledPayout.includes(:user, :created_by).order(id: :desc)
-    if params[:status].present?
-      unless ScheduledPayout::STATUSES.include?(params[:status])
-        return render json: { success: false, message: "status is invalid" }, status: :bad_request
-      end
-      scope = scope.where(status: params[:status])
-    end
-
-    limit = params[:limit].to_i
-    limit = SCHEDULED_PAYOUTS_DEFAULT_LIMIT if limit <= 0
-    limit = [limit, SCHEDULED_PAYOUTS_MAX_LIMIT].min
-
-    records = scope.limit(limit).to_a
-    enrichment_by_user_id = Admin::ScheduledPayoutEnrichmentService.new(records).call
-    scheduled_payouts = records.map { serialize_scheduled_payout(_1, enrichment: enrichment_by_user_id[_1.user_id] || {}) }
-
-    render json: { success: true, scheduled_payouts:, limit: }
-  end
-
-  def scheduled_execute
-    record_admin_write(action: "payouts.scheduled_execute", target: @scheduled_payout) do
-      unless @scheduled_payout.pending? || @scheduled_payout.flagged?
-        next render json: {
-          success: false,
-          message: "Cannot execute a #{@scheduled_payout.status} scheduled payout."
-        }, status: :unprocessable_entity
-      end
-
-      @scheduled_payout.update!(status: "pending") if @scheduled_payout.flagged?
-
-      result = @scheduled_payout.execute!
-      message = case result
-                when :held then "Payout is now on hold for manual release."
-                when :flagged then "Payout was flagged for review instead of executing."
-      end
-
-      render json: {
-        success: true,
-        result: result.to_s,
-        message:,
-        scheduled_payout: serialize_scheduled_payout(@scheduled_payout)
-      }
-    rescue => e
-      render_scheduled_payout_error(e)
-    end
-  end
-
-  def scheduled_cancel
-    record_admin_write(action: "payouts.scheduled_cancel", target: @scheduled_payout) do
-      @scheduled_payout.cancel!
-      render json: { success: true, scheduled_payout: serialize_scheduled_payout(@scheduled_payout) }
-    rescue => e
-      render_scheduled_payout_error(e)
-    end
-  end
-
   private
     def fetch_user_for_read
       @user = find_internal_admin_user_for_read_or_render
@@ -197,25 +137,11 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       @user = find_internal_admin_user_for_write_or_render
     end
 
-    def fetch_scheduled_payout
-      @scheduled_payout = ScheduledPayout.includes(:user, :created_by).find_by_external_id(params[:id])
-      render json: { success: false, message: "Scheduled payout not found" }, status: :not_found if @scheduled_payout.blank?
-    end
-
-    def serialize_scheduled_payout(scheduled_payout, enrichment: nil)
-      enrichment ||= Admin::ScheduledPayoutEnrichmentService.new([scheduled_payout]).call[scheduled_payout.user_id] || {}
-      Admin::ScheduledPayoutPresenter.new(scheduled_payout:, enrichment:).props
-    end
-
     def scheduled_payouts_for_review(user)
       ScheduledPayout
         .for_user(user)
         .where(status: SCHEDULED_PAYOUT_REVIEW_STATUSES)
         .includes(:user, :created_by)
         .order(id: :desc)
-    end
-
-    def render_scheduled_payout_error(error)
-      render json: { success: false, message: error.message }, status: :unprocessable_entity
     end
 end
