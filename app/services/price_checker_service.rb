@@ -4,7 +4,7 @@ class PriceCheckerService
   class TimeoutError < StandardError; end
 
   CACHE_TTL = 1.hour
-  CACHE_VERSION = "v2"
+  CACHE_VERSION = "v3"
   MIN_MATCHES = 5
   TARGET_BIN_COUNT = 12
   MAX_PRICE_CENTS = 10_000_000
@@ -248,6 +248,7 @@ class PriceCheckerService
       fingerprint = Digest::MD5.hexdigest(
         [
           effective_name,
+          Digest::MD5.hexdigest(effective_description.to_s.first(1_000)),
           effective_native_type,
           product.is_recurring_billing,
           product.price_currency_type,

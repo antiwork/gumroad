@@ -244,7 +244,15 @@ describe PriceCheckerService do
 
       it "stores the result under a stable cache key" do
         first_result = described_class.call(product:)
-        expect(Rails.cache.read("price_checker:v2:#{product.id}:#{Digest::MD5.hexdigest([product.name, product.native_type, product.is_recurring_billing, product.price_currency_type, product.taxonomy_id].join('|'))}")).to eq(first_result)
+        expected_fingerprint = Digest::MD5.hexdigest([product.name, Digest::MD5.hexdigest(product.description.to_s.first(1_000)), product.native_type, product.is_recurring_billing, product.price_currency_type, product.taxonomy_id].join("|"))
+        expect(Rails.cache.read("price_checker:v3:#{product.id}:#{expected_fingerprint}")).to eq(first_result)
+      end
+
+      it "uses different cache keys for different descriptions so a description edit busts the cache" do
+        service_a = described_class.new(product:, overrides: { description: "First description content" })
+        service_b = described_class.new(product:, overrides: { description: "Completely different second description content" })
+
+        expect(service_a.send(:cache_key)).not_to eq(service_b.send(:cache_key))
       end
     end
 
