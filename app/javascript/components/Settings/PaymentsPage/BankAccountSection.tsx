@@ -2415,9 +2415,6 @@ const BankAccountSection = ({
                       aria-invalid={errorFieldNames.has("account_number")}
                       onChange={(evt) => updateBankAccount({ account_number: evt.target.value })}
                     />
-                    {user.country_code === "MG" ? (
-                      <FieldsetDescription>Must start with MG followed by 25 digits.</FieldsetDescription>
-                    ) : null}
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
                     <FieldsetTitle>
@@ -2437,9 +2434,6 @@ const BankAccountSection = ({
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}
                       onChange={(evt) => updateBankAccount({ account_number_confirmation: evt.target.value })}
                     />
-                    {user.country_code === "MG" ? (
-                      <FieldsetDescription>Must start with MG followed by 25 digits.</FieldsetDescription>
-                    ) : null}
                   </Fieldset>
                 </>
               ) : (
