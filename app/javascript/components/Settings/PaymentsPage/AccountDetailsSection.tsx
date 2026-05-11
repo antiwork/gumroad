@@ -45,6 +45,7 @@ const AccountDetailsSection = ({
   canadaBusinessTypes,
   states,
   errorFieldNames,
+  saveCounter,
 }: {
   user: User;
   complianceInfo: ComplianceInfo;
@@ -66,6 +67,7 @@ const AccountDetailsSection = ({
     jp: { value: string; label: string; kana: string }[];
   };
   errorFieldNames: Set<FormFieldName>;
+  saveCounter: number;
 }) => {
   const uid = React.useId();
   const [isEditingIndividualTaxId, setIsEditingIndividualTaxId] = React.useState(false);
@@ -75,10 +77,8 @@ const AccountDetailsSection = ({
 
   React.useEffect(() => {
     if (user.individual_tax_id_entered) setIsEditingIndividualTaxId(false);
-  }, [user.individual_tax_id_entered, user.individual_tax_id_last_four]);
-  React.useEffect(() => {
     if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
-  }, [user.business_tax_id_entered, user.business_tax_id_last_four]);
+  }, [saveCounter]);
 
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null): string => {
     const countryCode: CountryCode = cast(country_code);
