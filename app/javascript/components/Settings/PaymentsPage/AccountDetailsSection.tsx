@@ -73,6 +73,13 @@ const AccountDetailsSection = ({
   const [showIndividualTaxId, setShowIndividualTaxId] = React.useState(false);
   const [showBusinessTaxId, setShowBusinessTaxId] = React.useState(false);
 
+  React.useEffect(() => {
+    if (user.individual_tax_id_entered) setIsEditingIndividualTaxId(false);
+  }, [user.individual_tax_id_entered, user.individual_tax_id_last_four]);
+  React.useEffect(() => {
+    if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
+  }, [user.business_tax_id_entered, user.business_tax_id_last_four]);
+
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null): string => {
     const countryCode: CountryCode = cast(country_code);
     return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;
