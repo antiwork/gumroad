@@ -29,7 +29,9 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
     limit = DEFAULT_LIMIT if limit <= 0
     limit = [limit, MAX_LIMIT].min
 
-    scheduled_payouts = scope.limit(limit).map { serialize_scheduled_payout(_1) }
+    records = scope.limit(limit).to_a
+    enrichment_by_user_id = Admin::ScheduledPayoutEnrichmentService.new(records).call
+    scheduled_payouts = records.map { serialize_scheduled_payout(_1, enrichment: enrichment_by_user_id[_1.user_id] || {}) }
 
     render json: { success: true, scheduled_payouts:, limit: }
   end
@@ -77,8 +79,9 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
       render json: { success: false, message: "Scheduled payout not found" }, status: :not_found if @scheduled_payout.blank?
     end
 
-    def serialize_scheduled_payout(scheduled_payout)
-      Admin::ScheduledPayoutPresenter.new(scheduled_payout:).props
+    def serialize_scheduled_payout(scheduled_payout, enrichment: nil)
+      enrichment ||= Admin::ScheduledPayoutEnrichmentService.new([scheduled_payout]).call[scheduled_payout.user_id] || {}
+      Admin::ScheduledPayoutPresenter.new(scheduled_payout:, enrichment:).props
     end
 
     def render_scheduled_payout_error(error)
