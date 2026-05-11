@@ -5498,8 +5498,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "malagasy creator")
         fill_in("SWIFT / BIC Code", with: "AAAAMGMGXXX")
-        fill_in("Account #", with: "MG4800005000011234567890123")
-        fill_in("Confirm account #", with: "MG4800005000011234567890123")
+        fill_in("IBAN", with: "MG4800005000011234567890123")
+        fill_in("Confirm IBAN", with: "MG4800005000011234567890123")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in MGA.")
