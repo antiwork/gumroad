@@ -2404,12 +2404,20 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-account-number`}
-                      placeholder={`${user.country_code || ""}1234567890`}
+                      placeholder={
+                        user.country_code === "MG"
+                          ? "MG4800005000011234567890123"
+                          : `${user.country_code || ""}1234567890`
+                      }
+                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number")}
                       onChange={(evt) => updateBankAccount({ account_number: evt.target.value })}
                     />
+                    {user.country_code === "MG" ? (
+                      <FieldsetDescription>Must start with MG followed by 25 digits.</FieldsetDescription>
+                    ) : null}
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
                     <FieldsetTitle>
@@ -2418,12 +2426,20 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-confirm-account-number`}
-                      placeholder={`${user.country_code || ""}1234567890`}
+                      placeholder={
+                        user.country_code === "MG"
+                          ? "MG4800005000011234567890123"
+                          : `${user.country_code || ""}1234567890`
+                      }
+                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}
                       onChange={(evt) => updateBankAccount({ account_number_confirmation: evt.target.value })}
                     />
+                    {user.country_code === "MG" ? (
+                      <FieldsetDescription>Must start with MG followed by 25 digits.</FieldsetDescription>
+                    ) : null}
                   </Fieldset>
                 </>
               ) : (

@@ -223,7 +223,8 @@ module User::Compliance
         signed_up_from_iceland? ||
         signed_up_from_monaco? ||
         signed_up_from_benin? ||
-        signed_up_from_cote_d_ivoire?
+        signed_up_from_cote_d_ivoire? ||
+        signed_up_from_madagascar?
   end
 
   def needs_info_of_significant_company_owners?
