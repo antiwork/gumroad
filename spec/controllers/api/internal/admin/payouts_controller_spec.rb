@@ -439,6 +439,19 @@ describe Api::Internal::Admin::PayoutsController do
   describe "POST scheduled_list" do
     include_examples "admin api authorization required", :post, :scheduled_list
 
+    let(:merchant_account) { create(:merchant_account, user: nil) }
+
+    let(:enrichment_keys) do
+      %w[
+        product_count
+        incoming_affiliate_count
+        risk_state
+        top_categories
+        unpaid_balance_cents
+        unpaid_balance_formatted
+      ]
+    end
+
     it "returns scheduled payouts ordered by id desc" do
       first = create(:scheduled_payout, user:)
       second = create(:scheduled_payout, user: create(:user))
@@ -484,6 +497,90 @@ describe Api::Internal::Admin::PayoutsController do
 
       expect(response.parsed_body["limit"]).to eq(20)
     end
+
+    it "includes enrichment keys for each scheduled payout" do
+      scheduled_payout = create(:scheduled_payout, user:)
+
+      post :scheduled_list
+
+      row = response.parsed_body["scheduled_payouts"].find { _1["external_id"] == scheduled_payout.external_id }
+      expect(row.keys).to include(*enrichment_keys)
+      expect(row["risk_state"]).to eq(Admin::UserRiskStatePresenter.new(user).props.as_json)
+    end
+
+    it "reports alive product count" do
+      seller = create(:compliant_user)
+      create_list(:product, 2, user: seller)
+      create(:product, user: seller, deleted_at: Time.current)
+      scheduled_payout = create(:scheduled_payout, user: seller)
+
+      post :scheduled_list
+
+      row = response.parsed_body["scheduled_payouts"].find { _1["external_id"] == scheduled_payout.external_id }
+      expect(row["product_count"]).to eq(2)
+    end
+
+    it "reports incoming affiliate count without global or deleted affiliates" do
+      seller = create(:compliant_user)
+      create_list(:direct_affiliate, 2, seller:)
+      create(:collaborator, seller:)
+      create(:direct_affiliate, seller:, deleted_at: Time.current)
+      seller.global_affiliate.update_column(:seller_id, seller.id)
+      scheduled_payout = create(:scheduled_payout, user: seller)
+
+      post :scheduled_list
+
+      row = response.parsed_body["scheduled_payouts"].find { _1["external_id"] == scheduled_payout.external_id }
+      expect(row["incoming_affiliate_count"]).to eq(3)
+    end
+
+    it "reports top categories by alive product count" do
+      seller = create(:compliant_user)
+      taxonomy_a = create(:taxonomy, slug: "taxonomy-a")
+      taxonomy_b = create(:taxonomy, slug: "taxonomy-b")
+      create_list(:product, 2, user: seller, taxonomy: taxonomy_a)
+      create(:product, user: seller, taxonomy: taxonomy_b)
+      scheduled_payout = create(:scheduled_payout, user: seller)
+
+      post :scheduled_list
+
+      row = response.parsed_body["scheduled_payouts"].find { _1["external_id"] == scheduled_payout.external_id }
+      expected_categories = [
+        { "slug" => "taxonomy-a", "product_count" => 2 },
+        { "slug" => "taxonomy-b", "product_count" => 1 }
+      ]
+      expect(row["top_categories"]).to eq(expected_categories)
+    end
+
+    it "reports unpaid balance" do
+      seller = create(:compliant_user)
+      create(:balance, user: seller, merchant_account:, amount_cents: 12_345, state: "unpaid")
+      create(:balance, user: seller, merchant_account:, amount_cents: 9_999, state: "paid")
+      scheduled_payout = create(:scheduled_payout, user: seller)
+
+      post :scheduled_list
+
+      row = response.parsed_body["scheduled_payouts"].find { _1["external_id"] == scheduled_payout.external_id }
+      expect(row["unpaid_balance_cents"]).to eq(12_345)
+      expect(row["unpaid_balance_formatted"]).to eq("$123.45")
+    end
+
+    it "keeps scheduled payout list enrichment queries bounded" do
+      taxonomy = create(:taxonomy)
+      5.times do
+        seller = create(:compliant_user)
+        create(:product, user: seller, taxonomy:)
+        create(:direct_affiliate, seller:)
+        create(:balance, user: seller, merchant_account:, amount_cents: 1_00)
+        create(:comment, commentable: seller, comment_type: Comment::COMMENT_TYPE_COMPLIANT)
+        create(:scheduled_payout, user: seller)
+      end
+
+      queries = sql_queries_for { post :scheduled_list, params: { limit: 5 } }
+
+      expect(response).to have_http_status(:ok)
+      expect(queries.count).to be <= 14
+    end
   end
 
   describe "POST scheduled_execute" do
@@ -503,6 +600,14 @@ describe Api::Internal::Admin::PayoutsController do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include("success" => true, "result" => "executed")
+      expect(response.parsed_body["scheduled_payout"].keys).to include(
+        "product_count",
+        "incoming_affiliate_count",
+        "risk_state",
+        "top_categories",
+        "unpaid_balance_cents",
+        "unpaid_balance_formatted"
+      )
     end
 
     it "promotes a flagged scheduled payout to pending before executing" do
@@ -572,6 +677,14 @@ describe Api::Internal::Admin::PayoutsController do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["scheduled_payout"].keys).to include(
+        "product_count",
+        "incoming_affiliate_count",
+        "risk_state",
+        "top_categories",
+        "unpaid_balance_cents",
+        "unpaid_balance_formatted"
+      )
     end
 
     it "returns 422 and the error message when cancel! raises" do
@@ -598,5 +711,17 @@ describe Api::Internal::Admin::PayoutsController do
         response_status: 200
       )
     end
+  end
+
+  def sql_queries_for(&block)
+    queries = []
+    counter = lambda do |*, payload|
+      next if payload[:cached] || payload[:name].in?(["SCHEMA", "TRANSACTION"])
+
+      queries << payload[:sql]
+    end
+
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+    queries
   end
 end

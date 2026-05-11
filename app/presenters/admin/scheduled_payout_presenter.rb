@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class Admin::ScheduledPayoutPresenter
-  attr_reader :scheduled_payout
+  attr_reader :scheduled_payout, :enrichment
 
-  def initialize(scheduled_payout:)
+  def initialize(scheduled_payout:, enrichment: {})
     @scheduled_payout = scheduled_payout
+    @enrichment = enrichment
   end
 
   def props
@@ -24,7 +25,8 @@ class Admin::ScheduledPayoutPresenter
       },
       created_by: scheduled_payout.created_by ? {
         name: scheduled_payout.created_by.name
-      } : nil
+      } : nil,
+      **enrichment
     }
   end
 end

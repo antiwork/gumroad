@@ -296,21 +296,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def suspension_status(user)
-      if user.suspended?
-        "Suspended"
-      elsif user.flagged?
-        "Flagged"
-      else
-        "Compliant"
-      end
+      Admin::UserRiskStatePresenter.new(user).props[:status]
     end
 
     def last_status_changed_at(user)
-      user.comments
-        .where(comment_type: Comment::RISK_STATE_COMMENT_TYPES)
-        .order(created_at: :desc)
-        .first
-        &.created_at
+      Admin::UserRiskStatePresenter.new(user).props[:last_status_changed_at]
     end
 
     def serialize_user_info(user)
@@ -325,16 +315,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         country: compliance_info&.country,
         created_at: user.created_at.as_json,
         deleted_at: user.deleted_at&.as_json,
-        risk_state: {
-          status: suspension_status(user),
-          user_risk_state: user.user_risk_state,
-          suspended: user.suspended?,
-          flagged_for_fraud: user.flagged_for_fraud?,
-          flagged_for_tos_violation: user.flagged_for_tos_violation?,
-          on_probation: user.on_probation?,
-          compliant: user.compliant?,
-          last_status_changed_at: last_status_changed_at(user)&.as_json
-        },
+        risk_state: Admin::UserRiskStatePresenter.new(user).props,
         active_watched_user: serialize_watched_user(user.active_watched_user),
         two_factor_authentication_enabled: user.two_factor_authentication_enabled?,
         payouts: {
