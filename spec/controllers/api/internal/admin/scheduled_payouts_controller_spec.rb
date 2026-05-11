@@ -58,6 +58,61 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
 
       expect(response.parsed_body["limit"]).to eq(20)
     end
+
+    it "filters by user_id when provided" do
+      mine = create(:scheduled_payout, user:)
+      create(:scheduled_payout, user: create(:user))
+
+      get :index, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
+    end
+
+    it "filters by email when provided" do
+      mine = create(:scheduled_payout, user:)
+      create(:scheduled_payout, user: create(:user))
+
+      get :index, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
+    end
+
+    it "returns 404 when the requested user does not exist" do
+      get :index, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "filters by an array of statuses" do
+      held = create(:scheduled_payout, user:, status: "held")
+      flagged = create(:scheduled_payout, user: create(:user), status: "flagged")
+      create(:scheduled_payout, user: create(:user), status: "pending")
+
+      get :index, params: { status: ["held", "flagged"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to match_array([held.external_id, flagged.external_id])
+    end
+
+    it "returns 400 when any status in the array is invalid" do
+      get :index, params: { status: ["held", "bogus"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "status is invalid" }.as_json)
+    end
+
+    it "combines user and status filters" do
+      held_mine = create(:scheduled_payout, user:, status: "held")
+      create(:scheduled_payout, user: create(:user), status: "held")
+
+      get :index, params: { user_id: user.external_id, status: ["held", "flagged"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([held_mine.external_id])
+    end
   end
 
   describe "POST execute" do

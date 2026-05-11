@@ -9,11 +9,20 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
 
   def index
     scope = ScheduledPayout.includes(:user, :created_by).order(id: :desc)
-    if params[:status].present?
-      unless ScheduledPayout::STATUSES.include?(params[:status])
+
+    if params[:user_id].present? || params[:external_id].present? || params[:email].present?
+      user = find_internal_admin_user_for_read_or_render
+      return unless user
+      scope = scope.for_user(user)
+    end
+
+    statuses = Array.wrap(params[:status]).reject(&:blank?)
+    if statuses.any?
+      invalid = statuses - ScheduledPayout::STATUSES
+      if invalid.any?
         return render json: { success: false, message: "status is invalid" }, status: :bad_request
       end
-      scope = scope.where(status: params[:status])
+      scope = scope.where(status: statuses)
     end
 
     limit = params[:limit].to_i

@@ -52,7 +52,6 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body["next_payout_date"]).to eq(Date.tomorrow.to_s)
       expect(response.parsed_body["balance_for_next_payout"]).to eq("$100.00")
       expect(response.parsed_body["payout_note"]).to eq(payout_note)
-      expect(response.parsed_body["scheduled_payouts"]).to eq([])
       expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 20 })
 
       payouts = response.parsed_body["recent_payouts"]
@@ -108,42 +107,6 @@ describe Api::Internal::Admin::PayoutsController do
       get :index, params: { user_id: user.external_id }
 
       expect(response.parsed_body["recent_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
-    end
-
-    it "lists scheduled payouts on hold or flagged and excludes pending, executed, cancelled, or other users' rows" do
-      create(:scheduled_payout, user:, status: "executed", executed_at: Time.current)
-      create(:scheduled_payout, user:, status: "cancelled")
-      flagged = create(:scheduled_payout, user:, status: "flagged", payout_amount_cents: 250_000)
-      create(:scheduled_payout, user: create(:user), status: "held")
-
-      get :index, params: { user_id: user.external_id }
-
-      scheduled = response.parsed_body["scheduled_payouts"]
-      expect(scheduled.map { _1["external_id"] }).to eq([flagged.external_id])
-      expect(scheduled.first).to include(
-        "external_id" => flagged.external_id,
-        "status" => "flagged",
-        "action" => "payout",
-        "payout_amount_cents" => 250_000
-      )
-      expect(scheduled.first["user"]).to include("external_id" => user.external_id)
-    end
-
-    it "lists held scheduled payouts" do
-      held = create(:scheduled_payout, user:, status: "held", action: "hold")
-
-      get :index, params: { user_id: user.external_id }
-
-      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([held.external_id])
-      expect(response.parsed_body["scheduled_payouts"].first).to include("status" => "held", "action" => "hold")
-    end
-
-    it "excludes pending scheduled payouts even though they are in progress" do
-      create(:scheduled_payout, user:, status: "pending")
-
-      get :index, params: { user_id: user.external_id }
-
-      expect(response.parsed_body["scheduled_payouts"]).to eq([])
     end
 
     it "returns a bad request when email and user_id are missing" do

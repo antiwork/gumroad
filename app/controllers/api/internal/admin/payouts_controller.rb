@@ -3,9 +3,6 @@
 class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseController
   include Api::Internal::Admin::CursorPaginated
 
-  SCHEDULED_PAYOUT_REVIEW_STATUSES = %w[held flagged].freeze
-  private_constant :SCHEDULED_PAYOUT_REVIEW_STATUSES
-
   before_action :fetch_user_for_read, only: [:index]
   before_action :fetch_user_for_write, only: [:pause, :resume, :issue]
 
@@ -20,7 +17,6 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       pagination:,
       next_payout_date: @user.next_payout_date,
       balance_for_next_payout: @user.formatted_balance_for_next_payout_date,
-      scheduled_payouts: scheduled_payouts_for_review(@user).map { Admin::ScheduledPayoutPresenter.new(scheduled_payout: _1).props },
       payout_note:
     }
   end
@@ -135,13 +131,5 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
 
     def fetch_user_for_write
       @user = find_internal_admin_user_for_write_or_render
-    end
-
-    def scheduled_payouts_for_review(user)
-      ScheduledPayout
-        .for_user(user)
-        .where(status: SCHEDULED_PAYOUT_REVIEW_STATUSES)
-        .includes(:user, :created_by)
-        .order(id: :desc)
     end
 end
