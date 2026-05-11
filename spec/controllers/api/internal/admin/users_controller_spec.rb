@@ -7,16 +7,16 @@ describe Api::Internal::Admin::UsersController do
   let(:admin_user) { create(:admin_user) }
   let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
 
-  shared_examples "supports user lookup by user_id" do |action, build_user: -> { create(:user) }, extra_params: {}, success_status: :ok|
+  shared_examples "supports user lookup by user_id" do |action, method: :post, build_user: -> { create(:user) }, extra_params: {}, success_status: :ok|
     describe "user_id lookup" do
       it "looks up the user by user_id" do
         user = instance_exec(&build_user)
-        post action, params: extra_params.merge(user_id: user.external_id)
+        public_send(method, action, params: extra_params.merge(user_id: user.external_id))
         expect(response).to have_http_status(success_status)
       end
 
       it "returns 404 when user_id does not match any user" do
-        post action, params: extra_params.merge(user_id: "999999999999")
+        public_send(method, action, params: extra_params.merge(user_id: "999999999999"))
         expect(response).to have_http_status(:not_found)
         expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
       end
@@ -24,7 +24,7 @@ describe Api::Internal::Admin::UsersController do
       it "prefers user_id over email when both are provided" do
         target = instance_exec(&build_user)
         other = instance_exec(&build_user)
-        post action, params: extra_params.merge(user_id: target.external_id, email: other.email)
+        public_send(method, action, params: extra_params.merge(user_id: target.external_id, email: other.email))
         expect(response).to have_http_status(success_status)
       end
     end
@@ -52,20 +52,20 @@ describe Api::Internal::Admin::UsersController do
     end
   end
 
-  describe "POST info" do
-    include_examples "admin api authorization required", :post, :info
+  describe "GET info" do
+    include_examples "admin api authorization required", :get, :info
 
     before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
 
     it "returns a bad request when email is missing" do
-      post :info
+      get :info
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
-      post :info, params: { email: "missing@example.com" }
+      get :info, params: { email: "missing@example.com" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
@@ -74,7 +74,7 @@ describe Api::Internal::Admin::UsersController do
     it "returns a comprehensive info payload for a compliant seller" do
       user = create(:compliant_user, email: "seller@example.com", name: "Seller One", username: "sellerone")
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -122,7 +122,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:tos_user, email: "suspended@example.com")
       comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago)
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       info = response.parsed_body["user"]
       expect(info["risk_state"]).to include(
@@ -137,7 +137,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "tfa@example.com")
       user.update!(two_factor_authentication_enabled: true)
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["two_factor_authentication_enabled"]).to be(true)
     end
@@ -146,7 +146,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "geo@example.com")
       create(:user_compliance_info, user:, country: "Germany")
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["country"]).to eq("Germany")
     end
@@ -156,7 +156,7 @@ describe Api::Internal::Admin::UsersController do
       user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
       user.comments.create!(author_id: GUMROAD_ADMIN_ID, comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED, content: "Manual review pending")
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["payouts"]).to include(
         "paused_internally" => true,
@@ -169,7 +169,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "syspaused@example.com")
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["payouts"]).to include(
         "paused_internally" => true,
@@ -182,7 +182,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "selfpaused@example.com")
       user.update!(payouts_paused_by_user: true)
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["payouts"]).to include(
         "paused_internally" => false,
@@ -195,7 +195,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "deactivated@example.com")
       user.deactivate!
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
       info = response.parsed_body["user"]
@@ -207,7 +207,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user, email: "deleted-by-id@example.com")
       user.mark_deleted!
 
-      post :info, params: { user_id: user.external_id }
+      get :info, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:ok)
       info = response.parsed_body["user"]
@@ -215,7 +215,7 @@ describe Api::Internal::Admin::UsersController do
       expect(info["deleted_at"]).to eq(user.reload.deleted_at.as_json)
     end
 
-    include_examples "supports user lookup by user_id", :info, build_user: -> { create(:compliant_user) }
+    include_examples "supports user lookup by user_id", :info, method: :get, build_user: -> { create(:compliant_user) }
 
     it "uses the latest risk-state comment for last_status_changed_at, including on_probation transitions" do
       user = create(:compliant_user, email: "probation@example.com")
@@ -223,7 +223,7 @@ describe Api::Internal::Admin::UsersController do
       probation_comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_ON_PROBATION, created_at: 1.day.ago)
       user.update_column(:user_risk_state, "on_probation")
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["risk_state"]).to include(
         "user_risk_state" => "on_probation",
@@ -240,7 +240,7 @@ describe Api::Internal::Admin::UsersController do
       create(:failed_purchase, link: product, seller:)
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(1500)
 
-      post :info, params: { email: seller.email }
+      get :info, params: { email: seller.email }
 
       stats = response.parsed_body["user"]["stats"]
       expect(stats["sales_count"]).to eq(2)
@@ -257,7 +257,7 @@ describe Api::Internal::Admin::UsersController do
                             notes: "Review again")
       watched_user.update!(last_synced_at: 1.hour.ago)
 
-      post :info, params: { email: user.email }
+      get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["active_watched_user"]).to eq(
         "id" => watched_user.external_id,
@@ -271,8 +271,8 @@ describe Api::Internal::Admin::UsersController do
     end
   end
 
-  describe "POST affiliates" do
-    include_examples "admin api authorization required", :post, :affiliates
+  describe "GET affiliates" do
+    include_examples "admin api authorization required", :get, :affiliates
 
     before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
 
@@ -283,7 +283,7 @@ describe Api::Internal::Admin::UsersController do
     it "returns bad request when direction is missing" do
       user = create(:user)
 
-      post :affiliates, params: { user_id: user.external_id }
+      get :affiliates, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "direction must be 'granted' or 'received'" }.as_json)
@@ -292,21 +292,21 @@ describe Api::Internal::Admin::UsersController do
     it "returns bad request when direction is invalid" do
       user = create(:user)
 
-      post :affiliates, params: { user_id: user.external_id, direction: "both" }
+      get :affiliates, params: { user_id: user.external_id, direction: "both" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "direction must be 'granted' or 'received'" }.as_json)
     end
 
     it "returns bad request when neither user_id nor email is provided" do
-      post :affiliates, params: { direction: "granted" }
+      get :affiliates, params: { direction: "granted" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
-      post :affiliates, params: { user_id: "missing", direction: "granted" }
+      get :affiliates, params: { user_id: "missing", direction: "granted" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
@@ -315,7 +315,7 @@ describe Api::Internal::Admin::UsersController do
     it "returns an empty list with cursor pagination metadata" do
       user = create(:user)
 
-      post :affiliates, params: { email: user.email, direction: "received" }
+      get :affiliates, params: { email: user.email, direction: "received" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
@@ -330,7 +330,7 @@ describe Api::Internal::Admin::UsersController do
     it "looks up soft-deleted users" do
       user = create(:user, :deleted)
 
-      post :affiliates, params: { user_id: user.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: user.external_id, direction: "granted" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["user_id"]).to eq(user.external_id)
@@ -340,7 +340,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:user)
 
       expect do
-        post :affiliates, params: { user_id: user.external_id, direction: "granted" }
+        get :affiliates, params: { user_id: user.external_id, direction: "granted" }
       end.not_to change { AdminApiAuditLog.count }
     end
 
@@ -355,7 +355,7 @@ describe Api::Internal::Admin::UsersController do
       collaborator = create(:collaborator, seller:, affiliate_user: collaborator_user, apply_to_all_products: false, affiliate_basis_points: 2000, created_at: 1.hour.ago)
       create(:product_affiliate, affiliate: collaborator, product: collaborator_product, affiliate_basis_points: 1500)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([collaborator.external_id, direct_affiliate.external_id])
@@ -410,7 +410,7 @@ describe Api::Internal::Admin::UsersController do
       product = create(:product, user: seller, name: "Seller guide")
       direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, affiliate_basis_points: 1200, products: [product])
 
-      post :affiliates, params: { email: affiliate_user.email, direction: "received" }
+      get :affiliates, params: { email: affiliate_user.email, direction: "received" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([direct_affiliate.external_id])
@@ -432,7 +432,7 @@ describe Api::Internal::Admin::UsersController do
       product = create(:product)
       create(:product_affiliate, affiliate: user.global_affiliate, product:)
 
-      post :affiliates, params: { user_id: user.external_id, direction: "received" }
+      get :affiliates, params: { user_id: user.external_id, direction: "received" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"]).to eq([])
@@ -444,7 +444,7 @@ describe Api::Internal::Admin::UsersController do
       deleted_at = 1.day.ago
       direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, deleted_at:)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       expect(response).to have_http_status(:ok)
       payload = response.parsed_body["affiliates"].first
@@ -462,7 +462,7 @@ describe Api::Internal::Admin::UsersController do
       direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, affiliate_basis_points: 1800, products: [product])
       ProductAffiliate.find_by!(affiliate: direct_affiliate, product:).update!(affiliate_basis_points: nil)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       expect(response.parsed_body["affiliates"].first["products"].first["basis_points"]).to eq(1800)
     end
@@ -474,7 +474,7 @@ describe Api::Internal::Admin::UsersController do
       collaborator = create(:collaborator, seller:, affiliate_user:, apply_to_all_products: false, affiliate_basis_points: 2000)
       create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 2500, destination_url: "https://example.com/collab")
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       expect(response.parsed_body["affiliates"].first["products"]).to contain_exactly(
         {
@@ -491,7 +491,7 @@ describe Api::Internal::Admin::UsersController do
       affiliate_user = create(:user)
       direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, apply_to_all_products: true)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       payload = response.parsed_body["affiliates"].first
       expect(payload).to include(
@@ -507,7 +507,7 @@ describe Api::Internal::Admin::UsersController do
       middle = create(:direct_affiliate, seller:, affiliate_user: create(:user), created_at: 2.hours.ago)
       oldest = create(:direct_affiliate, seller:, affiliate_user: create(:user), created_at: 3.hours.ago)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2 }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2 }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([newest.external_id, middle.external_id])
@@ -515,7 +515,7 @@ describe Api::Internal::Admin::UsersController do
       expect(cursor).to be_present
       expect(response.parsed_body["pagination"]["limit"]).to eq(2)
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2, cursor: }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2, cursor: }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([oldest.external_id])
@@ -525,7 +525,7 @@ describe Api::Internal::Admin::UsersController do
     it "returns bad request when the cursor is invalid" do
       user = create(:user)
 
-      post :affiliates, params: { user_id: user.external_id, direction: "granted", cursor: "invalid" }
+      get :affiliates, params: { user_id: user.external_id, direction: "granted", cursor: "invalid" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
@@ -538,12 +538,12 @@ describe Api::Internal::Admin::UsersController do
       newer_received = create(:direct_affiliate, seller: create(:user), affiliate_user: user, created_at: 2.days.ago)
       older_received = create(:direct_affiliate, seller: create(:user), affiliate_user: user, created_at: 4.days.ago)
 
-      post :affiliates, params: { user_id: user.external_id, direction: "granted", limit: 1 }
+      get :affiliates, params: { user_id: user.external_id, direction: "granted", limit: 1 }
 
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([granted_anchor.external_id])
       cursor = response.parsed_body["pagination"]["next"]
 
-      post :affiliates, params: { user_id: user.external_id, direction: "received", limit: 2, cursor: }
+      get :affiliates, params: { user_id: user.external_id, direction: "received", limit: 2, cursor: }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([older_received.external_id])
@@ -556,7 +556,7 @@ describe Api::Internal::Admin::UsersController do
       matching_affiliate = create(:direct_affiliate, seller:, affiliate_user: create(:user))
       create(:direct_affiliate, seller: other_seller, affiliate_user: create(:user))
 
-      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+      get :affiliates, params: { user_id: seller.external_id, direction: "granted" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([matching_affiliate.external_id])
@@ -581,7 +581,7 @@ describe Api::Internal::Admin::UsersController do
       end
 
       ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
-        post :affiliates, params: { user_id: affiliate_user.external_id, direction: "received" }
+        get :affiliates, params: { user_id: affiliate_user.external_id, direction: "received" }
       end
 
       expect(response).to have_http_status(:ok)
@@ -589,16 +589,16 @@ describe Api::Internal::Admin::UsersController do
       expect(select_queries.length).to be <= 6, "expected at most 6 SELECTs but got #{select_queries.length}:\n#{select_queries.join("\n")}"
     end
 
-    include_examples "supports user lookup by user_id", :affiliates, extra_params: { direction: "granted" }
+    include_examples "supports user lookup by user_id", :affiliates, method: :get, extra_params: { direction: "granted" }
   end
 
-  describe "POST suspension" do
-    include_examples "admin api authorization required", :post, :suspension
+  describe "GET suspension" do
+    include_examples "admin api authorization required", :get, :suspension
 
     it "returns compliant status for an unsuspended user" do
       user = create(:compliant_user, email: "seller@example.com")
 
-      post :suspension, params: { email: user.email }
+      get :suspension, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({
@@ -614,7 +614,7 @@ describe Api::Internal::Admin::UsersController do
       user = create(:tos_user, email: "suspended@example.com")
       comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago)
 
-      post :suspension, params: { email: user.email }
+      get :suspension, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({
@@ -627,14 +627,14 @@ describe Api::Internal::Admin::UsersController do
     end
 
     it "returns a bad request when email is missing" do
-      post :suspension
+      get :suspension
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
-      post :suspension, params: { email: "missing@example.com" }
+      get :suspension, params: { email: "missing@example.com" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
@@ -644,13 +644,13 @@ describe Api::Internal::Admin::UsersController do
       user = create(:compliant_user)
       user.mark_deleted!
 
-      post :suspension, params: { user_id: user.external_id }
+      get :suspension, params: { user_id: user.external_id }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
 
-    include_examples "supports user lookup by user_id", :suspension, build_user: -> { create(:compliant_user) }
+    include_examples "supports user lookup by user_id", :suspension, method: :get, build_user: -> { create(:compliant_user) }
   end
 
   describe "POST reset_password" do

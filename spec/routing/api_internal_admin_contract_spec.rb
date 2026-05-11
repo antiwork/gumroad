@@ -9,9 +9,11 @@ describe "internal admin API routing" do
 
   it "routes the safe read endpoints that gumroad-cli consumes" do
     expect(route_for("/internal/admin/purchases/123", :get)).to include(controller: "api/internal/admin/purchases", action: "show", id: "123")
-    expect(route_for("/internal/admin/purchases/search", :post)).to include(controller: "api/internal/admin/purchases", action: "search")
-    expect(route_for("/internal/admin/licenses/lookup", :post)).to include(controller: "api/internal/admin/licenses", action: "lookup")
-    expect(route_for("/internal/admin/users/suspension", :post)).to include(controller: "api/internal/admin/users", action: "suspension")
+    expect(route_for("/internal/admin/purchases/search", :get)).to include(controller: "api/internal/admin/purchases", action: "search")
+    expect(route_for("/internal/admin/licenses/lookup", :get)).to include(controller: "api/internal/admin/licenses", action: "lookup")
+    expect(route_for("/internal/admin/users/info", :get)).to include(controller: "api/internal/admin/users", action: "info")
+    expect(route_for("/internal/admin/users/affiliates", :get)).to include(controller: "api/internal/admin/users", action: "affiliates")
+    expect(route_for("/internal/admin/users/suspension", :get)).to include(controller: "api/internal/admin/users", action: "suspension")
     expect(route_for("/internal/admin/payouts", :get)).to include(controller: "api/internal/admin/payouts", action: "index")
   end
 
@@ -26,7 +28,7 @@ describe "internal admin API routing" do
   end
 
   it "routes the products endpoints" do
-    expect(route_for("/internal/admin/products/list", :post)).to include(controller: "api/internal/admin/products", action: "list")
+    expect(route_for("/internal/admin/products", :get)).to include(controller: "api/internal/admin/products", action: "index")
     expect(route_for("/internal/admin/products/abc123", :get)).to include(controller: "api/internal/admin/products", action: "show", id: "abc123")
   end
 end

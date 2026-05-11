@@ -9,18 +9,18 @@ describe Api::Internal::Admin::ProductsController do
 
   before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
 
-  describe "POST list" do
-    include_examples "admin api authorization required", :post, :list
+  describe "GET index" do
+    include_examples "admin api authorization required", :get, :index
 
     it "returns a bad request when neither email nor external_id is provided" do
-      post :list
+      get :index
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "email or external_id is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
-      post :list, params: { email: "missing@example.com" }
+      get :index, params: { email: "missing@example.com" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
@@ -29,14 +29,14 @@ describe Api::Internal::Admin::ProductsController do
     it "looks up the seller by external_id when provided" do
       product = create(:product, user: seller)
 
-      post :list, params: { external_id: seller.external_id }
+      get :index, params: { external_id: seller.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
     end
 
     it "returns not found when the external_id does not match any user" do
-      post :list, params: { external_id: "nonexistent" }
+      get :index, params: { external_id: "nonexistent" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
@@ -47,7 +47,7 @@ describe Api::Internal::Admin::ProductsController do
       external_match = create(:product, user: seller, name: "via external_id")
       create(:product, user: other_seller, name: "via email")
 
-      post :list, params: { email: other_seller.email, external_id: seller.external_id }
+      get :index, params: { email: other_seller.email, external_id: seller.external_id }
 
       expect(response.parsed_body["products"].map { _1["name"] }).to eq([external_match.name])
     end
@@ -56,14 +56,14 @@ describe Api::Internal::Admin::ProductsController do
       product = create(:product, user: seller)
       seller.mark_deleted!
 
-      post :list, params: { external_id: seller.external_id }
+      get :index, params: { external_id: seller.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
     end
 
     it "returns an empty list with pagination metadata when the seller has no products" do
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -76,7 +76,7 @@ describe Api::Internal::Admin::ProductsController do
       deleted_product = create(:product, user: seller, name: "Old draft")
       deleted_product.mark_deleted!
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       expect(response).to have_http_status(:ok)
       products = response.parsed_body["products"]
@@ -99,7 +99,7 @@ describe Api::Internal::Admin::ProductsController do
       deleted = create(:product, user: seller, name: "Deleted")
       deleted.mark_deleted!
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       names = response.parsed_body["products"].map { _1["name"] }
       expect(names).to eq(["New alive", "Old alive", "Deleted"])
@@ -109,7 +109,7 @@ describe Api::Internal::Admin::ProductsController do
       product = create(:product, user: seller)
       external = create(:external_link, link: product, display_name: "Telegram channel", url: "https://t.me/secret-channel")
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       files = response.parsed_body["products"].first["files"]
       payload = files.find { _1["id"] == external.external_id }
@@ -136,7 +136,7 @@ describe Api::Internal::Admin::ProductsController do
       end
 
       ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
-        post :list, params: { email: seller.email }
+        get :index, params: { email: seller.email }
       end
 
       expect(response).to have_http_status(:ok)
@@ -151,7 +151,7 @@ describe Api::Internal::Admin::ProductsController do
       deleted_file = create(:readable_document, link: product, display_name: "Removed extra", size: 256)
       deleted_file.mark_deleted!
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       files = response.parsed_body["products"].first["files"]
       expect(files.length).to eq(2)
@@ -174,7 +174,7 @@ describe Api::Internal::Admin::ProductsController do
     it "returns the cover image url when one is present" do
       product = create(:product, :with_youtube_preview, user: seller)
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       payload = response.parsed_body["products"].first
       expect(payload["preview_url"]).to eq(product.preview_url)
@@ -185,11 +185,11 @@ describe Api::Internal::Admin::ProductsController do
       stub_const("Api::Internal::Admin::ProductsController::DEFAULT_PER_PAGE", 2)
       create_list(:product, 3, user: seller)
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
       expect(response.parsed_body["products"].length).to eq(2)
       expect(response.parsed_body["pagination"]).to include("count" => 3, "page" => 1, "next" => 2)
 
-      post :list, params: { email: seller.email, page: 2 }
+      get :index, params: { email: seller.email, page: 2 }
       expect(response.parsed_body["products"].length).to eq(1)
       expect(response.parsed_body["pagination"]).to include("page" => 2, "next" => nil)
     end
@@ -198,7 +198,7 @@ describe Api::Internal::Admin::ProductsController do
       product = create(:product, user: seller)
 
       ["0", "-5", "abc", ""].each do |bad_page|
-        post :list, params: { email: seller.email, page: bad_page }
+        get :index, params: { email: seller.email, page: bad_page }
 
         expect(response).to have_http_status(:ok), "page=#{bad_page.inspect} returned #{response.status}"
         expect(response.parsed_body["success"]).to be(true)
@@ -210,7 +210,7 @@ describe Api::Internal::Admin::ProductsController do
     it "returns an empty page in the JSON envelope when page is past the end (rather than raising 500)" do
       create(:product, user: seller)
 
-      post :list, params: { email: seller.email, page: 99 }
+      get :index, params: { email: seller.email, page: 99 }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -225,7 +225,7 @@ describe Api::Internal::Admin::ProductsController do
       third = create(:readable_document, link: product, display_name: "Third", position: 1)
       first.update_column(:position, nil)
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       ids = response.parsed_body["products"].first["files"].map { _1["id"] }
       expect(ids).to eq([first.external_id, second.external_id, third.external_id])
@@ -234,10 +234,10 @@ describe Api::Internal::Admin::ProductsController do
     it "honors per_page and caps it at the maximum" do
       create_list(:product, 5, user: seller)
 
-      post :list, params: { email: seller.email, per_page: 2 }
+      get :index, params: { email: seller.email, per_page: 2 }
       expect(response.parsed_body["products"].length).to eq(2)
 
-      post :list, params: { email: seller.email, per_page: 10_000 }
+      get :index, params: { email: seller.email, per_page: 10_000 }
       expect(response.parsed_body["products"].length).to eq(5)
     end
 
@@ -246,7 +246,7 @@ describe Api::Internal::Admin::ProductsController do
       mine = create(:product, user: seller)
       create(:product, user: other_seller)
 
-      post :list, params: { email: seller.email }
+      get :index, params: { email: seller.email }
 
       ids = response.parsed_body["products"].map { _1["id"] }
       expect(ids).to eq([mine.external_id])

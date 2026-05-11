@@ -8,7 +8,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   SELLER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
   private_constant :DEFAULT_PER_PAGE, :MAX_PER_PAGE, :SELLER_LOOKUP_BAD_REQUEST_MESSAGE
 
-  def list
+  def index
     if params[:email].blank? && params[:external_id].blank?
       return render json: { success: false, message: SELLER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
     end

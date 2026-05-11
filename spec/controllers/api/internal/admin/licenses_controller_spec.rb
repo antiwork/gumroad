@@ -4,15 +4,15 @@ require "spec_helper"
 require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::LicensesController do
-  describe "POST lookup" do
-    include_examples "admin api authorization required", :post, :lookup
+  describe "GET lookup" do
+    include_examples "admin api authorization required", :get, :lookup
 
     let(:product) { create(:product, name: "Licensed product") }
     let(:purchase) { create(:free_purchase, link: product, email: "buyer@example.com") }
     let(:license) { create(:license, link: product, purchase:, uses: 3) }
 
     it "returns license and purchase details for a license key" do
-      post :lookup, params: { license_key: license.serial }
+      get :lookup, params: { license_key: license.serial }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -34,14 +34,14 @@ describe Api::Internal::Admin::LicensesController do
     end
 
     it "returns a bad request when the license key is missing" do
-      post :lookup
+      get :lookup
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "license_key is required" }.as_json)
     end
 
     it "returns not found when the license key does not exist" do
-      post :lookup, params: { license_key: "missing-key" }
+      get :lookup, params: { license_key: "missing-key" }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "License not found" }.as_json)

@@ -4,25 +4,25 @@ require "spec_helper"
 require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::PurchasesController do
-  describe "POST search" do
-    include_examples "admin api authorization required", :post, :search
+  describe "GET search" do
+    include_examples "admin api authorization required", :get, :search
 
     it "returns a bad request when no search parameters are provided" do
-      post :search
+      get :search
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "At least one search parameter is required." }.as_json)
     end
 
     it "requires query when query-only modifiers are provided" do
-      post :search, params: { purchase_status: "successful" }
+      get :search, params: { purchase_status: "successful" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "query is required when product_title_query or purchase_status is provided." }.as_json)
     end
 
     it "returns a bad request when purchase_status is invalid" do
-      post :search, params: { query: "buyer@example.com", purchase_status: "succesful" }
+      get :search, params: { query: "buyer@example.com", purchase_status: "succesful" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "purchase_status must be one of: #{described_class::VALID_PURCHASE_STATUSES.to_sentence(last_word_connector: ', or ')}." }.as_json)
@@ -34,7 +34,7 @@ describe Api::Internal::Admin::PurchasesController do
       newer_purchase = create(:free_purchase, email: buyer_email, created_at: 1.day.ago)
       create(:free_purchase, email: "other@example.com")
 
-      post :search, params: { query: buyer_email }
+      get :search, params: { query: buyer_email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(true)
@@ -66,7 +66,7 @@ describe Api::Internal::Admin::PurchasesController do
       other_product = create(:product, name: "Writing course")
       create(:free_purchase, link: other_product, email: buyer_email)
 
-      post :search, params: { query: " #{buyer_email} ", product_title_query: " Design " }
+      get :search, params: { query: " #{buyer_email} ", product_title_query: " Design " }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["purchases"].map { _1["id"] }).to eq([matching_purchase.external_id_numeric.to_s])
@@ -87,7 +87,7 @@ describe Api::Internal::Admin::PurchasesController do
         { card_last4: " 4242 " },
         { card_type: " visa " },
       ].each do |search_params|
-        post :search, params: search_params
+        get :search, params: search_params
 
         aggregate_failures(search_params.inspect) do
           expect(response).to have_http_status(:ok)
@@ -105,7 +105,7 @@ describe Api::Internal::Admin::PurchasesController do
       allow(search_service).to receive(:search_purchases).and_return(search_relation)
       expect(search_relation).to receive(:includes).with(:link, :seller, :refunds).and_call_original
 
-      post :search, params: { query: purchase.email }
+      get :search, params: { query: purchase.email }
 
       expect(response).to have_http_status(:ok)
     end
@@ -116,7 +116,7 @@ describe Api::Internal::Admin::PurchasesController do
 
       expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
 
-      post :search, params: { query: purchase.email }
+      get :search, params: { query: purchase.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["purchases"].first).to include(
@@ -133,7 +133,7 @@ describe Api::Internal::Admin::PurchasesController do
 
       expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
 
-      post :search, params: { query: purchase.email }
+      get :search, params: { query: purchase.email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["purchases"].first).to include(
@@ -149,7 +149,7 @@ describe Api::Internal::Admin::PurchasesController do
       second_purchase = create(:free_purchase, email: buyer_email, created_at: 2.days.ago)
       first_purchase = create(:free_purchase, email: buyer_email, created_at: 1.day.ago)
 
-      post :search, params: { query: buyer_email }
+      get :search, params: { query: buyer_email }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["count"]).to eq(2)
@@ -164,7 +164,7 @@ describe Api::Internal::Admin::PurchasesController do
       create(:free_purchase, email: buyer_email, created_at: 2.days.ago)
       returned_purchase = create(:free_purchase, email: buyer_email, created_at: 1.day.ago)
 
-      post :search, params: { query: buyer_email, limit: 1 }
+      get :search, params: { query: buyer_email, limit: 1 }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["count"]).to eq(1)
@@ -174,7 +174,7 @@ describe Api::Internal::Admin::PurchasesController do
     end
 
     it "returns an empty list when no purchases match" do
-      post :search, params: { query: "missing@example.com" }
+      get :search, params: { query: "missing@example.com" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
@@ -187,7 +187,7 @@ describe Api::Internal::Admin::PurchasesController do
     end
 
     it "returns a bad request when purchase_date is invalid" do
-      post :search, params: { purchase_date: "2021-01", card_type: "visa" }
+      get :search, params: { purchase_date: "2021-01", card_type: "visa" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "purchase_date must use YYYY-MM-DD format." }.as_json)

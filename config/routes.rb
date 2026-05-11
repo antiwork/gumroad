@@ -303,7 +303,7 @@ Rails.application.routes.draw do
 
           resources :purchases, only: [:show] do
             collection do
-              post :search
+              get :search
               post :resend_all_receipts
               post :reassign
             end
@@ -320,15 +320,15 @@ Rails.application.routes.draw do
 
           resources :licenses, only: [] do
             collection do
-              post :lookup
+              get :lookup
             end
           end
 
           resources :users, only: [] do
             collection do
-              post :info
-              post :affiliates
-              post :suspension
+              get :info
+              get :affiliates
+              get :suspension
               post :reset_password
               post :update_email
               post :two_factor_authentication
@@ -356,11 +356,7 @@ Rails.application.routes.draw do
             end
           end
 
-          resources :products, only: [:show] do
-            collection do
-              post :list
-            end
-          end
+          resources :products, only: [:index, :show]
         end
 
         namespace :grmc do
