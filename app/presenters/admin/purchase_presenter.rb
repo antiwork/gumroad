@@ -30,6 +30,11 @@ class Admin::PurchasePresenter
       chargeback_reversed: purchase.chargeback_reversed?,
       error_code: purchase.failed? ? purchase.formatted_error_code : nil,
       last_chargebacked_purchase: purchase.find_past_chargebacked_purchases.first&.external_id,
+      early_fraud_warning: purchase.early_fraud_warning ? {
+        fraud_type: purchase.early_fraud_warning.fraud_type,
+        charge_risk_level: purchase.early_fraud_warning.charge_risk_level,
+      } : nil,
+      disputes: purchase.disputes.map { |d| { state: d.state } },
     }
   end
 

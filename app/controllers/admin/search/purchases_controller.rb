@@ -22,7 +22,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
       query: params[:query]&.strip,
       product_title_query: params[:product_title_query]&.strip,
       **search_params,
-    )
+    ).includes(:early_fraud_warning, :disputes)
 
     pagination, purchases = pagy_countless(
       @purchases,
