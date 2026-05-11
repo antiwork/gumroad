@@ -122,14 +122,17 @@ describe Api::Internal::Admin::CursorPagination do
     end
 
     it "raises ArgumentError for invalid pagination configuration" do
-      mismatched_cursor = described_class.encode("id" => 1)
-
       expect { described_class.paginate(payment_scope, order: []) }.to raise_error(ArgumentError, /order/)
       expect { described_class.paginate(payment_scope, order: [[:id, :sideways]]) }.to raise_error(ArgumentError, /direction/)
       expect { described_class.paginate(payment_scope, order: [[:id, nil]]) }.to raise_error(ArgumentError, /direction/)
+    end
+
+    it "raises InvalidCursor when the cursor keys do not match the order columns" do
+      mismatched_cursor = described_class.encode("id" => 1)
+
       expect do
         described_class.paginate(payment_scope, cursor: mismatched_cursor, order: default_order)
-      end.to raise_error(ArgumentError, /cursor keys/)
+      end.to raise_error(described_class::InvalidCursor)
     end
   end
 

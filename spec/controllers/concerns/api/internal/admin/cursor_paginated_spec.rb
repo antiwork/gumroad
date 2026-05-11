@@ -13,17 +13,32 @@ describe Api::Internal::Admin::CursorPaginated do
     def invalid
       raise Api::Internal::Admin::CursorPagination::InvalidCursor
     end
+
+    def mismatched
+      paginate_with_cursor(Payment.all, order: [[:created_at, :desc], [:id, :desc]])
+      render json: { success: true }
+    end
   end
 
   before do
     routes.draw do
       get :index, to: "anonymous#index"
       get :invalid, to: "anonymous#invalid"
+      get :mismatched, to: "anonymous#mismatched"
     end
   end
 
   it "returns a bad request response for invalid cursors" do
     get :invalid
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+  end
+
+  it "returns a bad request response when a signed cursor has the wrong sort keys" do
+    cursor = Api::Internal::Admin::CursorPagination.encode("id" => 1)
+
+    get :mismatched, params: { cursor: }
 
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)

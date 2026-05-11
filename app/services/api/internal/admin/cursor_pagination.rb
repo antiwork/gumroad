@@ -62,7 +62,7 @@ class Api::Internal::Admin::CursorPagination
         expected_keys = normalized_order.map(&:first)
         return if payload.keys.sort == expected_keys.sort
 
-        raise ArgumentError, "cursor keys must match order columns"
+        raise InvalidCursor
       end
 
       def cast_cursor_values(model, payload, normalized_order)
