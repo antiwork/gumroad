@@ -233,6 +233,26 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       end
     end
 
+    context "when the refund policy image generation raises an unexpected error" do
+      let(:js_error) do
+        Selenium::WebDriver::Error::JavascriptError.new("javascript error: Cannot read properties of null (reading 'parentElement')")
+      end
+
+      before do
+        allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_raise(js_error)
+      end
+
+      it "still creates the dispute evidence without the refund policy image" do
+        expect(ErrorNotifier).to receive(:notify).with(js_error, context: hash_including(purchase_id: disputed_purchase.id))
+
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence).to be_persisted
+        expect(dispute_evidence.refund_policy_image).not_to be_attached
+        expect(dispute_evidence.receipt_image).to be_attached
+      end
+    end
+
     context "when there is a view event before the purchase" do
       let!(:event) do
         disputed_purchase.events.create!(
