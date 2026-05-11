@@ -1,11 +1,35 @@
 # frozen_string_literal: true
 
 class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseController
+  include Api::Internal::Admin::CursorPaginated
+
+  VALID_AFFILIATE_DIRECTIONS = %w[granted received].freeze
+  private_constant :VALID_AFFILIATE_DIRECTIONS
+
   def info
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user
 
     render json: internal_admin_user_success_payload(user, user: serialize_user_info(user))
+  end
+
+  def affiliates
+    direction = params[:direction].to_s
+    unless VALID_AFFILIATE_DIRECTIONS.include?(direction)
+      return render json: { success: false, message: "direction must be 'granted' or 'received'" }, status: :bad_request
+    end
+
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    records, pagination = paginate_with_cursor(affiliates_scope(user, direction), order: [[:created_at, :desc], [:id, :desc]])
+    sellers_by_id = sellers_by_id_for(records, direction)
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       direction:,
+                                                       affiliates: records.map { serialize_affiliate(_1, direction:, sellers_by_id:) },
+                                                       pagination:,
+                                                     })
   end
 
   def suspension
@@ -219,6 +243,58 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   end
 
   private
+    def affiliates_scope(user, direction)
+      column = direction == "granted" ? :seller_id : :affiliate_user_id
+      scope = Affiliate.where(column => user.id, type: [DirectAffiliate.name, Collaborator.name])
+      return scope.includes(:affiliate_user, product_affiliates: :product) if direction == "granted"
+
+      scope.includes(product_affiliates: :product)
+    end
+
+    def sellers_by_id_for(affiliates, direction)
+      return {} unless direction == "received"
+
+      seller_ids = affiliates.map(&:seller_id).compact.uniq
+      User.where(id: seller_ids).index_by(&:id)
+    end
+
+    def serialize_affiliate(affiliate, direction:, sellers_by_id:)
+      counterparty_user = direction == "granted" ? affiliate.affiliate_user : sellers_by_id[affiliate.seller_id]
+      {
+        id: affiliate.external_id,
+        type: affiliate.type,
+        direction:,
+        counterparty: serialize_affiliate_counterparty(counterparty_user),
+        affiliate_basis_points: affiliate.affiliate_basis_points,
+        destination_url: affiliate.destination_url,
+        apply_to_all_products: affiliate.apply_to_all_products?,
+        alive: affiliate.alive?,
+        deleted_at: affiliate.deleted_at&.as_json,
+        created_at: affiliate.created_at.as_json,
+        products: affiliate.product_affiliates.sort_by(&:id).map { serialize_affiliate_product(_1, parent_basis_points: affiliate.affiliate_basis_points) },
+      }
+    end
+
+    def serialize_affiliate_counterparty(user)
+      return nil if user.blank?
+
+      {
+        id: user.external_id,
+        email: user.email,
+        name: user.display_name(prefer_email_over_default_username: true)
+      }
+    end
+
+    def serialize_affiliate_product(product_affiliate, parent_basis_points:)
+      product = product_affiliate.product
+      {
+        id: product&.external_id,
+        name: product&.name,
+        basis_points: product_affiliate.affiliate_basis_points || parent_basis_points,
+        destination_url: product_affiliate.destination_url,
+      }
+    end
+
     def suspension_status(user)
       if user.suspended?
         "Suspended"

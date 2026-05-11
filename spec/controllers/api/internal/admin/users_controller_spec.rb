@@ -271,6 +271,327 @@ describe Api::Internal::Admin::UsersController do
     end
   end
 
+  describe "POST affiliates" do
+    include_examples "admin api authorization required", :post, :affiliates
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    def affiliate_payload(external_id)
+      response.parsed_body["affiliates"].find { _1["id"] == external_id }
+    end
+
+    it "returns bad request when direction is missing" do
+      user = create(:user)
+
+      post :affiliates, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "direction must be 'granted' or 'received'" }.as_json)
+    end
+
+    it "returns bad request when direction is invalid" do
+      user = create(:user)
+
+      post :affiliates, params: { user_id: user.external_id, direction: "both" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "direction must be 'granted' or 'received'" }.as_json)
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      post :affiliates, params: { direction: "granted" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      post :affiliates, params: { user_id: "missing", direction: "granted" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns an empty list with cursor pagination metadata" do
+      user = create(:user)
+
+      post :affiliates, params: { email: user.email, direction: "received" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "direction" => "received",
+        "affiliates" => [],
+        "pagination" => { "next" => nil, "limit" => 20 }
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      post :affiliates, params: { user_id: user.external_id, direction: "granted" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        post :affiliates, params: { user_id: user.external_id, direction: "granted" }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "lists granted direct affiliates and collaborators with affiliate users as counterparties" do
+      seller = create(:user, email: "seller@example.com")
+      direct_affiliate_user = create(:user, email: "direct@example.com", name: "Direct Affiliate")
+      collaborator_user = create(:user, email: "collab@example.com", name: "Collaborator User")
+      direct_product = create(:product, user: seller, name: "Direct guide")
+      collaborator_product = create(:product, user: seller, name: "Collab guide")
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user: direct_affiliate_user, affiliate_basis_points: 1000, products: [direct_product], created_at: 2.hours.ago)
+      ProductAffiliate.find_by!(affiliate: direct_affiliate, product: direct_product).update!(affiliate_basis_points: nil)
+      collaborator = create(:collaborator, seller:, affiliate_user: collaborator_user, apply_to_all_products: false, affiliate_basis_points: 2000, created_at: 1.hour.ago)
+      create(:product_affiliate, affiliate: collaborator, product: collaborator_product, affiliate_basis_points: 1500)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([collaborator.external_id, direct_affiliate.external_id])
+      direct_payload = affiliate_payload(direct_affiliate.external_id)
+      expect(direct_payload).to include(
+        "type" => "DirectAffiliate",
+        "direction" => "granted",
+        "affiliate_basis_points" => 1000,
+        "apply_to_all_products" => false,
+        "alive" => true,
+        "deleted_at" => nil,
+        "created_at" => direct_affiliate.created_at.as_json
+      )
+      expect(direct_payload["counterparty"]).to eq(
+        "id" => direct_affiliate_user.external_id,
+        "email" => "direct@example.com",
+        "name" => "Direct Affiliate"
+      )
+      expect(direct_payload["products"]).to contain_exactly(
+        {
+          "id" => direct_product.external_id,
+          "name" => "Direct guide",
+          "basis_points" => 1000,
+          "destination_url" => nil
+        }
+      )
+
+      collaborator_payload = affiliate_payload(collaborator.external_id)
+      expect(collaborator_payload).to include(
+        "type" => "Collaborator",
+        "direction" => "granted",
+        "affiliate_basis_points" => 2000
+      )
+      expect(collaborator_payload["counterparty"]).to include(
+        "id" => collaborator_user.external_id,
+        "email" => "collab@example.com",
+        "name" => "Collaborator User"
+      )
+      expect(collaborator_payload["products"]).to contain_exactly(
+        {
+          "id" => collaborator_product.external_id,
+          "name" => "Collab guide",
+          "basis_points" => 1500,
+          "destination_url" => nil
+        }
+      )
+    end
+
+    it "lists received affiliates with sellers as counterparties" do
+      affiliate_user = create(:user, email: "affiliate@example.com")
+      seller = create(:user, email: "seller@example.com", name: "Seller User")
+      product = create(:product, user: seller, name: "Seller guide")
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, affiliate_basis_points: 1200, products: [product])
+
+      post :affiliates, params: { email: affiliate_user.email, direction: "received" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([direct_affiliate.external_id])
+      payload = response.parsed_body["affiliates"].first
+      expect(payload).to include(
+        "type" => "DirectAffiliate",
+        "direction" => "received",
+        "affiliate_basis_points" => 1200
+      )
+      expect(payload["counterparty"]).to eq(
+        "id" => seller.external_id,
+        "email" => "seller@example.com",
+        "name" => "Seller User"
+      )
+    end
+
+    it "excludes global affiliates" do
+      user = create(:user)
+      product = create(:product)
+      create(:product_affiliate, affiliate: user.global_affiliate, product:)
+
+      post :affiliates, params: { user_id: user.external_id, direction: "received" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"]).to eq([])
+    end
+
+    it "includes soft-deleted affiliates" do
+      seller = create(:user)
+      affiliate_user = create(:user)
+      deleted_at = 1.day.ago
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, deleted_at:)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      expect(response).to have_http_status(:ok)
+      payload = response.parsed_body["affiliates"].first
+      expect(payload).to include(
+        "id" => direct_affiliate.external_id,
+        "alive" => false,
+        "deleted_at" => deleted_at.as_json
+      )
+    end
+
+    it "falls back to the parent basis points when a product row has no override" do
+      seller = create(:user)
+      affiliate_user = create(:user)
+      product = create(:product, user: seller)
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, affiliate_basis_points: 1800, products: [product])
+      ProductAffiliate.find_by!(affiliate: direct_affiliate, product:).update!(affiliate_basis_points: nil)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      expect(response.parsed_body["affiliates"].first["products"].first["basis_points"]).to eq(1800)
+    end
+
+    it "uses product basis points when a product row has an override" do
+      seller = create(:user)
+      affiliate_user = create(:user)
+      product = create(:product, user: seller)
+      collaborator = create(:collaborator, seller:, affiliate_user:, apply_to_all_products: false, affiliate_basis_points: 2000)
+      create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 2500, destination_url: "https://example.com/collab")
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      expect(response.parsed_body["affiliates"].first["products"]).to contain_exactly(
+        {
+          "id" => product.external_id,
+          "name" => product.name,
+          "basis_points" => 2500,
+          "destination_url" => "https://example.com/collab"
+        }
+      )
+    end
+
+    it "reflects apply_to_all_products without expanding blanket relationships into products" do
+      seller = create(:user)
+      affiliate_user = create(:user)
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, apply_to_all_products: true)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      payload = response.parsed_body["affiliates"].first
+      expect(payload).to include(
+        "id" => direct_affiliate.external_id,
+        "apply_to_all_products" => true,
+        "products" => []
+      )
+    end
+
+    it "paginates affiliates with a cursor" do
+      seller = create(:user)
+      newest = create(:direct_affiliate, seller:, affiliate_user: create(:user), created_at: 1.hour.ago)
+      middle = create(:direct_affiliate, seller:, affiliate_user: create(:user), created_at: 2.hours.ago)
+      oldest = create(:direct_affiliate, seller:, affiliate_user: create(:user), created_at: 3.hours.ago)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([newest.external_id, middle.external_id])
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted", limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([oldest.external_id])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      user = create(:user)
+
+      post :affiliates, params: { user_id: user.external_id, direction: "granted", cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    it "applies a granted cursor to the received scope without binding the cursor to the direction" do
+      user = create(:user)
+      granted_anchor = create(:direct_affiliate, seller: user, affiliate_user: create(:user), created_at: 3.days.ago)
+      create(:direct_affiliate, seller: user, affiliate_user: create(:user), created_at: 4.days.ago)
+      newer_received = create(:direct_affiliate, seller: create(:user), affiliate_user: user, created_at: 2.days.ago)
+      older_received = create(:direct_affiliate, seller: create(:user), affiliate_user: user, created_at: 4.days.ago)
+
+      post :affiliates, params: { user_id: user.external_id, direction: "granted", limit: 1 }
+
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([granted_anchor.external_id])
+      cursor = response.parsed_body["pagination"]["next"]
+
+      post :affiliates, params: { user_id: user.external_id, direction: "received", limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([older_received.external_id])
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).not_to include(newer_received.external_id)
+    end
+
+    it "scopes results to the requested user" do
+      seller = create(:user)
+      other_seller = create(:user)
+      matching_affiliate = create(:direct_affiliate, seller:, affiliate_user: create(:user))
+      create(:direct_affiliate, seller: other_seller, affiliate_user: create(:user))
+
+      post :affiliates, params: { user_id: seller.external_id, direction: "granted" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].map { _1["id"] }).to eq([matching_affiliate.external_id])
+    end
+
+    it "preloads received affiliate products and sellers instead of issuing one query per affiliate" do
+      affiliate_user = create(:user)
+      3.times do
+        seller = create(:user)
+        products = create_list(:product, 2, user: seller)
+        create(:direct_affiliate, seller:, affiliate_user:, products:)
+      end
+      select_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s.squish
+        next if payload[:name] == "SCHEMA"
+        next unless sql.start_with?("SELECT")
+        next if sql.include?("`admin_api_tokens`")
+        next if sql.include?("`oauth_access_tokens`")
+
+        select_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        post :affiliates, params: { user_id: affiliate_user.external_id, direction: "received" }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["affiliates"].length).to eq(3)
+      expect(select_queries.length).to be <= 6, "expected at most 6 SELECTs but got #{select_queries.length}:\n#{select_queries.join("\n")}"
+    end
+
+    include_examples "supports user lookup by user_id", :affiliates, extra_params: { direction: "granted" }
+  end
+
   describe "POST suspension" do
     include_examples "admin api authorization required", :post, :suspension
 
