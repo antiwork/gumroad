@@ -49,7 +49,7 @@ class MadagascarBankAccount < BankAccount
     end
 
     def validate_account_number
-      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
+      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted.to_s.gsub(/[ -]/, ""))
       errors.add :base, "The account number is invalid."
     end
 end

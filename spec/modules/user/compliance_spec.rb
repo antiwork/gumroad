@@ -414,6 +414,29 @@ describe User::Compliance do
     end
   end
 
+  describe "signed_up_from_madagascar?" do
+    it "returns true if from Madagascar" do
+      mg_creator = create(:user)
+      create(:user_compliance_info_empty, user: mg_creator, country: "Madagascar")
+      expect(mg_creator.signed_up_from_madagascar?).to be true
+      expect(mg_creator.compliance_country_has_states?).to be false
+    end
+  end
+
+  describe "country_supports_iban?" do
+    it "returns true for a Madagascar creator" do
+      mg_creator = create(:user)
+      create(:user_compliance_info_empty, user: mg_creator, country: "Madagascar")
+      expect(mg_creator.country_supports_iban?).to be true
+    end
+
+    it "returns false for a US creator" do
+      us_creator = create(:user)
+      create(:user_compliance_info_empty, user: us_creator, country: "United States")
+      expect(us_creator.country_supports_iban?).to be false
+    end
+  end
+
   describe "signed_up_from_jamaica?" do
     it "returns true if from Jamaica" do
       jm_creator = create(:user)

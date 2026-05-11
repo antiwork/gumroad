@@ -50,5 +50,13 @@ describe MadagascarBankAccount do
       expect(mg_bank_account).to_not be_valid
       expect(mg_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
+
+    it "accepts an IBAN with spaces between groups" do
+      expect(build(:madagascar_bank_account, account_number: "MG48 0000 5000 0112 3456 7890 123")).to be_valid
+    end
+
+    it "accepts an IBAN with dashes between groups" do
+      expect(build(:madagascar_bank_account, account_number: "MG48-0000-5000-0112-3456-7890-123")).to be_valid
+    end
   end
 end

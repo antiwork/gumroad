@@ -2404,7 +2404,12 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-account-number`}
-                      placeholder={`${user.country_code || ""}1234567890`}
+                      placeholder={
+                        user.country_code === "MG"
+                          ? "MG4800005000011234567890123"
+                          : `${user.country_code || ""}1234567890`
+                      }
+                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number")}
@@ -2418,7 +2423,12 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-confirm-account-number`}
-                      placeholder={`${user.country_code || ""}1234567890`}
+                      placeholder={
+                        user.country_code === "MG"
+                          ? "MG4800005000011234567890123"
+                          : `${user.country_code || ""}1234567890`
+                      }
+                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}
