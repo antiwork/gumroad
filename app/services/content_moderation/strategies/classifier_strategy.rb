@@ -38,12 +38,14 @@ class ContentModeration::Strategies::ClassifierStrategy
     thresholds = load_thresholds
 
     flagged_categories = []
+    text_moderated = false
 
     if @text.present?
       scores = moderate([{ type: "text", text: @text }])
       if scores.nil?
         return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
       end
+      text_moderated = true
       flagged_categories.concat(collect_flagged(scores, thresholds))
     end
 
@@ -68,7 +70,7 @@ class ContentModeration::Strategies::ClassifierStrategy
         image_url_count: @image_urls.size,
         skipped_urls: skipped_urls,
       )
-      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
+      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON]) unless text_moderated
     end
 
     if flagged_categories.any?

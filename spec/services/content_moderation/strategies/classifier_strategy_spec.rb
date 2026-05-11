@@ -148,7 +148,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.8)"])
   end
 
-  it "returns flagged with a retry reason and notifies Sentry when every image URL fails" do
+  it "returns flagged with a retry reason and notifies Sentry when every image URL fails and there is no text" do
     image_urls = [
       "blob:https://gumroad.com/bad-1",
       "https://cdn.example.com/bad-2.png",
@@ -159,13 +159,9 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
       { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
       bad_response
     )
-    allow(client).to receive(:moderations) do |parameters:|
-      part = parameters[:input].first
-      raise bad_error if part[:type] == "image_url"
-      { "results" => [{ "category_scores" => {} }] }
-    end
+    allow(client).to receive(:moderations).and_raise(bad_error)
 
-    result = described_class.new(text: "some text", image_urls:).perform
+    result = described_class.new(text: "", image_urls:).perform
 
     expect(result.status).to eq("flagged")
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
@@ -174,6 +170,42 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
       image_url_count: 3,
       skipped_urls: match_array(image_urls),
     )
+  end
+
+  it "returns compliant and notifies Sentry when every image fails but text was moderated successfully" do
+    image_urls = [
+      "https://cdn.example.com/bad-1.png",
+      "https://cdn.example.com/bad-2.png",
+    ]
+    allow(client).to receive(:moderations) do |parameters:|
+      part = parameters[:input].first
+      raise Faraday::ServerError, "500 Internal Server Error" if part[:type] == "image_url"
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "some clean text", image_urls:).perform
+
+    expect(result.status).to eq("compliant")
+    expect(result.reasoning).to eq([])
+    expect(ErrorNotifier).to have_received(:notify).with(
+      "ContentModeration::ClassifierStrategy could not moderate any image",
+      image_url_count: 2,
+      skipped_urls: match_array(image_urls),
+    )
+  end
+
+  it "still flags text-flagged categories when image moderation fails alongside successful text moderation" do
+    image_urls = ["https://cdn.example.com/bad.png"]
+    allow(client).to receive(:moderations) do |parameters:|
+      part = parameters[:input].first
+      raise Faraday::ServerError, "500 Internal Server Error" if part[:type] == "image_url"
+      { "results" => [{ "category_scores" => { "violence" => 0.95 } }] }
+    end
+
+    result = described_class.new(text: "violent text", image_urls:).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.8)"])
   end
 
   it "does not flag unavailability when text exists and image_urls is empty" do
