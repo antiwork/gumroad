@@ -752,7 +752,7 @@ const AccountDetailsSection = ({
                     {user.business_tax_id_last_four ? (
                       <button
                         type="button"
-                        className="text-muted hover:text-primary"
+                        className="border-none bg-transparent p-0 text-muted hover:text-primary"
                         onClick={() => setShowBusinessTaxId(!showBusinessTaxId)}
                         aria-label={showBusinessTaxId ? "Hide tax ID" : "Show last 4 digits"}
                       >
@@ -762,7 +762,7 @@ const AccountDetailsSection = ({
                   </div>
                   <button
                     type="button"
-                    className="cursor-pointer underline all-unset text-sm"
+                    className="cursor-pointer self-start underline all-unset text-sm"
                     onClick={() => setIsEditingBusinessTaxId(true)}
                     disabled={isFormDisabled}
                   >
@@ -1254,7 +1254,7 @@ const AccountDetailsSection = ({
                   {user.individual_tax_id_last_four ? (
                     <button
                       type="button"
-                      className="text-muted hover:text-primary"
+                      className="border-none bg-transparent p-0 text-muted hover:text-primary"
                       onClick={() => setShowIndividualTaxId(!showIndividualTaxId)}
                       aria-label={showIndividualTaxId ? "Hide tax ID" : "Show last 4 digits"}
                     >
@@ -1264,7 +1264,7 @@ const AccountDetailsSection = ({
                 </div>
                 <button
                   type="button"
-                  className="cursor-pointer underline all-unset text-sm"
+                  className="cursor-pointer self-start underline all-unset text-sm"
                   onClick={() => setIsEditingIndividualTaxId(true)}
                   disabled={isFormDisabled}
                 >
