@@ -117,6 +117,8 @@ class DisputeEvidence::CreateFromDisputeService
       )
     rescue DisputeEvidence::GenerateRefundPolicyImageService::ImageTooLargeError
       ErrorNotifier.notify("DisputeEvidence::CreateFromDisputeService (purchase #{purchase.id}): Refund policy image not attached because was too large")
+    rescue => e
+      ErrorNotifier.notify(e, context: { service: "DisputeEvidence::CreateFromDisputeService#attach_refund_policy_image", purchase_id: purchase.id })
     end
 
     def mobile_purchase?
