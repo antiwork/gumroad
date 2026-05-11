@@ -44,6 +44,7 @@ class DisputeEvidence::GenerateRefundPolicyImageService
 
     IMAGE_RESIZE_FACTOR = 2
     IMAGE_QUALITY = 80
+    ARTICLE_WAIT_TIMEOUT_SECONDS = 5
 
     attr_reader :url, :width, :open_fine_print_modal, :max_size_allowed
 
@@ -73,8 +74,14 @@ class DisputeEvidence::GenerateRefundPolicyImageService
         modal_height = driver.execute_script(%{ return document.querySelector("dialog").scrollHeight; })
         [modal_height, document_height].max
       else
-        # We need to calculate the height of the content, plus the padding added by the parent element
-        content_height = driver.execute_script(%{ return document.querySelector("article").parentElement.scrollHeight; })
+        begin
+          Selenium::WebDriver::Wait.new(timeout: ARTICLE_WAIT_TIMEOUT_SECONDS).until do
+            driver.execute_script(%{ return document.querySelector("article") !== null; })
+          end
+        rescue Selenium::WebDriver::Error::TimeoutError
+          return document_height
+        end
+        content_height = driver.execute_script(%{ return document.querySelector("article")?.parentElement?.scrollHeight ?? 0; })
         [content_height, document_height].max
       end
     end
