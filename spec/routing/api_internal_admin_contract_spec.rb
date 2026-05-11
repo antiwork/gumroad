@@ -12,7 +12,7 @@ describe "internal admin API routing" do
     expect(route_for("/internal/admin/purchases/search", :post)).to include(controller: "api/internal/admin/purchases", action: "search")
     expect(route_for("/internal/admin/licenses/lookup", :post)).to include(controller: "api/internal/admin/licenses", action: "lookup")
     expect(route_for("/internal/admin/users/suspension", :post)).to include(controller: "api/internal/admin/users", action: "suspension")
-    expect(route_for("/internal/admin/payouts/list", :post)).to include(controller: "api/internal/admin/payouts", action: "list")
+    expect(route_for("/internal/admin/payouts", :get)).to include(controller: "api/internal/admin/payouts", action: "index")
   end
 
   it "routes the precise refund endpoint" do

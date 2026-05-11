@@ -341,9 +341,8 @@ Rails.application.routes.draw do
             end
           end
 
-          resources :payouts, only: [] do
+          resources :payouts, only: [:index] do
             collection do
-              get :list
               post :pause
               post :resume
               post :issue

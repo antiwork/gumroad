@@ -8,11 +8,11 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
   SCHEDULED_PAYOUT_REVIEW_STATUSES = %w[held flagged].freeze
   private_constant :SCHEDULED_PAYOUTS_DEFAULT_LIMIT, :SCHEDULED_PAYOUTS_MAX_LIMIT, :SCHEDULED_PAYOUT_REVIEW_STATUSES
 
-  before_action :fetch_user_for_read, only: [:list]
+  before_action :fetch_user_for_read, only: [:index]
   before_action :fetch_user_for_write, only: [:pause, :resume, :issue]
   before_action :fetch_scheduled_payout, only: [:scheduled_execute, :scheduled_cancel]
 
-  def list
+  def index
     records, pagination = paginate_with_cursor(@user.payments.includes(:bank_account), order: [[:created_at, :desc], [:id, :desc]])
     payout_note = @user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last&.content
 
