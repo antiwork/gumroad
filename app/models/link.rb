@@ -237,6 +237,8 @@ class Link < ApplicationRecord
   attr_json_data_accessor :main_section_index, default: -> { 0 }
   attr_json_data_accessor :custom_view_content_button_text
   attr_json_data_accessor :custom_receipt_text
+  attr_json_data_accessor :content_moderation_disabled, default: -> { false }
+  alias_method :content_moderation_disabled?, :content_moderation_disabled
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }

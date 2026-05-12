@@ -18,6 +18,7 @@ class ContentModeration::ModerateRecordService
   def check
     return CheckResult.new(passed: true, reasons: []) unless moderation_enabled?
     return CheckResult.new(passed: true, reasons: []) if user&.verified?
+    return CheckResult.new(passed: true, reasons: []) if record_moderation_disabled?
 
     content = extract_content
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
@@ -48,6 +49,10 @@ class ContentModeration::ModerateRecordService
 
     def moderation_enabled?
       Feature.active?(:content_moderation)
+    end
+
+    def record_moderation_disabled?
+      entity_type == :product && record.content_moderation_disabled?
     end
 
     def extract_content

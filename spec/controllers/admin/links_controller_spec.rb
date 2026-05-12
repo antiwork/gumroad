@@ -172,4 +172,24 @@ describe Admin::LinksController, type: :controller, inertia: true do
       end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
+
+  describe "POST set_content_moderation_disabled" do
+    it "toggles content_moderation_disabled on the product" do
+      post :set_content_moderation_disabled, params: { external_id: product.external_id, disabled: "true" }
+
+      expect(response).to be_successful
+      expect(product.reload.content_moderation_disabled?).to be(true)
+
+      post :set_content_moderation_disabled, params: { external_id: product.external_id, disabled: "false" }
+
+      expect(response).to be_successful
+      expect(product.reload.content_moderation_disabled?).to be(false)
+    end
+
+    it "raises a 404 if the product is not found" do
+      expect do
+        post :set_content_moderation_disabled, params: { external_id: "invalid-id", disabled: "true" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+  end
 end

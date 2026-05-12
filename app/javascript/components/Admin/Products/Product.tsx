@@ -46,6 +46,7 @@ export type Product = {
   html_safe_description: string | null;
   alive: boolean;
   is_adult: boolean;
+  content_moderation_disabled: boolean;
   active_integrations: ActiveIntegration[];
   admins_can_mark_as_staff_picked: boolean;
   admins_can_unmark_as_staff_picked: boolean;

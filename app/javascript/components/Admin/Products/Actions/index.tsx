@@ -1,6 +1,7 @@
 import React from "react";
 
 import DeleteAction from "$app/components/Admin/Products/Actions/DeleteAction";
+import DisableContentModerationAction from "$app/components/Admin/Products/Actions/DisableContentModerationAction";
 import JoinDiscordAction from "$app/components/Admin/Products/Actions/JoinDiscordAction";
 import MakeAdultAction from "$app/components/Admin/Products/Actions/MakeAdultAction";
 import MarkAsStaffPickedAction from "$app/components/Admin/Products/Actions/MarkAsStaffPickedAction";
@@ -21,6 +22,7 @@ const AdminProductActions = ({ product }: AdminProductActionsProps) => (
       <MakeAdultAction product={product} />
       <MarkAsStaffPickedAction product={product} />
       <UnmarkAsStaffPickedAction product={product} />
+      <DisableContentModerationAction product={product} />
       <JoinDiscordAction product={product} />
     </div>
   </>

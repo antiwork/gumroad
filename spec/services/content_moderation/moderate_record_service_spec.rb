@@ -41,6 +41,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.reasons).to eq([])
     end
 
+    it "skips moderation for products with content_moderation_disabled set" do
+      product.update!(content_moderation_disabled: true)
+      expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to eq(true)
+      expect(result.reasons).to eq([])
+    end
+
     it "returns passed when content is empty" do
       allow_any_instance_of(ContentModeration::ContentExtractor).to receive(:extract_from_product)
         .and_return(ContentModeration::ContentExtractor::Result.new(text: "", image_urls: []))

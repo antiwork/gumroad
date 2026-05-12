@@ -35,6 +35,7 @@ describe Admin::ProductPresenter::Card do
           html_safe_description: product.html_safe_description,
           alive: product.alive?,
           is_adult: product.is_adult?,
+          content_moderation_disabled: false,
           active_integrations: [],
           admins_can_mark_as_staff_picked: false,
           admins_can_unmark_as_staff_picked: false,

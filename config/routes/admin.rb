@@ -91,6 +91,7 @@ namespace :admin do
       post :publish
       delete :unpublish
       post :is_adult
+      post :set_content_moderation_disabled
       get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
       get :views_count
       get :sales_stats

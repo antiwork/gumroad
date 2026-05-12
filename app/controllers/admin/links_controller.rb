@@ -72,6 +72,13 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: true }
   end
 
+  def set_content_moderation_disabled
+    @product.content_moderation_disabled = parse_boolean(params[:disabled])
+    @product.save!
+
+    render json: { success: true }
+  end
+
   def access_product_file
     url_redirect = @product.url_redirects.build
     product_file = ProductFile.find_by_external_id(params[:product_file_id])
