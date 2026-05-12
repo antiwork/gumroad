@@ -11,6 +11,7 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
+import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -34,6 +35,8 @@ type Purchase = {
   chargeback_reversed: boolean;
   error_code: string | null;
   last_chargebacked_purchase: string | null;
+  early_fraud_warning: { fraud_type: string; charge_risk_level: string } | null;
+  disputes: { state: string }[];
 };
 
 export default function Purchases() {
@@ -105,6 +108,25 @@ export default function Purchases() {
                       <ArrowUpRightSquare className="size-5" />
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
+                    {(purchase.early_fraud_warning || purchase.disputes.length > 0) && (
+                      <span className="inline-flex flex-wrap gap-1">
+                        {purchase.early_fraud_warning ? (
+                          <Pill size="small" color="warning">
+                            EFW: {purchase.early_fraud_warning.fraud_type.replaceAll("_", " ")} (risk:{" "}
+                            {purchase.early_fraud_warning.charge_risk_level})
+                          </Pill>
+                        ) : null}
+                        {purchase.disputes.map((dispute, i) => (
+                          <Pill
+                            key={i}
+                            size="small"
+                            color={dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"}
+                          >
+                            Dispute: {dispute.state}
+                          </Pill>
+                        ))}
+                      </span>
+                    )}
                     <div className="text-sm">
                       <InlineList>
                         {purchase.refund_policy ? (

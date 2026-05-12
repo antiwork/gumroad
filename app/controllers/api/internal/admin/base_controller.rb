@@ -12,6 +12,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.reassign
     purchases.resend_all_receipts
   ].freeze
+  ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes].freeze
   USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or user_id is required"
   USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
     "Use /internal/admin/users/info to look up the user_id by email."
@@ -211,7 +212,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       end
     end
 
-    def serialize_purchase(purchase)
+    def serialize_purchase(purchase, with_clusters: false)
       {
         id: purchase.external_id_numeric.to_s,
         email: purchase.email,
@@ -225,13 +226,126 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         amount_refundable_cents_in_currency: amount_refundable_cents_in_currency(purchase),
         purchase_state: purchase.purchase_state,
         refund_status: refund_status(purchase),
+        chargeback_date: purchase.chargeback_date&.as_json,
         created_at: purchase.created_at.as_json,
-        receipt_url: receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+        receipt_url: receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email),
+        charge_processor: purchase.charge_processor_id,
+        paypal_order_id: purchase.paypal_order_id,
+        ip_address: purchase.ip_address,
+        ip_country: purchase.ip_country,
+        billing_country: purchase.country,
+        card_country: purchase.card_country,
+        country_mismatches: serialize_purchase_country_mismatches(purchase),
+        card: serialize_purchase_card(purchase),
+        dispute: serialize_purchase_latest_dispute(purchase),
+        early_fraud_warning: serialize_purchase_early_fraud_warning(purchase),
+        affiliate_credit: serialize_purchase_affiliate_credit(purchase),
       }.tap do |payload|
         refund_amount = refund_amount_cents(purchase)
         payload[:refund_amount] = refund_amount if refund_amount.positive?
         payload[:refund_date] = latest_refund(purchase)&.created_at&.as_json if payload[:refund_status].present?
+        payload[:clusters] = serialize_purchase_clusters(purchase) if with_clusters
       end
+    end
+
+    def serialize_purchase_card(purchase)
+      {
+        bin: purchase.card_bin,
+        type: purchase.card_type,
+        visual: purchase.card_visual,
+        expiry_month: purchase.card_expiry_month,
+        expiry_year: purchase.card_expiry_year,
+      }
+    end
+
+    def serialize_purchase_country_mismatches(purchase)
+      billing = normalize_country_to_alpha2(purchase.country)
+      ip = normalize_country_to_alpha2(purchase.ip_country)
+      card = normalize_country_to_alpha2(purchase.card_country)
+      {
+        billing_vs_ip: countries_differ?(billing, ip),
+        billing_vs_card: countries_differ?(billing, card),
+        ip_vs_card: countries_differ?(ip, card),
+      }
+    end
+
+    def countries_differ?(a, b)
+      return false if a.blank? || b.blank?
+
+      a != b
+    end
+
+    def normalize_country_to_alpha2(value)
+      return nil if value.blank?
+
+      string = value.to_s
+      return string.upcase if string.length == 2
+
+      Compliance::Countries.find_by_name(string)&.alpha2 || string.upcase
+    end
+
+    def serialize_purchase_latest_dispute(purchase)
+      dispute = if purchase.association(:disputes).loaded?
+        purchase.disputes.max_by(&:created_at)
+      else
+        purchase.disputes.order(:created_at).last
+      end
+      return nil if dispute.nil?
+
+      {
+        id: dispute.external_id,
+        state: dispute.state,
+        reason: dispute.reason,
+        charge_processor_dispute_id: dispute.charge_processor_dispute_id,
+        created_at: dispute.created_at.as_json,
+        initiated_at: dispute.initiated_at&.as_json,
+        formalized_at: dispute.formalized_at&.as_json,
+        won_at: dispute.won_at&.as_json,
+        lost_at: dispute.lost_at&.as_json,
+      }
+    end
+
+    def serialize_purchase_early_fraud_warning(purchase)
+      efw = purchase.early_fraud_warning
+      return nil if efw.nil?
+
+      {
+        id: efw.id.to_s,
+        processor_id: efw.processor_id,
+        fraud_type: efw.fraud_type,
+        charge_risk_level: efw.charge_risk_level,
+        actionable: efw.actionable,
+        resolution: efw.resolution,
+        resolution_message: efw.resolution_message,
+        resolved_at: efw.resolved_at&.as_json,
+        processor_created_at: efw.processor_created_at.as_json,
+      }
+    end
+
+    def serialize_purchase_affiliate_credit(purchase)
+      credit = purchase.affiliate_credit
+      return nil if credit.nil?
+
+      {
+        amount_cents: credit.amount_cents,
+        fee_cents: credit.fee_cents,
+        basis_points: credit.basis_points,
+        affiliate_user_id: credit.affiliate_user&.external_id,
+      }
+    end
+
+    def serialize_purchase_clusters(purchase)
+      {
+        fingerprint_count: purchase_cluster_count(:stripe_fingerprint, purchase.stripe_fingerprint, purchase.id),
+        browser_count: purchase_cluster_count(:browser_guid, purchase.browser_guid, purchase.id),
+        ip_count: purchase_cluster_count(:ip_address, purchase.ip_address, purchase.id),
+      }
+    end
+
+    def purchase_cluster_count(column, value, exclude_id)
+      return nil if value.blank?
+
+      Purchase.where(column => value).where.not(id: exclude_id).count
     end
 
     def serialize_payout(payment)

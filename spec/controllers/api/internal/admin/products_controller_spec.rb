@@ -145,6 +145,33 @@ describe Api::Internal::Admin::ProductsController do
       expect(product_files_queries.first).to include("IN (")
     end
 
+    it "resolves taxonomy ancestry with a single batched query across distinct taxonomies" do
+      root = Taxonomy.create!(slug: "root")
+      branch_a = Taxonomy.create!(slug: "branch-a", parent: root)
+      branch_b = Taxonomy.create!(slug: "branch-b", parent: root)
+      branch_c = Taxonomy.create!(slug: "branch-c", parent: root)
+      create(:product, user: seller, taxonomy: branch_a)
+      create(:product, user: seller, taxonomy: branch_b)
+      create(:product, user: seller, taxonomy: branch_c)
+
+      hierarchy_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next if sql.start_with?("INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "SAVEPOINT", "RELEASE")
+        hierarchy_queries << sql if sql.include?("taxonomy_hierarchies") && sql.start_with?("SELECT")
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :index, params: { email: seller.email }
+      end
+
+      expect(response).to have_http_status(:ok)
+      paths = response.parsed_body["products"].map { _1["taxonomy"]["ancestry_path"] }
+      expect(paths).to contain_exactly(["root", "branch-a"], ["root", "branch-b"], ["root", "branch-c"])
+      expect(hierarchy_queries.length).to eq(1),
+                                          "expected one batched taxonomy_hierarchies SELECT but got #{hierarchy_queries.length}:\n#{hierarchy_queries.join("\n")}"
+    end
+
     it "exposes file metadata including soft-deleted files" do
       product = create(:product, user: seller)
       alive_file = create(:readable_document, link: product, display_name: "Big guide", size: 1_048_576)
@@ -311,6 +338,211 @@ describe Api::Internal::Admin::ProductsController do
       payload = response.parsed_body["product"]["files"].first
       expect(payload["id"]).to eq(file.external_id)
       expect(payload["deleted_at"]).to be_present
+    end
+
+    it "exposes banned_at and purchase_disabled_at when set, nil when not" do
+      banned = create(:product, user: seller, banned_at: 1.day.ago)
+      banned.update_column(:purchase_disabled_at, 2.days.ago)
+      clean = create(:product, user: seller)
+
+      get :show, params: { id: banned.external_id }
+      expect(response.parsed_body["product"]).to include(
+        "banned_at" => banned.banned_at.iso8601,
+        "purchase_disabled_at" => banned.purchase_disabled_at.iso8601,
+        "alive" => false
+      )
+
+      get :show, params: { id: clean.external_id }
+      expect(response.parsed_body["product"]).to include(
+        "banned_at" => nil,
+        "purchase_disabled_at" => nil
+      )
+    end
+
+    it "returns the bad-card counter value as stored on the product" do
+      product = create(:product, user: seller)
+      product.update_column(:bad_card_counter, 7)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["bad_card_counter"]).to eq(7)
+    end
+
+    it "returns the taxonomy slug and ancestry path when assigned" do
+      root = Taxonomy.create!(slug: "physical-goods")
+      child = Taxonomy.create!(slug: "books", parent: root)
+      product = create(:product, user: seller, taxonomy: child)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["taxonomy"]).to eq(
+        "id" => child.id.to_s,
+        "slug" => "books",
+        "ancestry_path" => ["physical-goods", "books"]
+      )
+    end
+
+    it "returns null taxonomy when none is assigned" do
+      product = create(:product, user: seller, taxonomy: nil)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["taxonomy"]).to be_nil
+    end
+
+    it "lists attached direct affiliates with the fallback basis points from the parent affiliate" do
+      product = create(:product, user: seller, name: "Direct affiliate product")
+      direct_user = create(:user, email: "direct@example.com")
+      direct = create(:direct_affiliate, seller:, affiliate_user: direct_user, affiliate_basis_points: 1500, products: [product])
+      ProductAffiliate.find_by!(affiliate: direct, product:).update!(affiliate_basis_points: nil, destination_url: "https://example.com/d")
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["affiliates"]
+      expect(payload.length).to eq(1)
+      expect(payload.first).to include(
+        "id" => direct.external_id,
+        "type" => "DirectAffiliate",
+        "basis_points" => 1500,
+        "destination_url" => "https://example.com/d",
+        "alive" => true,
+        "deleted_at" => nil
+      )
+      expect(payload.first["affiliate_user"]).to eq(
+        "id" => direct_user.external_id,
+        "email" => "direct@example.com"
+      )
+    end
+
+    it "surfaces soft-deleted affiliates with their lifecycle state so reviewers see recently removed ones" do
+      product = create(:product, user: seller)
+      direct_user = create(:user)
+      deleted_at = 1.day.ago
+      direct = create(:direct_affiliate, seller:, affiliate_user: direct_user, products: [product])
+      direct.update!(deleted_at:)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["affiliates"].first
+      expect(payload).to include(
+        "id" => direct.external_id,
+        "alive" => false,
+        "deleted_at" => deleted_at.as_json
+      )
+    end
+
+    it "lists collaborators with per-product basis-point overrides" do
+      product = create(:product, user: seller, name: "Collab product")
+      collab_user = create(:user, email: "collab@example.com")
+      collab = create(:collaborator, seller:, affiliate_user: collab_user, apply_to_all_products: false, affiliate_basis_points: 2000)
+      create(:product_affiliate, affiliate: collab, product:, affiliate_basis_points: 2500)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["affiliates"]
+      expect(payload.length).to eq(1)
+      expect(payload.first).to include(
+        "id" => collab.external_id,
+        "type" => "Collaborator",
+        "basis_points" => 2500
+      )
+    end
+
+    it "excludes global affiliates from the attached affiliates list" do
+      product = create(:product, user: seller)
+      direct_user = create(:user)
+      direct = create(:direct_affiliate, seller:, affiliate_user: direct_user, products: [product])
+      global = create(:user).global_affiliate
+      create(:product_affiliate, affiliate: global, product:)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["affiliates"].map { _1["id"] }).to eq([direct.external_id])
+    end
+
+    it "returns an empty affiliates list when none are attached" do
+      product = create(:product, user: seller)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["affiliates"]).to eq([])
+    end
+
+    it "computes recent_chargeback_rate over a 90 day window from successful sales" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      4.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      chargedback = create(:purchase, link: product, seller:, created_at: 5.days.ago)
+      chargedback.update_column(:chargeback_date, 4.days.ago)
+      stale_chargeback = create(:purchase, link: product, seller:, created_at: 100.days.ago)
+      stale_chargeback.update_column(:chargeback_date, 95.days.ago)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["recent_chargeback_rate"]).to eq(
+        "window_days" => 90,
+        "successful_count" => 5,
+        "chargedback_count" => 1,
+        "rate" => 0.2
+      )
+    end
+
+    it "excludes reversed chargebacks from recent_chargeback_rate, matching the rest of the fraud-signal stack" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      4.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      lost = create(:purchase, link: product, seller:, created_at: 5.days.ago)
+      lost.update_columns(chargeback_date: 4.days.ago)
+      reversed = create(:purchase, link: product, seller:, created_at: 6.days.ago)
+      reversed.update_columns(chargeback_date: 5.days.ago)
+      reversed.update!(chargeback_reversed: true)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["recent_chargeback_rate"]
+      expect(payload["successful_count"]).to eq(6)
+      expect(payload["chargedback_count"]).to eq(1)
+      expect(payload["rate"]).to eq((1.0 / 6).round(4))
+    end
+
+    it "excludes bundle sub-purchases from both successful_count and chargedback_count" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      3.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      bundle_sub = create(:purchase, link: product, seller:, created_at: 8.days.ago, price_cents: 0)
+      bundle_sub.update!(is_bundle_product_purchase: true)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["recent_chargeback_rate"]
+      expect(payload["successful_count"]).to eq(3)
+      expect(payload["chargedback_count"]).to eq(0)
+      expect(payload["rate"]).to be_nil.or eq(0.0)
+    end
+
+    it "returns a recent_chargeback_rate with nil rate when there are no recent successful purchases" do
+      product = create(:product, user: seller)
+
+      get :show, params: { id: product.external_id }
+
+      expect(response.parsed_body["product"]["recent_chargeback_rate"]).to eq(
+        "window_days" => 90,
+        "successful_count" => 0,
+        "chargedback_count" => 0,
+        "rate" => nil
+      )
+    end
+
+    it "omits recent_chargeback_rate from index rows to keep the listing cheap" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      create(:purchase, link: product, seller:)
+
+      get :index, params: { external_id: seller.external_id }
+
+      expect(response).to have_http_status(:ok)
+      row = response.parsed_body["products"].find { _1["id"] == product.external_id }
+      expect(row).not_to have_key("recent_chargeback_rate")
     end
   end
 end

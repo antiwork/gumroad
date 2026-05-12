@@ -3,9 +3,10 @@
 class Admin::UserPresenter::Card
   attr_reader :user, :pundit_user
 
-  def initialize(user:, pundit_user:)
+  def initialize(user:, pundit_user:, include_radar_stats: false)
     @user = user
     @pundit_user = pundit_user
+    @include_radar_stats = include_radar_stats
   end
 
   def props
@@ -64,7 +65,11 @@ class Admin::UserPresenter::Card
 
       # Associations
       admin_manageable_user_memberships: user_memberships,
-      alive_user_compliance_info: compliance_info
+      alive_user_compliance_info: compliance_info,
+
+      # Radar risk signals
+      radar_stats: @include_radar_stats ? radar_stats : nil,
+      recent_efws: @include_radar_stats ? recent_efws : nil
     }
   end
 
@@ -136,5 +141,17 @@ class Admin::UserPresenter::Card
         has_individual_tax_id: info.has_individual_tax_id,
         has_business_tax_id: info.has_business_tax_id
       }
+    end
+
+    def radar_stats
+      radar_service.stats
+    end
+
+    def recent_efws
+      radar_service.recent_efws
+    end
+
+    def radar_service
+      @radar_service ||= Radar::SellerRiskStatsService.new(user)
     end
 end

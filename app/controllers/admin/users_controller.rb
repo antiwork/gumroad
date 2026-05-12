@@ -13,7 +13,7 @@ class Admin::UsersController < Admin::BaseController
       format.html do
         render inertia: "Admin/Users/Show",
                props: {
-                 user: Admin::UserPresenter::Card.new(user: @user, pundit_user:).props,
+                 user: Admin::UserPresenter::Card.new(user: @user, pundit_user:, include_radar_stats: true).props,
                }
       end
       format.json { render json: @user }

@@ -45,6 +45,24 @@ export type ActiveWatchedUser = {
   created_at: string;
 };
 
+export type RadarStats = {
+  successful_purchases: number;
+  efw_count: number;
+  efw_by_fraud_type: Record<string, number>;
+  efw_with_elevated_risk: number;
+  efw_with_highest_risk: number;
+  dispute_count: number;
+  dispute_rate: number;
+};
+
+export type RecentEfw = {
+  purchase_id: string | null;
+  fraud_type: string;
+  charge_risk_level: string;
+  resolution: string;
+  created_at: string;
+};
+
 export type User = {
   external_id: string;
   email: string;
@@ -79,6 +97,8 @@ export type User = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  radar_stats?: RadarStats | null;
+  recent_efws?: RecentEfw[] | null;
 };
 
 export type Props = {

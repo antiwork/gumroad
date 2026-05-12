@@ -36,6 +36,10 @@ forcefully_finish_long_running_community_chat_recap_runs:
   description: Forcefully finishes long running community chat recap runs
 
 # Daily in format: [minute] [hour] * * *
+sync_radar_value_lists:
+  cron: "0 3 * * *" # UTC 03:00
+  class: Radar::SyncValueListsJob
+  description: Syncs blocked emails and card fingerprints to Stripe Radar value lists
 perform_daily_instant_payouts_worker:
   cron: "0 8 * * *" # UTC 08:00, should be run before the weekly payouts job at 10:00
   class: PerformDailyInstantPayoutsWorker

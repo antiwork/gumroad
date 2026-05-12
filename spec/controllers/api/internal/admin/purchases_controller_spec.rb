@@ -103,11 +103,48 @@ describe Api::Internal::Admin::PurchasesController do
 
       allow(AdminSearchService).to receive(:new).and_return(search_service)
       allow(search_service).to receive(:search_purchases).and_return(search_relation)
-      expect(search_relation).to receive(:includes).with(:link, :seller, :refunds).and_call_original
+      expect(search_relation).to receive(:includes).with(*Api::Internal::Admin::BaseController::ADMIN_PURCHASE_INCLUDES).and_call_original
 
       get :search, params: { query: purchase.email }
 
       expect(response).to have_http_status(:ok)
+    end
+
+    it "preloads the affiliate_credit's affiliate_user so serialization does not fire one users SELECT per row" do
+      buyer_email = "affiliate-cluster@example.com"
+      affiliate_user_ids = 3.times.map do
+        affiliate_user = create(:user)
+        affiliate = create(:direct_affiliate, affiliate_user:)
+        purchase = create(:free_purchase, email: buyer_email, affiliate:)
+        create(:affiliate_credit, purchase:, affiliate:, affiliate_user:, amount_cents: 100, fee_cents: 10, basis_points: 500)
+        affiliate_user.id
+      end
+
+      single_row_user_lookups = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next if sql.start_with?("INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "SAVEPOINT", "RELEASE")
+        next unless sql.start_with?("SELECT") && sql.include?("`users`")
+        next unless sql.match?(/`users`\.`id` = \d+ LIMIT 1\z/)
+
+        single_row_user_lookups << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: { query: buyer_email }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].length).to eq(3)
+      response.parsed_body["purchases"].each do |row|
+        expect(row["affiliate_credit"]["affiliate_user_id"]).to be_present
+      end
+
+      lookups_for_affiliate_users = single_row_user_lookups.select do |sql|
+        affiliate_user_ids.any? { |id| sql.include?("`id` = #{id} ") }
+      end
+      expect(lookups_for_affiliate_users).to be_empty,
+                                             "expected zero per-row SELECTs for affiliate_user (preload should batch via IN), but got:\n#{lookups_for_affiliate_users.join("\n")}"
     end
 
     it "uses preloaded refunds when serializing refund details" do
@@ -236,6 +273,233 @@ describe Api::Internal::Admin::PurchasesController do
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "Purchase not found" }.as_json)
+    end
+
+    it "exposes the chargeback date when the purchase has been charged back" do
+      purchase = create(:free_purchase, chargeback_date: 2.days.ago)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["chargeback_date"]).to eq(purchase.chargeback_date.as_json)
+    end
+
+    it "returns the raw IP, IP country, billing country, and card country" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(
+        ip_address: "203.0.113.42",
+        ip_country: "United States",
+        country: "Germany",
+        card_country: "FR"
+      )
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      payload = response.parsed_body["purchase"]
+      expect(payload).to include(
+        "ip_address" => "203.0.113.42",
+        "ip_country" => "United States",
+        "billing_country" => "Germany",
+        "card_country" => "FR"
+      )
+    end
+
+    it "computes country mismatch booleans across the production storage schemes (names for billing/ip, alpha-2 for card)" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(country: "Germany", ip_country: "United States", card_country: "GB")
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["country_mismatches"]).to eq(
+        "billing_vs_ip" => true,
+        "billing_vs_card" => true,
+        "ip_vs_card" => true
+      )
+    end
+
+    it "treats a billing/IP country name and a matching card alpha-2 as equal" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(country: "United States", ip_country: "United States", card_country: "US")
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["country_mismatches"]).to eq(
+        "billing_vs_ip" => false,
+        "billing_vs_card" => false,
+        "ip_vs_card" => false
+      )
+    end
+
+    it "treats blank country values as non-mismatches" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(country: nil, ip_country: "United States", card_country: nil)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["country_mismatches"]).to eq(
+        "billing_vs_ip" => false,
+        "billing_vs_card" => false,
+        "ip_vs_card" => false
+      )
+    end
+
+    it "ignores case when comparing alpha-2 codes" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(country: "United States", ip_country: "United States", card_country: "us")
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["country_mismatches"].values).to all(eq(false))
+    end
+
+    it "returns card BIN, type, visual, and expiry" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(
+        card_bin: "424242",
+        card_type: "visa",
+        card_visual: "**** **** **** 4242",
+        card_expiry_month: 11,
+        card_expiry_year: 2030
+      )
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["card"]).to eq(
+        "bin" => "424242",
+        "type" => "visa",
+        "visual" => "**** **** **** 4242",
+        "expiry_month" => 11,
+        "expiry_year" => 2030
+      )
+    end
+
+    it "returns the charge processor and PayPal order ID" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(charge_processor_id: "paypal", paypal_order_id: "PAY-TEST-123")
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      payload = response.parsed_body["purchase"]
+      expect(payload["charge_processor"]).to eq("paypal")
+      expect(payload["paypal_order_id"]).to eq("PAY-TEST-123")
+    end
+
+    it "serializes the latest dispute when one exists" do
+      purchase = create(:free_purchase)
+      create(:dispute, purchase:, state: "lost", reason: Dispute::REASON_FRAUDULENT, charge_processor_dispute_id: "dp_old", created_at: 5.days.ago, lost_at: 1.day.ago)
+      newest = create(:dispute, purchase:, state: "formalized", reason: Dispute::REASON_FRAUDULENT, charge_processor_dispute_id: "dp_new", created_at: 1.hour.ago, formalized_at: 30.minutes.ago)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      dispute_payload = response.parsed_body["purchase"]["dispute"]
+      expect(dispute_payload).to include(
+        "id" => newest.external_id,
+        "state" => "formalized",
+        "reason" => Dispute::REASON_FRAUDULENT,
+        "charge_processor_dispute_id" => "dp_new",
+        "formalized_at" => newest.formalized_at.as_json,
+        "won_at" => nil,
+        "lost_at" => nil
+      )
+    end
+
+    it "returns null dispute when the purchase has none" do
+      purchase = create(:free_purchase)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["dispute"]).to be_nil
+    end
+
+    it "serializes the early fraud warning when present" do
+      purchase = create(:free_purchase)
+      efw = create(:early_fraud_warning, purchase:, processor_id: "issfr_test_42", fraud_type: "made_with_stolen_card", charge_risk_level: "highest", actionable: true)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["early_fraud_warning"]).to include(
+        "id" => efw.id.to_s,
+        "processor_id" => "issfr_test_42",
+        "fraud_type" => "made_with_stolen_card",
+        "charge_risk_level" => "highest",
+        "actionable" => true,
+        "resolution" => "unknown",
+        "processor_created_at" => efw.processor_created_at.as_json
+      )
+    end
+
+    it "returns null early fraud warning when the purchase has none" do
+      purchase = create(:free_purchase)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["early_fraud_warning"]).to be_nil
+    end
+
+    it "serializes the affiliate credit when the purchase used an affiliate" do
+      affiliate_user = create(:user)
+      affiliate = create(:direct_affiliate, affiliate_user:)
+      purchase = create(:free_purchase, affiliate:)
+      create(:affiliate_credit, purchase:, affiliate:, affiliate_user:, amount_cents: 750, fee_cents: 50, basis_points: 1000)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["affiliate_credit"]).to eq(
+        "amount_cents" => 750,
+        "fee_cents" => 50,
+        "basis_points" => 1000,
+        "affiliate_user_id" => affiliate_user.external_id
+      )
+    end
+
+    it "returns null affiliate credit when none is attached" do
+      purchase = create(:free_purchase)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["affiliate_credit"]).to be_nil
+    end
+
+    it "counts purchases sharing the same fingerprint, browser, and IP excluding the current one" do
+      shared_fingerprint = "fp_shared"
+      shared_browser = "bg_shared"
+      shared_ip = "203.0.113.7"
+      purchase = create(:free_purchase)
+      purchase.update_columns(stripe_fingerprint: shared_fingerprint, browser_guid: shared_browser, ip_address: shared_ip)
+      2.times { create(:free_purchase).update_columns(stripe_fingerprint: shared_fingerprint) }
+      create(:free_purchase).update_columns(browser_guid: shared_browser)
+      3.times { create(:free_purchase).update_columns(ip_address: shared_ip) }
+      create(:free_purchase)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["clusters"]).to eq(
+        "fingerprint_count" => 2,
+        "browser_count" => 1,
+        "ip_count" => 3
+      )
+    end
+
+    it "returns nil cluster counts when the source column is blank" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(stripe_fingerprint: nil, browser_guid: nil, ip_address: nil)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["clusters"]).to eq(
+        "fingerprint_count" => nil,
+        "browser_count" => nil,
+        "ip_count" => nil
+      )
+    end
+
+    it "omits clusters from the search response to avoid N+1 cluster queries" do
+      buyer_email = "cluster-search@example.com"
+      create(:free_purchase, email: buyer_email)
+
+      get :search, params: { query: buyer_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).not_to have_key("clusters")
     end
   end
 

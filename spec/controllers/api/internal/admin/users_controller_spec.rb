@@ -743,6 +743,569 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :affiliates, method: :get, extra_params: { direction: "granted" }
   end
 
+  describe "GET compliance_info" do
+    include_examples "admin api authorization required", :get, :compliance_info
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :compliance_info
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :compliance_info, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns null compliance_info and an empty info_requests list when the user has never submitted KYC" do
+      user = create(:user)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(
+        "success" => true,
+        "user_id" => user.external_id,
+        "compliance_info" => nil,
+        "info_requests" => []
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        get :compliance_info, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "returns submitted KYC fields for an individual seller with the tax ID masked to last four" do
+      user = create(:user)
+      info = create(:user_compliance_info,
+                    user:,
+                    first_name: "Alice",
+                    last_name: "Investigator",
+                    dba: "Alice & Co",
+                    birthday: Date.new(1985, 6, 7),
+                    individual_tax_id: "123456789",
+                    nationality: "US",
+                    phone: "5551234567",
+                    job_title: "Owner",
+                    stripe_identity_document_id: "idoc_individual")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      payload = response.parsed_body["compliance_info"]
+      expect(payload).to include(
+        "id" => info.external_id,
+        "is_business" => false,
+        "first_name" => "Alice",
+        "last_name" => "Investigator",
+        "legal_name" => "Alice Investigator",
+        "dba" => "Alice & Co",
+        "birthday" => "1985-06-07",
+        "nationality" => "US",
+        "phone" => "5551234567",
+        "job_title" => "Owner",
+        "business_name" => nil,
+        "business_type" => nil,
+        "business_phone" => nil,
+        "business_vat_id_number" => nil,
+        "business_address" => nil
+      )
+      expect(payload["address"]).to eq(
+        "street_address" => "address_full_match",
+        "city" => "San Francisco",
+        "state" => "California",
+        "state_code" => "CA",
+        "zip_code" => "94107",
+        "country" => "United States",
+        "country_code" => "US"
+      )
+      expect(payload["tax_ids"]).to eq(
+        "individual_last_four" => "6789",
+        "business_last_four" => nil
+      )
+      expect(payload["identity_documents"]).to eq(
+        "stripe_identity_document_id" => "idoc_individual",
+        "stripe_company_document_id" => nil,
+        "stripe_additional_document_id" => nil
+      )
+      expect(payload["created_at"]).to eq(info.created_at.as_json)
+      expect(payload["updated_at"]).to eq(info.updated_at.as_json)
+    end
+
+    it "returns business KYC fields with the business address and business tax ID last four (digits only)" do
+      user = create(:user)
+      info = create(:user_compliance_info_business,
+                    user:,
+                    business_name: "Acme LLC",
+                    business_type: UserComplianceInfo::BusinessTypes::LLC,
+                    business_tax_id: "12-3456789",
+                    business_phone: "5550009999",
+                    business_vat_id_number: "GB123456789",
+                    stripe_company_document_id: "idoc_company",
+                    stripe_additional_document_id: "idoc_additional")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      payload = response.parsed_body["compliance_info"]
+      expect(payload).to include(
+        "id" => info.external_id,
+        "is_business" => true,
+        "legal_name" => "Acme LLC",
+        "business_name" => "Acme LLC",
+        "business_type" => UserComplianceInfo::BusinessTypes::LLC,
+        "business_phone" => "5550009999",
+        "business_vat_id_number" => "GB123456789"
+      )
+      expect(payload["business_address"]).to eq(
+        "street_address" => "address_full_match",
+        "city" => "Burbank",
+        "state" => "California",
+        "state_code" => "CA",
+        "zip_code" => "91506",
+        "country" => "United States",
+        "country_code" => "US"
+      )
+      expect(payload["tax_ids"]).to eq(
+        "individual_last_four" => "0000",
+        "business_last_four" => "6789"
+      )
+      expect(payload["identity_documents"]).to include(
+        "stripe_company_document_id" => "idoc_company",
+        "stripe_additional_document_id" => "idoc_additional"
+      )
+    end
+
+    it "returns the latest alive compliance info when older records are soft-deleted" do
+      user = create(:user)
+      old_info = create(:user_compliance_info, user:, first_name: "Old")
+      old_info.mark_deleted!
+      newest = create(:user_compliance_info, user:, first_name: "Newest")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["compliance_info"]["id"]).to eq(newest.external_id)
+      expect(response.parsed_body["compliance_info"]["first_name"]).to eq("Newest")
+    end
+
+    it "omits last_four for tax IDs that were never set" do
+      user = create(:user)
+      create(:user_compliance_info_empty, user:)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["compliance_info"]["tax_ids"]).to eq(
+        "individual_last_four" => nil,
+        "business_last_four" => nil
+      )
+    end
+
+    it "lists only requested info_requests and excludes provided ones, marking overdue rows" do
+      user = create(:user)
+      overdue = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested", due_at: 3.days.ago, created_at: 5.days.ago)
+      upcoming = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::DATE_OF_BIRTH, state: "requested", due_at: 5.days.from_now, created_at: 2.days.ago)
+      undated = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Business::TAX_ID, state: "requested", due_at: nil, created_at: 1.day.ago)
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, state: "provided", provided_at: 1.day.ago)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      rows = response.parsed_body["info_requests"]
+      expect(rows.map { _1["id"] }).to eq([overdue, upcoming, undated].map(&:external_id))
+      expect(rows.first).to include(
+        "field_needed" => UserComplianceInfoFields::Individual::TAX_ID,
+        "state" => "requested",
+        "due_at" => overdue.due_at.as_json,
+        "overdue" => true,
+        "created_at" => overdue.created_at.as_json,
+        "last_email_sent_at" => nil
+      )
+      expect(rows[1]).to include(
+        "field_needed" => UserComplianceInfoFields::Individual::DATE_OF_BIRTH,
+        "overdue" => false
+      )
+      expect(rows[2]).to include(
+        "field_needed" => UserComplianceInfoFields::Business::TAX_ID,
+        "due_at" => nil,
+        "overdue" => false
+      )
+    end
+
+    it "exposes the most recent email reminder timestamp when present" do
+      user = create(:user)
+      request_record = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested", due_at: 1.day.from_now)
+      reminder_time = 2.hours.ago.change(usec: 0)
+      request_record.record_email_sent!(reminder_time)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      row = response.parsed_body["info_requests"].first
+      expect(row["last_email_sent_at"]).to eq(reminder_time.as_json)
+    end
+
+    it "scopes info_requests to the requested user" do
+      user = create(:user)
+      other_user = create(:user)
+      mine = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested")
+      create(:user_compliance_info_request, user: other_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["info_requests"].map { _1["id"] }).to eq([mine.external_id])
+    end
+
+    include_examples "supports user lookup by user_id", :compliance_info, method: :get
+  end
+
+  describe "GET purchases" do
+    include_examples "admin api authorization required", :get, :purchases
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+
+    def purchase_ids
+      response.parsed_body["purchases"].map { _1["id"] }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :purchases
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :purchases, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns an empty list with cursor pagination metadata" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "purchases" => [],
+        "pagination" => { "next" => nil, "limit" => 20 }
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :purchases, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        get :purchases, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "returns purchases matched by purchaser_id and by email, newest first" do
+      buyer = create(:user, email: "buyer@example.com")
+      anonymous_match = create(:purchase, email: buyer.email, created_at: 3.hours.ago)
+      logged_in = create(:purchase, purchaser: buyer, email: "other@example.com", created_at: 2.hours.ago)
+      newest = create(:purchase, purchaser: buyer, email: buyer.email, created_at: 1.hour.ago)
+      create(:purchase, email: "someone-else@example.com", created_at: 30.minutes.ago)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([newest, logged_in, anonymous_match].map { _1.external_id_numeric.to_s })
+    end
+
+    it "serializes each row with the shared purchase payload" do
+      buyer = create(:user, email: "buyer@example.com")
+      seller = create(:user, email: "seller@example.com")
+      product = create(:product, user: seller, name: "Investigation guide")
+      purchase = create(:purchase, purchaser: buyer, seller:, link: product, email: buyer.email, price_cents: 12_34)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      payload = response.parsed_body["purchases"].first
+      expect(payload).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "email" => buyer.email,
+        "seller_email" => "seller@example.com",
+        "product_name" => "Investigation guide",
+        "price_cents" => 12_34,
+        "purchase_state" => "successful"
+      )
+    end
+
+    it "filters by a single purchase_state" do
+      buyer = create(:user)
+      successful = create(:purchase, purchaser: buyer)
+      create(:failed_purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "successful" }
+
+      expect(purchase_ids).to eq([successful.external_id_numeric.to_s])
+    end
+
+    it "filters by multiple purchase states from a comma-separated list" do
+      buyer = create(:user)
+      successful = create(:purchase, purchaser: buyer, created_at: 2.hours.ago)
+      failed = create(:failed_purchase, purchaser: buyer, created_at: 1.hour.ago)
+      create(:purchase, purchaser: buyer, purchase_state: "not_charged", created_at: 30.minutes.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "successful,failed" }
+
+      expect(purchase_ids).to eq([failed, successful].map { _1.external_id_numeric.to_s })
+    end
+
+    it "rejects an unknown status value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, status: "not_a_state" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to start_with("status must be one of")
+    end
+
+    it "rejects a comma-only status value instead of silently returning an empty list" do
+      buyer = create(:user)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "," }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to start_with("status must be one of")
+    end
+
+    it "accepts every state defined on the Purchase state machine, including preorder_concluded_unsuccessfully" do
+      buyer = create(:user)
+      purchase = create(:purchase, purchaser: buyer)
+      purchase.update_column(:purchase_state, "preorder_concluded_unsuccessfully")
+
+      get :purchases, params: { user_id: buyer.external_id, status: "preorder_concluded_unsuccessfully" }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([purchase.external_id_numeric.to_s])
+    end
+
+    it "filters by a created_at window using ISO 8601 timestamps" do
+      buyer = create(:user)
+      too_old = create(:purchase, purchaser: buyer, created_at: 3.days.ago)
+      in_window = create(:purchase, purchaser: buyer, created_at: 1.day.ago)
+      too_new = create(:purchase, purchaser: buyer, created_at: 1.hour.ago)
+
+      get :purchases, params: {
+        user_id: buyer.external_id,
+        start_at: 2.days.ago.iso8601,
+        end_at: 6.hours.ago.iso8601
+      }
+
+      expect(purchase_ids).to eq([in_window.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(too_old.external_id_numeric.to_s, too_new.external_id_numeric.to_s)
+    end
+
+    it "rejects an unparseable start_at" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, start_at: "yesterday" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "start_at must be a valid ISO 8601 timestamp" }.as_json)
+    end
+
+    it "rejects an unparseable end_at" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, end_at: "soon" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "end_at must be a valid ISO 8601 timestamp" }.as_json)
+    end
+
+    it "filters by chargedback=true" do
+      buyer = create(:user)
+      clean = create(:purchase, purchaser: buyer)
+      chargedback = create(:purchase, purchaser: buyer, chargeback_date: 1.day.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, chargedback: true }
+
+      expect(purchase_ids).to eq([chargedback.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(clean.external_id_numeric.to_s)
+    end
+
+    it "filters by chargedback=false" do
+      buyer = create(:user)
+      clean = create(:purchase, purchaser: buyer)
+      create(:purchase, purchaser: buyer, chargeback_date: 1.day.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, chargedback: false }
+
+      expect(purchase_ids).to eq([clean.external_id_numeric.to_s])
+    end
+
+    it "rejects an empty chargedback value instead of silently filtering to chargedback=false" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, chargedback: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "chargedback must be true or false" }.as_json)
+    end
+
+    it "rejects an empty has_early_fraud_warning value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, has_early_fraud_warning: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "has_early_fraud_warning must be true or false" }.as_json)
+    end
+
+    it "rejects an unparseable has_affiliate value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, has_affiliate: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "has_affiliate must be true or false" }.as_json)
+    end
+
+    it "filters by has_early_fraud_warning=true" do
+      buyer = create(:user)
+      flagged = create(:purchase, purchaser: buyer)
+      create(:early_fraud_warning, purchase: flagged)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_early_fraud_warning: true }
+
+      expect(purchase_ids).to eq([flagged.external_id_numeric.to_s])
+    end
+
+    it "filters by has_early_fraud_warning=false" do
+      buyer = create(:user)
+      flagged = create(:purchase, purchaser: buyer)
+      create(:early_fraud_warning, purchase: flagged)
+      clean = create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_early_fraud_warning: false }
+
+      expect(purchase_ids).to eq([clean.external_id_numeric.to_s])
+    end
+
+    it "filters by has_affiliate=true" do
+      buyer = create(:user)
+      seller = create(:user)
+      product = create(:product, user: seller)
+      affiliate = create(:direct_affiliate, seller:, affiliate_user: create(:user))
+      with_affiliate = create(:purchase, purchaser: buyer, seller:, link: product, affiliate:)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_affiliate: true }
+
+      expect(purchase_ids).to eq([with_affiliate.external_id_numeric.to_s])
+    end
+
+    it "filters by stripe_fingerprint" do
+      buyer = create(:user)
+      matching = create(:purchase, purchaser: buyer, stripe_fingerprint: "fp_shared")
+      create(:purchase, purchaser: buyer, stripe_fingerprint: "fp_other")
+
+      get :purchases, params: { user_id: buyer.external_id, stripe_fingerprint: "fp_shared" }
+
+      expect(purchase_ids).to eq([matching.external_id_numeric.to_s])
+    end
+
+    it "filters by ip_address" do
+      buyer = create(:user)
+      matching = create(:purchase, purchaser: buyer, ip_address: "203.0.113.7")
+      create(:purchase, purchaser: buyer, ip_address: "198.51.100.4")
+
+      get :purchases, params: { user_id: buyer.external_id, ip_address: "203.0.113.7" }
+
+      expect(purchase_ids).to eq([matching.external_id_numeric.to_s])
+    end
+
+    it "scopes results to the requested user" do
+      buyer = create(:user)
+      other_buyer = create(:user)
+      mine = create(:purchase, purchaser: buyer)
+      create(:purchase, purchaser: other_buyer)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      expect(purchase_ids).to eq([mine.external_id_numeric.to_s])
+    end
+
+    it "skips the email branch when the user has no email so NULL-email purchases are not leaked" do
+      oauth_buyer = create(:user, provider: "google_oauth2", google_uid: "g-uid")
+      oauth_buyer.update_columns(email: nil)
+      own_purchase = create(:purchase, purchaser: oauth_buyer)
+      unrelated = create(:purchase)
+      unrelated.update_columns(email: nil)
+
+      get :purchases, params: { user_id: oauth_buyer.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([own_purchase.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(unrelated.external_id_numeric.to_s)
+    end
+
+    it "paginates purchases with a cursor" do
+      buyer = create(:user)
+      newest = create(:purchase, purchaser: buyer, created_at: 1.hour.ago)
+      middle = create(:purchase, purchaser: buyer, created_at: 2.hours.ago)
+      oldest = create(:purchase, purchaser: buyer, created_at: 3.hours.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([newest, middle].map { _1.external_id_numeric.to_s })
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+
+      get :purchases, params: { user_id: buyer.external_id, limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([oldest.external_id_numeric.to_s])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    include_examples "supports user lookup by user_id", :purchases, method: :get
+  end
+
   describe "GET suspension" do
     include_examples "admin api authorization required", :get, :suspension
 

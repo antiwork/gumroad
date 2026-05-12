@@ -6,6 +6,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   VALID_AFFILIATE_DIRECTIONS = %w[granted received].freeze
   private_constant :VALID_AFFILIATE_DIRECTIONS
 
+  def self.valid_purchase_states
+    @valid_purchase_states ||= Purchase.state_machines[:purchase_state].states.map { _1.name.to_s }.freeze
+  end
+
   def info
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user
@@ -28,6 +32,34 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     render json: internal_admin_user_success_payload(user, {
                                                        direction:,
                                                        affiliates: records.map { serialize_affiliate(_1, direction:, sellers_by_id:) },
+                                                       pagination:,
+                                                     })
+  end
+
+  def compliance_info
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       compliance_info: serialize_compliance_info(user.alive_user_compliance_info),
+                                                       info_requests: open_compliance_info_requests(user).map { serialize_compliance_info_request(_1) },
+                                                     })
+  end
+
+  def purchases
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    filters = parse_purchases_filters
+    return if filters.nil?
+
+    records, pagination = paginate_with_cursor(
+      purchases_scope(user, filters),
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       purchases: records.map { serialize_purchase(_1) },
                                                        pagination:,
                                                      })
   end
@@ -293,6 +325,185 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         basis_points: product_affiliate.affiliate_basis_points || parent_basis_points,
         destination_url: product_affiliate.destination_url,
       }
+    end
+
+    def serialize_compliance_info(info)
+      return nil if info.nil?
+
+      {
+        id: info.external_id,
+        is_business: info.is_business?,
+        legal_name: info.legal_entity_name.presence,
+        first_name: info.first_name,
+        last_name: info.last_name,
+        dba: info.dba,
+        birthday: info.birthday&.iso8601,
+        nationality: info.nationality,
+        phone: info.phone,
+        job_title: info.job_title,
+        address: serialize_compliance_address(
+          street_address: info.street_address,
+          city: info.city,
+          state: info.state,
+          state_code: info.state_code,
+          zip_code: info.zip_code,
+          country: info.country,
+          country_code: info.country_code
+        ),
+        business_name: info.business_name,
+        business_type: info.business_type,
+        business_phone: info.business_phone,
+        business_vat_id_number: info.business_vat_id_number,
+        business_address: info.is_business? ? serialize_compliance_address(
+          street_address: info.business_street_address,
+          city: info.business_city,
+          state: info.business_state,
+          state_code: info.business_state_code,
+          zip_code: info.business_zip_code,
+          country: info.business_country,
+          country_code: info.business_country_code
+        ) : nil,
+        tax_ids: {
+          individual_last_four: tax_id_last_four(info.individual_tax_id),
+          business_last_four: tax_id_last_four(info.business_tax_id, digits_only: true),
+        },
+        identity_documents: {
+          stripe_identity_document_id: info.stripe_identity_document_id,
+          stripe_company_document_id: info.stripe_company_document_id,
+          stripe_additional_document_id: info.stripe_additional_document_id,
+        },
+        created_at: info.created_at.as_json,
+        updated_at: info.updated_at.as_json,
+      }
+    end
+
+    def serialize_compliance_address(street_address:, city:, state:, state_code:, zip_code:, country:, country_code:)
+      {
+        street_address:,
+        city:,
+        state:,
+        state_code:,
+        zip_code:,
+        country:,
+        country_code:,
+      }
+    end
+
+    def tax_id_last_four(encrypted_tax_id, digits_only: false)
+      return nil if encrypted_tax_id.blank?
+
+      decrypted = encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s
+      decrypted = decrypted.gsub(/\D/, "") if digits_only
+      decrypted[-4..]
+    end
+
+    def open_compliance_info_requests(user)
+      user.user_compliance_info_requests
+          .requested
+          .order(Arel.sql("ISNULL(due_at), due_at ASC, created_at ASC"))
+    end
+
+    def serialize_compliance_info_request(request)
+      due_at = request.due_at
+      {
+        id: request.external_id,
+        field_needed: request.field_needed,
+        state: request.state,
+        due_at: due_at&.as_json,
+        overdue: due_at.present? && due_at < Time.current,
+        created_at: request.created_at.as_json,
+        last_email_sent_at: request.last_email_sent_at&.as_json,
+      }
+    end
+
+    def parse_purchases_filters
+      filters = {}
+      valid_states = self.class.valid_purchase_states
+
+      if params[:status].present?
+        states = Array(params[:status]).flat_map { _1.to_s.split(",") }.map(&:strip).reject(&:blank?)
+        invalid = states - valid_states
+        if states.empty? || invalid.any?
+          render json: { success: false, message: "status must be one of: #{valid_states.join(", ")}" }, status: :bad_request
+          return nil
+        end
+        filters[:states] = states
+      end
+
+      if params[:start_at].present?
+        filters[:start_at] = parse_iso8601_param(params[:start_at])
+        return render_invalid_purchases_filter_timestamp("start_at") if filters[:start_at].nil?
+      end
+
+      if params[:end_at].present?
+        filters[:end_at] = parse_iso8601_param(params[:end_at])
+        return render_invalid_purchases_filter_timestamp("end_at") if filters[:end_at].nil?
+      end
+
+      %i[chargedback has_early_fraud_warning has_affiliate].each do |key|
+        next unless params.key?(key)
+
+        casted = boolean_param(params[key])
+        return render_invalid_purchases_filter_boolean(key) if casted.nil?
+
+        filters[key] = casted
+      end
+
+      filters[:stripe_fingerprint] = params[:stripe_fingerprint].to_s if params[:stripe_fingerprint].present?
+      filters[:ip_address] = params[:ip_address].to_s if params[:ip_address].present?
+
+      filters
+    end
+
+    def parse_iso8601_param(value)
+      Time.iso8601(value.to_s)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def boolean_param(value)
+      ActiveModel::Type::Boolean.new.cast(value)
+    end
+
+    def render_invalid_purchases_filter_timestamp(name)
+      render json: { success: false, message: "#{name} must be a valid ISO 8601 timestamp" }, status: :bad_request
+      nil
+    end
+
+    def render_invalid_purchases_filter_boolean(name)
+      render json: { success: false, message: "#{name} must be true or false" }, status: :bad_request
+      nil
+    end
+
+    def purchases_scope(user, filters)
+      scope = Purchase.where(purchaser_id: user.id)
+      scope = scope.or(Purchase.where(email: user.email)) if user.email.present?
+      scope = scope.includes(:link, :seller, :refunds)
+
+      scope = scope.where(purchase_state: filters[:states]) if filters[:states]
+      scope = scope.where("purchases.created_at >= ?", filters[:start_at]) if filters[:start_at]
+      scope = scope.where("purchases.created_at <= ?", filters[:end_at]) if filters[:end_at]
+
+      if filters.key?(:chargedback)
+        scope = filters[:chargedback] ? scope.where.not(chargeback_date: nil) : scope.where(chargeback_date: nil)
+      end
+
+      if filters.key?(:has_early_fraud_warning)
+        scope = if filters[:has_early_fraud_warning]
+          scope.joins(:early_fraud_warning)
+        else
+          scope.left_outer_joins(:early_fraud_warning).where(purchase_early_fraud_warnings: { id: nil })
+        end
+      end
+
+      if filters.key?(:has_affiliate)
+        scope = filters[:has_affiliate] ? scope.where.not(affiliate_id: nil) : scope.where(affiliate_id: nil)
+      end
+
+      scope = scope.where(stripe_fingerprint: filters[:stripe_fingerprint]) if filters[:stripe_fingerprint]
+      scope = scope.where(ip_address: filters[:ip_address]) if filters[:ip_address]
+
+      scope
     end
 
     def suspension_status(user)
