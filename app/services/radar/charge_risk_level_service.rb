@@ -4,6 +4,7 @@ module Radar
   class ChargeRiskLevelService
     CACHE_TTL = 24.hours
     CACHE_KEY_PREFIX = "stripe_charge_risk_level"
+    CACHE_NIL_SENTINEL = "__nil__"
 
     # Fetch the Stripe Radar risk level for a purchase's charge.
     # Returns "normal", "elevated", "highest", "not_assessed", or nil if unavailable.
@@ -28,23 +29,26 @@ module Radar
 
       results = {}
 
-      # Read all from cache first
+      # Read all from cache first, using exist? to distinguish missing from cached nil
       uncached = []
       stripe_purchases.each do |purchase|
         cache_key = "#{CACHE_KEY_PREFIX}:#{purchase.stripe_transaction_id}"
-        cached = Rails.cache.read(cache_key)
-        if cached
-          results[purchase.id] = cached
+        if Rails.cache.exist?(cache_key)
+          cached = Rails.cache.read(cache_key)
+          results[purchase.id] = cached == CACHE_NIL_SENTINEL ? nil : cached
         else
           uncached << purchase
         end
       end
 
+      # Preload merchant_accounts to avoid N+1 queries
+      ActiveRecord::Associations::Preloader.new(records: uncached, associations: [:merchant_account]).call if uncached.any?
+
       # Fetch uncached from Stripe (bounded — admin views should limit this)
       uncached.each do |purchase|
         risk_level = fetch_from_stripe(purchase)
         cache_key = "#{CACHE_KEY_PREFIX}:#{purchase.stripe_transaction_id}"
-        Rails.cache.write(cache_key, risk_level, expires_in: CACHE_TTL)
+        Rails.cache.write(cache_key, risk_level || CACHE_NIL_SENTINEL, expires_in: CACHE_TTL)
         results[purchase.id] = risk_level
       end
 

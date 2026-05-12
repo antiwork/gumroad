@@ -328,7 +328,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dt>IP Country</dt>
           <dd>{purchase.ip_country}</dd>
 
-          {purchase.stripe_risk_level ? (
+          {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
             <>
               <dt>Stripe Radar</dt>
               <dd>
@@ -337,9 +337,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                   color={
                     purchase.stripe_risk_level === "highest"
                       ? "danger"
-                      : purchase.stripe_risk_level === "elevated"
-                        ? "warning"
-                        : "success"
+                      : "warning"
                   }
                 >
                   {purchase.stripe_risk_level}

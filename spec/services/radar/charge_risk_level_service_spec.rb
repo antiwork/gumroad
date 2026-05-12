@@ -93,6 +93,20 @@ describe Radar::ChargeRiskLevelService do
       expect(results).not_to have_key(non_stripe.id)
     end
 
+    it "caches nil results and does not re-fetch from Stripe" do
+      charge = double("Stripe::Charge")
+      allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return(nil)
+      expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(charge)
+
+      # First bulk fetch — calls Stripe, gets nil
+      results = described_class.fetch_bulk([purchase])
+      expect(results[purchase.id]).to be_nil
+
+      # Second bulk fetch — should use cache, not re-fetch
+      results = described_class.fetch_bulk([purchase])
+      expect(results[purchase.id]).to be_nil
+    end
+
     it "uses cache for already-fetched purchases" do
       charge = double("Stripe::Charge")
       allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return("highest")
