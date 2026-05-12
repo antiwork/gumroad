@@ -132,7 +132,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def stripe_identity_verification_failed
-    ContactingCreatorMailer.stripe_document_verification_failed(User.last&.id, "The country of the business address provided does not match the country of the account. Businesses must be located in the same country as the account.")
+    ContactingCreatorMailer.stripe_identity_verification_failed(User.last&.id, "The country of the business address provided does not match the country of the account. Businesses must be located in the same country as the account.")
   end
 
   def singapore_identity_verification_reminder

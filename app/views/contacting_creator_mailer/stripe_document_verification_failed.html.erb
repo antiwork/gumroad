@@ -1,9 +1,9 @@
 <div>
-  <p>Sorry about this! We ran into the following issue when trying to verify the document you uploaded on your payout settings page:</p>
+  <p>Stripe, our payment processor, was unable to verify a document you uploaded on your payout settings. This is a standard compliance check — no action was taken on your account.</p>
+  <p>Here's what Stripe reported:</p>
   <p>
     <i><%= @error_message %></i>
   </p>
-  <p>Please upload a valid document at:</p>
-  <p><%= link_to("Provide your information", settings_payments_url, class: "button primary") %></p>
-  <p>Or you can click here: <%= link_to settings_payments_url, settings_payments_url %></p>
+  <p>To fix this, visit your payout settings and upload a valid document. You can navigate there directly at <strong>gumroad.com/settings/payments</strong> — no need to click the link in this email if you're unsure.</p>
+  <p><%= link_to("Go to payout settings", settings_payments_url, class: "button primary") %></p>
 </div>

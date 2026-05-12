@@ -348,14 +348,14 @@ class ContactingCreatorMailer < ApplicationMailer
   def stripe_document_verification_failed(user_id, error_message)
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?
-    @subject = "[Action Required] Document Verification Failed"
+    @subject = "[Action Required] Stripe needs an updated document"
     @error_message = error_message
   end
 
   def stripe_identity_verification_failed(user_id, error_message)
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?
-    @subject = "[Action Required] Identity Verification Failed"
+    @subject = "[Action Required] Stripe needs updated identity information"
     @error_message = error_message
   end
 

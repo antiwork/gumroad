@@ -1714,10 +1714,10 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, stripe_error_reason)
 
       expect(mail.to).to eq [creator.email]
-      expect(mail.subject).to eq "[Action Required] Document Verification Failed"
-      expect(mail.body.encoded).to include "Sorry about this! We ran into the following issue when trying to verify the document you uploaded on your payout settings page:"
+      expect(mail.subject).to eq "[Action Required] Stripe needs an updated document"
+      expect(mail.body.encoded).to include "Stripe, our payment processor, was unable to verify a document"
       expect(mail.body.encoded).to include stripe_error_reason
-      expect(mail.body.encoded).to include "Please upload a valid document at:"
+      expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
     end
   end
@@ -1730,10 +1730,10 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, stripe_error_reason)
 
       expect(mail.to).to eq [creator.email]
-      expect(mail.subject).to eq "[Action Required] Identity Verification Failed"
-      expect(mail.body.encoded).to include "Sorry about this! We ran into the following issue when trying to verify the information entered on your payout settings page:"
+      expect(mail.subject).to eq "[Action Required] Stripe needs updated identity information"
+      expect(mail.body.encoded).to include "Stripe, our payment processor, was unable to verify some of the identity information"
       expect(mail.body.encoded).to include stripe_error_reason
-      expect(mail.body.encoded).to include "Please make any required changes at:"
+      expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
     end
   end
