@@ -109,7 +109,7 @@ const RadarSignals = ({ user }: RadarSignalsProps) => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Purchase ID</TableHead>
+                    <TableHead>Reference</TableHead>
                     <TableHead>Fraud type</TableHead>
                     <TableHead>Risk level</TableHead>
                     <TableHead>Resolution</TableHead>

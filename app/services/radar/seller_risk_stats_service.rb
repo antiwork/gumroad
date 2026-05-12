@@ -23,9 +23,9 @@ module Radar
     end
 
     def recent_efws(limit = 5)
-      efws.includes(:purchase, charge: :purchases).order(created_at: :desc).limit(limit).map do |efw|
+      efws.includes(:purchase, :charge).order(created_at: :desc).limit(limit).map do |efw|
         {
-          purchase_id: efw.purchase&.external_id || efw.charge&.external_id,
+          purchase_id: efw.purchase&.external_id || (efw.charge && "CH-#{efw.charge.external_id}"),
           fraud_type: efw.fraud_type,
           charge_risk_level: efw.charge_risk_level,
           resolution: efw.resolution,
@@ -61,6 +61,7 @@ module Radar
       def dispute_count
         @dispute_count ||= Dispute
           .where(seller_id: user.id)
+          .where.not(state: "won")
           .where("disputes.created_at >= ?", cutoff_date)
           .count
       end
