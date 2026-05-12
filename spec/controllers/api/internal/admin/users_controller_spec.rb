@@ -861,6 +861,17 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["message"]).to start_with("status must be one of")
     end
 
+    it "accepts every state defined on the Purchase state machine, including preorder_concluded_unsuccessfully" do
+      buyer = create(:user)
+      purchase = create(:purchase, purchaser: buyer)
+      purchase.update_column(:purchase_state, "preorder_concluded_unsuccessfully")
+
+      get :purchases, params: { user_id: buyer.external_id, status: "preorder_concluded_unsuccessfully" }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([purchase.external_id_numeric.to_s])
+    end
+
     it "filters by a created_at window using ISO 8601 timestamps" do
       buyer = create(:user)
       too_old = create(:purchase, purchaser: buyer, created_at: 3.days.ago)
@@ -914,6 +925,33 @@ describe Api::Internal::Admin::UsersController do
       get :purchases, params: { user_id: buyer.external_id, chargedback: false }
 
       expect(purchase_ids).to eq([clean.external_id_numeric.to_s])
+    end
+
+    it "rejects an empty chargedback value instead of silently filtering to chargedback=false" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, chargedback: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "chargedback must be true or false" }.as_json)
+    end
+
+    it "rejects an empty has_early_fraud_warning value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, has_early_fraud_warning: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "has_early_fraud_warning must be true or false" }.as_json)
+    end
+
+    it "rejects an unparseable has_affiliate value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, has_affiliate: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "has_affiliate must be true or false" }.as_json)
     end
 
     it "filters by has_early_fraud_warning=true" do
@@ -980,6 +1018,20 @@ describe Api::Internal::Admin::UsersController do
       get :purchases, params: { user_id: buyer.external_id }
 
       expect(purchase_ids).to eq([mine.external_id_numeric.to_s])
+    end
+
+    it "skips the email branch when the user has no email so NULL-email purchases are not leaked" do
+      oauth_buyer = create(:user, provider: "google_oauth2", google_uid: "g-uid")
+      oauth_buyer.update_columns(email: nil)
+      own_purchase = create(:purchase, purchaser: oauth_buyer)
+      unrelated = create(:purchase)
+      unrelated.update_columns(email: nil)
+
+      get :purchases, params: { user_id: oauth_buyer.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([own_purchase.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(unrelated.external_id_numeric.to_s)
     end
 
     it "paginates purchases with a cursor" do

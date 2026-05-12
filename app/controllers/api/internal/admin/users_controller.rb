@@ -4,18 +4,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   include Api::Internal::Admin::CursorPaginated
 
   VALID_AFFILIATE_DIRECTIONS = %w[granted received].freeze
-  VALID_PURCHASE_STATES = %w[
-    in_progress
-    successful
-    failed
-    preorder_authorization_successful
-    preorder_authorization_failed
-    preorder_concluded_successfully
-    not_charged
-    gift_receiver_purchase_successful
-    test_successful
-  ].freeze
-  private_constant :VALID_AFFILIATE_DIRECTIONS, :VALID_PURCHASE_STATES
+  private_constant :VALID_AFFILIATE_DIRECTIONS
+
+  def self.valid_purchase_states
+    @valid_purchase_states ||= Purchase.state_machines[:purchase_state].states.map { _1.name.to_s }.freeze
+  end
 
   def info
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
@@ -326,12 +319,13 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def parse_purchases_filters
       filters = {}
+      valid_states = self.class.valid_purchase_states
 
       if params[:status].present?
         states = Array(params[:status]).flat_map { _1.to_s.split(",") }.map(&:strip).reject(&:blank?)
-        invalid = states - VALID_PURCHASE_STATES
+        invalid = states - valid_states
         if invalid.any?
-          render json: { success: false, message: "status must be one of: #{VALID_PURCHASE_STATES.join(", ")}" }, status: :bad_request
+          render json: { success: false, message: "status must be one of: #{valid_states.join(", ")}" }, status: :bad_request
           return nil
         end
         filters[:states] = states
@@ -339,17 +333,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       if params[:start_at].present?
         filters[:start_at] = parse_iso8601_param(params[:start_at])
-        return render_invalid_purchases_filter("start_at") if filters[:start_at].nil?
+        return render_invalid_purchases_filter_timestamp("start_at") if filters[:start_at].nil?
       end
 
       if params[:end_at].present?
         filters[:end_at] = parse_iso8601_param(params[:end_at])
-        return render_invalid_purchases_filter("end_at") if filters[:end_at].nil?
+        return render_invalid_purchases_filter_timestamp("end_at") if filters[:end_at].nil?
       end
 
-      filters[:chargedback] = boolean_param(params[:chargedback]) if params.key?(:chargedback)
-      filters[:has_early_fraud_warning] = boolean_param(params[:has_early_fraud_warning]) if params.key?(:has_early_fraud_warning)
-      filters[:has_affiliate] = boolean_param(params[:has_affiliate]) if params.key?(:has_affiliate)
+      %i[chargedback has_early_fraud_warning has_affiliate].each do |key|
+        next unless params.key?(key)
+
+        casted = boolean_param(params[key])
+        return render_invalid_purchases_filter_boolean(key) if casted.nil?
+
+        filters[key] = casted
+      end
+
       filters[:stripe_fingerprint] = params[:stripe_fingerprint].to_s if params[:stripe_fingerprint].present?
       filters[:ip_address] = params[:ip_address].to_s if params[:ip_address].present?
 
@@ -366,16 +366,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       ActiveModel::Type::Boolean.new.cast(value)
     end
 
-    def render_invalid_purchases_filter(name)
+    def render_invalid_purchases_filter_timestamp(name)
       render json: { success: false, message: "#{name} must be a valid ISO 8601 timestamp" }, status: :bad_request
       nil
     end
 
+    def render_invalid_purchases_filter_boolean(name)
+      render json: { success: false, message: "#{name} must be true or false" }, status: :bad_request
+      nil
+    end
+
     def purchases_scope(user, filters)
-      scope = Purchase
-        .where(purchaser_id: user.id)
-        .or(Purchase.where(email: user.email))
-        .includes(:link, :seller, :refunds)
+      scope = Purchase.where(purchaser_id: user.id)
+      scope = scope.or(Purchase.where(email: user.email)) if user.email.present?
+      scope = scope.includes(:link, :seller, :refunds)
 
       scope = scope.where(purchase_state: filters[:states]) if filters[:states]
       scope = scope.where("purchases.created_at >= ?", filters[:start_at]) if filters[:start_at]
