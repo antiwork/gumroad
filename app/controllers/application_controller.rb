@@ -14,7 +14,6 @@ class ApplicationController < ActionController::Base
   include TwoFactorAuthenticationValidator
   include Impersonate
   include CurrentSeller
-  include HelperWidget
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
   include InertiaRendering
