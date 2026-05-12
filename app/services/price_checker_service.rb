@@ -52,6 +52,10 @@ class PriceCheckerService
       @overrides.fetch(:native_type, product.native_type)
     end
 
+    def effective_currency
+      @overrides.fetch(:currency_code, product.price_currency_type)
+    end
+
     def effective_taxonomy
       return product.taxonomy unless @overrides.key?(:taxonomy_id)
       effective_taxonomy_id ? Taxonomy.find_by(id: effective_taxonomy_id) : nil
@@ -71,7 +75,7 @@ class PriceCheckerService
         tier: "insufficient",
         match_count: result[:match_count],
         taxonomy_label: nil,
-        currency_code: product.price_currency_type,
+        currency_code: effective_currency,
         current_price_cents: product.price_cents,
         summary: nil,
         histogram: nil,
@@ -122,7 +126,7 @@ class PriceCheckerService
         tier:,
         match_count: result[:match_count],
         taxonomy_label: tier == "with_taxonomy" && !generic_taxonomy ? taxonomy_label_for(effective_taxonomy) : nil,
-        currency_code: product.price_currency_type,
+        currency_code: effective_currency,
         current_price_cents: product.price_cents,
         summary: {
           median_cents: result[:percentiles][:p50].to_i,
@@ -203,7 +207,7 @@ class PriceCheckerService
         { term: { is_bundle: false } },
         { term: { customizable_price: false } },
         { term: { native_type: effective_native_type } },
-        { term: { price_currency_type: product.price_currency_type } },
+        { term: { price_currency_type: effective_currency } },
         { range: { price_cents: { gt: 0, lte: MAX_PRICE_CENTS } } },
       ]
       if include_taxonomy && effective_taxonomy_id
@@ -251,7 +255,7 @@ class PriceCheckerService
           Digest::MD5.hexdigest(effective_description.to_s.first(1_000)),
           effective_native_type,
           product.is_recurring_billing,
-          product.price_currency_type,
+          effective_currency,
           effective_taxonomy_id,
         ].join("|")
       )

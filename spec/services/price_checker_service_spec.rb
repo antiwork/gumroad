@@ -254,6 +254,21 @@ describe PriceCheckerService do
 
         expect(service_a.send(:cache_key)).not_to eq(service_b.send(:cache_key))
       end
+
+      it "uses different cache keys for different currencies so a currency edit busts the cache" do
+        service_a = described_class.new(product:, overrides: { currency_code: "usd" })
+        service_b = described_class.new(product:, overrides: { currency_code: "eur" })
+
+        expect(service_a.send(:cache_key)).not_to eq(service_b.send(:cache_key))
+      end
+    end
+
+    context "with a currency override" do
+      it "returns the effective currency in the response, not the saved one" do
+        result = described_class.call(product:, overrides: { currency_code: "eur" })
+
+        expect(result[:currency_code]).to eq("eur")
+      end
     end
 
     context "when the product is in the 'other' taxonomy" do

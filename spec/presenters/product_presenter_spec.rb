@@ -480,6 +480,14 @@ describe ProductPresenter do
       )
     end
 
+    context "when the price_checker feature flag is enabled for the seller" do
+      before { Flipper.enable(:price_checker, product.user) }
+
+      it "exposes price_checker_enabled: true in edit_props" do
+        expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
+      end
+    end
+
     context "with default offer code" do
       let(:offer_code) { create(:offer_code, user: product.user, products: [product], code: "DEFAULT10", amount_percentage: 10) }
 

@@ -33,8 +33,8 @@ const NATIVE_TYPE_LABELS: Record<string, string> = {
 const labelFor = (nativeType: string | null | undefined) =>
   (nativeType && NATIVE_TYPE_LABELS[nativeType]) || "products";
 
-const checklistFingerprint = (product: Product) =>
-  JSON.stringify([product.native_type, product.name, product.description, product.taxonomy_id]);
+const checklistFingerprint = (product: Product, currencyCode: string) =>
+  JSON.stringify([product.native_type, product.name, product.description, product.taxonomy_id, currencyCode]);
 
 type Status = "idle" | "loading" | "ok" | "insufficient" | "error";
 
@@ -70,18 +70,19 @@ export const PriceCheckerCard = () => {
   const [data, setData] = React.useState<PriceDistribution | null>(null);
   const [lastCheckedFingerprint, setLastCheckedFingerprint] = React.useState<string | null>(null);
 
-  const currentFingerprint = checklistFingerprint(product);
+  const currentFingerprint = checklistFingerprint(product, currencyType);
 
   const load = React.useCallback(
     async ({ refresh, signal }: { refresh: boolean; signal: AbortSignal }) => {
       setStatus("loading");
-      const fingerprintAtRequest = checklistFingerprint(product);
+      const fingerprintAtRequest = checklistFingerprint(product, currencyType);
       try {
         const overrides = {
           name: product.name,
           description: product.description,
           taxonomy_id: product.taxonomy_id,
           native_type: product.native_type,
+          currency_code: currencyType,
         };
         const result = await fetchPriceDistribution(uniquePermalink, { refresh, overrides, signal });
         if (signal.aborted) return;

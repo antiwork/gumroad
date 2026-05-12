@@ -301,7 +301,7 @@ class LinksController < ApplicationController
   def price_check
     fetch_product_by_unique_permalink
     authorize @product, :edit?
-    return head :not_found unless Feature.active?(:price_checker, current_seller)
+    return head :not_found unless Feature.active?(:price_checker, @product.user)
 
     begin
       result = PriceCheckerService.call(
@@ -531,7 +531,7 @@ class LinksController < ApplicationController
     DESCRIPTION_OVERRIDE_MAX = 5_000
 
     def sanitized_price_check_overrides
-      raw = params.permit(overrides: [:name, :description, :taxonomy_id, :native_type])[:overrides]
+      raw = params.permit(overrides: [:name, :description, :taxonomy_id, :native_type, :currency_code])[:overrides]
       return {} unless raw.is_a?(ActionController::Parameters) || raw.is_a?(Hash)
       overrides = {}
 
@@ -555,6 +555,10 @@ class LinksController < ApplicationController
       if raw.key?(:native_type) || raw.key?("native_type")
         candidate = raw[:native_type].to_s
         overrides[:native_type] = candidate if Link::NATIVE_TYPES.include?(candidate)
+      end
+      if raw.key?(:currency_code) || raw.key?("currency_code")
+        candidate = raw[:currency_code].to_s.downcase
+        overrides[:currency_code] = candidate if CURRENCY_CHOICES.key?(candidate)
       end
       overrides
     end

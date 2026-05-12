@@ -51,6 +51,7 @@ export type PriceCheckOverrides = {
   description: string;
   taxonomy_id: string | null;
   native_type: string;
+  currency_code: string;
 };
 
 export const fetchPriceDistribution = async (

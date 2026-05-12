@@ -380,6 +380,7 @@ describe LinksController, :vcr, inertia: true do
             description: "Edited description",
             taxonomy_id: taxonomy.id,
             native_type: "digital",
+            currency_code: "eur",
           },
           force_refresh: false,
         ).and_return({})
@@ -391,6 +392,25 @@ describe LinksController, :vcr, inertia: true do
             description: "Edited description",
             taxonomy_id: taxonomy.id.to_s,
             native_type: "digital",
+            currency_code: "EUR",
+          },
+        }
+
+        expect(response).to be_successful
+      end
+
+      it "drops an unknown currency_code override" do
+        expect(PriceCheckerService).to receive(:call).with(
+          product: product,
+          overrides: { name: "ok" },
+          force_refresh: false,
+        ).and_return({})
+
+        post :price_check, params: {
+          id: product.unique_permalink,
+          overrides: {
+            name: "ok",
+            currency_code: "xxx_not_a_currency",
           },
         }
 
