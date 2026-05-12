@@ -25,7 +25,7 @@ module Radar
     def recent_efws(limit = 5)
       efws.includes(:purchase, charge: :purchases).order(created_at: :desc).limit(limit).map do |efw|
         {
-          purchase_id: (efw.purchase || efw.charge&.purchases&.first)&.external_id,
+          purchase_id: efw.purchase&.external_id || efw.charge&.external_id,
           fraud_type: efw.fraud_type,
           charge_risk_level: efw.charge_risk_level,
           resolution: efw.resolution,
@@ -49,8 +49,8 @@ module Radar
             .joins(:purchase)
             .where(purchases: { seller_id: user.id })
           charge_scope = EarlyFraudWarning
-            .joins(charge: :purchases)
-            .where(purchases: { seller_id: user.id })
+            .joins(:charge)
+            .where(charges: { seller_id: user.id })
           EarlyFraudWarning
             .where(id: purchase_scope.select(:id))
             .or(EarlyFraudWarning.where(id: charge_scope.select(:id)))
