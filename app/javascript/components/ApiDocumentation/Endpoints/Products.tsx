@@ -65,6 +65,7 @@ export const GetProducts = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products list</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -142,6 +143,7 @@ export const GetProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products view A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -271,6 +273,12 @@ export const CreateProduct = () => (
   -d "price_currency_type=usd" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad products create --type digital \\
+  --name "Pencil Icon PSD" \\
+  --price 1.00 \\
+  --currency usd`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -348,6 +356,11 @@ export const UpdateProduct = () => (
   -d "max_purchase_count=100" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad products update A-m3CDDC5dlrSdKZp0RFhA== \\
+  --name "Pencil Icon PSD v2" \\
+  --max-purchase-count 100`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -379,6 +392,7 @@ export const DeleteProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products delete A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -396,6 +410,7 @@ export const EnableProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products publish A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -473,6 +488,7 @@ export const DisableProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products unpublish A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,

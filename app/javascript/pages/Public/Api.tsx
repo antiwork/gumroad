@@ -2,6 +2,7 @@ import React from "react";
 
 import { ApiResource } from "$app/components/ApiDocumentation/ApiResource";
 import { Authentication } from "$app/components/ApiDocumentation/Authentication";
+import { CommandLine } from "$app/components/ApiDocumentation/CommandLine";
 import { CreateCover, DeleteCover } from "$app/components/ApiDocumentation/Endpoints/Covers";
 import {
   GetCustomFields,
@@ -78,6 +79,7 @@ export default function Api() {
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
             <Navigation />
             <article className="grid gap-8">
+              <CommandLine />
               <Introduction />
               <Authentication />
               <Scopes />

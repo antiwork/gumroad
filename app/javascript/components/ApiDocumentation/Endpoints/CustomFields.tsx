@@ -43,6 +43,7 @@ export const GetCustomFields = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad custom-fields list --product A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -74,6 +75,11 @@ export const CreateCustomField = () => (
   -d "required=true" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad custom-fields create --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --name "phone number" \\
+  --required`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -104,6 +110,10 @@ export const UpdateCustomField = () => (
   -d "name=phone number" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad custom-fields update --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --name "phone number"`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -126,6 +136,10 @@ export const DeleteCustomField = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/custom_fields/phone%20number \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad custom-fields delete --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --name "phone number"`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

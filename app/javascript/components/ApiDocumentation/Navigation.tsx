@@ -8,6 +8,9 @@ export const Navigation = () => (
   >
     <menu className="grid list-none gap-3">
       <li>
+        <a href="#api-cli">Command line</a>
+      </li>
+      <li>
         <a href="#api-intro">Introduction</a>
       </li>
       <li>

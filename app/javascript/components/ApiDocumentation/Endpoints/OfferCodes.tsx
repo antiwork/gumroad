@@ -43,6 +43,7 @@ export const GetOfferCodes = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad offer-codes list --product A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -79,6 +80,10 @@ export const GetOfferCode = () => (
   -d "name=1OFF" \\
   -d "amount_cents=100" \\
   -X GET`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad offer-codes view bfi_30HLgGWL8H2wo_Gzlg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -117,6 +122,11 @@ export const CreateOfferCode = () => (
   -d "offer_type=cents" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad offer-codes create --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --name 1OFF \\
+  --amount 1.00`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -149,6 +159,11 @@ export const UpdateOfferCode = () => (
   -d "max_purchase_count=10" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad offer-codes update bfi_30HLgGWL8H2wo_Gzlg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --max-purchase-count 10`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -174,6 +189,10 @@ export const DeleteOfferCode = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/offer_codes/bfi_30HLgGWL8H2wo_Gzlg== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad offer-codes delete bfi_30HLgGWL8H2wo_Gzlg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

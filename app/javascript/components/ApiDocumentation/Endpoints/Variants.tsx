@@ -52,6 +52,10 @@ export const CreateVariantCategory = () => (
   -d "title=colors" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variant-categories create --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --title colors`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -75,6 +79,10 @@ export const GetVariantCategory = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variant-categories view mN7CdHiwHaR9FlxKvF-n-g== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -105,6 +113,11 @@ export const UpdateVariantCategory = () => (
   -d "title=sizes" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variant-categories update mN7CdHiwHaR9FlxKvF-n-g== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --title sizes`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -127,6 +140,10 @@ export const DeleteVariantCategory = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variant-categories delete mN7CdHiwHaR9FlxKvF-n-g== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -159,6 +176,7 @@ export const GetVariantCategories = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad variant-categories list --product A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -190,6 +208,12 @@ export const CreateVariant = () => (
   -d "name=red" \\
   -d "price_difference_cents=250"`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variants create --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --category mN7CdHiwHaR9FlxKvF-n-g== \\
+  --name red \\
+  --price-difference 2.50`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -215,6 +239,11 @@ export const GetVariant = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants/kuaXCPHTmRuoK13rNGVbxg== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variants view kuaXCPHTmRuoK13rNGVbxg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --category mN7CdHiwHaR9FlxKvF-n-g==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -249,6 +278,12 @@ export const UpdateVariant = () => (
   -d "price_difference_cents=150" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variants update kuaXCPHTmRuoK13rNGVbxg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --category mN7CdHiwHaR9FlxKvF-n-g== \\
+  --price-difference 1.50`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -273,6 +308,11 @@ export const DeleteVariant = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants/kuaXCPHTmRuoK13rNGVbxg== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variants delete kuaXCPHTmRuoK13rNGVbxg== \\
+  --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --category mN7CdHiwHaR9FlxKvF-n-g==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -304,6 +344,10 @@ export const GetVariants = () => (
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants \\
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad variants list --product A-m3CDDC5dlrSdKZp0RFhA== \\
+  --category mN7CdHiwHaR9FlxKvF-n-g==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

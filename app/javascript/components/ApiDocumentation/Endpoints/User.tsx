@@ -19,6 +19,7 @@ export const GetUser = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad user</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,

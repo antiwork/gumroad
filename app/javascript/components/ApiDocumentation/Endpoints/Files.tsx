@@ -34,6 +34,11 @@ export const FilesOverview = () => (
         this <code>upload_id</code>. Call abort again while you see <code>accepted</code>; stop when you see{" "}
         <code>already_gone</code>.
       </p>
+      <p>
+        The CLI collapses all four steps into a single command and prints the canonical <code>file_url</code> you can
+        attach to a product:
+      </p>
+      <CodeSnippet caption="Gumroad CLI">gumroad files upload ./course.pdf</CodeSnippet>
     </div>
   </CardContent>
 );
@@ -125,6 +130,10 @@ export const CompleteFile = () => (
   -d 'parts[][etag]="9b2cf535f27731c974343645a3985328"' \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`# replay an ambiguous complete from a recovery manifest written by 'gumroad files upload'
+gumroad files complete --recovery err.json`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -166,6 +175,11 @@ export const AbortFile = () => (
   -d "key=attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad files abort \\
+  --upload-id ibZBv_75gd9o.uPYmGbJ5JjxqK4_VsP3... \\
+  --key attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -202,6 +216,12 @@ export const AttachFile = () => (
   -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
   -X POST`}
       </CodeSnippet>
+      <CodeSnippet caption="Gumroad CLI (upload + attach in one call)">
+        {`gumroad products create --type digital \\
+  --name "My product" \\
+  --price 5.00 \\
+  --file ./course.pdf`}
+      </CodeSnippet>
       <p>
         <strong>
           <code>files</code> on <code>PUT /v2/products/:id</code> is a full replacement
@@ -219,6 +239,9 @@ export const AttachFile = () => (
   -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/bbbb2222/original/existing2.pdf" \\
   -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
   -X PUT`}
+      </CodeSnippet>
+      <CodeSnippet caption="Gumroad CLI (append a file, keep existing attachments)">
+        gumroad products update PRODUCT_ID --file ./course.pdf
       </CodeSnippet>
       <p>
         Save the canonical <code>file_url</code> on your side. <code>GET /v2/products/:id</code> returns a time-limited

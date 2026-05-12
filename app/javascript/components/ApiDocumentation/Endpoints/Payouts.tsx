@@ -79,6 +79,7 @@ export const GetPayouts = () => (
   -d "after=2020-09-03" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad payouts list --before 2021-09-03 --after 2020-09-03</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -158,6 +159,7 @@ export const GetPayout = () => (
   -d "include_transactions=true" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad payouts view fEGTaEpuKDsnDvf_MfecTA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -269,6 +271,7 @@ export const GetUpcomingPayouts = () => (
   -d "include_transactions=true" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad payouts upcoming</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,

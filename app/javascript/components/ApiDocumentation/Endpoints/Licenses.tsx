@@ -36,6 +36,10 @@ export const VerifyLicense = () => (
   -d "license_key=A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`echo "A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" | gumroad licenses verify \\
+  --product 32-nPAicqbLj8B_WswVlMw==`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -98,6 +102,10 @@ export const EnableLicense = () => (
   -d "product_id=32-nPAicqbLj8B_WswVlMw==" \\
   -d "license_key=A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" \\
   -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`echo "A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" | gumroad licenses enable \\
+  --product 32-nPAicqbLj8B_WswVlMw==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -162,6 +170,10 @@ export const DisableLicense = () => (
   -d "license_key=A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`echo "A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" | gumroad licenses disable \\
+  --product 32-nPAicqbLj8B_WswVlMw==`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -224,6 +236,10 @@ export const DecrementUsesCount = () => (
   -d "product_id=32-nPAicqbLj8B_WswVlMw==" \\
   -d "license_key=A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" \\
   -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`echo "A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" | gumroad licenses decrement \\
+  --product 32-nPAicqbLj8B_WswVlMw==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -291,6 +307,10 @@ export const RotateLicense = () => (
   -d "product_id=32-nPAicqbLj8B_WswVlMw==" \\
   -d "license_key=A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" \\
   -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`echo "A1B2C3D4-E5F60718-9ABCDEF0-1234ABCD" | gumroad licenses rotate \\
+  --product 32-nPAicqbLj8B_WswVlMw==`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

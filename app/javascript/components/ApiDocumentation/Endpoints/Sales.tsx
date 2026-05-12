@@ -60,6 +60,13 @@ export const GetSales = () => (
   -d "license_key=83DB262A-C19D3B06-A5235A6B-8C079166" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad sales list --all \\
+  --before 2021-09-03 \\
+  --after 2020-09-03 \\
+  --product bfi_30HLgGWL8H2wo_Gzlg== \\
+  --email calvin@example.com`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -148,6 +155,7 @@ export const GetSale = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad sales view FO8TXN-dvxYabdavG97Y-Q==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -239,6 +247,10 @@ export const MarkSaleAsShipped = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -d "tracking_url=https://www.shippingcompany.com/track/t123" \\
   -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad sales ship A-m3CDDC5dlrSdKZp0RFhA== \\
+  --tracking-url https://www.shippingcompany.com/track/t123`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -337,6 +349,7 @@ export const RefundSale = () => (
   -d "amount_cents=200" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad sales refund A-m3CDDC5dlrSdKZp0RFhA== --amount 2.00</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -411,6 +424,7 @@ export const ResendReceipt = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad sales resend-receipt A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true

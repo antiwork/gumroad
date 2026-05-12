@@ -69,6 +69,10 @@ export const GetSubscribers = () => (
   -d "email=calvin@gumroad.com" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad subscribers list --product 0ssD7adjRklGBjS5cwlWPq== \\
+  --email calvin@example.com`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success":true,
@@ -119,6 +123,7 @@ export const GetSubscriber = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad subscribers view P5ppE6H8XIjy2JSCgUhbAw==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success":true,

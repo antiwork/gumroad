@@ -180,6 +180,10 @@ export const CreateResourceSubscription = () => (
   -d "post_url=https://postatmebro.com" \\
   -X PUT`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad webhooks create --resource sale \\
+  --url https://postatmebro.com`}
+    </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -222,6 +226,7 @@ export const GetResourceSubscriptions = () => (
   -d "resource_name=sale" \\
   -X GET`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad webhooks list --resource sale</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -246,6 +251,7 @@ export const DeleteResourceSubscription = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
     </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad webhooks delete G_-mnBf9b1j9A7a4ub4nFQ==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
