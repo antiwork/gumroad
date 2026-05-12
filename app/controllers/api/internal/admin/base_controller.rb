@@ -12,7 +12,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.reassign
     purchases.resend_all_receipts
   ].freeze
-  ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes].freeze
+  ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes, :merchant_account].freeze
   USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or user_id is required"
   USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
     "Use /internal/admin/users/info to look up the user_id by email."

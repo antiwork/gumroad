@@ -332,14 +332,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
             <>
               <dt>Stripe Radar</dt>
               <dd>
-                <Pill
-                  size="small"
-                  color={
-                    purchase.stripe_risk_level === "highest"
-                      ? "danger"
-                      : "warning"
-                  }
-                >
+                <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
                   {purchase.stripe_risk_level}
                 </Pill>
               </dd>

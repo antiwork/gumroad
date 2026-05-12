@@ -112,10 +112,7 @@ export default function Purchases() {
                     {(purchase.stripe_risk_level || purchase.early_fraud_warning || purchase.disputes.length > 0) && (
                       <span className="inline-flex flex-wrap gap-1">
                         {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
-                          <Pill
-                            size="small"
-                            color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}
-                          >
+                          <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
                             Radar: {purchase.stripe_risk_level}
                           </Pill>
                         ) : null}
@@ -129,7 +126,9 @@ export default function Purchases() {
                           <Pill
                             key={i}
                             size="small"
-                            color={dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"}
+                            color={
+                              dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"
+                            }
                           >
                             Dispute: {dispute.state}
                           </Pill>
