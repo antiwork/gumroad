@@ -11,6 +11,7 @@ describe Admin::Search::PurchasesController, type: :controller, inertia: true do
 
   before do
     sign_in create(:admin_user)
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
   end
 
   describe "#index" do
