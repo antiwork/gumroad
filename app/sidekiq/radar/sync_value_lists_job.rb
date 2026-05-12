@@ -3,7 +3,7 @@
 class Radar::SyncValueListsJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :low, retry: 3
+  sidekiq_options queue: "low", retry: 3
 
   def perform
     service = Radar::ValueListSyncService.new

@@ -12,10 +12,12 @@ describe Radar::ValueListSyncService do
       allow(Stripe::Radar::ValueList).to receive(:retrieve)
         .with("gumroad_blocked_emails")
         .and_return(value_list)
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .and_return(double(data: []))
     end
 
     it "pushes recently blocked emails to Stripe Radar" do
-      blocked_email = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "bad@example.com", nil)
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "bad@example.com", nil)
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
         value_list: "rsl_123",
@@ -25,7 +27,7 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_emails
     end
 
-    it "skips emails blocked more than a day ago" do
+    it "skips emails blocked more than 25 hours ago" do
       travel_to 2.days.ago do
         BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "old@example.com", nil)
       end
@@ -35,10 +37,24 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_emails
     end
 
+    it "removes recently unblocked emails from Stripe Radar" do
+      blocked = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "unblocked@example.com", nil)
+      blocked.unblock!
+
+      item = double("ValueListItem", id: "rsli_456")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "unblocked@example.com")
+        .and_return(double(data: [item]))
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_456")
+
+      service.sync_blocked_emails
+    end
+
     it "creates the value list if it does not exist" do
       allow(Stripe::Radar::ValueList).to receive(:retrieve)
         .with("gumroad_blocked_emails")
-        .and_raise(Stripe::InvalidRequestError.new("No such value list", "alias"))
+        .and_raise(Stripe::InvalidRequestError.new("No such value list", "alias", code: "resource_missing"))
 
       expect(Stripe::Radar::ValueList).to receive(:create).with(
         alias: "gumroad_blocked_emails",
@@ -57,6 +73,24 @@ describe Radar::ValueListSyncService do
 
       expect { service.sync_blocked_emails }.not_to raise_error
     end
+
+    it "picks up re-blocked emails by filtering on blocked_at" do
+      blocked = nil
+      travel_to 1.month.ago do
+        blocked = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "reblocked@example.com", nil)
+        blocked.unblock!
+      end
+
+      # Re-block now
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "reblocked@example.com", nil)
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
+        value_list: "rsl_123",
+        value: "reblocked@example.com"
+      )
+
+      service.sync_blocked_emails
+    end
   end
 
   describe "#sync_blocked_cards" do
@@ -64,6 +98,8 @@ describe Radar::ValueListSyncService do
       allow(Stripe::Radar::ValueList).to receive(:retrieve)
         .with("gumroad_blocked_cards")
         .and_return(value_list)
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .and_return(double(data: []))
     end
 
     it "pushes recently blocked card fingerprints to Stripe Radar" do
@@ -77,7 +113,7 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_cards
     end
 
-    it "skips fingerprints blocked more than a day ago" do
+    it "skips fingerprints blocked more than 25 hours ago" do
       travel_to 2.days.ago do
         BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_old", nil)
       end
@@ -94,6 +130,30 @@ describe Radar::ValueListSyncService do
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value"))
 
       expect { service.sync_blocked_cards }.not_to raise_error
+    end
+  end
+
+  describe "#backfill_all" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:retrieve).and_return(value_list)
+    end
+
+    it "pushes all active blocked emails and cards regardless of date" do
+      travel_to 1.year.ago do
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "old@example.com", nil)
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_old", nil)
+      end
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
+        value_list: "rsl_123",
+        value: "old@example.com"
+      )
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
+        value_list: "rsl_123",
+        value: "fp_old"
+      )
+
+      service.backfill_all
     end
   end
 end
