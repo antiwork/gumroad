@@ -4,7 +4,18 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
   include Api::Internal::Admin::CursorPaginated
 
   VALID_AFFILIATE_DIRECTIONS = %w[granted received].freeze
-  private_constant :VALID_AFFILIATE_DIRECTIONS
+  VALID_PURCHASE_STATES = %w[
+    in_progress
+    successful
+    failed
+    preorder_authorization_successful
+    preorder_authorization_failed
+    preorder_concluded_successfully
+    not_charged
+    gift_receiver_purchase_successful
+    test_successful
+  ].freeze
+  private_constant :VALID_AFFILIATE_DIRECTIONS, :VALID_PURCHASE_STATES
 
   def info
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
@@ -28,6 +39,24 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     render json: internal_admin_user_success_payload(user, {
                                                        direction:,
                                                        affiliates: records.map { serialize_affiliate(_1, direction:, sellers_by_id:) },
+                                                       pagination:,
+                                                     })
+  end
+
+  def purchases
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    filters = parse_purchases_filters
+    return if filters.nil?
+
+    records, pagination = paginate_with_cursor(
+      purchases_scope(user, filters),
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       purchases: records.map { serialize_purchase(_1) },
                                                        pagination:,
                                                      })
   end
@@ -293,6 +322,85 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         basis_points: product_affiliate.affiliate_basis_points || parent_basis_points,
         destination_url: product_affiliate.destination_url,
       }
+    end
+
+    def parse_purchases_filters
+      filters = {}
+
+      if params[:status].present?
+        states = Array(params[:status]).flat_map { _1.to_s.split(",") }.map(&:strip).reject(&:blank?)
+        invalid = states - VALID_PURCHASE_STATES
+        if invalid.any?
+          render json: { success: false, message: "status must be one of: #{VALID_PURCHASE_STATES.join(", ")}" }, status: :bad_request
+          return nil
+        end
+        filters[:states] = states
+      end
+
+      if params[:start_at].present?
+        filters[:start_at] = parse_iso8601_param(params[:start_at])
+        return render_invalid_purchases_filter("start_at") if filters[:start_at].nil?
+      end
+
+      if params[:end_at].present?
+        filters[:end_at] = parse_iso8601_param(params[:end_at])
+        return render_invalid_purchases_filter("end_at") if filters[:end_at].nil?
+      end
+
+      filters[:chargedback] = boolean_param(params[:chargedback]) if params.key?(:chargedback)
+      filters[:has_early_fraud_warning] = boolean_param(params[:has_early_fraud_warning]) if params.key?(:has_early_fraud_warning)
+      filters[:has_affiliate] = boolean_param(params[:has_affiliate]) if params.key?(:has_affiliate)
+      filters[:stripe_fingerprint] = params[:stripe_fingerprint].to_s if params[:stripe_fingerprint].present?
+      filters[:ip_address] = params[:ip_address].to_s if params[:ip_address].present?
+
+      filters
+    end
+
+    def parse_iso8601_param(value)
+      Time.iso8601(value.to_s)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def boolean_param(value)
+      ActiveModel::Type::Boolean.new.cast(value)
+    end
+
+    def render_invalid_purchases_filter(name)
+      render json: { success: false, message: "#{name} must be a valid ISO 8601 timestamp" }, status: :bad_request
+      nil
+    end
+
+    def purchases_scope(user, filters)
+      scope = Purchase
+        .where(purchaser_id: user.id)
+        .or(Purchase.where(email: user.email))
+        .includes(:link, :seller, :refunds)
+
+      scope = scope.where(purchase_state: filters[:states]) if filters[:states]
+      scope = scope.where("purchases.created_at >= ?", filters[:start_at]) if filters[:start_at]
+      scope = scope.where("purchases.created_at <= ?", filters[:end_at]) if filters[:end_at]
+
+      if filters.key?(:chargedback)
+        scope = filters[:chargedback] ? scope.where.not(chargeback_date: nil) : scope.where(chargeback_date: nil)
+      end
+
+      if filters.key?(:has_early_fraud_warning)
+        scope = if filters[:has_early_fraud_warning]
+          scope.joins(:early_fraud_warning)
+        else
+          scope.left_outer_joins(:early_fraud_warning).where(purchase_early_fraud_warnings: { id: nil })
+        end
+      end
+
+      if filters.key?(:has_affiliate)
+        scope = filters[:has_affiliate] ? scope.where.not(affiliate_id: nil) : scope.where(affiliate_id: nil)
+      end
+
+      scope = scope.where(stripe_fingerprint: filters[:stripe_fingerprint]) if filters[:stripe_fingerprint]
+      scope = scope.where(ip_address: filters[:ip_address]) if filters[:ip_address]
+
+      scope
     end
 
     def suspension_status(user)

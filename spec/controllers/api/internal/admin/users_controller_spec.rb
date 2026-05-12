@@ -743,6 +743,278 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :affiliates, method: :get, extra_params: { direction: "granted" }
   end
 
+  describe "GET purchases" do
+    include_examples "admin api authorization required", :get, :purchases
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+
+    def purchase_ids
+      response.parsed_body["purchases"].map { _1["id"] }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :purchases
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :purchases, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns an empty list with cursor pagination metadata" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "purchases" => [],
+        "pagination" => { "next" => nil, "limit" => 20 }
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :purchases, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        get :purchases, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "returns purchases matched by purchaser_id and by email, newest first" do
+      buyer = create(:user, email: "buyer@example.com")
+      anonymous_match = create(:purchase, email: buyer.email, created_at: 3.hours.ago)
+      logged_in = create(:purchase, purchaser: buyer, email: "other@example.com", created_at: 2.hours.ago)
+      newest = create(:purchase, purchaser: buyer, email: buyer.email, created_at: 1.hour.ago)
+      create(:purchase, email: "someone-else@example.com", created_at: 30.minutes.ago)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([newest, logged_in, anonymous_match].map { _1.external_id_numeric.to_s })
+    end
+
+    it "serializes each row with the shared purchase payload" do
+      buyer = create(:user, email: "buyer@example.com")
+      seller = create(:user, email: "seller@example.com")
+      product = create(:product, user: seller, name: "Investigation guide")
+      purchase = create(:purchase, purchaser: buyer, seller:, link: product, email: buyer.email, price_cents: 12_34)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      payload = response.parsed_body["purchases"].first
+      expect(payload).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "email" => buyer.email,
+        "seller_email" => "seller@example.com",
+        "product_name" => "Investigation guide",
+        "price_cents" => 12_34,
+        "purchase_state" => "successful"
+      )
+    end
+
+    it "filters by a single purchase_state" do
+      buyer = create(:user)
+      successful = create(:purchase, purchaser: buyer)
+      create(:failed_purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "successful" }
+
+      expect(purchase_ids).to eq([successful.external_id_numeric.to_s])
+    end
+
+    it "filters by multiple purchase states from a comma-separated list" do
+      buyer = create(:user)
+      successful = create(:purchase, purchaser: buyer, created_at: 2.hours.ago)
+      failed = create(:failed_purchase, purchaser: buyer, created_at: 1.hour.ago)
+      create(:purchase, purchaser: buyer, purchase_state: "not_charged", created_at: 30.minutes.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "successful,failed" }
+
+      expect(purchase_ids).to eq([failed, successful].map { _1.external_id_numeric.to_s })
+    end
+
+    it "rejects an unknown status value" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, status: "not_a_state" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to start_with("status must be one of")
+    end
+
+    it "filters by a created_at window using ISO 8601 timestamps" do
+      buyer = create(:user)
+      too_old = create(:purchase, purchaser: buyer, created_at: 3.days.ago)
+      in_window = create(:purchase, purchaser: buyer, created_at: 1.day.ago)
+      too_new = create(:purchase, purchaser: buyer, created_at: 1.hour.ago)
+
+      get :purchases, params: {
+        user_id: buyer.external_id,
+        start_at: 2.days.ago.iso8601,
+        end_at: 6.hours.ago.iso8601
+      }
+
+      expect(purchase_ids).to eq([in_window.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(too_old.external_id_numeric.to_s, too_new.external_id_numeric.to_s)
+    end
+
+    it "rejects an unparseable start_at" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, start_at: "yesterday" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "start_at must be a valid ISO 8601 timestamp" }.as_json)
+    end
+
+    it "rejects an unparseable end_at" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, end_at: "soon" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "end_at must be a valid ISO 8601 timestamp" }.as_json)
+    end
+
+    it "filters by chargedback=true" do
+      buyer = create(:user)
+      clean = create(:purchase, purchaser: buyer)
+      chargedback = create(:purchase, purchaser: buyer, chargeback_date: 1.day.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, chargedback: true }
+
+      expect(purchase_ids).to eq([chargedback.external_id_numeric.to_s])
+      expect(purchase_ids).not_to include(clean.external_id_numeric.to_s)
+    end
+
+    it "filters by chargedback=false" do
+      buyer = create(:user)
+      clean = create(:purchase, purchaser: buyer)
+      create(:purchase, purchaser: buyer, chargeback_date: 1.day.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, chargedback: false }
+
+      expect(purchase_ids).to eq([clean.external_id_numeric.to_s])
+    end
+
+    it "filters by has_early_fraud_warning=true" do
+      buyer = create(:user)
+      flagged = create(:purchase, purchaser: buyer)
+      create(:early_fraud_warning, purchase: flagged)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_early_fraud_warning: true }
+
+      expect(purchase_ids).to eq([flagged.external_id_numeric.to_s])
+    end
+
+    it "filters by has_early_fraud_warning=false" do
+      buyer = create(:user)
+      flagged = create(:purchase, purchaser: buyer)
+      create(:early_fraud_warning, purchase: flagged)
+      clean = create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_early_fraud_warning: false }
+
+      expect(purchase_ids).to eq([clean.external_id_numeric.to_s])
+    end
+
+    it "filters by has_affiliate=true" do
+      buyer = create(:user)
+      seller = create(:user)
+      product = create(:product, user: seller)
+      affiliate = create(:direct_affiliate, seller:, affiliate_user: create(:user))
+      with_affiliate = create(:purchase, purchaser: buyer, seller:, link: product, affiliate:)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, has_affiliate: true }
+
+      expect(purchase_ids).to eq([with_affiliate.external_id_numeric.to_s])
+    end
+
+    it "filters by stripe_fingerprint" do
+      buyer = create(:user)
+      matching = create(:purchase, purchaser: buyer, stripe_fingerprint: "fp_shared")
+      create(:purchase, purchaser: buyer, stripe_fingerprint: "fp_other")
+
+      get :purchases, params: { user_id: buyer.external_id, stripe_fingerprint: "fp_shared" }
+
+      expect(purchase_ids).to eq([matching.external_id_numeric.to_s])
+    end
+
+    it "filters by ip_address" do
+      buyer = create(:user)
+      matching = create(:purchase, purchaser: buyer, ip_address: "203.0.113.7")
+      create(:purchase, purchaser: buyer, ip_address: "198.51.100.4")
+
+      get :purchases, params: { user_id: buyer.external_id, ip_address: "203.0.113.7" }
+
+      expect(purchase_ids).to eq([matching.external_id_numeric.to_s])
+    end
+
+    it "scopes results to the requested user" do
+      buyer = create(:user)
+      other_buyer = create(:user)
+      mine = create(:purchase, purchaser: buyer)
+      create(:purchase, purchaser: other_buyer)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      expect(purchase_ids).to eq([mine.external_id_numeric.to_s])
+    end
+
+    it "paginates purchases with a cursor" do
+      buyer = create(:user)
+      newest = create(:purchase, purchaser: buyer, created_at: 1.hour.ago)
+      middle = create(:purchase, purchaser: buyer, created_at: 2.hours.ago)
+      oldest = create(:purchase, purchaser: buyer, created_at: 3.hours.ago)
+
+      get :purchases, params: { user_id: buyer.external_id, limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([newest, middle].map { _1.external_id_numeric.to_s })
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+
+      get :purchases, params: { user_id: buyer.external_id, limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(purchase_ids).to eq([oldest.external_id_numeric.to_s])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      user = create(:user)
+
+      get :purchases, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    include_examples "supports user lookup by user_id", :purchases, method: :get
+  end
+
   describe "GET suspension" do
     include_examples "admin api authorization required", :get, :suspension
 
