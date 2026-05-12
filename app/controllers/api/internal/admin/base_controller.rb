@@ -216,7 +216,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       {
         id: purchase.external_id_numeric.to_s,
         email: purchase.email,
-        seller_email: purchase.seller_email,
+        seller_email: purchase.seller&.email,
+        seller: serialize_purchase_seller(purchase),
         product_name: purchase.link&.name,
         link_name: purchase.link_name,
         product_id: purchase.link&.external_id_numeric&.to_s,
@@ -255,6 +256,17 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         visual: purchase.card_visual,
         expiry_month: purchase.card_expiry_month,
         expiry_year: purchase.card_expiry_year,
+      }
+    end
+
+    def serialize_purchase_seller(purchase)
+      seller = purchase.seller
+      return nil if seller.blank?
+
+      {
+        id: seller.external_id,
+        email: seller.email,
+        name: seller.name,
       }
     end
 

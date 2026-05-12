@@ -2,9 +2,12 @@
 
 class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseController
   include CurrencyHelper
+  include Api::Internal::Admin::CursorPaginated
 
   MAX_SEARCH_RESULTS = 25
   VALID_PURCHASE_STATUSES = %w[successful failed not_charged chargeback refunded].freeze
+  LOOKUP_FIELDS = %w[stripe_fingerprint browser_guid ip_address].freeze
+  private_constant :LOOKUP_FIELDS
 
   def show
     purchase = fetch_purchase
@@ -40,6 +43,23 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     }
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
+  end
+
+  def lookup
+    lookup = parse_lookup_params
+    return if lookup.nil?
+
+    records, pagination = paginate_with_cursor(
+      Purchase.where(lookup[:field] => lookup[:value]).includes(*ADMIN_PURCHASE_INCLUDES),
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: {
+      success: true,
+      lookup:,
+      purchases: records.map { serialize_purchase(_1) },
+      pagination:,
+    }
   end
 
   def resend_receipt
@@ -327,6 +347,22 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       end
 
       purchase
+    end
+
+    def parse_lookup_params
+      present = LOOKUP_FIELDS.select { |field| params[field].to_s.strip.present? }
+      if present.empty?
+        render json: { success: false, message: "stripe_fingerprint, browser_guid, or ip_address is required" }, status: :bad_request
+        return nil
+      end
+
+      if present.size > 1
+        render json: { success: false, message: "only one of stripe_fingerprint, browser_guid, ip_address is allowed" }, status: :bad_request
+        return nil
+      end
+
+      field = present.first
+      { field:, value: params[field].to_s.strip }
     end
 
     def fetch_purchase

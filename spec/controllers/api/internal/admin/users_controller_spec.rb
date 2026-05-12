@@ -1276,9 +1276,29 @@ describe Api::Internal::Admin::UsersController do
         "id" => purchase.external_id_numeric.to_s,
         "email" => buyer.email,
         "seller_email" => "seller@example.com",
+        "seller" => {
+          "id" => seller.external_id,
+          "email" => "seller@example.com",
+          "name" => seller.name,
+        },
         "product_name" => "Investigation guide",
         "price_cents" => 12_34,
         "purchase_state" => "successful"
+      )
+    end
+
+    it "serializes nil seller fields when a purchase has no seller" do
+      buyer = create(:user, email: "buyer@example.com")
+      purchase = create(:free_purchase, purchaser: buyer, email: buyer.email)
+      purchase.update_columns(seller_id: nil)
+
+      get :purchases, params: { user_id: buyer.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "seller_email" => nil,
+        "seller" => nil
       )
     end
 

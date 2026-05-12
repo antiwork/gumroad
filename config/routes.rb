@@ -304,6 +304,7 @@ Rails.application.routes.draw do
           resources :purchases, only: [:show] do
             collection do
               get :search
+              get :lookup
               post :resend_all_receipts
               post :reassign
             end
