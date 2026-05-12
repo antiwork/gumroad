@@ -868,6 +868,16 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({ success: false, message: "comment_type contains invalid value: bogus" }.as_json)
     end
 
+    it "rejects a comma-only comment_type value instead of silently returning all comments" do
+      user = create(:user)
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "," }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "comment_type contains invalid value: ," }.as_json)
+    end
+
     it "includes soft-deleted comments with deletion state exposed" do
       user = create(:user)
       deleted_comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)

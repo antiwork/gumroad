@@ -509,8 +509,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       values = raw.split(",").map(&:strip).reject(&:blank?)
       invalid = values - self.class.valid_comment_types
-      if invalid.any?
-        render json: { success: false, message: "comment_type contains invalid value: #{invalid.first}" }, status: :bad_request
+      if values.empty? || invalid.any?
+        render json: { success: false, message: "comment_type contains invalid value: #{invalid.first || raw}" }, status: :bad_request
         return nil
       end
 
