@@ -110,6 +110,43 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response).to have_http_status(:ok)
     end
 
+    it "preloads the affiliate_credit's affiliate_user so serialization does not fire one users SELECT per row" do
+      buyer_email = "affiliate-cluster@example.com"
+      affiliate_user_ids = 3.times.map do
+        affiliate_user = create(:user)
+        affiliate = create(:direct_affiliate, affiliate_user:)
+        purchase = create(:free_purchase, email: buyer_email, affiliate:)
+        create(:affiliate_credit, purchase:, affiliate:, affiliate_user:, amount_cents: 100, fee_cents: 10, basis_points: 500)
+        affiliate_user.id
+      end
+
+      single_row_user_lookups = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next if sql.start_with?("INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "SAVEPOINT", "RELEASE")
+        next unless sql.start_with?("SELECT") && sql.include?("`users`")
+        next unless sql.match?(/`users`\.`id` = \d+ LIMIT 1\z/)
+
+        single_row_user_lookups << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: { query: buyer_email }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].length).to eq(3)
+      response.parsed_body["purchases"].each do |row|
+        expect(row["affiliate_credit"]["affiliate_user_id"]).to be_present
+      end
+
+      lookups_for_affiliate_users = single_row_user_lookups.select do |sql|
+        affiliate_user_ids.any? { |id| sql.include?("`id` = #{id} ") }
+      end
+      expect(lookups_for_affiliate_users).to be_empty,
+                                             "expected zero per-row SELECTs for affiliate_user (preload should batch via IN), but got:\n#{lookups_for_affiliate_users.join("\n")}"
+    end
+
     it "uses preloaded refunds when serializing refund details" do
       purchase = create(:free_purchase, stripe_refunded: true, stripe_partially_refunded: false, email: "refunded@example.com")
       refund = create(:refund, purchase:, amount_cents: 0)
@@ -266,22 +303,22 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
-    it "computes country mismatch booleans across billing, IP, and card" do
+    it "computes country mismatch booleans across the production storage schemes (names for billing/ip, alpha-2 for card)" do
       purchase = create(:free_purchase)
-      purchase.update_columns(country: "US", ip_country: "US", card_country: "GB")
+      purchase.update_columns(country: "Germany", ip_country: "United States", card_country: "GB")
 
       get :show, params: { id: purchase.external_id_numeric }
 
       expect(response.parsed_body["purchase"]["country_mismatches"]).to eq(
-        "billing_vs_ip" => false,
+        "billing_vs_ip" => true,
         "billing_vs_card" => true,
         "ip_vs_card" => true
       )
     end
 
-    it "treats blank country values as non-mismatches" do
+    it "treats a billing/IP country name and a matching card alpha-2 as equal" do
       purchase = create(:free_purchase)
-      purchase.update_columns(country: nil, ip_country: "US", card_country: nil)
+      purchase.update_columns(country: "United States", ip_country: "United States", card_country: "US")
 
       get :show, params: { id: purchase.external_id_numeric }
 
@@ -292,9 +329,22 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
-    it "ignores case when comparing country codes" do
+    it "treats blank country values as non-mismatches" do
       purchase = create(:free_purchase)
-      purchase.update_columns(country: "us", ip_country: "US", card_country: "Us")
+      purchase.update_columns(country: nil, ip_country: "United States", card_country: nil)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response.parsed_body["purchase"]["country_mismatches"]).to eq(
+        "billing_vs_ip" => false,
+        "billing_vs_card" => false,
+        "ip_vs_card" => false
+      )
+    end
+
+    it "ignores case when comparing alpha-2 codes" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(country: "United States", ip_country: "United States", card_country: "us")
 
       get :show, params: { id: purchase.external_id_numeric }
 

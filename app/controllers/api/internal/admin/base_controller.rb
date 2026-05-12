@@ -12,7 +12,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.reassign
     purchases.resend_all_receipts
   ].freeze
-  ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, :affiliate_credit, :early_fraud_warning, :disputes].freeze
+  ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes].freeze
   USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or user_id is required"
   USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
     "Use /internal/admin/users/info to look up the user_id by email."
@@ -259,9 +259,9 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     end
 
     def serialize_purchase_country_mismatches(purchase)
-      billing = purchase.country
-      ip = purchase.ip_country
-      card = purchase.card_country
+      billing = normalize_country_to_alpha2(purchase.country)
+      ip = normalize_country_to_alpha2(purchase.ip_country)
+      card = normalize_country_to_alpha2(purchase.card_country)
       {
         billing_vs_ip: countries_differ?(billing, ip),
         billing_vs_card: countries_differ?(billing, card),
@@ -272,7 +272,16 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     def countries_differ?(a, b)
       return false if a.blank? || b.blank?
 
-      a.to_s.upcase != b.to_s.upcase
+      a != b
+    end
+
+    def normalize_country_to_alpha2(value)
+      return nil if value.blank?
+
+      string = value.to_s
+      return string.upcase if string.length == 2
+
+      Compliance::Countries.find_by_name(string)&.alpha2 || string.upcase
     end
 
     def serialize_purchase_latest_dispute(purchase)
