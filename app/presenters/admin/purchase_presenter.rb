@@ -138,7 +138,7 @@ class Admin::PurchasePresenter
   private
     def effective_early_fraud_warning
       @effective_early_fraud_warning ||= purchase.early_fraud_warning ||
-        (purchase.charge_id && EarlyFraudWarning.find_by(charge_id: purchase.charge_id))
+        (purchase.charge&.id && EarlyFraudWarning.find_by(charge_id: purchase.charge.id))
     end
 
     def effective_disputes
