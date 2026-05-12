@@ -21,6 +21,11 @@ class Radar::ValueListSyncService
     recently_unblocked_emails.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end
+
+    expired_emails = BlockedObject.email.where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
+    expired_emails.each do |blocked_object|
+      remove_item_from_list(value_list.id, blocked_object.object_value)
+    end
   end
 
   def sync_blocked_cards
@@ -37,6 +42,11 @@ class Radar::ValueListSyncService
 
     recently_unblocked_cards = BlockedObject.charge_processor_fingerprint.where(blocked_at: nil).where(:updated_at.gte => SYNC_WINDOW.ago)
     recently_unblocked_cards.each do |blocked_object|
+      remove_item_from_list(value_list.id, blocked_object.object_value)
+    end
+
+    expired_cards = BlockedObject.charge_processor_fingerprint.where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
+    expired_cards.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end
   end
@@ -82,7 +92,7 @@ class Radar::ValueListSyncService
       value: value
     )
   rescue Stripe::InvalidRequestError => e
-    raise unless e.message.include?("already exists")
+    raise unless e.code == "value_list_item_already_exists"
   end
 
   def remove_item_from_list(value_list_id, value)
@@ -90,7 +100,7 @@ class Radar::ValueListSyncService
     items.data.each do |item|
       Stripe::Radar::ValueListItem.delete(item.id)
     end
-  rescue Stripe::InvalidRequestError
-    # Item may not exist in the list, ignore
+  rescue Stripe::InvalidRequestError => e
+    raise unless e.code == "resource_missing"
   end
 end

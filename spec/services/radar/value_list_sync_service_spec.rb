@@ -51,6 +51,21 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_emails
     end
 
+    it "removes expired blocked emails from Stripe Radar" do
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "expired@example.com", nil, expires_in: 1.hour)
+
+      travel 2.hours
+
+      item = double("ValueListItem", id: "rsli_789")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "expired@example.com")
+        .and_return(double(data: [item]))
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_789")
+
+      service.sync_blocked_emails
+    end
+
     it "creates the value list if it does not exist" do
       allow(Stripe::Radar::ValueList).to receive(:retrieve)
         .with("gumroad_blocked_emails")
@@ -69,13 +84,12 @@ describe Radar::ValueListSyncService do
       BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "dup@example.com", nil)
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
-        .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value"))
+        .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
 
       expect { service.sync_blocked_emails }.not_to raise_error
     end
 
     it "picks up re-blocked emails by filtering on blocked_at" do
-      blocked = nil
       travel_to 1.month.ago do
         blocked = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "reblocked@example.com", nil)
         blocked.unblock!
@@ -127,7 +141,7 @@ describe Radar::ValueListSyncService do
       BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_dup", nil)
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
-        .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value"))
+        .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
 
       expect { service.sync_blocked_cards }.not_to raise_error
     end
