@@ -327,17 +327,17 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
           <dt>IP Country</dt>
           <dd>{purchase.ip_country}</dd>
+        </>
+      ) : null}
 
-          {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
-            <>
-              <dt>Stripe Radar</dt>
-              <dd>
-                <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
-                  {purchase.stripe_risk_level}
-                </Pill>
-              </dd>
-            </>
-          ) : null}
+      {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
+        <>
+          <dt>Stripe Radar</dt>
+          <dd>
+            <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
+              {purchase.stripe_risk_level}
+            </Pill>
+          </dd>
         </>
       ) : null}
 
