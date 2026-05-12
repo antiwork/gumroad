@@ -65,7 +65,7 @@ export const GetSales = () => (
   --before 2021-09-03 \\
   --after 2020-09-03 \\
   --product bfi_30HLgGWL8H2wo_Gzlg== \\
-  --email calvin@example.com`}
+  --email calvin@gumroad.com`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

@@ -71,7 +71,7 @@ export const GetSubscribers = () => (
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">
       {`gumroad subscribers list --product 0ssD7adjRklGBjS5cwlWPq== \\
-  --email calvin@example.com`}
+  --email calvin@gumroad.com`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

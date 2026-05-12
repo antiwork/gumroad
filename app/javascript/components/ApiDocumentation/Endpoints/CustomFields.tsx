@@ -112,7 +112,8 @@ export const UpdateCustomField = () => (
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">
       {`gumroad custom-fields update --product A-m3CDDC5dlrSdKZp0RFhA== \\
-  --name "phone number"`}
+  --name "phone number" \\
+  --required=false`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{

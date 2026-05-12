@@ -130,9 +130,8 @@ export const CompleteFile = () => (
   -d 'parts[][etag]="9b2cf535f27731c974343645a3985328"' \\
   -X POST`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">
-      {`# replay an ambiguous complete from a recovery manifest written by 'gumroad files upload'
-gumroad files complete --recovery err.json`}
+    <CodeSnippet caption="Gumroad CLI (replay from recovery manifest)">
+      gumroad files complete --recovery err.json
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
