@@ -7,6 +7,8 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
   let(:purchase) { create(:purchase, purchaser: create(:user), is_deleted_by_buyer: true) }
 
   before do
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch).and_return(nil)
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
     login_as(admin)
   end
 
