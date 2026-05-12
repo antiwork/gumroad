@@ -212,7 +212,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       end
     end
 
-    def serialize_purchase(purchase, with_clusters: false)
+    def serialize_purchase(purchase, with_clusters: false, stripe_risk_level: nil)
       {
         id: purchase.external_id_numeric.to_s,
         email: purchase.email,
@@ -241,11 +241,19 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         dispute: serialize_purchase_latest_dispute(purchase),
         early_fraud_warning: serialize_purchase_early_fraud_warning(purchase),
         affiliate_credit: serialize_purchase_affiliate_credit(purchase),
+        stripe_risk_level:,
       }.tap do |payload|
         refund_amount = refund_amount_cents(purchase)
         payload[:refund_amount] = refund_amount if refund_amount.positive?
         payload[:refund_date] = latest_refund(purchase)&.created_at&.as_json if payload[:refund_status].present?
         payload[:clusters] = serialize_purchase_clusters(purchase) if with_clusters
+      end
+    end
+
+    def serialize_purchases_with_risk_levels(purchases, **options)
+      risk_levels = Radar::ChargeRiskLevelService.fetch_bulk(purchases)
+      purchases.map do |purchase|
+        serialize_purchase(purchase, stripe_risk_level: risk_levels[purchase.id], **options)
       end
     end
 

@@ -14,7 +14,8 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.blank?
 
     ActiveRecord::Associations::Preloader.new(records: [purchase], associations: ADMIN_PURCHASE_INCLUDES).call
-    render json: { success: true, purchase: serialize_purchase(purchase, with_clusters: true) }
+    risk_level = Radar::ChargeRiskLevelService.fetch(purchase)
+    render json: { success: true, purchase: serialize_purchase(purchase, with_clusters: true, stripe_risk_level: risk_level) }
   end
 
   def search
@@ -36,7 +37,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     render json: {
       success: true,
-      purchases: purchases.first(limit).map { serialize_purchase(_1) },
+      purchases: serialize_purchases_with_risk_levels(purchases.first(limit)),
       count: [purchases.length, limit].min,
       limit:,
       has_more:
@@ -57,7 +58,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     render json: {
       success: true,
       lookup:,
-      purchases: records.map { serialize_purchase(_1) },
+      purchases: serialize_purchases_with_risk_levels(records),
       pagination:,
     }
   end
