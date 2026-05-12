@@ -51,30 +51,6 @@ class Radar::ValueListSyncService
     end
   end
 
-  def backfill_all
-    email_list = find_or_create_list(
-      list_alias: BLOCKED_EMAILS_LIST,
-      name: "Gumroad Blocked Emails",
-      item_type: "email"
-    )
-
-    BlockedObject.email.active.each do |blocked_object|
-      add_item_to_list(email_list.id, blocked_object.object_value)
-    end
-
-    card_list = find_or_create_list(
-      list_alias: BLOCKED_CARDS_LIST,
-      name: "Gumroad Blocked Cards",
-      item_type: "card_fingerprint"
-    )
-
-    BlockedObject.charge_processor_fingerprint.active.each do |blocked_object|
-      add_item_to_list(card_list.id, blocked_object.object_value)
-    end
-  end
-
-  private
-
   def find_or_create_list(list_alias:, name:, item_type:)
     Stripe::Radar::ValueList.retrieve(list_alias)
   rescue Stripe::InvalidRequestError => e
@@ -94,6 +70,8 @@ class Radar::ValueListSyncService
   rescue Stripe::InvalidRequestError => e
     raise unless e.code == "value_list_item_already_exists"
   end
+
+  private
 
   def remove_item_from_list(value_list_id, value)
     items = Stripe::Radar::ValueListItem.list(value_list: value_list_id, value: value)

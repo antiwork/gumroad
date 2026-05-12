@@ -147,27 +147,4 @@ describe Radar::ValueListSyncService do
     end
   end
 
-  describe "#backfill_all" do
-    before do
-      allow(Stripe::Radar::ValueList).to receive(:retrieve).and_return(value_list)
-    end
-
-    it "pushes all active blocked emails and cards regardless of date" do
-      travel_to 1.year.ago do
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "old@example.com", nil)
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_old", nil)
-      end
-
-      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
-        value_list: "rsl_123",
-        value: "old@example.com"
-      )
-      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
-        value_list: "rsl_123",
-        value: "fp_old"
-      )
-
-      service.backfill_all
-    end
-  end
 end
