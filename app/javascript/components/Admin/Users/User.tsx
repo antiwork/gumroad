@@ -56,7 +56,7 @@ export type RadarStats = {
 };
 
 export type RecentEfw = {
-  purchase_id: number | null;
+  purchase_id: string | null;
   fraud_type: string;
   charge_risk_level: string;
   resolution: string;
