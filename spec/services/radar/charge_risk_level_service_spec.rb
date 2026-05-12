@@ -72,7 +72,7 @@ describe Radar::ChargeRiskLevelService do
 
   describe ".fetch_bulk" do
     let(:purchase) { create_test_purchase }
-    let(:purchase2) { create_test_purchase }
+    let(:purchase2) { p = create_test_purchase; p.update_column(:stripe_transaction_id, "ch_unique_#{p.id}"); p }
 
     it "bulk fetches risk levels and skips non-Stripe purchases" do
       non_stripe = create_test_purchase
@@ -115,6 +115,20 @@ describe Radar::ChargeRiskLevelService do
       described_class.fetch_bulk([purchase])
       results = described_class.fetch_bulk([purchase])
       expect(results[purchase.id]).to eq("highest")
+    end
+
+    it "deduplicates purchases sharing the same stripe_transaction_id" do
+      shared_txn_id = purchase.stripe_transaction_id
+      duplicate = create_test_purchase
+      duplicate.update_column(:stripe_transaction_id, shared_txn_id)
+
+      charge = double("Stripe::Charge")
+      allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return("elevated")
+      expect(Stripe::Charge).to receive(:retrieve).with(shared_txn_id).once.and_return(charge)
+
+      results = described_class.fetch_bulk([purchase, duplicate])
+      expect(results[purchase.id]).to eq("elevated")
+      expect(results[duplicate.id]).to eq("elevated")
     end
   end
 end

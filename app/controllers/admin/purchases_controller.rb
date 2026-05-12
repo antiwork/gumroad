@@ -66,7 +66,8 @@ class Admin::PurchasesController < Admin::BaseController
     e404 if @purchase.nil?
     @product = @purchase.link
     set_meta_tag(title: "Purchase #{@purchase.external_id}")
-    purchase = Admin::PurchasePresenter.new(@purchase).props
+    stripe_risk_level = Radar::ChargeRiskLevelService.fetch(@purchase)
+    purchase = Admin::PurchasePresenter.new(@purchase, stripe_risk_level:).props
     render(
       inertia: "Admin/Purchases/Show",
       props: {
