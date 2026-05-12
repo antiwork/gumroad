@@ -14,6 +14,12 @@
   <a href="https://gumroad.com">Gumroad</a> is an e-commerce platform that enables creators to sell products directly to consumers. This repository contains the source code for the Gumroad web application.
 </p>
 
+<p align="center">
+  <a href="https://github.com/antiwork/gumroad-cli">
+    <img src="https://img.shields.io/badge/CLI-gumroad--cli-FF90E8?style=for-the-badge" alt="Gumroad CLI">
+  </a>
+</p>
+
 ## Table of Contents
 
 - [Getting Started](#getting-started)
