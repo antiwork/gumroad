@@ -2,8 +2,9 @@
 
 module Onetime
   class BackfillPriceCheckerIndexFields
-    SCROLL_SIZE = 1_000
+    SCROLL_SIZE = 5_000
     SCROLL_SORT = ["_doc"].freeze
+    JOB_INTERVAL_SECONDS = 10
     ATTRIBUTES_TO_UPDATE = %w[price_currency_type customizable_price native_type].freeze
 
     def self.process
@@ -20,7 +21,7 @@ module Onetime
         _source: false,
       )
 
-      minute_offset = 0
+      seconds_offset = 0
       loop do
         hits = response.dig("hits", "hits") || []
         break if hits.empty?
@@ -30,9 +31,9 @@ module Onetime
           "class" => SendToElasticsearchWorker,
           "args" => args,
           "queue" => "low",
-          "at" => minute_offset.minutes.from_now.to_i,
+          "at" => seconds_offset.seconds.from_now.to_i,
         )
-        minute_offset += 1
+        seconds_offset += JOB_INTERVAL_SECONDS
 
         response = EsClient.scroll(scroll_id: response["_scroll_id"], scroll: "1m")
       end
