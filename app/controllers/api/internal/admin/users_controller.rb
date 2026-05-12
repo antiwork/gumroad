@@ -313,11 +313,15 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         username: user.username,
         profile_url: user.subdomain_with_protocol,
         country: compliance_info&.country,
+        locale: user.locale,
+        timezone: user.timezone,
         created_at: user.created_at.as_json,
         deleted_at: user.deleted_at&.as_json,
         risk_state: Admin::UserRiskStatePresenter.new(user).props,
         active_watched_user: serialize_watched_user(user.active_watched_user),
         two_factor_authentication_enabled: user.two_factor_authentication_enabled?,
+        sign_in: serialize_sign_in(user),
+        social: serialize_social(user),
         payouts: {
           paused_internally: user.payouts_paused_internally?,
           paused_by_user: user.payouts_paused_by_user?,
@@ -332,6 +336,36 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
           unpaid_balance_formatted: Money.from_cents(user.unpaid_balance_cents).format,
           comments_count: user.comments.size
         }
+      }
+    end
+
+    def serialize_sign_in(user)
+      {
+        account_created_ip: user.account_created_ip,
+        current_ip: user.current_sign_in_ip,
+        current_at: user.current_sign_in_at&.as_json,
+        last_ip: user.last_sign_in_ip,
+        last_at: user.last_sign_in_at&.as_json,
+        count: user.sign_in_count
+      }
+    end
+
+    def serialize_social(user)
+      {
+        twitter_user_id: user.twitter_user_id,
+        twitter_handle: user.twitter_handle,
+        facebook_uid: user.facebook_uid,
+        google_uid: user.google_uid,
+        oauth_provider: user.provider,
+        external_authentications: user.user_external_authentications.order(:created_at).map { serialize_external_authentication(_1) }
+      }
+    end
+
+    def serialize_external_authentication(authentication)
+      {
+        provider: authentication.provider,
+        uid: authentication.uid,
+        linked_at: authentication.created_at.as_json
       }
     end
 

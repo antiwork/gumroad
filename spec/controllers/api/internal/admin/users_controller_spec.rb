@@ -72,7 +72,17 @@ describe Api::Internal::Admin::UsersController do
     end
 
     it "returns a comprehensive info payload for a compliant seller" do
-      user = create(:compliant_user, email: "seller@example.com", name: "Seller One", username: "sellerone")
+      user = create(:compliant_user,
+                    email: "seller@example.com",
+                    name: "Seller One",
+                    username: "sellerone",
+                    locale: "fr",
+                    timezone: "Eastern Time (US & Canada)",
+                    account_created_ip: "1.2.3.4",
+                    current_sign_in_ip: nil,
+                    current_sign_in_at: nil,
+                    last_sign_in_ip: nil,
+                    last_sign_in_at: nil)
 
       get :info, params: { email: user.email }
 
@@ -87,10 +97,20 @@ describe Api::Internal::Admin::UsersController do
         "name" => "Seller One",
         "username" => "sellerone",
         "deleted_at" => nil,
+        "locale" => "fr",
+        "timezone" => "Eastern Time (US & Canada)",
         "active_watched_user" => nil,
         "two_factor_authentication_enabled" => false
       )
       expect(info["created_at"]).to eq(user.created_at.as_json)
+      expect(info["sign_in"]).to eq(
+        "account_created_ip" => "1.2.3.4",
+        "current_ip" => nil,
+        "current_at" => nil,
+        "last_ip" => nil,
+        "last_at" => nil,
+        "count" => 0
+      )
 
       expect(info["risk_state"]).to include(
         "status" => "Compliant",
@@ -115,6 +135,137 @@ describe Api::Internal::Admin::UsersController do
         "total_earnings_formatted" => "$0.00",
         "unpaid_balance_formatted" => "$0.00",
         "comments_count" => 0
+      )
+    end
+
+    it "includes populated social handles and OAuth provider" do
+      user = create(:compliant_user,
+                    twitter_user_id: "1",
+                    twitter_handle: "alice",
+                    facebook_uid: "fb1",
+                    google_uid: "gid1",
+                    provider: "google_oauth2")
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["social"]).to eq(
+        "twitter_user_id" => "1",
+        "twitter_handle" => "alice",
+        "facebook_uid" => "fb1",
+        "google_uid" => "gid1",
+        "oauth_provider" => "google_oauth2",
+        "external_authentications" => []
+      )
+    end
+
+    it "includes blank social fields with an empty external authentications list" do
+      user = create(:compliant_user,
+                    twitter_user_id: nil,
+                    twitter_handle: nil,
+                    facebook_uid: nil,
+                    google_uid: nil,
+                    provider: nil)
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["social"]).to eq(
+        "twitter_user_id" => nil,
+        "twitter_handle" => nil,
+        "facebook_uid" => nil,
+        "google_uid" => nil,
+        "oauth_provider" => nil,
+        "external_authentications" => []
+      )
+    end
+
+    it "includes linked external authentications" do
+      user = create(:compliant_user)
+      authentication = create(:user_external_authentication, user:, provider: "apple", uid: "001-test")
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["social"]["external_authentications"]).to contain_exactly(
+        {
+          "provider" => "apple",
+          "uid" => "001-test",
+          "linked_at" => authentication.created_at.as_json
+        }
+      )
+    end
+
+    it "orders linked external authentications by creation time" do
+      user = create(:compliant_user)
+      newer = create(:user_external_authentication, user:, provider: "apple", uid: "newer", created_at: 1.day.ago)
+      older = create(:user_external_authentication, user:, provider: "apple", uid: "older", created_at: 2.days.ago)
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["social"]["external_authentications"]).to eq(
+        [
+          {
+            "provider" => "apple",
+            "uid" => "older",
+            "linked_at" => older.created_at.as_json
+          },
+          {
+            "provider" => "apple",
+            "uid" => "newer",
+            "linked_at" => newer.created_at.as_json
+          }
+        ]
+      )
+    end
+
+    it "does not expose credential fields or token values" do
+      user = create(:compliant_user)
+      user.update_columns(
+        twitter_oauth_token: "secret-twitter-token",
+        twitter_oauth_secret: "secret-twitter-secret",
+        facebook_access_token: "secret-facebook-token",
+        otp_secret_key: "secret-otp-key",
+        reset_password_token: "secret-reset-token",
+        encrypted_password: "secret-encrypted-password"
+      )
+
+      get :info, params: { email: user.email }
+
+      credential_patterns = %w[
+        twitter_oauth_token
+        twitter_oauth_secret
+        facebook_access_token
+        otp_secret_key
+        reset_password_token
+        encrypted_password
+        secret-twitter-token
+        secret-twitter-secret
+        secret-facebook-token
+        secret-otp-key
+        secret-reset-token
+        secret-encrypted-password
+      ]
+      expect(response.body).not_to match(Regexp.union(credential_patterns))
+    end
+
+    it "includes populated sign-in tracking fields" do
+      current_sign_in_at = 1.hour.ago.change(usec: 0)
+      last_sign_in_at = 2.days.ago.change(usec: 0)
+      user = create(:compliant_user,
+                    account_created_ip: "1.2.3.4",
+                    current_sign_in_ip: "5.6.7.8",
+                    current_sign_in_at:,
+                    last_sign_in_ip: "9.10.11.12",
+                    last_sign_in_at:,
+                    sign_in_count: 42)
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["sign_in"]).to eq(
+        "account_created_ip" => "1.2.3.4",
+        "current_ip" => "5.6.7.8",
+        "current_at" => current_sign_in_at.as_json,
+        "last_ip" => "9.10.11.12",
+        "last_at" => last_sign_in_at.as_json,
+        "count" => 42
       )
     end
 
