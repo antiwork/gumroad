@@ -116,14 +116,43 @@ describe Admin::RelatedUsersService do
     expect(result.related_users.first[:relations].map { _1[:signal] }).to contain_exactly("ip", "payment_address")
   end
 
-  it "caps each signal and reports truncation" do
+  it "caps the IP signal to the most recently updated matches and reports truncation" do
     target = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
-    create_list(:user, 3, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+    oldest = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil, updated_at: 3.days.ago)
+    middle = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil, updated_at: 2.days.ago)
+    newest = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil, updated_at: 1.day.ago)
 
     result = described_class.new(target, signals: ["ip"], limit: 2).call
 
-    expect(result.related_users.length).to eq(2)
+    expect(result.related_users.map { _1[:id] }).to eq([newest.external_id, middle.external_id])
+    expect(result.related_users.map { _1[:id] }).not_to include(oldest.external_id)
     expect(result.truncated).to eq("ip" => true)
+  end
+
+  it "caps the payment address signal to the most recently updated matches" do
+    target = create(:user, payment_address: "shared-payment@example.com")
+    oldest = create(:user, payment_address: "shared-payment@example.com", updated_at: 3.days.ago)
+    middle = create(:user, payment_address: "shared-payment@example.com", updated_at: 2.days.ago)
+    newest = create(:user, payment_address: "shared-payment@example.com", updated_at: 1.day.ago)
+
+    result = described_class.new(target, signals: ["payment_address"], limit: 2).call
+
+    expect(result.related_users.map { _1[:id] }).to eq([newest.external_id, middle.external_id])
+    expect(result.related_users.map { _1[:id] }).not_to include(oldest.external_id)
+    expect(result.truncated).to eq("payment_address" => true)
+  end
+
+  it "caps the card fingerprint signal to the most recently updated matches" do
+    target = create(:user, payment_address: nil, credit_card: credit_card_with_fingerprint("fp_shared"))
+    oldest = create(:user, payment_address: nil, credit_card: credit_card_with_fingerprint("fp_shared"), updated_at: 3.days.ago)
+    middle = create(:user, payment_address: nil, credit_card: credit_card_with_fingerprint("fp_shared"), updated_at: 2.days.ago)
+    newest = create(:user, payment_address: nil, credit_card: credit_card_with_fingerprint("fp_shared"), updated_at: 1.day.ago)
+
+    result = described_class.new(target, signals: ["card_fingerprint"], limit: 2).call
+
+    expect(result.related_users.map { _1[:id] }).to eq([newest.external_id, middle.external_id])
+    expect(result.related_users.map { _1[:id] }).not_to include(oldest.external_id)
+    expect(result.truncated).to eq("card_fingerprint" => true)
   end
 
   it "excludes the target user from related users" do

@@ -1572,6 +1572,15 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({ success: false, message: "signals contains invalid value: bogus" }.as_json)
     end
 
+    it "rejects a comma-only signals value" do
+      user = create(:user)
+
+      get :related, params: { user_id: user.external_id, signals: ",,," }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "signals contains invalid value: ,,," }.as_json)
+    end
+
     it "returns the full default-signals response" do
       target = create(:user,
                       account_created_ip: "1.2.3.4",

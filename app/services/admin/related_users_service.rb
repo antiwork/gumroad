@@ -81,6 +81,7 @@ class Admin::RelatedUsersService
       rows = User
         .where("account_created_ip IN (:ips) OR current_sign_in_ip IN (:ips) OR last_sign_in_ip IN (:ips)", ips: target_ips)
         .where.not(id: @target.id)
+        .order(updated_at: :desc, id: :desc)
         .limit(@limit + 1)
         .pluck(:id, :account_created_ip, :current_sign_in_ip, :last_sign_in_ip)
 
@@ -108,6 +109,7 @@ class Admin::RelatedUsersService
       ids = User
         .where(payment_address: @target.payment_address)
         .where.not(id: @target.id)
+        .order(updated_at: :desc, id: :desc)
         .limit(@limit + 1)
         .pluck(:id)
 
@@ -122,6 +124,7 @@ class Admin::RelatedUsersService
         .joins(:credit_card)
         .where(credit_cards: { stripe_fingerprint: target_fingerprint })
         .where.not(id: @target.id)
+        .order(updated_at: :desc, id: :desc)
         .limit(@limit + 1)
         .pluck(:id)
 

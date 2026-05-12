@@ -540,8 +540,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
       values = raw.split(",").map(&:strip).reject(&:blank?).uniq
       invalid = values - Admin::RelatedUsersService::VALID_SIGNALS
-      if invalid.any?
-        render json: { success: false, message: "signals contains invalid value: #{invalid.first}" }, status: :bad_request
+      if values.empty? || invalid.any?
+        render json: { success: false, message: "signals contains invalid value: #{invalid.first || raw}" }, status: :bad_request
         return nil
       end
 
