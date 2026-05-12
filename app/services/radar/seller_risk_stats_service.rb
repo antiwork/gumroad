@@ -13,10 +13,10 @@ module Radar
     def stats
       {
         successful_purchases: successful_purchases_count,
-        efw_count: efws.count,
-        efw_by_fraud_type: efw_by_fraud_type,
-        efw_with_elevated_risk: efws.where(charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED).count,
-        efw_with_highest_risk: efws.where(charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_HIGHEST).count,
+        efw_count: efw_grouped_counts.values.sum,
+        efw_by_fraud_type: efw_grouped_counts.each_with_object(Hash.new(0)) { |((_, type), count), h| h[type] += count },
+        efw_with_elevated_risk: efw_grouped_counts.sum { |(risk, _), count| risk == EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED ? count : 0 },
+        efw_with_highest_risk: efw_grouped_counts.sum { |(risk, _), count| risk == EarlyFraudWarning::CHARGE_RISK_LEVEL_HIGHEST ? count : 0 },
         dispute_count: dispute_count,
         dispute_rate: dispute_rate
       }
@@ -72,8 +72,8 @@ module Radar
         (dispute_count.to_f / successful_purchases_count * 100).round(2)
       end
 
-      def efw_by_fraud_type
-        efws.group(:fraud_type).count
+      def efw_grouped_counts
+        @efw_grouped_counts ||= efws.group(:charge_risk_level, :fraud_type).count
       end
   end
 end

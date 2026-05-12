@@ -98,7 +98,7 @@ export type User = {
   updated_at: string;
   deleted_at: string | null;
   radar_stats?: RadarStats | null;
-  recent_efws?: RecentEfw[];
+  recent_efws?: RecentEfw[] | null;
 };
 
 export type Props = {
