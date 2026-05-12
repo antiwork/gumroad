@@ -86,6 +86,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                      })
   end
 
+  def related
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    signals = parse_related_signals
+    return if signals.nil?
+
+    result = Admin::RelatedUsersService.new(user, signals:, limit: related_limit).call
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       signals_evaluated: result.signals_evaluated,
+                                                       per_signal_limit: result.per_signal_limit,
+                                                       related_users: result.related_users,
+                                                       truncated: result.truncated,
+                                                     })
+  end
+
   def suspension
     user = find_internal_admin_user_for_read_or_render
     return unless user
@@ -515,6 +532,27 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       end
 
       values
+    end
+
+    def parse_related_signals
+      raw = params[:signals].to_s
+      return Admin::RelatedUsersService::VALID_SIGNALS if raw.blank?
+
+      values = raw.split(",").map(&:strip).reject(&:blank?).uniq
+      invalid = values - Admin::RelatedUsersService::VALID_SIGNALS
+      if invalid.any?
+        render json: { success: false, message: "signals contains invalid value: #{invalid.first}" }, status: :bad_request
+        return nil
+      end
+
+      values
+    end
+
+    def related_limit
+      raw = Integer(params[:limit], exception: false)
+      return Admin::RelatedUsersService::DEFAULT_LIMIT if raw.nil? || raw <= 0
+
+      [raw, Admin::RelatedUsersService::MAX_LIMIT].min
     end
 
     def purchases_scope(user, filters)

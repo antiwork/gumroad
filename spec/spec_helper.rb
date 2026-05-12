@@ -205,6 +205,7 @@ RSpec.configure do |config|
   config.raise_errors_for_deprecations!
   config.use_transactional_fixtures = true
   config.filter_run_when_matching :focus
+  config.filter_run_excluding benchmark: true unless config.inclusion_filter.rules.key?(:benchmark)
   config.example_status_persistence_file_path = Rails.root.join("tmp", "rspec_status.txt").to_s
   config.include ActiveSupport::Testing::TimeHelpers
 

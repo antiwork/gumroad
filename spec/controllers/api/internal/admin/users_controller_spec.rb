@@ -1528,6 +1528,173 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :purchases, method: :get
   end
 
+  describe "GET related" do
+    include_examples "admin api authorization required", :get, :related
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    def credit_card_with_fingerprint(fingerprint)
+      CreditCard.create!(
+        stripe_fingerprint: fingerprint,
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        stripe_customer_id: "cus_#{SecureRandom.hex(6)}",
+        expiry_month: 12,
+        expiry_year: 2030,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id
+      )
+    end
+
+    def related_user_payload(user)
+      response.parsed_body["related_users"].find { _1["id"] == user.external_id }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :related
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :related, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "rejects unknown signal values" do
+      user = create(:user)
+
+      get :related, params: { user_id: user.external_id, signals: "ip,bogus" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "signals contains invalid value: bogus" }.as_json)
+    end
+
+    it "returns the full default-signals response" do
+      target = create(:user,
+                      account_created_ip: "1.2.3.4",
+                      current_sign_in_ip: nil,
+                      last_sign_in_ip: nil,
+                      payment_address: "shared-payment@example.com",
+                      credit_card: credit_card_with_fingerprint("fp_shared"))
+      ip_match = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+      payment_match = create(:user, account_created_ip: nil, current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: "shared-payment@example.com")
+      card_match = create(:user, account_created_ip: nil, current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil, credit_card: credit_card_with_fingerprint("fp_shared"))
+
+      get :related, params: { user_id: target.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => target.external_id,
+        "signals_evaluated" => %w[ip payment_address card_fingerprint],
+        "per_signal_limit" => 50,
+        "truncated" => {
+          "ip" => false,
+          "payment_address" => false,
+          "card_fingerprint" => false,
+        }
+      )
+      expect(response.parsed_body["related_users"].map { _1["id"] }).to contain_exactly(ip_match.external_id, payment_match.external_id, card_match.external_id)
+      expect(related_user_payload(ip_match)["relations"]).to contain_exactly(
+        {
+          "signal" => "ip",
+          "shared_value" => "1.2.3.4",
+          "via" => ["account_created_ip"],
+        }
+      )
+      expect(related_user_payload(payment_match)["relations"]).to eq([
+                                                                       {
+                                                                         "signal" => "payment_address",
+                                                                         "shared_value" => "shared-payment@example.com",
+                                                                       }
+                                                                     ])
+      expect(related_user_payload(card_match)["relations"]).to eq([
+                                                                    {
+                                                                      "signal" => "card_fingerprint",
+                                                                      "shared_value" => nil,
+                                                                    }
+                                                                  ])
+    end
+
+    it "scopes related users to the requested signals" do
+      target = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: "shared-payment@example.com")
+      ip_match = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+      payment_match = create(:user, account_created_ip: nil, current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: "shared-payment@example.com")
+
+      get :related, params: { user_id: target.external_id, signals: "ip" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["signals_evaluated"]).to eq(["ip"])
+      expect(response.parsed_body["related_users"].map { _1["id"] }).to eq([ip_match.external_id])
+      expect(response.parsed_body["related_users"].map { _1["id"] }).not_to include(payment_match.external_id)
+    end
+
+    it "applies the per-signal limit and reports truncation" do
+      target = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+      create_list(:user, 3, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+
+      get :related, params: { user_id: target.external_id, signals: "ip", limit: 1 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["per_signal_limit"]).to eq(1)
+      expect(response.parsed_body["related_users"].length).to eq(1)
+      expect(response.parsed_body["truncated"]).to eq("ip" => true)
+    end
+
+    it "includes each related user's risk state" do
+      target = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil)
+      related = create(:user, account_created_ip: "1.2.3.4", current_sign_in_ip: nil, last_sign_in_ip: nil, payment_address: nil, user_risk_state: "suspended_for_fraud")
+      create(:comment, commentable: related, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 1.hour.ago)
+
+      get :related, params: { user_id: target.external_id, signals: "ip" }
+
+      expect(response).to have_http_status(:ok)
+      expect(related_user_payload(related)["risk_state"]).to eq(Admin::UserRiskStatePresenter.new(related).props.as_json)
+    end
+
+    it "keeps related user enrichment queries bounded" do
+      target = create(:user,
+                      account_created_ip: "1.2.3.4",
+                      current_sign_in_ip: nil,
+                      last_sign_in_ip: nil,
+                      payment_address: "shared-payment@example.com",
+                      credit_card: credit_card_with_fingerprint("fp_shared"))
+      5.times do
+        related = create(:user,
+                         account_created_ip: "1.2.3.4",
+                         current_sign_in_ip: nil,
+                         last_sign_in_ip: nil,
+                         payment_address: "shared-payment@example.com",
+                         credit_card: credit_card_with_fingerprint("fp_shared"))
+        create(:comment, commentable: related, comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+      end
+
+      select_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s.squish
+        next if payload[:name] == "SCHEMA"
+        next unless sql.start_with?("SELECT")
+        next if sql.include?("`admin_api_tokens`")
+        next if sql.include?("`oauth_access_tokens`")
+
+        select_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :related, params: { user_id: target.external_id }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["related_users"].length).to eq(5)
+      expect(select_queries.length).to be <= 8, "expected at most 8 SELECTs but got #{select_queries.length}:\n#{select_queries.join("\n")}"
+    end
+
+    include_examples "supports user lookup by user_id", :related, method: :get
+  end
+
   describe "GET suspension" do
     include_examples "admin api authorization required", :get, :suspension
 
