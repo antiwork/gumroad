@@ -8,8 +8,15 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   SELLER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
   RECENT_CHARGEBACK_WINDOW_DAYS = 90
   NON_GLOBAL_AFFILIATE_TYPES = [DirectAffiliate.name, Collaborator.name].freeze
+  TAXONOMY_ANCESTRY_SQL = <<~SQL.squish.freeze
+    SELECT h.descendant_id, t.slug
+    FROM taxonomy_hierarchies h
+    INNER JOIN taxonomies t ON t.id = h.ancestor_id
+    WHERE h.descendant_id IN (?)
+    ORDER BY h.descendant_id, h.generations DESC
+  SQL
   private_constant :DEFAULT_PER_PAGE, :MAX_PER_PAGE, :SELLER_LOOKUP_BAD_REQUEST_MESSAGE,
-                   :RECENT_CHARGEBACK_WINDOW_DAYS, :NON_GLOBAL_AFFILIATE_TYPES
+                   :RECENT_CHARGEBACK_WINDOW_DAYS, :NON_GLOBAL_AFFILIATE_TYPES, :TAXONOMY_ANCESTRY_SQL
 
   def index
     if params[:email].blank? && params[:external_id].blank?
@@ -24,19 +31,24 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       .order(Admin::Users::ListPaginatedProducts::PRODUCTS_ORDER)
 
     pagination, paginated = pagy(products, page: requested_page, limit: per_page, overflow: :empty_page)
+    ancestry_paths = taxonomy_ancestry_paths_for(paginated)
 
     render json: {
       success: true,
-      products: paginated.map { serialize_product(_1) },
+      products: paginated.map { serialize_product(_1, ancestry_paths:) },
       pagination: PagyPresenter.new(pagination).metadata
     }
   end
 
   def show
-    product = Link.find_by_external_id(params[:id])
+    product = Link
+      .includes(:product_files, :display_asset_previews, :taxonomy, product_affiliates: { affiliate: :affiliate_user })
+      .find_by_external_id(params[:id])
     return render json: { success: false, message: "Product not found" }, status: :not_found if product.blank?
 
-    render json: { success: true, product: serialize_product(product, with_fraud_context: true) }
+    ancestry_paths = taxonomy_ancestry_paths_for([product])
+
+    render json: { success: true, product: serialize_product(product, with_fraud_context: true, ancestry_paths:) }
   end
 
   private
@@ -63,7 +75,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       [params[:page].to_i, 1].max
     end
 
-    def serialize_product(product, with_fraud_context: false)
+    def serialize_product(product, with_fraud_context: false, ancestry_paths: {})
       payload = {
         id: product.external_id,
         name: product.name,
@@ -80,7 +92,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
         alive: product.alive?,
         is_adult: product.is_adult?,
         bad_card_counter: product.bad_card_counter,
-        taxonomy: serialize_product_taxonomy(product.taxonomy),
+        taxonomy: serialize_product_taxonomy(product.taxonomy, ancestry_paths:),
         seller: {
           id: product.user&.external_id,
           email: product.user&.email
@@ -92,14 +104,25 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       payload
     end
 
-    def serialize_product_taxonomy(taxonomy)
+    def serialize_product_taxonomy(taxonomy, ancestry_paths:)
       return nil if taxonomy.nil?
 
       {
         id: taxonomy.id.to_s,
         slug: taxonomy.slug,
-        ancestry_path: taxonomy.ancestry_path,
+        ancestry_path: ancestry_paths[taxonomy.id] || [taxonomy.slug],
       }
+    end
+
+    def taxonomy_ancestry_paths_for(products)
+      taxonomy_ids = products.filter_map(&:taxonomy_id).uniq
+      return {} if taxonomy_ids.empty?
+
+      sql = ActiveRecord::Base.sanitize_sql_array([TAXONOMY_ANCESTRY_SQL, taxonomy_ids])
+      rows = ActiveRecord::Base.connection.select_rows(sql)
+      rows.each_with_object({}) do |(descendant_id, slug), hash|
+        (hash[descendant_id] ||= []) << slug
+      end
     end
 
     def serialize_product_affiliates(product)
@@ -122,6 +145,8 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
         },
         basis_points: basis_points,
         destination_url: product_affiliate.destination_url,
+        alive: affiliate.alive?,
+        deleted_at: affiliate.deleted_at&.as_json,
       }
     end
 
@@ -131,7 +156,9 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       payload = { window_days: RECENT_CHARGEBACK_WINDOW_DAYS, successful_count:, chargedback_count: 0, rate: nil }
       return payload if successful_count.zero?
 
-      chargedback_count = Purchase.chargedback.where(link_id: product.id).where("purchases.created_at >= ?", window).count
+      chargedback_count = Purchase.chargedback.not_chargeback_reversed
+        .where(link_id: product.id)
+        .where("purchases.created_at >= ?", window).count
       payload.merge(chargedback_count:, rate: (chargedback_count.to_f / successful_count).round(4))
     end
 

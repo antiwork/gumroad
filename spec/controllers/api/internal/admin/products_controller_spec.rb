@@ -145,6 +145,33 @@ describe Api::Internal::Admin::ProductsController do
       expect(product_files_queries.first).to include("IN (")
     end
 
+    it "resolves taxonomy ancestry with a single batched query across distinct taxonomies" do
+      root = Taxonomy.create!(slug: "root")
+      branch_a = Taxonomy.create!(slug: "branch-a", parent: root)
+      branch_b = Taxonomy.create!(slug: "branch-b", parent: root)
+      branch_c = Taxonomy.create!(slug: "branch-c", parent: root)
+      create(:product, user: seller, taxonomy: branch_a)
+      create(:product, user: seller, taxonomy: branch_b)
+      create(:product, user: seller, taxonomy: branch_c)
+
+      hierarchy_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next if sql.start_with?("INSERT", "UPDATE", "DELETE", "BEGIN", "COMMIT", "SAVEPOINT", "RELEASE")
+        hierarchy_queries << sql if sql.include?("taxonomy_hierarchies") && sql.start_with?("SELECT")
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :index, params: { email: seller.email }
+      end
+
+      expect(response).to have_http_status(:ok)
+      paths = response.parsed_body["products"].map { _1["taxonomy"]["ancestry_path"] }
+      expect(paths).to contain_exactly(["root", "branch-a"], ["root", "branch-b"], ["root", "branch-c"])
+      expect(hierarchy_queries.length).to eq(1),
+                                          "expected one batched taxonomy_hierarchies SELECT but got #{hierarchy_queries.length}:\n#{hierarchy_queries.join("\n")}"
+    end
+
     it "exposes file metadata including soft-deleted files" do
       product = create(:product, user: seller)
       alive_file = create(:readable_document, link: product, display_name: "Big guide", size: 1_048_576)
@@ -377,11 +404,30 @@ describe Api::Internal::Admin::ProductsController do
         "id" => direct.external_id,
         "type" => "DirectAffiliate",
         "basis_points" => 1500,
-        "destination_url" => "https://example.com/d"
+        "destination_url" => "https://example.com/d",
+        "alive" => true,
+        "deleted_at" => nil
       )
       expect(payload.first["affiliate_user"]).to eq(
         "id" => direct_user.external_id,
         "email" => "direct@example.com"
+      )
+    end
+
+    it "surfaces soft-deleted affiliates with their lifecycle state so reviewers see recently removed ones" do
+      product = create(:product, user: seller)
+      direct_user = create(:user)
+      deleted_at = 1.day.ago
+      direct = create(:direct_affiliate, seller:, affiliate_user: direct_user, products: [product])
+      direct.update!(deleted_at:)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["affiliates"].first
+      expect(payload).to include(
+        "id" => direct.external_id,
+        "alive" => false,
+        "deleted_at" => deleted_at.as_json
       )
     end
 
@@ -439,6 +485,24 @@ describe Api::Internal::Admin::ProductsController do
         "chargedback_count" => 1,
         "rate" => 0.2
       )
+    end
+
+    it "excludes reversed chargebacks from recent_chargeback_rate, matching the rest of the fraud-signal stack" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      4.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      lost = create(:purchase, link: product, seller:, created_at: 5.days.ago)
+      lost.update_columns(chargeback_date: 4.days.ago)
+      reversed = create(:purchase, link: product, seller:, created_at: 6.days.ago)
+      reversed.update_columns(chargeback_date: 5.days.ago)
+      reversed.update!(chargeback_reversed: true)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["recent_chargeback_rate"]
+      expect(payload["successful_count"]).to eq(6)
+      expect(payload["chargedback_count"]).to eq(1)
+      expect(payload["rate"]).to eq((1.0 / 6).round(4))
     end
 
     it "returns a recent_chargeback_rate with nil rate when there are no recent successful purchases" do
