@@ -12,7 +12,7 @@ module Radar
 
     def stats
       {
-        total_purchases: total_purchases_count,
+        successful_purchases: successful_purchases_count,
         efw_count: efws.count,
         efw_by_fraud_type: efw_by_fraud_type,
         efw_with_elevated_risk: efws.where(charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED).count,
@@ -23,7 +23,7 @@ module Radar
     end
 
     def recent_efws(limit = 5)
-      efws.includes(:purchase, :charge).order(created_at: :desc).limit(limit).map do |efw|
+      efws.includes(:purchase, charge: :purchases).order(created_at: :desc).limit(limit).map do |efw|
         {
           purchase_id: (efw.purchase || efw.charge&.purchases&.first)&.external_id,
           fraud_type: efw.fraud_type,
@@ -39,8 +39,8 @@ module Radar
         @cutoff_date ||= LOOKBACK_PERIOD.ago
       end
 
-      def total_purchases_count
-        @total_purchases_count ||= user.sales.successful.where("purchases.created_at >= ?", cutoff_date).count
+      def successful_purchases_count
+        @successful_purchases_count ||= user.sales.successful.where("purchases.created_at >= ?", cutoff_date).count
       end
 
       def efws
@@ -66,9 +66,9 @@ module Radar
       end
 
       def dispute_rate
-        return 0.0 if total_purchases_count.zero?
+        return 0.0 if successful_purchases_count.zero?
 
-        (dispute_count.to_f / total_purchases_count * 100).round(2)
+        (dispute_count.to_f / successful_purchases_count * 100).round(2)
       end
 
       def efw_by_fraud_type

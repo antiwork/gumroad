@@ -46,7 +46,7 @@ export type ActiveWatchedUser = {
 };
 
 export type RadarStats = {
-  total_purchases: number;
+  successful_purchases: number;
   efw_count: number;
   efw_by_fraud_type: Record<string, number>;
   efw_with_elevated_risk: number;
