@@ -12,11 +12,7 @@ module Radar
       return nil unless purchase.stripe_transaction_id.present?
       return nil unless purchase.charge_processor_id == StripeChargeProcessor.charge_processor_id
 
-      cache_key = "#{CACHE_KEY_PREFIX}:#{purchase.stripe_transaction_id}"
-
-      Rails.cache.fetch(cache_key, expires_in: CACHE_TTL) do
-        fetch_from_stripe(purchase)
-      end
+      fetch_bulk([purchase])[purchase.id]
     end
 
     # Bulk-fetch risk levels for multiple purchases, using cache where possible.
