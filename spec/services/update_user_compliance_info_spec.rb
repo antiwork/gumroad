@@ -64,6 +64,8 @@ describe UpdateUserComplianceInfo do
           city: compliance_info.city,
           state: compliance_info.state,
           zip_code: compliance_info.zip_code,
+          country: compliance_info.country_code,
+          business_country: compliance_info.country_code,
           is_business: false,
           ssn_last_four: "000000000",
           dob_month: compliance_info.birthday.month.to_s,

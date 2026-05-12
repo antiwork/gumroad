@@ -228,6 +228,10 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      def payment_form_params
+        params.merge(country: "US", business_country: "US")
+      end
+
       it "updates the payout threshold for valid amounts" do
         expect do
           put :update, params: { payout_threshold_cents: 20_000 }
@@ -254,7 +258,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         initial_compliance_info_count = UserComplianceInfo.count
 
         expect do
-          put :update, params: { user: params, payout_threshold_cents: 20_000 }
+          put :update, params: { user: payment_form_params, payout_threshold_cents: 20_000 }
         end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_identity_verification_failed)
 
         expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
@@ -272,7 +276,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         initial_compliance_info_count = UserComplianceInfo.count
 
         expect do
-          put :update, params: { user: params }
+          put :update, params: { user: payment_form_params }
         end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_identity_verification_failed)
 
         expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)

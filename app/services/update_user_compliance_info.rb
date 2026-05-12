@@ -37,7 +37,6 @@ class UpdateUserComplianceInfo
     street_address_kana
     city
     state
-    country
     zip_code
     business_name
     business_name_kanji
@@ -49,7 +48,6 @@ class UpdateUserComplianceInfo
     business_street_address_kana
     business_city
     business_state
-    business_country
     business_zip_code
     business_type
     phone
@@ -195,8 +193,12 @@ class UpdateUserComplianceInfo
 
     def country_changed?(old_compliance_info, field)
       compliance_params[field].present? &&
-        compliance_params[:is_business] &&
+        country_param_will_be_persisted? &&
         compliance_info_value(old_compliance_info, field) != Compliance::Countries.mapping[compliance_params[field]]
+    end
+
+    def country_param_will_be_persisted?
+      !compliance_params[:is_business].nil? && ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
     end
 
     def business_mode_param_changed?(old_compliance_info)
