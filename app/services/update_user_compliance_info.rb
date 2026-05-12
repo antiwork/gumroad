@@ -74,7 +74,10 @@ class UpdateUserComplianceInfo
       old_compliance_info = current_compliance_info
       compliance_info_changed = compliance_info_changed?(old_compliance_info)
       old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
-      return { success: true } unless compliance_info_changed
+      unless compliance_info_changed
+        UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
+        return { success: true }
+      end
 
       saved, new_compliance_info = if encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)

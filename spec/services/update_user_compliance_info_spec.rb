@@ -57,6 +57,7 @@ describe UpdateUserComplianceInfo do
       let!(:compliance_info) { create(:user_compliance_info, user:) }
 
       it "returns success without creating a new compliance info row or submitting it to Stripe" do
+        request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::Address::STREET)
         params = ActionController::Parameters.new(
           first_name: compliance_info.first_name,
           last_name: compliance_info.last_name,
@@ -83,6 +84,7 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
         expect(user.reload.alive_user_compliance_info.id).to eq(compliance_info.id)
+        expect(request.reload.state).to eq("provided")
       end
     end
 

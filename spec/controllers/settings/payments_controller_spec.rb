@@ -282,6 +282,10 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
         expect(UserComplianceInfo.count).to eq(initial_compliance_info_count)
         expect(user.reload.alive_user_compliance_info.id).to eq(initial_compliance_info_id)
+        expect(request_1.reload.state).to eq("provided")
+        expect(request_2.reload.state).to eq("requested")
+        expect(request_3.reload.state).to eq("provided")
+        expect(request_4.reload.state).to eq("requested")
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :see_other
       end
