@@ -423,7 +423,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       if params[:status].present?
         states = Array(params[:status]).flat_map { _1.to_s.split(",") }.map(&:strip).reject(&:blank?)
         invalid = states - valid_states
-        if invalid.any?
+        if states.empty? || invalid.any?
           render json: { success: false, message: "status must be one of: #{valid_states.join(", ")}" }, status: :bad_request
           return nil
         end

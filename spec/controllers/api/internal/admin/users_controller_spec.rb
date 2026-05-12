@@ -1090,6 +1090,16 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["message"]).to start_with("status must be one of")
     end
 
+    it "rejects a comma-only status value instead of silently returning an empty list" do
+      buyer = create(:user)
+      create(:purchase, purchaser: buyer)
+
+      get :purchases, params: { user_id: buyer.external_id, status: "," }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to start_with("status must be one of")
+    end
+
     it "accepts every state defined on the Purchase state machine, including preorder_concluded_unsuccessfully" do
       buyer = create(:user)
       purchase = create(:purchase, purchaser: buyer)
