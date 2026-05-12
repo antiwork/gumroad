@@ -4,6 +4,7 @@ class Radar::ValueListSyncService
   BLOCKED_EMAILS_LIST = "gumroad_blocked_emails"
   BLOCKED_CARDS_LIST = "gumroad_blocked_cards"
   SYNC_WINDOW = 25.hours
+  STRIPE_FINGERPRINT_PATTERN = /\A[A-Za-z0-9]+\z/
 
   def sync_blocked_emails
     value_list = find_or_create_list(
@@ -35,17 +36,24 @@ class Radar::ValueListSyncService
       item_type: "card_fingerprint"
     )
 
-    blocked_cards = BlockedObject.charge_processor_fingerprint.active.where(:blocked_at.gte => SYNC_WINDOW.ago)
+    blocked_cards = BlockedObject.charge_processor_fingerprint.active
+      .where(:blocked_at.gte => SYNC_WINDOW.ago)
+      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
     blocked_cards.each do |blocked_object|
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
-    recently_unblocked_cards = BlockedObject.charge_processor_fingerprint.where(blocked_at: nil).where(:updated_at.gte => SYNC_WINDOW.ago)
+    recently_unblocked_cards = BlockedObject.charge_processor_fingerprint
+      .where(blocked_at: nil)
+      .where(:updated_at.gte => SYNC_WINDOW.ago)
+      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
     recently_unblocked_cards.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end
 
-    expired_cards = BlockedObject.charge_processor_fingerprint.where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
+    expired_cards = BlockedObject.charge_processor_fingerprint
+      .where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
+      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
     expired_cards.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end

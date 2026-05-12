@@ -43,7 +43,9 @@ class Onetime::BackfillRadarValueLists
       )
 
       total = 0
-      BlockedObject.charge_processor_fingerprint.active.no_timeout.each_slice(batch_size) do |batch|
+      BlockedObject.charge_processor_fingerprint.active
+        .where(object_value: Radar::ValueListSyncService::STRIPE_FINGERPRINT_PATTERN)
+        .no_timeout.each_slice(batch_size) do |batch|
         batch.each { |obj| service.add_item_to_list(list.id, obj.object_value) }
         total += batch.size
         puts "Radar card backfill: #{total} pushed"
