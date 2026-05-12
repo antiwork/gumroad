@@ -10,7 +10,8 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     purchase = fetch_purchase
     return render json: { success: false, message: "Purchase not found" }, status: :not_found if purchase.blank?
 
-    render json: { success: true, purchase: serialize_purchase(purchase) }
+    ActiveRecord::Associations::Preloader.new(records: [purchase], associations: ADMIN_PURCHASE_INCLUDES).call
+    render json: { success: true, purchase: serialize_purchase(purchase, with_clusters: true) }
   end
 
   def search
@@ -27,7 +28,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     end
 
     limit = purchase_search_limit
-    purchases = AdminSearchService.new.search_purchases(**search_params, limit: limit.next).includes(:link, :seller, :refunds).to_a
+    purchases = AdminSearchService.new.search_purchases(**search_params, limit: limit.next).includes(*ADMIN_PURCHASE_INCLUDES).to_a
     has_more = purchases.length > limit
 
     render json: {
