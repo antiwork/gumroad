@@ -117,11 +117,11 @@ describe Radar::ValueListSyncService do
     end
 
     it "pushes recently blocked card fingerprints to Stripe Radar" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_abc123", nil)
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpabc123", nil)
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
         value_list: "rsl_123",
-        value: "fp_abc123"
+        value: "fpabc123"
       )
 
       service.sync_blocked_cards
@@ -129,7 +129,7 @@ describe Radar::ValueListSyncService do
 
     it "skips fingerprints blocked more than 25 hours ago" do
       travel_to 2.days.ago do
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_old", nil)
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpold", nil)
       end
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
@@ -138,7 +138,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "ignores duplicate item errors" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fp_dup", nil)
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpdup", nil)
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
