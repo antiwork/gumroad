@@ -505,6 +505,21 @@ describe Api::Internal::Admin::ProductsController do
       expect(payload["rate"]).to eq((1.0 / 6).round(4))
     end
 
+    it "excludes bundle sub-purchases from both successful_count and chargedback_count" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      3.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      bundle_sub = create(:purchase, link: product, seller:, created_at: 8.days.ago, price_cents: 0)
+      bundle_sub.update!(is_bundle_product_purchase: true)
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["recent_chargeback_rate"]
+      expect(payload["successful_count"]).to eq(3)
+      expect(payload["chargedback_count"]).to eq(0)
+      expect(payload["rate"]).to be_nil.or eq(0.0)
+    end
+
     it "returns a recent_chargeback_rate with nil rate when there are no recent successful purchases" do
       product = create(:product, user: seller)
 

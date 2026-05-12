@@ -152,13 +152,15 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
 
     def recent_chargeback_rate(product)
       window = RECENT_CHARGEBACK_WINDOW_DAYS.days.ago
-      successful_count = Purchase.successful.where(link_id: product.id).where("purchases.created_at >= ?", window).count
+      base = Purchase.not_is_bundle_product_purchase
+        .where(link_id: product.id)
+        .where("purchases.created_at >= ?", window)
+
+      successful_count = base.successful.count
       payload = { window_days: RECENT_CHARGEBACK_WINDOW_DAYS, successful_count:, chargedback_count: 0, rate: nil }
       return payload if successful_count.zero?
 
-      chargedback_count = Purchase.chargedback.not_chargeback_reversed
-        .where(link_id: product.id)
-        .where("purchases.created_at >= ?", window).count
+      chargedback_count = base.chargedback.not_chargeback_reversed.count
       payload.merge(chargedback_count:, rate: (chargedback_count.to_f / successful_count).round(4))
     end
 
