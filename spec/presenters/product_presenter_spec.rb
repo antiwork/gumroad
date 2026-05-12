@@ -473,6 +473,7 @@ describe ProductPresenter do
             fine_print: nil,
           },
           cancellation_discounts_enabled: false,
+          price_checker_enabled: false,
           ai_generated: false,
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
@@ -709,6 +710,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: true,
+            price_checker_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
@@ -923,6 +925,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: false,
+            price_checker_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
