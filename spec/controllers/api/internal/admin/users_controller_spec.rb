@@ -743,6 +743,235 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :affiliates, method: :get, extra_params: { direction: "granted" }
   end
 
+  describe "GET compliance_info" do
+    include_examples "admin api authorization required", :get, :compliance_info
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :compliance_info
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :compliance_info, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns null compliance_info and an empty info_requests list when the user has never submitted KYC" do
+      user = create(:user)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(
+        "success" => true,
+        "user_id" => user.external_id,
+        "compliance_info" => nil,
+        "info_requests" => []
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        get :compliance_info, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "returns submitted KYC fields for an individual seller with the tax ID masked to last four" do
+      user = create(:user)
+      info = create(:user_compliance_info,
+                    user:,
+                    first_name: "Alice",
+                    last_name: "Investigator",
+                    dba: "Alice & Co",
+                    birthday: Date.new(1985, 6, 7),
+                    individual_tax_id: "123456789",
+                    nationality: "US",
+                    phone: "5551234567",
+                    job_title: "Owner",
+                    stripe_identity_document_id: "idoc_individual")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      payload = response.parsed_body["compliance_info"]
+      expect(payload).to include(
+        "id" => info.external_id,
+        "is_business" => false,
+        "first_name" => "Alice",
+        "last_name" => "Investigator",
+        "legal_name" => "Alice Investigator",
+        "dba" => "Alice & Co",
+        "birthday" => "1985-06-07",
+        "nationality" => "US",
+        "phone" => "5551234567",
+        "job_title" => "Owner",
+        "business_name" => nil,
+        "business_type" => nil,
+        "business_phone" => nil,
+        "business_vat_id_number" => nil,
+        "business_address" => nil
+      )
+      expect(payload["address"]).to eq(
+        "street_address" => "address_full_match",
+        "city" => "San Francisco",
+        "state" => "California",
+        "state_code" => "CA",
+        "zip_code" => "94107",
+        "country" => "United States",
+        "country_code" => "US"
+      )
+      expect(payload["tax_ids"]).to eq(
+        "individual_last_four" => "6789",
+        "business_last_four" => nil
+      )
+      expect(payload["identity_documents"]).to eq(
+        "stripe_identity_document_id" => "idoc_individual",
+        "stripe_company_document_id" => nil,
+        "stripe_additional_document_id" => nil
+      )
+      expect(payload["created_at"]).to eq(info.created_at.as_json)
+      expect(payload["updated_at"]).to eq(info.updated_at.as_json)
+    end
+
+    it "returns business KYC fields with the business address and business tax ID last four (digits only)" do
+      user = create(:user)
+      info = create(:user_compliance_info_business,
+                    user:,
+                    business_name: "Acme LLC",
+                    business_type: UserComplianceInfo::BusinessTypes::LLC,
+                    business_tax_id: "12-3456789",
+                    business_phone: "5550009999",
+                    business_vat_id_number: "GB123456789",
+                    stripe_company_document_id: "idoc_company",
+                    stripe_additional_document_id: "idoc_additional")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      payload = response.parsed_body["compliance_info"]
+      expect(payload).to include(
+        "id" => info.external_id,
+        "is_business" => true,
+        "legal_name" => "Acme LLC",
+        "business_name" => "Acme LLC",
+        "business_type" => UserComplianceInfo::BusinessTypes::LLC,
+        "business_phone" => "5550009999",
+        "business_vat_id_number" => "GB123456789"
+      )
+      expect(payload["business_address"]).to eq(
+        "street_address" => "address_full_match",
+        "city" => "Burbank",
+        "state" => "California",
+        "state_code" => "CA",
+        "zip_code" => "91506",
+        "country" => "United States",
+        "country_code" => "US"
+      )
+      expect(payload["tax_ids"]).to eq(
+        "individual_last_four" => "0000",
+        "business_last_four" => "6789"
+      )
+      expect(payload["identity_documents"]).to include(
+        "stripe_company_document_id" => "idoc_company",
+        "stripe_additional_document_id" => "idoc_additional"
+      )
+    end
+
+    it "returns the latest alive compliance info when older records are soft-deleted" do
+      user = create(:user)
+      old_info = create(:user_compliance_info, user:, first_name: "Old")
+      old_info.mark_deleted!
+      newest = create(:user_compliance_info, user:, first_name: "Newest")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["compliance_info"]["id"]).to eq(newest.external_id)
+      expect(response.parsed_body["compliance_info"]["first_name"]).to eq("Newest")
+    end
+
+    it "omits last_four for tax IDs that were never set" do
+      user = create(:user)
+      create(:user_compliance_info_empty, user:)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["compliance_info"]["tax_ids"]).to eq(
+        "individual_last_four" => nil,
+        "business_last_four" => nil
+      )
+    end
+
+    it "lists only requested info_requests and excludes provided ones, marking overdue rows" do
+      user = create(:user)
+      overdue = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested", due_at: 3.days.ago, created_at: 5.days.ago)
+      upcoming = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::DATE_OF_BIRTH, state: "requested", due_at: 5.days.from_now, created_at: 2.days.ago)
+      undated = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Business::TAX_ID, state: "requested", due_at: nil, created_at: 1.day.ago)
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, state: "provided", provided_at: 1.day.ago)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      rows = response.parsed_body["info_requests"]
+      expect(rows.map { _1["id"] }).to eq([overdue, upcoming, undated].map(&:external_id))
+      expect(rows.first).to include(
+        "field_needed" => UserComplianceInfoFields::Individual::TAX_ID,
+        "state" => "requested",
+        "due_at" => overdue.due_at.as_json,
+        "overdue" => true,
+        "created_at" => overdue.created_at.as_json,
+        "last_email_sent_at" => nil
+      )
+      expect(rows[1]).to include(
+        "field_needed" => UserComplianceInfoFields::Individual::DATE_OF_BIRTH,
+        "overdue" => false
+      )
+      expect(rows[2]).to include(
+        "field_needed" => UserComplianceInfoFields::Business::TAX_ID,
+        "due_at" => nil,
+        "overdue" => false
+      )
+    end
+
+    it "exposes the most recent email reminder timestamp when present" do
+      user = create(:user)
+      request_record = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested", due_at: 1.day.from_now)
+      reminder_time = 2.hours.ago.change(usec: 0)
+      request_record.record_email_sent!(reminder_time)
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      row = response.parsed_body["info_requests"].first
+      expect(row["last_email_sent_at"]).to eq(reminder_time.as_json)
+    end
+
+    it "scopes info_requests to the requested user" do
+      user = create(:user)
+      other_user = create(:user)
+      mine = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested")
+      create(:user_compliance_info_request, user: other_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID, state: "requested")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["info_requests"].map { _1["id"] }).to eq([mine.external_id])
+    end
+
+    include_examples "supports user lookup by user_id", :compliance_info, method: :get
+  end
+
   describe "GET suspension" do
     include_examples "admin api authorization required", :get, :suspension
 

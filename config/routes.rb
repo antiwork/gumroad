@@ -328,6 +328,7 @@ Rails.application.routes.draw do
             collection do
               get :info
               get :affiliates
+              get :compliance_info
               get :suspension
               post :reset_password
               post :update_email

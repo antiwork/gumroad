@@ -32,6 +32,16 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                      })
   end
 
+  def compliance_info
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       compliance_info: serialize_compliance_info(user.alive_user_compliance_info),
+                                                       info_requests: open_compliance_info_requests(user).map { serialize_compliance_info_request(_1) },
+                                                     })
+  end
+
   def suspension
     user = find_internal_admin_user_for_read_or_render
     return unless user
@@ -292,6 +302,95 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         name: product&.name,
         basis_points: product_affiliate.affiliate_basis_points || parent_basis_points,
         destination_url: product_affiliate.destination_url,
+      }
+    end
+
+    def serialize_compliance_info(info)
+      return nil if info.nil?
+
+      {
+        id: info.external_id,
+        is_business: info.is_business?,
+        legal_name: info.legal_entity_name.presence,
+        first_name: info.first_name,
+        last_name: info.last_name,
+        dba: info.dba,
+        birthday: info.birthday&.iso8601,
+        nationality: info.nationality,
+        phone: info.phone,
+        job_title: info.job_title,
+        address: serialize_compliance_address(
+          street_address: info.street_address,
+          city: info.city,
+          state: info.state,
+          state_code: info.state_code,
+          zip_code: info.zip_code,
+          country: info.country,
+          country_code: info.country_code
+        ),
+        business_name: info.business_name,
+        business_type: info.business_type,
+        business_phone: info.business_phone,
+        business_vat_id_number: info.business_vat_id_number,
+        business_address: info.is_business? ? serialize_compliance_address(
+          street_address: info.business_street_address,
+          city: info.business_city,
+          state: info.business_state,
+          state_code: info.business_state_code,
+          zip_code: info.business_zip_code,
+          country: info.business_country,
+          country_code: info.business_country_code
+        ) : nil,
+        tax_ids: {
+          individual_last_four: tax_id_last_four(info.individual_tax_id),
+          business_last_four: tax_id_last_four(info.business_tax_id, digits_only: true),
+        },
+        identity_documents: {
+          stripe_identity_document_id: info.stripe_identity_document_id,
+          stripe_company_document_id: info.stripe_company_document_id,
+          stripe_additional_document_id: info.stripe_additional_document_id,
+        },
+        created_at: info.created_at.as_json,
+        updated_at: info.updated_at.as_json,
+      }
+    end
+
+    def serialize_compliance_address(street_address:, city:, state:, state_code:, zip_code:, country:, country_code:)
+      {
+        street_address:,
+        city:,
+        state:,
+        state_code:,
+        zip_code:,
+        country:,
+        country_code:,
+      }
+    end
+
+    def tax_id_last_four(encrypted_tax_id, digits_only: false)
+      return nil if encrypted_tax_id.blank?
+
+      decrypted = encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s
+      decrypted = decrypted.gsub(/\D/, "") if digits_only
+      decrypted[-4..]
+    end
+
+    def open_compliance_info_requests(user)
+      user.user_compliance_info_requests
+          .requested
+          .order(Arel.sql("ISNULL(due_at), due_at ASC, created_at ASC"))
+    end
+
+    def serialize_compliance_info_request(request)
+      due_at = request.due_at
+      {
+        id: request.external_id,
+        field_needed: request.field_needed,
+        state: request.state,
+        due_at: due_at&.as_json,
+        overdue: due_at.present? && due_at < Time.current,
+        created_at: request.created_at.as_json,
+        last_email_sent_at: request.last_email_sent_at&.as_json,
       }
     end
 
