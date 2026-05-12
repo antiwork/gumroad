@@ -89,6 +89,8 @@ describe Admin::PurchasePresenter do
             buyer_blocked: purchase.buyer_blocked?,
             is_deleted_by_buyer: purchase.is_deleted_by_buyer?,
             comments_count: purchase.comments.count,
+            early_fraud_warning: nil,
+            disputes: [],
           )
         end
       end

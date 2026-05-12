@@ -107,21 +107,22 @@ export default function Purchases() {
                     <a href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <ArrowUpRightSquare className="size-5" />
                     </a>{" "}
-                    <PurchaseStates purchase={purchase} />
+                    <PurchaseStates purchase={purchase} />{" "}
                     {purchase.early_fraud_warning ? (
                       <Pill size="small" color="warning">
                         EFW: {purchase.early_fraud_warning.fraud_type.replaceAll("_", " ")} (risk:{" "}
                         {purchase.early_fraud_warning.charge_risk_level})
                       </Pill>
-                    ) : null}
+                    ) : null}{" "}
                     {purchase.disputes.map((dispute, i) => (
-                      <Pill
-                        key={i}
-                        size="small"
-                        color={dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"}
-                      >
-                        Dispute: {dispute.state}
-                      </Pill>
+                      <span key={i}>
+                        <Pill
+                          size="small"
+                          color={dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"}
+                        >
+                          Dispute: {dispute.state}
+                        </Pill>{" "}
+                      </span>
                     ))}
                     <div className="text-sm">
                       <InlineList>
