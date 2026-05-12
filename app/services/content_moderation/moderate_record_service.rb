@@ -17,6 +17,7 @@ class ContentModeration::ModerateRecordService
 
   def check
     return CheckResult.new(passed: true, reasons: []) unless moderation_enabled?
+    return CheckResult.new(passed: true, reasons: []) if user&.verified?
 
     content = extract_content
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?

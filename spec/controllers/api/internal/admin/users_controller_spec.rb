@@ -743,6 +743,228 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :affiliates, method: :get, extra_params: { direction: "granted" }
   end
 
+  describe "GET comments" do
+    include_examples "admin api authorization required", :get, :comments
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    def comment_ids
+      response.parsed_body["comments"].map { _1["id"] }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :comments
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :comments, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns an empty list with cursor pagination metadata" do
+      user = create(:user)
+
+      get :comments, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "comments" => [],
+        "pagination" => { "next" => nil, "limit" => 20 }
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :comments, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "lists comments for the user ordered by created_at and id descending" do
+      user = create(:user)
+      timestamp = 1.hour.ago.change(usec: 0)
+      older = create(:comment, commentable: user, author: admin_user, author_name: "Older Admin", comment_type: Comment::COMMENT_TYPE_NOTE, content: "Older note", created_at: 2.hours.ago)
+      first_same_time = create(:comment, commentable: user, author: admin_user, author_name: "First Admin", comment_type: Comment::COMMENT_TYPE_NOTE, content: "First note", created_at: timestamp)
+      second_same_time = create(:comment, commentable: user, author: admin_user, author_name: "Second Admin", comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE, content: "Second note", created_at: timestamp)
+
+      get :comments, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([second_same_time.external_id, first_same_time.external_id, older.external_id])
+      expect(response.parsed_body["comments"].first).to include(
+        "id" => second_same_time.external_id,
+        "author_name" => "Second Admin",
+        "content" => "Second note",
+        "comment_type" => Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+        "created_at" => second_same_time.created_at.iso8601,
+        "deleted_at" => nil,
+        "alive" => true
+      )
+    end
+
+    it "falls back to the author name and then System when the snapshot is blank" do
+      user = create(:user)
+      author = create(:admin_user, name: "Riley Admin")
+      snapshot = create(:comment, commentable: user, author:, author_name: "Snapshot Name", comment_type: Comment::COMMENT_TYPE_NOTE)
+      author_fallback = create(:comment, commentable: user, author:, author_name: nil, comment_type: Comment::COMMENT_TYPE_NOTE)
+      system_fallback = create(:comment, commentable: user, author:, author_name: "Temporary", comment_type: Comment::COMMENT_TYPE_NOTE)
+      system_fallback.update_columns(author_id: nil, author_name: nil)
+
+      get :comments, params: { user_id: user.external_id }
+
+      payloads = response.parsed_body["comments"].index_by { _1["id"] }
+      expect(payloads[snapshot.external_id]["author_name"]).to eq("Snapshot Name")
+      expect(payloads[author_fallback.external_id]["author_name"]).to eq("Riley Admin")
+      expect(payloads[system_fallback.external_id]["author_name"]).to eq("System")
+    end
+
+    it "filters to a single comment_type" do
+      user = create(:user)
+      note = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "note" }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([note.external_id])
+    end
+
+    it "filters to multiple comment types from a comma-separated list" do
+      user = create(:user)
+      note = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, created_at: 2.hours.ago)
+      suspension_note = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE, created_at: 1.hour.ago)
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_FLAGGED, created_at: 30.minutes.ago)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "note,suspension_note" }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([suspension_note.external_id, note.external_id])
+    end
+
+    it "rejects an unknown comment_type value" do
+      user = create(:user)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "bogus" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "comment_type contains invalid value: bogus" }.as_json)
+    end
+
+    it "rejects a comma-separated comment_type list with any invalid value" do
+      user = create(:user)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "note,bogus" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "comment_type contains invalid value: bogus" }.as_json)
+    end
+
+    it "rejects a comma-only comment_type value instead of silently returning all comments" do
+      user = create(:user)
+      create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+
+      get :comments, params: { user_id: user.external_id, comment_type: "," }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "comment_type contains invalid value: ," }.as_json)
+    end
+
+    it "includes soft-deleted comments with deletion state exposed" do
+      user = create(:user)
+      deleted_comment = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+      deleted_comment.mark_deleted!
+
+      get :comments, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      payload = response.parsed_body["comments"].first
+      expect(payload).to include(
+        "id" => deleted_comment.external_id,
+        "alive" => false,
+        "deleted_at" => deleted_comment.reload.deleted_at.iso8601
+      )
+    end
+
+    it "scopes results to the requested user and excludes comments on other records" do
+      user = create(:user)
+      matching = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+      create(:comment, commentable: create(:user), comment_type: Comment::COMMENT_TYPE_NOTE)
+      create(:comment, commentable: create(:purchase), comment_type: Comment::COMMENT_TYPE_NOTE)
+
+      get :comments, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([matching.external_id])
+    end
+
+    it "paginates comments with a cursor" do
+      user = create(:user)
+      newest = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, created_at: 1.hour.ago)
+      middle = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, created_at: 2.hours.ago)
+      oldest = create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, created_at: 3.hours.ago)
+
+      get :comments, params: { user_id: user.external_id, limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([newest.external_id, middle.external_id])
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+
+      get :comments, params: { user_id: user.external_id, limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(comment_ids).to eq([oldest.external_id])
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      user = create(:user)
+
+      get :comments, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    it "preloads authors instead of issuing one query per comment" do
+      user = create(:user)
+      3.times do |index|
+        author = create(:admin_user, name: "Admin #{index}")
+        create(:comment, commentable: user, author:, author_name: nil, comment_type: Comment::COMMENT_TYPE_NOTE)
+      end
+      select_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s.squish
+        next if payload[:name] == "SCHEMA"
+        next unless sql.start_with?("SELECT")
+        next if sql.include?("`admin_api_tokens`")
+        next if sql.include?("`oauth_access_tokens`")
+
+        select_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :comments, params: { user_id: user.external_id }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["comments"].length).to eq(3)
+      expect(select_queries.length).to be <= 4, "expected at most 4 SELECTs but got #{select_queries.length}:\n#{select_queries.join("\n")}"
+    end
+
+    include_examples "supports user lookup by user_id", :comments, method: :get
+  end
+
   describe "GET compliance_info" do
     include_examples "admin api authorization required", :get, :compliance_info
 
@@ -1642,7 +1864,12 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["success"]).to be(true)
       expect(response.parsed_body["user_id"]).to eq(user.external_id)
       comment_data = response.parsed_body["comment"]
-      expect(comment_data).to include("content" => "An admin note", "comment_type" => Comment::COMMENT_TYPE_NOTE)
+      expect(comment_data).to include(
+        "content" => "An admin note",
+        "comment_type" => Comment::COMMENT_TYPE_NOTE,
+        "deleted_at" => nil,
+        "alive" => true
+      )
       expect(comment_data["id"]).to be_present
       expect(user.comments.last.author_id).to eq(admin_user.id)
     end

@@ -10,6 +10,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     @valid_purchase_states ||= Purchase.state_machines[:purchase_state].states.map { _1.name.to_s }.freeze
   end
 
+  def self.valid_comment_types
+    @valid_comment_types ||= Comment.constants.grep(/^COMMENT_TYPE_/).map { Comment.const_get(_1) }.freeze
+  end
+
   def info
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user
@@ -43,6 +47,24 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     render json: internal_admin_user_success_payload(user, {
                                                        compliance_info: serialize_compliance_info(user.alive_user_compliance_info),
                                                        info_requests: open_compliance_info_requests(user).map { serialize_compliance_info_request(_1) },
+                                                     })
+  end
+
+  def comments
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    comment_types = parse_comment_types
+    return if comment_types.nil?
+
+    records, pagination = paginate_with_cursor(
+      comments_scope(user, comment_types),
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       comments: records.map { serialize_comment(_1) },
+                                                       pagination:,
                                                      })
   end
 
@@ -283,6 +305,12 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       scope.includes(product_affiliates: :product)
     end
 
+    def comments_scope(user, comment_types)
+      scope = user.comments.includes(:author)
+      scope = scope.where(comment_type: comment_types) if comment_types.any?
+      scope
+    end
+
     def sellers_by_id_for(affiliates, direction)
       return {} unless direction == "received"
 
@@ -475,6 +503,20 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       nil
     end
 
+    def parse_comment_types
+      raw = params[:comment_type].to_s
+      return [] if raw.blank?
+
+      values = raw.split(",").map(&:strip).reject(&:blank?)
+      invalid = values - self.class.valid_comment_types
+      if values.empty? || invalid.any?
+        render json: { success: false, message: "comment_type contains invalid value: #{invalid.first || raw}" }, status: :bad_request
+        return nil
+      end
+
+      values
+    end
+
     def purchases_scope(user, filters)
       scope = Purchase.where(purchaser_id: user.id)
       scope = scope.or(Purchase.where(email: user.email)) if user.email.present?
@@ -586,7 +628,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         author_name: comment.author_name.presence || comment.author&.name || "System",
         content: comment.content,
         comment_type: comment.comment_type,
-        created_at: comment.created_at.iso8601
+        created_at: comment.created_at.iso8601,
+        deleted_at: comment.deleted_at&.iso8601,
+        alive: comment.alive?
       }
     end
 
