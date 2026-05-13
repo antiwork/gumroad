@@ -15,6 +15,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
   describe "#show" do
     before do
       @purchase = create(:purchase)
+      allow(Radar::ChargeRiskLevelService).to receive(:fetch).and_return(nil)
     end
 
     it "redirects numeric ID to external_id" do
@@ -23,7 +24,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "returns successful response with Inertia page data" do
-      expect(Admin::PurchasePresenter).to receive(:new).with(@purchase).and_call_original
+      expect(Admin::PurchasePresenter).to receive(:new).with(@purchase, stripe_risk_level: nil).and_call_original
       get :show, params: { external_id: @purchase.external_id }
 
       expect(response).to be_successful

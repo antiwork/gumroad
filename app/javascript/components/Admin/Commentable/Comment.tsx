@@ -1,6 +1,5 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
-import ReactMarkdown from "react-markdown";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Row, RowContent } from "$app/components/ui/Rows";
@@ -41,7 +40,7 @@ const AdminCommentableComment = ({ comment }: { comment: CommentProps }) => (
             <DateTimeWithRelativeTooltip date={comment.updated_at} />
           </li>
         </ul>
-        <ReactMarkdown>{comment.content}</ReactMarkdown>
+        <p style={{ whiteSpace: "pre-wrap" }}>{comment.content}</p>
       </div>
     </RowContent>
   </Row>

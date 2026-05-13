@@ -3,8 +3,9 @@
 class Admin::PurchasePresenter
   attr_reader :purchase
 
-  def initialize(purchase)
+  def initialize(purchase, stripe_risk_level: nil)
     @purchase = purchase
+    @stripe_risk_level = stripe_risk_level
   end
 
   def list_props
@@ -35,6 +36,7 @@ class Admin::PurchasePresenter
         charge_risk_level: effective_early_fraud_warning.charge_risk_level,
       } : nil,
       disputes: effective_disputes.map { |d| { state: d.state } },
+      stripe_risk_level: @stripe_risk_level,
     }
   end
 

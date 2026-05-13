@@ -81,7 +81,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     )
 
     render json: internal_admin_user_success_payload(user, {
-                                                       purchases: records.map { serialize_purchase(_1) },
+                                                       purchases: serialize_purchases_with_risk_levels(records),
                                                        pagination:,
                                                      })
   end

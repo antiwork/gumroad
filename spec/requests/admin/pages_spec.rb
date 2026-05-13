@@ -8,6 +8,8 @@ describe "Admin Pages Scenario", type: :system, js: true do
 
   before do
     allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch).and_return(nil)
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
     login_as(admin)
   end
 

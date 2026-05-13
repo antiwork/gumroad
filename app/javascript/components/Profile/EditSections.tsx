@@ -452,6 +452,7 @@ const ProductsSectionView = ({ section }: { section: ProductsSection }) => {
     [JSON.stringify(section.shown_products), section.default_product_sort],
   );
   const selectedProductsCount = state.products.filter((product) => section.shown_products.includes(product.id)).length;
+  const totalProductsCount = state.products.length;
 
   return (
     <SectionLayout
@@ -460,7 +461,7 @@ const ProductsSectionView = ({ section }: { section: ProductsSection }) => {
         <EditorSubmenu
           key="0"
           heading="Products"
-          text={`${selectedProductsCount} ${selectedProductsCount === 1 ? "product" : "products"}`}
+          text={`${selectedProductsCount}/${totalProductsCount} ${totalProductsCount === 1 ? "product" : "products"}`}
         >
           <ProductsSettings section={section} />
         </EditorSubmenu>,

@@ -22,7 +22,7 @@ class Admin::Search::PurchasesController < Admin::BaseController
       query: params[:query]&.strip,
       product_title_query: params[:product_title_query]&.strip,
       **search_params,
-    ).includes(:early_fraud_warning, :disputes, charge: [:dispute])
+    ).includes(:early_fraud_warning, :disputes, :merchant_account, charge: [:dispute])
 
     pagination, purchases = pagy_countless(
       @purchases,
@@ -32,8 +32,9 @@ class Admin::Search::PurchasesController < Admin::BaseController
     )
 
     return redirect_to admin_purchase_path(purchases.first.external_id) if purchases.one? && pagination.page == 1
+    risk_levels = Radar::ChargeRiskLevelService.fetch_bulk(purchases)
     purchases = purchases.map do |purchase|
-      Admin::PurchasePresenter.new(purchase).list_props
+      Admin::PurchasePresenter.new(purchase, stripe_risk_level: risk_levels[purchase.id]).list_props
     end
 
     respond_to do |format|

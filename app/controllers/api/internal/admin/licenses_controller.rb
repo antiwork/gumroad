@@ -10,7 +10,7 @@ class Api::Internal::Admin::LicensesController < Api::Internal::Admin::BaseContr
     render json: {
       success: true,
       license: serialize_license(license),
-      purchase: license.purchase.present? ? serialize_purchase(license.purchase) : nil,
+      purchase: license.purchase.present? ? serialize_purchase(license.purchase, stripe_risk_level: Radar::ChargeRiskLevelService.fetch(license.purchase)) : nil,
       uses: license.uses
     }
   end

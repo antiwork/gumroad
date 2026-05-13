@@ -17,6 +17,7 @@ import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
+import { Pill } from "$app/components/ui/Pill";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
 import { type PurchaseStatesInfo, PurchaseStates } from "./States";
@@ -120,6 +121,7 @@ export type Purchase = PurchaseStatesInfo & {
   can_force_update: boolean;
   failed: boolean;
   stripe_fingerprint: string | null;
+  stripe_risk_level: string | null;
   is_free_trial_purchase: boolean;
   buyer_blocked: boolean;
   is_deleted_by_buyer: boolean;
@@ -325,6 +327,17 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
           <dt>IP Country</dt>
           <dd>{purchase.ip_country}</dd>
+        </>
+      ) : null}
+
+      {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
+        <>
+          <dt>Stripe Radar</dt>
+          <dd>
+            <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
+              {purchase.stripe_risk_level}
+            </Pill>
+          </dd>
         </>
       ) : null}
 

@@ -1197,7 +1197,10 @@ describe Api::Internal::Admin::UsersController do
   describe "GET purchases" do
     include_examples "admin api authorization required", :get, :purchases
 
-    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+    before do
+      stub_const("GUMROAD_ADMIN_ID", admin_user.id)
+      allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
+    end
 
     let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
 

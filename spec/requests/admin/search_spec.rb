@@ -6,6 +6,8 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
   let(:admin) { create(:admin_user) }
 
   before do
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch).and_return(nil)
+    allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
     sign_in admin
   end
 

@@ -204,6 +204,34 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     end
 
     describe "minimum payout threshold" do
+      def create_current_compliance_info_matching_form_params
+        create(
+          :user_compliance_info_empty,
+          user:,
+          first_name: params[:first_name],
+          last_name: params[:last_name],
+          street_address: params[:street_address],
+          city: params[:city],
+          state: params[:state],
+          zip_code: params[:zip_code],
+          country: "United States",
+          is_business: false,
+          individual_tax_id: params[:ssn_last_four],
+          birthday: Date.new(params[:dob_year].to_i, params[:dob_month].to_i, params[:dob_day].to_i),
+          phone: params[:phone],
+        )
+      end
+
+      def enqueue_identity_verification_email_if_compliance_info_is_submitted
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do
+          ContactingCreatorMailer.stripe_identity_verification_failed(user.id, "Identity verification failed").deliver_later(queue: "critical")
+        end
+      end
+
+      def payment_form_params
+        params.merge(country: "US", business_country: "US")
+      end
+
       it "updates the payout threshold for valid amounts" do
         expect do
           put :update, params: { payout_threshold_cents: 20_000 }
@@ -221,6 +249,45 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("Your payout threshold must be greater than the minimum payout amount")
         expect(user.reload.payout_threshold_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+      end
+
+      it "does not resubmit unchanged compliance info when only the payout threshold changed" do
+        create_current_compliance_info_matching_form_params
+        enqueue_identity_verification_email_if_compliance_info_is_submitted
+        initial_compliance_info_id = user.alive_user_compliance_info.id
+        initial_compliance_info_count = UserComplianceInfo.count
+
+        expect do
+          put :update, params: { user: payment_form_params, payout_threshold_cents: 20_000 }
+        end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_identity_verification_failed)
+
+        expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
+        expect(UserComplianceInfo.count).to eq(initial_compliance_info_count)
+        expect(user.reload.alive_user_compliance_info.id).to eq(initial_compliance_info_id)
+        expect(user.payout_threshold_cents.to_i).to eq(20_000)
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+      end
+
+      it "does not resubmit identical compliance info" do
+        create_current_compliance_info_matching_form_params
+        enqueue_identity_verification_email_if_compliance_info_is_submitted
+        initial_compliance_info_id = user.alive_user_compliance_info.id
+        initial_compliance_info_count = UserComplianceInfo.count
+
+        expect do
+          put :update, params: { user: payment_form_params }
+        end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_identity_verification_failed)
+
+        expect(StripeMerchantAccountManager).not_to have_received(:handle_new_user_compliance_info)
+        expect(UserComplianceInfo.count).to eq(initial_compliance_info_count)
+        expect(user.reload.alive_user_compliance_info.id).to eq(initial_compliance_info_id)
+        expect(request_1.reload.state).to eq("provided")
+        expect(request_2.reload.state).to eq("requested")
+        expect(request_3.reload.state).to eq("provided")
+        expect(request_4.reload.state).to eq("requested")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
       end
     end
 

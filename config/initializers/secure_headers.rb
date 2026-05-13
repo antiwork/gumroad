@@ -189,9 +189,6 @@ SecureHeaders::Configuration.default do |config|
   # Required by AnyCable
   config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}"
 
-  # Required for realtime events in Helper widget
-  config.csp[:connect_src] << "wss://#{ENV["HELPER_SUPABASE_DOMAIN"]}" if ENV["HELPER_SUPABASE_DOMAIN"].present?
-
   if Rails.application.config.asset_host.present?
     config.csp[:connect_src] << Rails.application.config.asset_host
     config.csp[:script_src] << Rails.application.config.asset_host
@@ -214,10 +211,7 @@ SecureHeaders::Configuration.default do |config|
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
     cable_port = PROTOCOL == "https" ? 8081 : 8080
     config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable
-    config.csp[:connect_src] << "helperai.dev" # Required by Helper widget
-    config.csp[:connect_src] << "wss://supabase.helperai.dev" # Required by Helper widget
     config.csp[:connect_src] << "http:"
-    config.csp[:script_src] << "http:" # Required by Helper widget
-    config.csp[:script_src] << "helperai.dev" # Required by Helper widget
+    config.csp[:script_src] << "http:"
   end
 end

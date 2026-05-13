@@ -15,8 +15,6 @@
     "@ai-sdk/react": "^2.0.8",
     "@anycable/web": "^1.1.0",
     "@boxicons/react": "^1.0.2",
-    "@helperai/client": "^0.4.5",
-    "@helperai/react": "^0.9.5",
     "@inertiajs/react": "^2.3.13",
     "@paypal/paypal-js": "^8.0.0",
     "@radix-ui/react-dialog": "^1.1.15",

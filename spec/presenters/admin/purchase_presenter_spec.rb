@@ -91,6 +91,7 @@ describe Admin::PurchasePresenter do
             comments_count: purchase.comments.count,
             early_fraud_warning: nil,
             disputes: [],
+            stripe_risk_level: nil,
           )
         end
       end

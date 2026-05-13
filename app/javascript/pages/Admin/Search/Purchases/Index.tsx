@@ -36,6 +36,7 @@ type Purchase = {
   error_code: string | null;
   last_chargebacked_purchase: string | null;
   early_fraud_warning: { fraud_type: string; charge_risk_level: string } | null;
+  stripe_risk_level: string | null;
   disputes: { state: string }[];
 };
 
@@ -108,8 +109,15 @@ export default function Purchases() {
                       <ArrowUpRightSquare className="size-5" />
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
-                    {(purchase.early_fraud_warning || purchase.disputes.length > 0) && (
+                    {((purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal") ||
+                      purchase.early_fraud_warning ||
+                      purchase.disputes.length > 0) && (
                       <span className="inline-flex flex-wrap gap-1">
+                        {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
+                          <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
+                            Radar: {purchase.stripe_risk_level}
+                          </Pill>
+                        ) : null}
                         {purchase.early_fraud_warning ? (
                           <Pill size="small" color="warning">
                             EFW: {purchase.early_fraud_warning.fraud_type.replaceAll("_", " ")} (risk:{" "}
@@ -120,7 +128,9 @@ export default function Purchases() {
                           <Pill
                             key={i}
                             size="small"
-                            color={dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"}
+                            color={
+                              dispute.state === "won" ? "success" : dispute.state === "lost" ? "danger" : "warning"
+                            }
                           >
                             Dispute: {dispute.state}
                           </Pill>

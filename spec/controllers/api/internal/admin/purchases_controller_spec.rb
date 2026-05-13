@@ -328,6 +328,7 @@ describe Api::Internal::Admin::PurchasesController do
       create(:refund, purchase:, amount_cents: 250)
 
       expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
+      allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
 
       get :search, params: { query: purchase.email }
 
