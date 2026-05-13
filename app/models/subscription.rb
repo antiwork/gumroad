@@ -275,7 +275,7 @@ class Subscription < ApplicationRecord
     elsif applies_next && original_purchase.offer_code.present?
       purchase.offer_code = original_purchase.offer_code
     elsif (auto = auto_renewal_offer_code)
-      pre_discount = original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+      pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
       purchase.offer_code = auto.offer_code
       purchase.build_purchase_offer_code_discount(
         offer_code: auto.offer_code,
@@ -955,11 +955,18 @@ class Subscription < ApplicationRecord
         return nil
       end
 
-      candidates = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
+      product_codes = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
+      universal_codes = link.user.offer_codes.alive
+        .universal_with_matching_currency(link.price_currency_type)
+        .where(existing_customers_only: true)
+        .includes(:ownership_products)
+      candidates = (product_codes.to_a + universal_codes.to_a).uniq
       return nil if candidates.empty?
 
       candidates
         .filter_map do |offer_code|
+          next if offer_code.inactive?
+
           resolved = offer_code.evaluate_for_buyer(user)
           next unless resolved && resolved[:type] == "percent" && resolved[:percents].to_i.positive?
           [offer_code, resolved[:percents].to_i]

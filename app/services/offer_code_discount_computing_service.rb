@@ -151,7 +151,10 @@ class OfferCodeDiscountComputingService
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
-        products_data[cross_sell.product.unique_permalink] = { discount: offer_code.discount }
+        resolved_discount = offer_code.evaluate_for_buyer(buyer)
+        next unless resolved_discount
+
+        products_data[cross_sell.product.unique_permalink] = { discount: resolved_discount }
       end
     end
 end

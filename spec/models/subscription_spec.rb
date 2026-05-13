@@ -3759,6 +3759,42 @@ describe Subscription, :vcr do
       expect(auto.resolved_percent).to eq(50)
     end
 
+    it "discovers universal existing-customer renewal discounts" do
+      tiered_code.mark_deleted!
+      universal_code = create(:universal_offer_code,
+                              user: seller,
+                              code: "universalrenewal",
+                              ownership_products: [product],
+                              existing_customers_only: true,
+                              amount_cents: nil,
+                              amount_percentage: 1,
+                              currency_type: nil)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(universal_code)
+      expect(auto.resolved_percent).to eq(1)
+    end
+
+    it "ignores inactive renewal discounts" do
+      create(:offer_code,
+             user: seller,
+             code: "expiredrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             valid_at: 2.days.ago,
+             expires_at: 1.day.ago)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
     it "returns nil when the original purchase already carries a still-applicable discount" do
       subscription.original_purchase.create_purchase_offer_code_discount!(
         offer_code: tiered_code,
@@ -3777,6 +3813,15 @@ describe Subscription, :vcr do
       expect(renewal_purchase.purchase_offer_code_discount).to be_present
       expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
       expect(renewal_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+    end
+
+    it "records the auto-discovered discount's pre-discount price per unit" do
+      pre_discount_price = subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount
+      subscription.original_purchase.update!(quantity: 3, price_cents: pre_discount_price * 3)
+
+      renewal_purchase = subscription.build_purchase
+
+      expect(renewal_purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents).to eq(pre_discount_price)
     end
   end
 

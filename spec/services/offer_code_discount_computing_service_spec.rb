@@ -404,6 +404,68 @@ describe OfferCodeDiscountComputingService do
         expect(result[:error_code]).to be_nil
       end
     end
+
+    context "existing-customer-only cross-sell offer code" do
+      let(:shared_code_name) { "EXISTINGCROSS" }
+      let(:buyer) { create(:user) }
+      let(:owned_product) { create(:product, user: seller) }
+      let!(:offer_for_product) do
+        create(
+          :offer_code,
+          user: seller,
+          code: shared_code_name,
+          products: [product],
+          amount_percentage: 25,
+          amount_cents: nil,
+          currency_type: "usd"
+        )
+      end
+
+      it "uses the buyer-resolved tier discount for applicable cross-sells" do
+        create(:purchase, purchaser: buyer, link: owned_product, seller:, price_cents: owned_product.price_cents, created_at: 13.months.ago)
+        create(
+          :offer_code,
+          user: seller,
+          code: shared_code_name,
+          products: [cross_sell_product1],
+          ownership_products: [owned_product],
+          existing_customers_only: true,
+          amount_cents: nil,
+          amount_percentage: 0,
+          currency_type: nil,
+          ownership_duration_tiers: [
+            { "months" => 0, "amount_percentage" => 0 },
+            { "months" => 12, "amount_percentage" => 50 },
+          ]
+        )
+
+        result = OfferCodeDiscountComputingService.new(shared_code_name, products_data, buyer:).process
+
+        expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 25)
+        expect(result[:products_data][cross_sell_product1.unique_permalink][:discount]).to include(type: "percent", percents: 50)
+        expect(result[:error_code]).to be_nil
+      end
+
+      it "skips cross-sell discounts when the buyer does not qualify" do
+        create(
+          :offer_code,
+          user: seller,
+          code: shared_code_name,
+          products: [cross_sell_product1],
+          ownership_products: [owned_product],
+          existing_customers_only: true,
+          amount_cents: nil,
+          amount_percentage: 25,
+          currency_type: nil
+        )
+
+        result = OfferCodeDiscountComputingService.new(shared_code_name, products_data, buyer:).process
+
+        expect(result[:products_data]).to include(product.unique_permalink)
+        expect(result[:products_data]).not_to include(cross_sell_product1.unique_permalink)
+        expect(result[:error_code]).to be_nil
+      end
+    end
   end
 
   describe "existing-customer-only offer codes" do
