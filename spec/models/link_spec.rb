@@ -3855,6 +3855,22 @@ describe Link, :vcr do
       end
     end
 
+    context "when description contains an iframely.net iframe" do
+      let(:product) { create(:product, description: "<iframe src=\"https://iframely.net/api/iframe?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DzumvXpa7kGY&key=31708e31\" allowfullscreen></iframe>") }
+
+      it "keeps the iframe" do
+        expect(product.html_safe_description).to include("iframely.net/api/iframe")
+      end
+    end
+
+    context "when description contains an iframe from an untrusted host" do
+      let(:product) { create(:product, description: "before<iframe src=\"https://evil.example.com/embed\"></iframe>after") }
+
+      it "removes the iframe" do
+        expect(product.html_safe_description).to eq("beforeafter")
+      end
+    end
+
     context "when description contains a script from an untrusted source" do
       let(:product) { create(:product, description: "some text<script src='https://untrusted.example.com/script.js'></script>evil script") }
 

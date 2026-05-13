@@ -88,6 +88,7 @@ SecureHeaders::Configuration.default do |config|
 
       # oembeds - rich text editor
       "iframe.ly",
+      "iframely.net",
 
       # helper widget
       "help.gumroad.com",

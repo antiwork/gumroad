@@ -1396,7 +1396,8 @@ class Link < ApplicationRecord
         if %w[strong b em u s h1 h2 h3 h4 h5 h6 pre code ul ol li hr blockquote p a figure figcaption img div span iframe script br upsell-card public-file-embed review-card].exclude?(node.name) && !node.text?
           node.remove
         elsif node.name == "iframe"
-          if node["src"].present? && (URI.parse(node["src"]) rescue nil)&.host == "cdn.iframe.ly"
+          iframe_host = (URI.parse(node["src"]) rescue nil)&.host if node["src"].present?
+          if %w[cdn.iframe.ly iframely.net].include?(iframe_host)
             node.attributes.each do |attr|
               node.remove_attribute(attr.first) unless %w[src frameborder allowfullscreen scrolling allow style].include?(attr.first)
             end
