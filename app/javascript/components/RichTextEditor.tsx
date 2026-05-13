@@ -277,8 +277,13 @@ export const useRichTextEditor = ({
     uploadImages({ view, files: images, imageSettings });
   };
 
+  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
+  const dedupedExtensions = allExtensions.filter(
+    (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
+  );
+
   const editor = useEditor({
-    ...baseEditorOptions([...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard]),
+    ...baseEditorOptions(dedupedExtensions),
     immediatelyRender: false,
     editable,
     editorProps: {
