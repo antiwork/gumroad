@@ -9,6 +9,7 @@ import { request } from "$app/utils/request";
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { CliIcon } from "$app/components/icons/getting-started/CliIcon";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
 import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
@@ -17,7 +18,6 @@ import { FirstProductIcon } from "$app/components/icons/getting-started/FirstPro
 import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
 import { GettingStartedIconProps } from "$app/components/icons/getting-started/GettingStartedIconProps";
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
-import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
@@ -55,7 +55,7 @@ export type DashboardPageProps = {
     first_sale?: boolean;
     first_payout?: boolean;
     first_email?: boolean;
-    purchased_small_bets?: boolean;
+    used_cli?: boolean;
   };
   getting_started_dismissed: boolean;
   sales: ProductRow[];
@@ -132,11 +132,11 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
     description: "Send out your first email blast.",
   },
   {
-    name: "Smart move",
-    getCompleted: (stats) => !!stats.purchased_small_bets,
-    link: Routes.small_bets_url(),
-    IconComponent: SmallBetsIcon,
-    description: "Sign up for Small Bets.",
+    name: "Command line",
+    getCompleted: (stats) => !!stats.used_cli,
+    link: "https://github.com/antiwork/gumroad-cli",
+    IconComponent: CliIcon,
+    description: "Use Gumroad via the command line interface.",
   },
 ];
 

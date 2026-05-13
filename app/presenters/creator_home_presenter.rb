@@ -29,7 +29,7 @@ class CreatorHomePresenter
         "first_sale" => has_sale,
         "first_payout" => seller.has_payout_information?,
         "first_email" => seller.installments.not_workflow_installment.send_emails.exists?,
-        "purchased_small_bets" => seller.purchased_small_bets?,
+        "used_cli" => seller.has_used_cli?,
       }
     end
 

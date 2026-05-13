@@ -153,9 +153,7 @@ describe DashboardController, type: :controller, inertia: true do
         create(:payment_completed, user: seller)
         create(:installment, seller:, send_emails: true)
 
-        small_bets_product = create(:product)
-        create(:purchase, purchaser: seller, link: small_bets_product)
-        stub_const("ENV", ENV.to_hash.merge("SMALL_BETS_PRODUCT_ID" => small_bets_product.id))
+        seller.update!(has_used_cli: true)
       end
 
       it "doesn't render `Getting started` text"  do

@@ -50,7 +50,7 @@ describe CreatorHomePresenter do
           "first_payout" => true,
           "first_product" => false,
           "first_sale" => false,
-          "purchased_small_bets" => false,
+          "used_cli" => false,
         }
       )
     end
@@ -80,7 +80,7 @@ describe CreatorHomePresenter do
           "first_payout" => true,
           "first_product" => true,
           "first_sale" => true,
-          "purchased_small_bets" => false,
+          "used_cli" => false,
         }
       )
     end
