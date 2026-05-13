@@ -28,12 +28,8 @@ export const CliIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
         stroke={strokeColor}
         strokeWidth={strokeWidthValue}
       />
-      <rect
-        x="45"
-        y="65"
-        width="280"
-        height="50"
-        rx="20"
+      <path
+        d="M45 85 A20 20 0 0 1 65 65 H305 A20 20 0 0 1 325 85 V115 H45 Z"
         fill={mainFillColor}
         stroke={strokeColor}
         strokeWidth={strokeWidthValue}
