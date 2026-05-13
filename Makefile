@@ -135,16 +135,16 @@ build_staging:
 		gosu app bash -c "docker/web/compile_assets.sh && $(call remove_spec_folder)"
 	$(DOCKER_CMD) ps -lq --filter='name=$(COMPOSE_PROJECT_NAME)_staging-assets' --filter='label=assets_compiled=true' --filter='exited=0' | xargs -I{} $(DOCKER_CMD) commit {} $(NEW_WEB_REPO):staging-$(NEW_WEB_TAG)
 ifeq ($(PUSH_ASSETS),true)
-	$(DOCKER_CMD) run -d \
-		--entrypoint="bash" \
-		--volume /app \
-		$(NEW_WEB_REPO):staging-$(NEW_WEB_TAG) | xargs -I{} docker run \
-			-e AWS_ACCESS_KEY_ID=$$GUM_AWS_ACCESS_KEY_ID \
-			-e AWS_SECRET_ACCESS_KEY=$$GUM_AWS_SECRET_ACCESS_KEY \
-			-e ASSETS_S3_BUCKET=gumroad-staging-assets \
-			--volumes-from {} \
-			$(AWS_CLI_DOCKER_IMAGE) \
-			sh /app/docker/web/push_assets_to_s3.sh
+	set -e; \
+	container_id=$$($(DOCKER_CMD) run -d --entrypoint="bash" --volume /app $(NEW_WEB_REPO):staging-$(NEW_WEB_TAG)); \
+	trap "$(DOCKER_CMD) rm -f $$container_id >/dev/null 2>&1 || true" EXIT; \
+	$(DOCKER_CMD) run \
+		-e AWS_ACCESS_KEY_ID=$$GUM_AWS_ACCESS_KEY_ID \
+		-e AWS_SECRET_ACCESS_KEY=$$GUM_AWS_SECRET_ACCESS_KEY \
+		-e ASSETS_S3_BUCKET=gumroad-staging-assets \
+		--volumes-from $$container_id \
+		$(AWS_CLI_DOCKER_IMAGE) \
+		sh /app/docker/web/push_assets_to_s3.sh
 endif
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml down
@@ -175,16 +175,16 @@ build_production:
 		gosu app bash -c "docker/web/compile_assets.sh && $(call remove_spec_folder)"
 	$(DOCKER_CMD) ps -lq --filter='name=$(COMPOSE_PROJECT_NAME)_production-assets' --filter='label=assets_compiled=true' --filter='exited=0' | xargs -I{} $(DOCKER_CMD) commit {} $(NEW_WEB_REPO):production-$(NEW_WEB_TAG)
 ifeq ($(PUSH_ASSETS),true)
-	$(DOCKER_CMD) run -d \
-		--entrypoint="bash" \
-		--volume /app \
-		$(NEW_WEB_REPO):production-$(NEW_WEB_TAG) | xargs -I{} docker run \
-			-e AWS_ACCESS_KEY_ID=$$GUM_AWS_ACCESS_KEY_ID \
-			-e AWS_SECRET_ACCESS_KEY=$$GUM_AWS_SECRET_ACCESS_KEY \
-			-e ASSETS_S3_BUCKET=gumroad-production-assets \
-			--volumes-from {} \
-			$(AWS_CLI_DOCKER_IMAGE) \
-			sh /app/docker/web/push_assets_to_s3.sh
+	set -e; \
+	container_id=$$($(DOCKER_CMD) run -d --entrypoint="bash" --volume /app $(NEW_WEB_REPO):production-$(NEW_WEB_TAG)); \
+	trap "$(DOCKER_CMD) rm -f $$container_id >/dev/null 2>&1 || true" EXIT; \
+	$(DOCKER_CMD) run \
+		-e AWS_ACCESS_KEY_ID=$$GUM_AWS_ACCESS_KEY_ID \
+		-e AWS_SECRET_ACCESS_KEY=$$GUM_AWS_SECRET_ACCESS_KEY \
+		-e ASSETS_S3_BUCKET=gumroad-production-assets \
+		--volumes-from $$container_id \
+		$(AWS_CLI_DOCKER_IMAGE) \
+		sh /app/docker/web/push_assets_to_s3.sh
 endif
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml down
