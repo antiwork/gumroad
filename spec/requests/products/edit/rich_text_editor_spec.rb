@@ -396,7 +396,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     sleep 1
     expect(rich_text_editor_input.find("iframe")[:src]).to include "1380521414818557955"
     save_change
-    expect(@product.reload.description).to include "iframe.ly/api/iframe?app=1&amp;url=#{CGI.escape("https://twitter.com/gumroad/status/1380521414818557955")}"
+    expect(@product.reload.description).to include "iframely.net/api/iframe?app=1&amp;url=#{CGI.escape("https://twitter.com/gumroad/status/1380521414818557955")}"
   end
 
   it "supports button embeds" do
@@ -533,7 +533,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       end
       sleep 0.5 # wait for the editor to update the content
       escaped_url = CGI.escape(tweet_url)
-      iframely_base = "https://cdn.iframe.ly/api/iframe"
+      iframely_base = "https://iframely.net/api/iframe"
 
       expect(rich_text_editor_input.find("iframe")[:src]).to include(iframely_base)
       expect(rich_text_editor_input.find("iframe")[:src]).to include("url=#{escaped_url}")
