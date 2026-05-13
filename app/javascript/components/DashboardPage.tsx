@@ -79,8 +79,6 @@ type GettingStartedItemType = {
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
-  target?: string;
-  rel?: string;
 };
 
 const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
@@ -136,11 +134,9 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Command line",
     getCompleted: (stats) => !!stats.used_cli,
-    link: "https://github.com/antiwork/gumroad-cli",
+    link: "/api#api-cli",
     IconComponent: CliIcon,
     description: "Use Gumroad via the command line interface.",
-    target: "_blank",
-    rel: "noreferrer",
   },
 ];
 
@@ -151,8 +147,6 @@ type GettingStartedItemProps = {
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
-  target?: string;
-  rel?: string;
 };
 
 const Greeter = () => (
@@ -175,8 +169,6 @@ const GettingStartedItem = ({
   IconComponent,
   description,
   minimized,
-  target,
-  rel,
 }: GettingStartedItemProps) => {
   const commonClasses = "relative";
 
@@ -214,14 +206,7 @@ const GettingStartedItem = ({
   }
 
   return (
-    <NavigationButton
-      color="filled"
-      href={link}
-      className={commonClasses}
-      data-status="pending"
-      target={target}
-      rel={rel}
-    >
+    <NavigationButton color="filled" href={link} className={commonClasses} data-status="pending">
       {content}
     </NavigationButton>
   );
@@ -429,8 +414,6 @@ export const DashboardPage = ({
                     IconComponent={item.IconComponent}
                     description={item.description}
                     minimized={gettingStartedMinimized}
-                    {...(item.target !== undefined ? { target: item.target } : {})}
-                    {...(item.rel !== undefined ? { rel: item.rel } : {})}
                   />
                 ))}
               </div>
