@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CardProduct } from "$app/parsers/product";
 import { request } from "$app/utils/request";
@@ -23,5 +23,5 @@ export async function getRecommendedProducts(
       recommendation_type: recommendationType,
     }),
   });
-  return cast<CardProduct[]>(await response.json());
+  return typia.assert<CardProduct[]>(await response.json());
 }

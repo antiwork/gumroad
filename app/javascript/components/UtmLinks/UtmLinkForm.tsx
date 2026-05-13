@@ -1,7 +1,7 @@
 import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { UtmLink, UtmLinkDestinationOption, SavedUtmLink } from "$app/types/utm_link";
 import { assertDefined } from "$app/utils/assert";
@@ -185,7 +185,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
     router.reload({
       only: ["additional_metadata"],
       onSuccess: (page) => {
-        const additionalMetadata = cast<UtmLinkFormAdditionalMetadata | undefined>(page.props.additional_metadata);
+        const additionalMetadata = typia.assert<UtmLinkFormAdditionalMetadata | undefined>(page.props.additional_metadata);
         const newPermalink = additionalMetadata?.new_permalink;
         if (newPermalink) {
           setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));

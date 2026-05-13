@@ -5,7 +5,7 @@ import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -113,7 +113,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
   const [isPopoverVisible, setIsPopoverVisible] = React.useState(false);
   const [link, setLink] = React.useState<{ label: string; url: string }>({
     label: node.textContent,
-    url: cast(node.attrs.href),
+    url: typia.assert<string>(node.attrs.href),
   });
 
   const linkInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -203,14 +203,14 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
         <Popover
           open={isPopoverShown}
           onOpenChange={(open) => {
-            setLink({ label: node.textContent, url: cast(node.attrs.href) });
+            setLink({ label: node.textContent, url: typia.assert<string>(node.attrs.href) });
             setIsPopoverShown(open);
           }}
         >
           <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
             <NodeViewContent
               as="a"
-              href={cast<string>(node.attrs.href)}
+              href={typia.assert<string>(node.attrs.href)}
               className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
@@ -255,7 +255,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
         <NodeViewContent
           style={{ display: "grid" }}
           as="a"
-          href={cast<string>(node.attrs.href)}
+          href={typia.assert<string>(node.attrs.href)}
           contentEditable={editor.isEditable}
           className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
           target="_blank"
@@ -263,7 +263,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           onClick={(event: React.MouseEvent) => {
             if (editor.isEditable) {
               event.preventDefault();
-              setLink({ label: node.textContent, url: cast(node.attrs.href) });
+              setLink({ label: node.textContent, url: typia.assert<string>(node.attrs.href) });
               setIsPopoverShown(true);
             }
           }}
@@ -413,7 +413,7 @@ export const Link = Node.create({
         const link = node.marks.find((mark) => mark.type.name === "link");
         if (link) {
           const mappedPos = tr.mapping.map(pos);
-          const href = cast(link.attrs.href);
+          const href = typia.assert<string>(link.attrs.href);
           const LinkNode =
             this.editor.schema.nodes[Link.name]?.create({ href }, this.editor.schema.text(node.text || "")) ?? node;
           tr.setSelection(new NodeSelection(tr.doc.resolve(mappedPos)));

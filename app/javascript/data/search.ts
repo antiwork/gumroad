@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CardProduct } from "$app/parsers/product";
 import { request } from "$app/utils/request";
@@ -39,6 +39,6 @@ export function getSearchResults(data: SearchRequest): { response: Promise<Searc
     accept: "json",
   })
     .then((res) => res.json())
-    .then((json) => cast<SearchResults>(json));
+    .then((json) => typia.assert<SearchResults>(json));
   return { response: promise, cancel: () => abort.abort() };
 }

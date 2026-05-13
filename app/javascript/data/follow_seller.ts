@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assertResponseError, request } from "$app/utils/request";
 
@@ -12,7 +12,7 @@ export const followSeller = async (email: string, seller_id: string): Promise<Fo
       url: Routes.follow_user_path(),
       data: { email, seller_id },
     });
-    return cast<FollowResponse>(await response.json());
+    return typia.assert<FollowResponse>(await response.json());
   } catch (e) {
     assertResponseError(e);
     return { success: false };

@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
@@ -52,7 +52,7 @@ type NewInvoicePageProps = {
 };
 
 const PurchaseNewInvoicePage = () => {
-  const { form_data, form_metadata, invoice_file_url } = cast<NewInvoicePageProps>(usePage().props);
+  const { form_data, form_metadata, invoice_file_url } = typia.assert<NewInvoicePageProps>(usePage().props);
   const { supplier_info, seller_info, order_info, countries } = form_metadata;
 
   const form = useForm(form_data);
@@ -94,7 +94,7 @@ const PurchaseNewInvoicePage = () => {
     form.post(Routes.purchase_invoice_path(form.data.purchase_id), {
       only: ["flash", "invoice_file_url"],
       onSuccess: (page) => {
-        const { invoice_file_url } = cast<{ invoice_file_url: string }>(page.props);
+        const { invoice_file_url } = typia.assert<{ invoice_file_url: string }>(page.props);
         if (invoice_file_url) window.open(invoice_file_url, "_blank");
       },
     });

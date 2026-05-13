@@ -1,5 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
@@ -42,7 +42,7 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok) throw new ResponseError(cast<{ error_message: string }>(await response.json()).error_message);
+  if (!response.ok) throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
   if (response.status === 204) return {};
-  return cast<{ warning_message?: string }>(await response.json());
+  return typia.assert<{ warning_message?: string }>(await response.json());
 };

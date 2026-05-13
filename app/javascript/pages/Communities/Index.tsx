@@ -4,7 +4,7 @@ import { InfiniteScroll, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import cable from "$app/channels/consumer";
 import { Community, CommunityChatMessage, Seller, NotificationSettings } from "$app/data/communities";
@@ -115,7 +115,7 @@ function CommunitiesIndex() {
   const [localMessages, setLocalMessages] = React.useState<Record<string, CommunityChatMessage[]>>({});
   const [deletedMessageIds, setDeletedMessageIds] = React.useState<Set<string>>(new Set());
 
-  const pageProps = cast<PageProps>(usePage().props);
+  const pageProps = typia.assert<PageProps>(usePage().props);
   const pageMessages = pageProps.messages ?? [];
   const localMsgs = localMessages[selectedCommunity?.id ?? ""] ?? [];
 
@@ -353,7 +353,7 @@ function CommunitiesIndex() {
     userChannelRef.current = channel;
 
     channel.on("message", (msg) => {
-      if (is<IncomingUserChannelMessage>(msg)) {
+      if (typia.is<IncomingUserChannelMessage>(msg)) {
         updateCommunity(msg.data.id, {
           unread_count: msg.data.unread_count,
           last_read_community_chat_message_created_at: msg.data.last_read_community_chat_message_created_at,
@@ -384,7 +384,7 @@ function CommunitiesIndex() {
       const channel = cable.subscribeTo(COMMUNITY_CHANNEL_NAME, { community_id: community.id });
       communityChannelsRef.current[community.id] = channel;
       channel.on("message", (msg) => {
-        if (is<IncomingCommunityChannelMessage>(msg)) {
+        if (typia.is<IncomingCommunityChannelMessage>(msg)) {
           if (msg.type === "create_chat_message") {
             if (msg.message.community_id === community.id) {
               insertOrUpdateMessage(msg.message);

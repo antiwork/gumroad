@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, TimeoutError } from "$app/utils/request";
 
@@ -47,7 +47,7 @@ export const verifyShippingAddress = async (shippingAddress: ShippingAddress): P
     });
 
     if (response.ok) {
-      const responseData = cast<
+      const responseData = typia.assert<
         | VerifyShippingAddressErrorResponse
         | VerifyShippingAddressVerificationCaseResponse
         | VerifyShippingAddressSuccessResponse

@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Button } from "$app/components/Button";
 import { Layout, LayoutProps } from "$app/components/DownloadPage/Layout";
@@ -32,7 +32,7 @@ function ConfirmPage() {
     installment,
     purchase,
     authenticity_token,
-  } = cast<PageProps>(usePage().props);
+  } = typia.assert<PageProps>(usePage().props);
 
   return (
     <div className="flex min-h-screen flex-col">

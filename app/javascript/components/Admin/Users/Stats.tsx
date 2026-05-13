@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, assertResponseError } from "$app/utils/request";
 
@@ -36,7 +36,7 @@ const AdminUserStats = ({ user_external_id }: { user_external_id: string }) => {
           accept: "json",
         });
         if (!response.ok) assertResponseError(response);
-        const data = cast<ResponseData>(await response.json());
+        const data = typia.assert<ResponseData>(await response.json());
         setUserStats(data);
       } catch (e) {
         assertResponseError(e);

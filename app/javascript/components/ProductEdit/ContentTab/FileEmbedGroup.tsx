@@ -4,7 +4,7 @@ import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/data/products";
 import { isTuple } from "$app/utils/array";
@@ -76,7 +76,7 @@ const FileEmbedGroupNodeView = ({
     downloadableFiles.length > 0 &&
     !downloadableFiles.some((file) => file.pdf_stamp_enabled) &&
     downloadableFiles.reduce((total, file) => total + (file.file_size ?? 0), 0) < ARCHIVE_SIZE_LIMIT_IN_BYTES;
-  const folderId = cast<string>(node.attrs.uid);
+  const folderId = typia.assert<string>(node.attrs.uid);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   useRunOnce(() => {

@@ -6,7 +6,7 @@ import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { cancelDropboxFileUpload } from "$app/data/dropbox_upload";
 import { assertDefined } from "$app/utils/assert";
@@ -76,7 +76,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
 
-  const file = filesById.get(cast<string>(node.attrs.id));
+  const file = filesById.get(typia.assert<string>(node.attrs.id));
   const downloadUrl = file && getDownloadUrl(id, file);
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
@@ -169,7 +169,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       findChildren(editor.state.doc, ({ type }) => type.name === FileEmbedGroup.name).flatMap(({ node: groupNode }) =>
         groupNode === parentNode
           ? []
-          : [{ uid: cast<string>(groupNode.attrs.uid), name: titleWithFallback(groupNode.attrs.name) }],
+          : [{ uid: typia.assert<string>(groupNode.attrs.uid), name: titleWithFallback(groupNode.attrs.name) }],
       ),
     [selected],
   );
@@ -315,7 +315,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       <>
         {parentNode?.childCount === 1 ? null : (
           <MenuItem
-            onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
+            onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: typia.assert<string>(node.attrs.uid), groupUid: null })}
           >
             <FolderPlus className="size-5" />
             <span>New folder</span>
@@ -325,9 +325,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           <MenuItem
             key={uid}
             onClick={() => {
-              editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: uid });
+              editor.commands.moveFileEmbedToGroup({ fileUid: typia.assert<string>(node.attrs.uid), groupUid: uid });
 
-              const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
+              const fileName = filesById.get(typia.assert<string>(node.attrs.id))?.display_name;
               if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
             }}
           >

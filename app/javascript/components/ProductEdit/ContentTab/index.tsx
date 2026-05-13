@@ -29,7 +29,7 @@ import { parseISO } from "date-fns";
 import { partition } from "lodash-es";
 import * as React from "react";
 import { ReactSortable } from "react-sortablejs";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import { type Post } from "$app/types/workflow";
@@ -432,7 +432,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         new Promise((resolve) => setTimeout(resolve, 250)),
       ]);
       if (!response.ok) throw new ResponseError();
-      const parsedResponse = cast<{ existing_files: ExistingFileEntry[] }>(await response.json());
+      const parsedResponse = typia.assert<{ existing_files: ExistingFileEntry[] }>(await response.json());
       setExistingFiles(parsedResponse.existing_files);
     } catch (error) {
       assertResponseError(error);
@@ -1130,7 +1130,7 @@ export const ContentTab = () => {
         accept: "json",
       });
       if (!response.ok) throw new ResponseError();
-      const parsedResponse = cast<{ posts: Post[]; total: number; next_page: number | null }>(await response.json());
+      const parsedResponse = typia.assert<{ posts: Post[]; total: number; next_page: number | null }>(await response.json());
       loadedPostsData.current.set(
         selectedVariantId,
         refresh

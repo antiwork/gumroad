@@ -1,7 +1,7 @@
 import { Link, usePage } from "@inertiajs/react";
 import { capitalize } from "lodash-es";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { BooleanIcon, NoIcon } from "$app/components/Admin/Icons";
@@ -28,7 +28,7 @@ export type AdminMerchantAccountProps = {
 };
 
 const AdminMerchantAccountsShow = () => {
-  const { merchant_account } = cast<{ merchant_account: AdminMerchantAccountProps }>(usePage().props);
+  const { merchant_account } = typia.assert<{ merchant_account: AdminMerchantAccountProps }>(usePage().props);
 
   return (
     <div className="override grid gap-4 rounded border border-border bg-background p-4">

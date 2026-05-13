@@ -2,7 +2,7 @@ import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
@@ -108,8 +108,8 @@ type ErrorMessageInfo = {
 
 export default function PaymentsPage() {
   const page = usePage();
-  const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
+  const props = typia.assert<PaymentsPageProps>(page.props);
+  const errors = typia.assert<{ base?: string[] } | undefined>(page.props.errors);
 
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -243,7 +243,7 @@ export default function PaymentsPage() {
   };
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
-    const countryCode: CountryCode = cast(country_code);
+    const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
     return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
   };
 
@@ -596,12 +596,12 @@ export default function PaymentsPage() {
       !form.data.user.street_address ||
       (streetAddressValidationContextChanged &&
         form.data.user.country !== null &&
-        isPhysicalAddressRequiredAndPOBox(cast(form.data.user.country), form.data.user.street_address))
+        isPhysicalAddressRequiredAndPOBox(typia.assert<CountryCode>(form.data.user.country), form.data.user.street_address))
     ) {
       markFieldInvalid("street_address");
       if (form.data.user.street_address) {
         setClientErrorMessage({
-          message: poBoxAddressErrorMessage(cast(form.data.user.country)),
+          message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.country)),
         });
       }
     }
@@ -708,12 +708,12 @@ export default function PaymentsPage() {
         !form.data.user.business_street_address ||
         (businessStreetAddressValidationContextChanged &&
           form.data.user.business_country !== null &&
-          isPhysicalAddressRequiredAndPOBox(cast(form.data.user.business_country), form.data.user.business_street_address))
+          isPhysicalAddressRequiredAndPOBox(typia.assert<CountryCode>(form.data.user.business_country), form.data.user.business_street_address))
       ) {
         markFieldInvalid("business_street_address");
         if (form.data.user.business_street_address) {
           setClientErrorMessage({
-            message: poBoxAddressErrorMessage(cast(form.data.user.business_country)),
+            message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.business_country)),
           });
         }
       }

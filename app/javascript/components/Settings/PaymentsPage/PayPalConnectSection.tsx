@@ -1,6 +1,6 @@
 import { CheckCircle, Paypal } from "@boxicons/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
@@ -40,7 +40,7 @@ const PayPalConnectSection = ({
       accept: "json",
     });
 
-    const parsedResponse = cast<{ success: boolean }>(await response.json());
+    const parsedResponse = typia.assert<{ success: boolean }>(await response.json());
     if (parsedResponse.success) {
       showAlert("Your PayPal account has been disconnected.", "success");
       window.location.reload();

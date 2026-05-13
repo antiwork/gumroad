@@ -1,5 +1,5 @@
 import { StripeError } from "@stripe/stripe-js";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   LineItemUid,
@@ -144,7 +144,7 @@ const createOrder = async (payload: StartCartPurchaseRequestPayload) => {
     data,
   });
   if (!response.ok) throw new ResponseError();
-  return cast<OrderSuccessResponse | OrderErrorResponse>(await response.json());
+  return typia.assert<OrderSuccessResponse | OrderErrorResponse>(await response.json());
 };
 
 const translateOrderSuccessIntoLineItemSuccess = (response: OrderSuccessResponse): CartPurchaseResult => ({
@@ -214,5 +214,5 @@ const confirmOrderAfterAction = async ({
     },
   });
   if (!response.ok) throw new ResponseError();
-  return cast<ConfirmOrderResponse>(await response.json());
+  return typia.assert<ConfirmOrderResponse>(await response.json());
 };

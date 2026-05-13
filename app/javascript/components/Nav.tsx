@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle, Menu, X } from "@boxicons/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
@@ -171,7 +171,7 @@ export const UnbecomeDropdownItem = () => {
     try {
       const response = await request({ method: "DELETE", accept: "json", url: Routes.admin_unimpersonate_path() });
       if (response.ok) {
-        const responseData = cast<{ redirect_to: string }>(await response.json());
+        const responseData = typia.assert<{ redirect_to: string }>(await response.json());
         window.location.href = responseData.redirect_to;
       }
     } catch (e) {

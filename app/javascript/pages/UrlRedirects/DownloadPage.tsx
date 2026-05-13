@@ -1,6 +1,6 @@
 import { usePoll, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useDropbox } from "$app/hooks/useDropbox";
 import FileUtils from "$app/utils/file";
@@ -18,7 +18,7 @@ type PageProps = LayoutProps & {
 };
 
 function DownloadPage() {
-  const props = cast<PageProps>(usePage().props);
+  const props = typia.assert<PageProps>(usePage().props);
   const { content, dropbox_api_key, audio_durations, latest_media_locations } = props;
 
   useDropbox(dropbox_api_key);

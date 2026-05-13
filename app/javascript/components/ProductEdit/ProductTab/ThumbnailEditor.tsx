@@ -1,6 +1,6 @@
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Thumbnail, ThumbnailPayload, createThumbnail, deleteThumbnail } from "$app/data/thumbnails";
 import { AssetPreview, ProductNativeType } from "$app/parsers/product";
@@ -86,7 +86,7 @@ export const ThumbnailEditor = ({
         allowedExtensions={ALLOWED_EXTENSIONS}
         helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG or GIF format."
         onRemove={() => void removeThumbnail(thumbnail?.guid ?? "")}
-        defaultImageUrl={coverUrlForThumbnail(covers) ?? cast<string>(nativeTypeThumbnails(`./${nativeType}.svg`))}
+        defaultImageUrl={coverUrlForThumbnail(covers) ?? typia.assert<string>(nativeTypeThumbnails(`./${nativeType}.svg`))}
         onSelectFile={(file) =>
           new Promise((resolve, reject) => {
             validateFile(file).then(

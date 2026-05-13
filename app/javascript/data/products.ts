@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -60,7 +60,7 @@ export async function getFolderArchiveDownloadUrl(request_url: string) {
     url: request_url,
   });
   if (!res.ok) return { url: null };
-  return cast<{ url: string | null }>(await res.json());
+  return typia.assert<{ url: string | null }>(await res.json());
 }
 
 export async function getProductFileDownloadInfos(request_url: string) {
@@ -70,7 +70,7 @@ export async function getProductFileDownloadInfos(request_url: string) {
     url: request_url,
   });
   if (!res.ok) return [];
-  return cast<{ files: { url: string; filename: string | null }[] }>(await res.json()).files;
+  return typia.assert<{ files: { url: string; filename: string | null }[] }>(await res.json()).files;
 }
 
 export async function saveLastContentPage(token: string, pageId: string) {
@@ -82,7 +82,7 @@ export async function saveLastContentPage(token: string, pageId: string) {
       data: { page_id: pageId },
     });
     if (!res.ok) return { success: false };
-    return cast<{ success: boolean }>(await res.json());
+    return typia.assert<{ success: boolean }>(await res.json());
   } catch {
     return { success: false };
   }

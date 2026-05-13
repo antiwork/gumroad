@@ -1,5 +1,5 @@
 import * as React from "react";
-import { is } from "ts-safe-cast";
+import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -30,7 +30,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 
   useGlobalEventListener("message", (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
-    if (is<{ type: "alert"; payload: AlertPayload }>(event.data)) {
+    if (typia.is<{ type: "alert"; payload: AlertPayload }>(event.data)) {
       const newAlert = event.data.payload;
       setAlert(newAlert);
       setIsVisible(true);

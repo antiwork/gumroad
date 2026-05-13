@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -49,8 +49,8 @@ export const addComment = async ({
     data: { comment: { content, parent_id } },
   });
   const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
-  return cast<{ comment: Comment }>(json).comment;
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ comment: Comment }>(json).comment;
 };
 
 type UpdateCommentArgs = {
@@ -74,8 +74,8 @@ export const updateComment = async ({
     data: { comment: { content } },
   });
   const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
-  return cast<{ comment: Comment }>(json).comment;
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ comment: Comment }>(json).comment;
 };
 
 type DeleteCommentArgs = {
@@ -90,8 +90,8 @@ export const deleteComment = async ({ commentable_id, purchase_id, id }: DeleteC
     url: Routes.custom_domain_delete_post_comment_path(commentable_id, id, { purchase_id }),
   });
   const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
-  return cast<{ deleted_comment_ids: string[] }>(json).deleted_comment_ids;
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ deleted_comment_ids: string[] }>(json).deleted_comment_ids;
 };
 
 type FetchPaginatedCommentsArgs = {
@@ -110,5 +110,5 @@ export const fetchPaginatedComments = async ({
     url: Routes.custom_domain_post_comments_path(commentable_id, { purchase_id, page }),
   });
   if (!response.ok) throw new ResponseError();
-  return cast<PaginatedComments>(await response.json());
+  return typia.assert<PaginatedComments>(await response.json());
 };

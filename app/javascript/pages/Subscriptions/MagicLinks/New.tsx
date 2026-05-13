@@ -1,6 +1,6 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
@@ -21,7 +21,7 @@ type Props = {
 };
 
 function SubscriptionsMagicLink() {
-  const { product_name, subscription_id, is_installment_plan, user_emails, email_sent } = cast<Props>(usePage().props);
+  const { product_name, subscription_id, is_installment_plan, user_emails, email_sent } = typia.assert<Props>(usePage().props);
 
   const hasSentEmail = email_sent !== null;
   const defaultEmailSource = email_sent ?? user_emails[0].source;

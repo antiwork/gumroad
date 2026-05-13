@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -33,5 +33,5 @@ export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: Ab
     data,
   });
   if (!response.ok) throw new ResponseError();
-  return cast<SurchargesResponse>(await response.json());
+  return typia.assert<SurchargesResponse>(await response.json());
 };

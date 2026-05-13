@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -53,7 +53,7 @@ const AdminProductPurchasesContent = ({
       return;
     }
 
-    const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
 
     setIsMassRefunding(true);
 
@@ -68,7 +68,7 @@ const AdminProductPurchasesContent = ({
         },
       });
 
-      const body = cast<{ success: boolean; message?: string | null }>(await response.json());
+      const body = typia.assert<{ success: boolean; message?: string | null }>(await response.json());
       if (!response.ok || !body.success) {
         throw new ResponseError(body.message ?? "Something went wrong.");
       }

@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { type SettingPage } from "$app/parsers/settings";
 
@@ -24,7 +24,7 @@ type AdvancedPageProps = {
 };
 
 export default function AdvancedPage() {
-  const props = cast<AdvancedPageProps>(usePage().props);
+  const props = typia.assert<AdvancedPageProps>(usePage().props);
   const form = useForm({
     domain: props.custom_domain_name,
     blocked_customer_emails: props.blocked_customer_emails,

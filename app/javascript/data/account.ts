@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   AnyPaymentMethodParams,
@@ -37,7 +37,7 @@ export const createAccount = async (data: CreateAccountPayload): Promise<CreateA
       ...("recaptchaResponse" in data ? { "g-recaptcha-response": data.recaptchaResponse } : {}),
     },
   });
-  const responseData = cast<{ success: true; redirect_location: string } | { success: false; error_message: string }>(
+  const responseData = typia.assert<{ success: true; redirect_location: string } | { success: false; error_message: string }>(
     await response.json(),
   );
   if (!responseData.success) throw new ResponseError(responseData.error_message);
@@ -57,7 +57,7 @@ export const addPurchaseToLibrary = async (data: {
     data: { user: { purchase_id: data.purchaseId, purchase_email: data.purchaseEmail } },
   });
 
-  const responseData = cast<{ success: true; redirect_location: string } | { success: false }>(await response.json());
+  const responseData = typia.assert<{ success: true; redirect_location: string } | { success: false }>(await response.json());
   if (!responseData.success) throw new ResponseError();
   return { redirectLocation: responseData.redirect_location };
 };

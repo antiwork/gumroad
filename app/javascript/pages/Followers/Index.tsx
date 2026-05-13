@@ -1,7 +1,7 @@
 import { ArrowInDownSquareHalf, Link } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -39,7 +39,7 @@ type Props = {
 };
 
 export default function FollowersPage() {
-  const { followers, total_count, page, has_more, email } = cast<Props>(usePage().props);
+  const { followers, total_count, page, has_more, email } = typia.assert<Props>(usePage().props);
   const userAgentInfo = useUserAgentInfo();
 
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);

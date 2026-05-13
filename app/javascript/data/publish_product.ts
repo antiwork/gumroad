@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -10,6 +10,6 @@ export async function setProductPublished(id: string, publish: boolean) {
     method: "POST",
     accept: "json",
   });
-  const responseData = cast<TogglePublishStateResponse>(await response.json());
+  const responseData = typia.assert<TogglePublishStateResponse>(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 }

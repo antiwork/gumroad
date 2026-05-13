@@ -1,6 +1,6 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { SelfServeAffiliateProduct } from "$app/data/affiliates";
 import { isUrlValid } from "$app/utils/url";
@@ -55,16 +55,16 @@ const validateProduct = (product: SelfServeAffiliateProduct): InvalidProductAttr
 const AffiliatesNavigation = () => (
   <Tabs>
     <Tab asChild isSelected={false}>
-      <Link href={cast<string>(Routes.affiliates_path())}>Affiliates</Link>
+      <Link href={typia.assert<string>(Routes.affiliates_path())}>Affiliates</Link>
     </Tab>
     <Tab asChild isSelected>
-      <Link href={cast<string>(Routes.onboarding_affiliates_path())}>Affiliate Signup Form</Link>
+      <Link href={typia.assert<string>(Routes.onboarding_affiliates_path())}>Affiliate Signup Form</Link>
     </Tab>
   </Tabs>
 );
 
 export default function AffiliatesOnboarding() {
-  const props = cast<Props>(usePage().props);
+  const props = typia.assert<Props>(usePage().props);
   const loggedInUser = useLoggedInUser();
 
   const { data, setData, patch, processing } = useForm({
@@ -110,7 +110,7 @@ export default function AffiliatesOnboarding() {
           <>
             <WithTooltip position="bottom" tip={props.affiliates_disabled_reason}>
               <NavigationButtonInertia
-                href={cast<string>(Routes.new_affiliate_path())}
+                href={typia.assert<string>(Routes.new_affiliate_path())}
                 disabled={!loggedInUser?.policies.direct_affiliate.create || props.affiliates_disabled_reason !== null}
               >
                 Add affiliate

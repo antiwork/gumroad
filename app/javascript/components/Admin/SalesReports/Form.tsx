@@ -1,7 +1,7 @@
 import { useForm } from "@inertiajs/react";
 import { subMonths } from "date-fns";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -60,7 +60,7 @@ const AdminSalesReportsForm = ({
     });
   };
 
-  const errors = cast<Errors>(form.errors);
+  const errors = typia.assert<Errors>(form.errors);
 
   return (
     <form onSubmit={handleSubmit}>

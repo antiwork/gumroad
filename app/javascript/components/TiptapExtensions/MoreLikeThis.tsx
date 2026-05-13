@@ -2,7 +2,7 @@ import { Archive, Cog } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { getRecommendedProducts, RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
@@ -45,14 +45,14 @@ export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
 const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewProps) => {
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const recommendationType = cast<RecommendationType | undefined>(node.attrs.recommendationType);
+  const recommendationType = typia.assert<RecommendationType | undefined>(node.attrs.recommendationType);
 
   React.useEffect(() => {
     const fetchRecommendedProducts = async () => {
       setIsLoading(true);
       try {
         const results = await getRecommendedProducts(
-          [cast<{ productId: string }>(extension.options).productId],
+          [typia.assert<{ productId: string }>(extension.options).productId],
           3,
           recommendationType,
         );

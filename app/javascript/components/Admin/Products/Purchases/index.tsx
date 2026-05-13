@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
@@ -35,7 +35,7 @@ const AdminProductPurchases = ({
     fetchUnlessLoaded: open,
     url,
     responseParser: (data) => {
-      const parsed = cast<{ purchases: ProductPurchase[] }>(data);
+      const parsed = typia.assert<{ purchases: ProductPurchase[] }>(data);
       return parsed.purchases;
     },
     mode: "append",

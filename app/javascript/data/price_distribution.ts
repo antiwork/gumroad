@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ResponseError, request } from "$app/utils/request";
 
@@ -66,5 +66,5 @@ export const fetchPriceDistribution = async (
     abortSignal: signal,
   });
   if (!response.ok) throw new ResponseError();
-  return cast<PriceDistribution>(await response.json());
+  return typia.assert<PriceDistribution>(await response.json());
 };

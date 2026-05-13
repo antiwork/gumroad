@@ -1,4 +1,4 @@
-import { is } from "ts-safe-cast";
+import typia from "typia";
 
 import { HeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
 
@@ -48,5 +48,5 @@ window.addEventListener("message", (evt) => {
   const iframe = embeds.find((embed) => embed.contentWindow === evt.source);
   if (!iframe || !isValidHost(url, customDomain)) return;
 
-  if (is<HeightMessage>(evt.data)) iframe.style.height = `${evt.data.height}px`;
+  if (typia.is<HeightMessage>(evt.data)) iframe.style.height = `${evt.data.height}px`;
 });

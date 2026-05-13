@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { GCAL_OAUTH_URL } from "$app/utils/integrations";
 import { request, ResponseError } from "$app/utils/request";
@@ -11,7 +11,7 @@ export const fetchAccountInfo = async (code: string): Promise<AccountInfo> => {
     url: Routes.account_info_integrations_google_calendar_index_path({ format: "json", code }),
     accept: "json",
   });
-  const responseData = cast<
+  const responseData = typia.assert<
     | {
         success: true;
         access_token: string;
@@ -38,7 +38,7 @@ export const fetchCalendarList = async (accessToken: string, refreshToken: strin
     }),
     accept: "json",
   });
-  const responseData = cast<{ success: true; calendar_list: { id: string; summary: string }[] } | { success: false }>(
+  const responseData = typia.assert<{ success: true; calendar_list: { id: string; summary: string }[] } | { success: false }>(
     await response.json(),
   );
   if (!responseData.success) throw new ResponseError();

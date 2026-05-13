@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -58,7 +58,7 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
       url: Routes.admin_user_latest_posts_path(user.external_id),
       accept: "json",
     });
-    setPosts(cast<PostProps[]>(await response.json()));
+    setPosts(typia.assert<PostProps[]>(await response.json()));
     setIsLoading(false);
   };
 

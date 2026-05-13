@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import AdminProduct, { type Product } from "$app/components/Admin/Products/Product";
 import AdminPurchase, { type Purchase } from "$app/components/Admin/Purchases";
@@ -13,7 +13,7 @@ type AdminPurchaseProps = {
 };
 
 const AdminPurchasesShow = () => {
-  const { user, product, purchase } = cast<AdminPurchaseProps>(usePage().props);
+  const { user, product, purchase } = typia.assert<AdminPurchaseProps>(usePage().props);
 
   return (
     <div className="flex flex-col gap-4">

@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { SettingPage } from "$app/parsers/settings";
 
@@ -35,7 +35,7 @@ type BillingPageProps = {
 };
 
 export default function BillingSettingsPage() {
-  const props = cast<BillingPageProps>(usePage().props);
+  const props = typia.assert<BillingPageProps>(usePage().props);
   const uid = React.useId();
 
   const form = useForm({ billing_detail: props.billing_detail });

@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { StandaloneLayout } from "$app/inertia/layout";
 
@@ -11,7 +11,7 @@ import placeholderImage from "$assets/images/placeholders/comic-stars.png";
 
 export type UnavailablePageProps = LayoutProps;
 
-export const useUnavailablePageProps = () => cast<UnavailablePageProps>(usePage().props);
+export const useUnavailablePageProps = () => typia.assert<UnavailablePageProps>(usePage().props);
 
 const fullHeightPlaceholderClassName = "flex-1 content-center";
 

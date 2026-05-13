@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Button } from "$app/components/Button";
 import { Logo } from "$app/components/Logo";
@@ -12,7 +12,7 @@ type Props = {
 };
 
 export default function SubscribePreview() {
-  const { avatar_url, title } = cast<Props>(usePage().props);
+  const { avatar_url, title } = typia.assert<Props>(usePage().props);
 
   return (
     <div className="override grid h-full w-full grid-cols-[27.5%_1fr] items-center gap-6 p-6">

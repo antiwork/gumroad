@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -97,7 +97,7 @@ type ProductFormData = {
 
 export default function BundlesProductEdit() {
   const page = usePage();
-  const props = cast<ProductPageProps>(page.props);
+  const props = typia.assert<ProductPageProps>(page.props);
   const {
     bundle,
     id,
