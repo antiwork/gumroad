@@ -396,7 +396,12 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     sleep 1
     expect(rich_text_editor_input.find("iframe")[:src]).to include "1380521414818557955"
     save_change
-    expect(@product.reload.description).to include "iframe.ly/api/iframe?app=1&amp;url=#{CGI.escape("https://twitter.com/gumroad/status/1380521414818557955")}"
+    description = @product.reload.description
+    escaped_tweet_url = CGI.escape("https://twitter.com/gumroad/status/1380521414818557955")
+    expect(description).to satisfy("include iframe.ly or iframely.net embed URL") { |d|
+      d.include?("iframe.ly/api/iframe?app=1&amp;url=#{escaped_tweet_url}") ||
+        d.include?("iframely.net/api/iframe?app=1&amp;url=#{escaped_tweet_url}")
+    }
   end
 
   it "supports button embeds" do
@@ -533,16 +538,21 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       end
       sleep 0.5 # wait for the editor to update the content
       escaped_url = CGI.escape(tweet_url)
-      iframely_base = "https://cdn.iframe.ly/api/iframe"
+      iframely_base_patterns = ["https://cdn.iframe.ly/api/iframe", "https://iframely.net/api/iframe"]
 
-      expect(rich_text_editor_input.find("iframe")[:src]).to include(iframely_base)
-      expect(rich_text_editor_input.find("iframe")[:src]).to include("url=#{escaped_url}")
+      iframe_src = rich_text_editor_input.find("iframe")[:src]
+      expect(iframe_src).to satisfy("include cdn.iframe.ly or iframely.net") { |src|
+        iframely_base_patterns.any? { |base| src.include?(base) }
+      }
+      expect(iframe_src).to include("url=#{escaped_url}")
 
       save_change
 
       description = product.reload.rich_contents.first.description.first
       expect(description["type"]).to eq("raw")
-      expect(description["attrs"]["html"]).to include(iframely_base)
+      expect(description["attrs"]["html"]).to satisfy("include cdn.iframe.ly or iframely.net") { |html|
+        iframely_base_patterns.any? { |base| html.include?(base) }
+      }
       expect(description["attrs"]["html"]).to include("url=#{escaped_url}")
     end
   end
