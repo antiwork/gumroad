@@ -241,7 +241,7 @@ RAILS_ENV=test bin/rails js:export  # generate JS constants for the test environ
 
 ### Integration tests
 
-Integration specs use Capybara with Selenium driving Chrome. Install Chrome from [google.com/chrome](https://www.google.com/chrome/) — Selenium Manager handles chromedriver automatically.
+Integration specs use Capybara with Selenium driving Chrome. Install Chrome from [google.com/chrome](https://www.google.com/chrome/).
 
 See [docs/testing.md](docs/testing.md) for details on preventing flaky specs, VCR cassettes, debugging widgets, and purchase testing with Stripe/PayPal.
 
