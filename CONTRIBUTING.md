@@ -62,6 +62,10 @@ git rebase origin/main
 
 Resolve conflicts locally before pushing. PRs with stale branches will not be merged.
 
+### Code review
+
+Claude Code Review is set to manual mode. After opening a PR, request a review by posting a `@claude review` comment on the PR. This triggers an AI-powered review of your changes — it won't run automatically.
+
 ### Before pushing
 
 Run **test-confidence** before every commit:
