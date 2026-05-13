@@ -27,6 +27,9 @@ class Subscription < ApplicationRecord
   TOKEN_VALIDITY = 24.hours
   ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR = 7.days
 
+  AutoRenewalDiscount = Struct.new(:offer_code, :resolved_percent, keyword_init: true)
+  private_constant :AutoRenewalDiscount
+
   module ResubscriptionReason
     PAYMENT_ISSUE_RESOLVED = "payment_issue_resolved"
   end
@@ -197,13 +200,22 @@ class Subscription < ApplicationRecord
   end
 
   def current_subscription_price_cents
-    if is_installment_plan
-      original_purchase.minimum_paid_price_cents
-    else
-      discount_applies_to_next_charge? ?
-        original_purchase.displayed_price_cents :
-        original_purchase.displayed_price_cents_before_offer_code(include_deleted: true)
+    return original_purchase.minimum_paid_price_cents if is_installment_plan
+
+    if discount_applies_to_next_charge? && (original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?)
+      return original_purchase.displayed_price_cents
     end
+
+    pre_discount = original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+    auto = auto_renewal_offer_code
+    return pre_discount unless auto
+
+    pre_discount - OfferCode.new(amount_percentage: auto.resolved_percent).amount_off(pre_discount)
+  end
+
+  def auto_renewal_offer_code
+    return @_auto_renewal_offer_code if defined?(@_auto_renewal_offer_code)
+    @_auto_renewal_offer_code = compute_auto_renewal_offer_code
   end
 
   def current_plan_displayed_price_cents
@@ -249,20 +261,29 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    if discount_applies_to_next_charge?
-      if original_purchase.purchase_offer_code_discount.present?
-        original_discount = original_purchase.purchase_offer_code_discount
-        purchase.offer_code = original_purchase.offer_code
-        purchase.build_purchase_offer_code_discount(
-          offer_code: original_discount.offer_code,
-          offer_code_amount: original_discount.offer_code_amount,
-          offer_code_is_percent: original_discount.offer_code_is_percent,
-          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
-          duration_in_months: original_discount.duration_in_months
-        )
-      elsif original_purchase.offer_code.present?
-        purchase.offer_code = original_purchase.offer_code
-      end
+    applies_next = discount_applies_to_next_charge?
+    if applies_next && original_purchase.purchase_offer_code_discount.present?
+      original_discount = original_purchase.purchase_offer_code_discount
+      purchase.offer_code = original_purchase.offer_code
+      purchase.build_purchase_offer_code_discount(
+        offer_code: original_discount.offer_code,
+        offer_code_amount: original_discount.offer_code_amount,
+        offer_code_is_percent: original_discount.offer_code_is_percent,
+        pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+        duration_in_months: original_discount.duration_in_months
+      )
+    elsif applies_next && original_purchase.offer_code.present?
+      purchase.offer_code = original_purchase.offer_code
+    elsif (auto = auto_renewal_offer_code)
+      pre_discount = original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+      purchase.offer_code = auto.offer_code
+      purchase.build_purchase_offer_code_discount(
+        offer_code: auto.offer_code,
+        offer_code_amount: auto.resolved_percent,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: pre_discount,
+        duration_in_months: nil
+      )
     end
 
     purchase.purchaser = user
@@ -895,12 +916,15 @@ class Subscription < ApplicationRecord
   end
 
   def discount_applies_to_next_charge?
-    return true if is_installment_plan
+    return @_discount_applies_to_next_charge if defined?(@_discount_applies_to_next_charge)
 
-    duration_in_billing_cycles = original_purchase.purchase_offer_code_discount&.duration_in_billing_cycles
-    return true if duration_in_billing_cycles.blank?
-
-    purchases.successful.count < duration_in_billing_cycles
+    @_discount_applies_to_next_charge =
+      if is_installment_plan
+        true
+      else
+        duration = original_purchase.purchase_offer_code_discount&.duration_in_billing_cycles
+        duration.blank? || purchases.successful.count < duration
+      end
   end
 
   def cookie_key
@@ -921,6 +945,27 @@ class Subscription < ApplicationRecord
       args = [5.seconds, nil, nil, resource_name, id]
       args << params.deep_stringify_keys if params.present?
       PostToPingEndpointsWorker.perform_in(*args)
+    end
+
+    def compute_auto_renewal_offer_code
+      return nil if is_installment_plan
+      return nil if user.nil? || link.nil?
+      if discount_applies_to_next_charge? && original_purchase &&
+         (original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?)
+        return nil
+      end
+
+      candidates = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
+      return nil if candidates.empty?
+
+      candidates
+        .filter_map do |offer_code|
+          resolved = offer_code.evaluate_for_buyer(user)
+          next unless resolved && resolved[:type] == "percent" && resolved[:percents].to_i.positive?
+          [offer_code, resolved[:percents].to_i]
+        end
+        .max_by(&:last)
+        &.then { |offer_code, percent| AutoRenewalDiscount.new(offer_code:, resolved_percent: percent) }
     end
 
     def installment_plans_cannot_be_cancelled_by_buyer

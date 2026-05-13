@@ -43,6 +43,9 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: 1,
                      duration_in_billing_cycles: 1,
                      minimum_amount_cents: 1000,
+                     existing_customers_only: false,
+                     ownership_products: [],
+                     ownership_duration_tiers: nil,
                      products: [
                        {
                          id: product1.external_id,
@@ -77,6 +80,9 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     existing_customers_only: false,
+                     ownership_products: [],
+                     ownership_duration_tiers: nil,
                      products: [
                        {
                          id: product2.external_id,
@@ -102,6 +108,9 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     existing_customers_only: false,
+                     ownership_products: [],
+                     ownership_duration_tiers: nil,
                      products: nil,
                    },
                  ],
@@ -162,6 +171,9 @@ describe Checkout::DiscountsPresenter do
             minimum_quantity: 1,
             duration_in_billing_cycles: 1,
             minimum_amount_cents: 1000,
+            existing_customers_only: false,
+            ownership_products: [],
+            ownership_duration_tiers: nil,
             products: [
               {
                 id: product1.external_id,
@@ -184,6 +196,29 @@ describe Checkout::DiscountsPresenter do
             ],
           }
         )
+      end
+
+      it "exposes ownership products and tiers for existing-customers codes" do
+        offer_code = create(:offer_code,
+                            user: seller,
+                            products: [product1],
+                            ownership_products: [product2],
+                            existing_customers_only: true,
+                            amount_cents: nil,
+                            amount_percentage: 0,
+                            currency_type: nil,
+                            ownership_duration_tiers: [
+                              { "months" => 0, "amount_percentage" => 0 },
+                              { "months" => 12, "amount_percentage" => 50 },
+                            ])
+
+        props = presenter.offer_code_props(offer_code)
+        expect(props[:existing_customers_only]).to eq(true)
+        expect(props[:ownership_products].map { _1[:id] }).to eq([product2.external_id])
+        expect(props[:ownership_duration_tiers]).to eq([
+                                                         { "months" => 0, "amount_percentage" => 0 },
+                                                         { "months" => 12, "amount_percentage" => 50 },
+                                                       ])
       end
     end
 

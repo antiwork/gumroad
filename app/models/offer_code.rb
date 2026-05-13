@@ -19,12 +19,15 @@ class OfferCode < ApplicationRecord
   stripped_fields :code
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
+  has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
   has_one :upsell
 
   alias_attribute :duration_in_billing_cycles, :duration_in_months
+
+  MAX_OWNERSHIP_DURATION_TIERS = 10
 
   # Regex modified from https://stackoverflow.com/a/26900132
   validates :code, presence: true, format: { with: /\A[A-Za-zÀ-ÖØ-öø-ÿ0-9\-_]*\z/, message: "can only contain numbers, letters, dashes, and underscores." }, unless: -> { is_cancellation_discount? || upsell.present? }
@@ -34,6 +37,8 @@ class OfferCode < ApplicationRecord
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
   validate :validate_not_used_as_default_discount
+  validate :validate_existing_customer_settings
+  validate :validate_ownership_duration_tiers
 
 
   after_save :invalidate_product_cache
@@ -204,6 +209,52 @@ class OfferCode < ApplicationRecord
     )
   end
 
+  def tiered?
+    ownership_duration_tiers.present?
+  end
+
+  def normalized_ownership_duration_tiers
+    return nil unless tiered?
+    ownership_duration_tiers.map do |tier|
+      raw = tier.with_indifferent_access
+      { "months" => raw["months"].to_i, "amount_percentage" => raw["amount_percentage"].to_i }
+    end.sort_by { it["months"] }
+  end
+
+  def evaluate_for_buyer(buyer)
+    if existing_customers_only?
+      months = ownership_months_for(buyer)
+      return nil if months.nil?
+
+      if tiered?
+        tier = matching_tier_for(months)
+        return nil if tier.nil?
+        return discount.merge(type: "percent", percents: tier["amount_percentage"])
+      end
+    end
+
+    discount
+  end
+
+  def ownership_months_for(buyer)
+    return nil if buyer.nil?
+    return nil if ownership_products.empty?
+
+    oldest = Purchase
+      .where(purchaser_id: buyer.id, link_id: ownership_products.map(&:id))
+      .all_success_states
+      .not_chargedback_or_chargedback_reversed
+      .not_fully_refunded
+      .order(:created_at)
+      .pick(:created_at)
+    oldest && ((Time.current - oldest) / 1.month).floor
+  end
+
+  def matching_tier_for(ownership_months)
+    return nil unless tiered?
+    normalized_ownership_duration_tiers.reverse.find { it["months"] <= ownership_months }
+  end
+
   def is_amount_valid?(product)
     product.available_price_cents.all? do |price_cents|
       price_after_code = price_cents - amount_off(price_cents)
@@ -324,6 +375,68 @@ class OfferCode < ApplicationRecord
 
       if Link.visible.where(default_offer_code_id: id).exists?
         errors.add(:base, "This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")
+      end
+    end
+
+    def validate_existing_customer_settings
+      return if deleted_at.present?
+      return unless existing_customers_only?
+
+      if ownership_products.empty?
+        errors.add(:base, "Pick at least one product the customer must already own.")
+      end
+    end
+
+    def validate_ownership_duration_tiers
+      return if deleted_at.present?
+      return if ownership_duration_tiers.blank?
+
+      unless existing_customers_only?
+        errors.add(:base, "Turn on \"Limit to existing customers\" to use tiered discounts.")
+        return
+      end
+
+      if duration_in_billing_cycles.present?
+        errors.add(:base, "Remove the membership duration to use tiered discounts.")
+        return
+      end
+
+      if is_cents?
+        errors.add(:base, "Switch the discount type to percentage to use tiers.")
+        return
+      end
+
+      tiers = ownership_duration_tiers
+      unless tiers.is_a?(Array) && tiers.any?
+        errors.add(:base, "Add at least one tier.")
+        return
+      end
+
+      if tiers.length > MAX_OWNERSHIP_DURATION_TIERS
+        errors.add(:base, "Use up to #{MAX_OWNERSHIP_DURATION_TIERS} tiers.")
+        return
+      end
+
+      raw_tiers = tiers.map(&:with_indifferent_access)
+
+      unless raw_tiers.all? { it["months"].is_a?(Integer) && it["months"] >= 0 }
+        errors.add(:base, "Each tier must start at a whole number of months (0 or more).")
+        return
+      end
+
+      unless raw_tiers.all? { it["amount_percentage"].is_a?(Integer) && (0..100).cover?(it["amount_percentage"]) }
+        errors.add(:base, "Each tier percentage must be between 0 and 100.")
+        return
+      end
+
+      months = raw_tiers.map { it["months"] }
+      unless months == months.uniq
+        errors.add(:base, "Each tier needs a different starting month.")
+        return
+      end
+
+      unless months.min.zero?
+        errors.add(:base, "The first tier must start at 0 months.")
       end
     end
 end

@@ -314,6 +314,57 @@ describe Checkout::DiscountsController do
         expect(response.parsed_body["error_message"]).to eq("Discount code must be unique.")
       end
     end
+
+    context "when limited to existing customers" do
+      let(:owned_product) { create(:product, user: seller) }
+      let(:subject_product) { create(:product, user: seller) }
+
+      it "creates an offer code with ownership products and tiers" do
+        expect do
+          post :create, params: {
+            name: "Renewal discount",
+            code: "renew",
+            amount_percentage: 0,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: true,
+            ownership_product_ids: [owned_product.external_id],
+            ownership_duration_tiers: [
+              { months: 0, amount_percentage: 0 },
+              { months: 12, amount_percentage: 50 },
+            ],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        offer_code = seller.offer_codes.last
+        expect(offer_code.existing_customers_only?).to eq(true)
+        expect(offer_code.ownership_products).to eq([owned_product])
+        expect(offer_code.normalized_ownership_duration_tiers).to eq([
+                                                                       { "months" => 0, "amount_percentage" => 0 },
+                                                                       { "months" => 12, "amount_percentage" => 50 },
+                                                                     ])
+      end
+
+      it "rejects ownership tiers without an existing-customers flag" do
+        expect do
+          post :create, params: {
+            name: "Bad",
+            code: "bad",
+            amount_percentage: 0,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: false,
+            ownership_product_ids: [],
+            ownership_duration_tiers: [{ months: 0, amount_percentage: 50 }],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(0)
+
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
   end
 
   describe "PUT update" do

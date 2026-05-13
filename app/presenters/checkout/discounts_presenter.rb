@@ -42,17 +42,7 @@ class Checkout::DiscountsPresenter
       name: offer_code.name.presence || "",
       code: offer_code.code,
       discount: offer_code.amount_cents.present? ? { type: "cents", value: offer_code.amount_cents } : { type: "percent", value: offer_code.amount_percentage },
-      products: offer_code.universal ? nil : offer_code.products.map do |product|
-        {
-          id: product.external_id,
-          name: product.name,
-          archived: product.archived?,
-          url: product.long_url,
-          currency_type: product.price_currency_type,
-          is_tiered_membership: product.is_tiered_membership?,
-          is_recurring_billing: product.is_recurring_billing?,
-        }
-      end,
+      products: offer_code.universal ? nil : offer_code.products.map { product_props_for(_1) },
       limit: offer_code.max_purchase_count,
       currency_type: offer_code.currency_type || Currency::USD,
       valid_at: offer_code.valid_at,
@@ -60,6 +50,22 @@ class Checkout::DiscountsPresenter
       minimum_quantity: offer_code.minimum_quantity,
       duration_in_billing_cycles: offer_code.duration_in_billing_cycles,
       minimum_amount_cents: offer_code.minimum_amount_cents,
+      existing_customers_only: offer_code.existing_customers_only?,
+      ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
+      ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
     }
   end
+
+  private
+    def product_props_for(product)
+      {
+        id: product.external_id,
+        name: product.name,
+        archived: product.archived?,
+        url: product.long_url,
+        currency_type: product.price_currency_type,
+        is_tiered_membership: product.is_tiered_membership?,
+        is_recurring_billing: product.is_recurring_billing?,
+      }
+    end
 end

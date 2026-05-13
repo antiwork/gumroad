@@ -118,7 +118,7 @@ class Order::CreateService
     end
 
     offer_codes = offer_codes
-                    .map { |offer_code, products| { code: offer_code, result: OfferCodeDiscountComputingService.new(offer_code, products).process } }
+                    .map { |offer_code, products| { code: offer_code, result: OfferCodeDiscountComputingService.new(offer_code, products, buyer:).process } }
                     .filter_map do |response|
       {
         code: response[:code],

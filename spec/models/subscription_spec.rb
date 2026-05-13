@@ -3723,6 +3723,63 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "#auto_renewal_offer_code" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+    let(:buyer) { create(:user) }
+    let(:subscription) do
+      purchase = create(:membership_purchase,
+                        link: product,
+                        purchaser: buyer,
+                        variant_attributes: [product.alive_variants.first],
+                        price_cents: 200,
+                        created_at: 13.months.ago)
+      purchase.subscription.update!(user: buyer)
+      purchase.subscription
+    end
+
+    let!(:tiered_code) do
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 0,
+             currency_type: nil,
+             ownership_duration_tiers: [
+               { "months" => 0, "amount_percentage" => 0 },
+               { "months" => 12, "amount_percentage" => 50 },
+             ])
+    end
+
+    it "discovers the best tiered renewal discount for the subscriber" do
+      auto = subscription.auto_renewal_offer_code
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "returns nil when the original purchase already carries a still-applicable discount" do
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "records the auto-discovered discount on the renewal purchase" do
+      renewal_purchase = subscription.build_purchase
+      expect(renewal_purchase.offer_code).to eq(tiered_code)
+      expect(renewal_purchase.purchase_offer_code_discount).to be_present
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+    end
+  end
+
   describe "#cookie_key" do
     it "returns the cookie key" do
       expect(@subscription.cookie_key).to eq("subscription_#{@subscription.external_id_numeric}")

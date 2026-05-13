@@ -113,7 +113,8 @@ class LinksController < ApplicationController
         discount_result = BestOfferCodeService.new(
           product: @product,
           url_code: params[:offer_code] || params[:code],
-          quantity: (params[:quantity] || 1).to_i
+          quantity: (params[:quantity] || 1).to_i,
+          buyer: logged_in_user
         ).result
         code = discount_result&.dig(:code) if discount_result&.dig(:valid)
         redirect_params = params.permit!.except(:code, :offer_code)
