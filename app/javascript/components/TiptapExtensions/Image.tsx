@@ -99,7 +99,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
   useOnOutsideClick([nodeRef], () => setHasFocus(false));
 
   const [isImageLoaded, setIsImageLoaded] = React.useState(false);
-  const isUploading = editor.isEditable && typia.assert<boolean>(attrs.uploading) && isImageLoaded;
+  const isUploading = editor.isEditable && !!attrs.uploading && isImageLoaded;
   const imageMarkup = (
     <img
       {...{ ...attrs, uploading: undefined }}
