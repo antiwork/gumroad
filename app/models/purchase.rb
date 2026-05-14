@@ -1718,12 +1718,12 @@ class Purchase < ApplicationRecord
   end
 
   def amount_refundable_in_currency
-    amount_in_cents = usd_cents_to_currency(link.price_currency_type, amount_refundable_cents, rate_converted_to_usd)
+    amount_in_cents = usd_cents_to_currency(displayed_price_currency_type, amount_refundable_cents, rate_converted_to_usd)
     Money.new(amount_in_cents, displayed_price_currency_type).format(no_cents_if_whole: true, symbol: false)
   end
 
   def amount_refundable_cents_in_currency
-    usd_cents_to_currency(link.price_currency_type, amount_refundable_cents, rate_converted_to_usd)
+    usd_cents_to_currency(displayed_price_currency_type, amount_refundable_cents, rate_converted_to_usd)
   end
 
   def refunding_amount_cents(amount)
