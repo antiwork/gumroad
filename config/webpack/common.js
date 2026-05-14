@@ -172,7 +172,7 @@ const config = {
   },
 
   plugins: [
-    UnpluginTypia({ cache: true }),
+    UnpluginTypia(),
     webpackAssetsManifestPlugin,
     miniCssExtractPlugin,
     new webpack.ProvidePlugin({ Routes: "$app/utils/routes" }),
@@ -206,7 +206,7 @@ const widgetConfig = {
     rules: [sassRule, assetRule, jsRule],
   },
   plugins: [
-    UnpluginTypia({ cache: true }),
+    UnpluginTypia(),
     webpackAssetsManifestPlugin,
     miniCssExtractPlugin,
     new webpack.EnvironmentPlugin(["ROOT_DOMAIN", "SHORT_DOMAIN", "DOMAIN", "PROTOCOL"]),
