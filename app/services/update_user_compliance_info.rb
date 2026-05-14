@@ -238,7 +238,7 @@ class UpdateUserComplianceInfo
     def normalize_business_tax_id(value, country_code:)
       return nil if value.blank?
       return value.gsub(/\D/, "") if country_code == "US"
-      value.strip
+      value.gsub(/[\s-]+/, "")
     end
 
     def encrypted_compliance_info_params_present?

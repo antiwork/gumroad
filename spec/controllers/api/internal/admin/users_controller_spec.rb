@@ -1071,13 +1071,13 @@ describe Api::Internal::Admin::UsersController do
       expect(payload["updated_at"]).to eq(info.updated_at.as_json)
     end
 
-    it "returns business KYC fields with the business address and business tax ID last four (digits only)" do
+    it "returns business KYC fields with the business address and business tax ID last four" do
       user = create(:user)
       info = create(:user_compliance_info_business,
                     user:,
                     business_name: "Acme LLC",
                     business_type: UserComplianceInfo::BusinessTypes::LLC,
-                    business_tax_id: "12-3456789",
+                    business_tax_id: "123456789",
                     business_phone: "5550009999",
                     business_vat_id_number: "GB123456789",
                     stripe_company_document_id: "idoc_company",
@@ -1124,6 +1124,22 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response.parsed_body["compliance_info"]["id"]).to eq(newest.external_id)
       expect(response.parsed_body["compliance_info"]["first_name"]).to eq("Newest")
+    end
+
+    it "returns the trailing characters of an alphanumeric non-US business_tax_id verbatim" do
+      user = create(:user)
+      create(:user_compliance_info_business,
+             user:,
+             country: "Ireland",
+             business_country: "Ireland",
+             business_tax_id: "3490731JH",
+             stripe_company_document_id: "idoc_company")
+
+      get :compliance_info, params: { user_id: user.external_id }
+
+      expect(response.parsed_body["compliance_info"]["tax_ids"]).to include(
+        "business_last_four" => "31JH"
+      )
     end
 
     it "omits last_four for tax IDs that were never set" do

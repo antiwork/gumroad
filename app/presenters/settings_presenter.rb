@@ -358,7 +358,7 @@ class SettingsPresenter
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
         individual_tax_id_last_four: user_compliance_info.individual_tax_id.present? ? user_compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
-        business_tax_id_last_four: user_compliance_info.business_tax_id.present? ? user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s.gsub(/\D/, "")[-4..] : nil,
+        business_tax_id_last_four: user_compliance_info.business_tax_id.present? ? user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
         requires_credit_card: seller.requires_credit_card?,
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
