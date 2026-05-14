@@ -1,7 +1,7 @@
 import { router, useForm, usePage } from "@inertiajs/react";
 import { reverse } from "lodash-es";
 import * as React from "react";
-import typia, { TypeGuardError } from "typia";
+import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
@@ -143,25 +143,6 @@ const addProduct = ({
 };
 
 const CheckoutIndexPage = () => {
-  const rawPageProps = usePage().props;
-  let validatedPageProps: CheckoutIndexPageProps;
-  try {
-    validatedPageProps = typia.assert<CheckoutIndexPageProps>(rawPageProps);
-  } catch (e) {
-    if (e instanceof TypeGuardError) {
-      const detail = `TYPIA_ASSERT_FAILED CheckoutIndexPage<CheckoutIndexPageProps>\npath: ${e.path ?? "(none)"}\nexpected: ${e.expected ?? "(none)"}\nvalue: ${JSON.stringify(e.value)}`;
-      console.error(detail);
-      return (
-        <pre
-          data-testid="typia-error"
-          style={{ padding: 16, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#fff" }}
-        >
-          {detail}
-        </pre>
-      );
-    }
-    throw e;
-  }
   const {
     checkout: {
       discover_url,
@@ -183,7 +164,7 @@ const CheckoutIndexPage = () => {
       default_tip_option,
     },
     ...props
-  } = validatedPageProps;
+  } = typia.assert<CheckoutIndexPageProps>(usePage().props);
 
   const user = useLoggedInUser();
   const email = props.cart?.email ?? user?.email ?? "";
