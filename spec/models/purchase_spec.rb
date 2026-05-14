@@ -4777,6 +4777,44 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#set_price_and_rate" do
+    let(:seller) { create(:user) }
+    let(:buyer) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+    let(:offer_code) do
+      create(:tiered_offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             amount_percentage: 0,
+             ownership_duration_tiers: [
+               { "months" => 0, "amount_percentage" => 0 },
+               { "months" => 12, "amount_percentage" => 50 },
+             ])
+    end
+
+    it "caches the buyer-specific tiered discount amount" do
+      create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents, created_at: 13.months.ago)
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+
+      expect(purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(purchase.displayed_price_cents).to eq(500)
+    end
+
+    it "rejects an existing-customer discount when the buyer does not qualify" do
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+
+      expect(purchase.errors.full_messages).to include("Sorry, this discount code is only for existing customers.")
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
+  end
+
   describe "associations" do
     let(:circle_integration) { create(:circle_integration) }
     let(:discord_integration) { create(:discord_integration) }

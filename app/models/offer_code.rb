@@ -437,6 +437,25 @@ class OfferCode < ApplicationRecord
 
       unless months.min.zero?
         errors.add(:base, "The first tier must start at 0 months.")
+        return
+      end
+
+      applicable_products.each do |product|
+        validate_ownership_duration_tier_prices(product, raw_tiers)
+        return if errors.present?
+      end
+    end
+
+    def validate_ownership_duration_tier_prices(product, raw_tiers)
+      return if raw_tiers.all? { |tier| is_percentage_amount_valid?(product, tier["amount_percentage"]) }
+
+      errors.add(:base, "The price after discount for all of your products must be either #{product.currency["symbol"]}0 or at least #{product.min_price_formatted}.")
+    end
+
+    def is_percentage_amount_valid?(product, amount_percentage)
+      product.available_price_cents.all? do |price_cents|
+        price_after_code = price_cents - (price_cents * (amount_percentage / 100.0)).round
+        price_after_code <= 0 || price_after_code >= product.currency["min_price"]
       end
     end
 end

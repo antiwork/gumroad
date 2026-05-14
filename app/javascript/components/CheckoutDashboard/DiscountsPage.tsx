@@ -111,12 +111,20 @@ const formatProducts = (offerCode: OfferCode) => {
     ? `${products}, and ${offerCode.products.length - 2} ${offerCode.products.length - 2 === 1 ? "other" : "others"}`
     : products;
 };
-const formatAmount = (offerCode: OfferCode) =>
-  offerCode.discount.type === "cents"
+const formatAmount = (offerCode: OfferCode) => {
+  if (offerCode.ownership_duration_tiers?.length) {
+    const percentages = offerCode.ownership_duration_tiers.map(({ amount_percentage }) => amount_percentage);
+    const minPercentage = Math.min(...percentages);
+    const maxPercentage = Math.max(...percentages);
+    return minPercentage === maxPercentage ? `${minPercentage}%` : `${minPercentage}%–${maxPercentage}%`;
+  }
+
+  return offerCode.discount.type === "cents"
     ? formatPriceCentsWithCurrencySymbol(offerCode.currency_type, offerCode.discount.value, {
         symbolFormat: "short",
       })
     : `${offerCode.discount.value}%`;
+};
 const formatRevenue = (revenue: number) => formatPriceCentsWithCurrencySymbol("usd", revenue, { symbolFormat: "long" });
 const formatUses = (uses: number, limit: number | null) => `${uses}/${limit ?? "∞"}`;
 

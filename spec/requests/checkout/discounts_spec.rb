@@ -517,7 +517,7 @@ describe("Checkout discounts page", type: :system, js: true) do
                ownership_duration_tiers: [
                  { "months" => 0,  "amount_percentage" => 0 },
                  { "months" => 6,  "amount_percentage" => 25 },
-                 { "months" => 18, "amount_percentage" => 75 },
+                 { "months" => 18, "amount_percentage" => 50 },
                ])
 
         visit checkout_discounts_path
@@ -554,6 +554,7 @@ describe("Checkout discounts page", type: :system, js: true) do
 
         visit checkout_discounts_path
         within(find(:table_row, { "Discount" => "Renewal tiered" })) do
+          expect(page).to have_text("0%–50% off")
           click_on "Edit"
         end
 
@@ -563,14 +564,14 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_field("Tier 2 percentage", with: "50")
         expect(page).to have_field("Tier 2 starting month", with: "12")
 
-        fill_in "Tier 2 percentage", with: "75"
+        fill_in "Tier 2 percentage", with: "25"
         click_on "Save changes"
         expect(page).to have_alert(text: "Successfully updated discount!")
 
         tiered_code.reload
         expect(tiered_code.normalized_ownership_duration_tiers).to eq([
                                                                         { "months" => 0, "amount_percentage" => 0 },
-                                                                        { "months" => 12, "amount_percentage" => 75 },
+                                                                        { "months" => 12, "amount_percentage" => 25 },
                                                                       ])
       end
     end

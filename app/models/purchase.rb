@@ -1876,9 +1876,17 @@ class Purchase < ApplicationRecord
 
   def set_price_and_rate
     if offer_code.present? && !has_cached_offer_code?
-      self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
-                                              pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
-                                              duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
+      resolved_discount = resolved_offer_code_discount_for_buyer
+      if resolved_discount.present?
+        offer_code_is_percent = resolved_discount[:type] == "percent"
+        offer_code_amount = offer_code_is_percent ? resolved_discount[:percents] : resolved_discount[:cents]
+        self.build_purchase_offer_code_discount(offer_code:, offer_code_amount:, offer_code_is_percent:,
+                                                pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+                                                duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
+      else
+        errors.add(:base, "Sorry, this discount code is only for existing customers.")
+        self.offer_code = nil
+      end
     end
 
     self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted? && purchasing_power_parity_factor < 1
@@ -2863,6 +2871,18 @@ class Purchase < ApplicationRecord
   end
 
   private
+    def resolved_offer_code_discount_for_buyer
+      if offer_code.existing_customers_only?
+        evaluated_discount = offer_code.evaluate_for_buyer(purchaser)
+        return nil if evaluated_discount.blank?
+        return evaluated_discount if offer_code.tiered?
+      end
+
+      offer_code.is_percent? ?
+        { type: "percent", percents: offer_code.amount } :
+        { type: "fixed", cents: offer_code.amount }
+    end
+
     def auto_delete_single_use_offer_code
       offer_code.auto_delete_if_single_use_exhausted!
     rescue => e

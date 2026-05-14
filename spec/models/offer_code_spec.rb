@@ -929,6 +929,18 @@ describe OfferCode do
       expect(offer_code).not_to be_valid
       expect(offer_code.errors.full_messages).to include("Each tier percentage must be between 0 and 100.")
     end
+
+    it "rejects tiers that discount a product below the minimum price" do
+      offer_code = build(:tiered_offer_code,
+                         products: [@product],
+                         ownership_duration_tiers: [
+                           { "months" => 0, "amount_percentage" => 0 },
+                           { "months" => 12, "amount_percentage" => 99 },
+                         ])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("The price after discount for all of your products must be either $0 or at least $0.99.")
+    end
   end
 
   describe "#evaluate_for_buyer" do
