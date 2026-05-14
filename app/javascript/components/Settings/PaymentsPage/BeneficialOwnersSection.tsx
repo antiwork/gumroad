@@ -1031,7 +1031,7 @@ const BeneficialOwnersSection = ({
                     onChange={(event) =>
                       updateForm({
                         owner: event.target.checked,
-                        percent_ownership: event.target.checked ? formState.percent_ownership : "",
+                        percent_ownership: event.target.checked ? formState.percent_ownership : "0",
                       })
                     }
                   />

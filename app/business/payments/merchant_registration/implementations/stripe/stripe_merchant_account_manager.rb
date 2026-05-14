@@ -210,8 +210,7 @@ module StripeMerchantAccountManager
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
-    stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-    stripe_person = find_stripe_representative_person(stripe_persons)
+    stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
@@ -235,10 +234,6 @@ module StripeMerchantAccountManager
     end
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
-  end
-
-  def self.find_stripe_representative_person(stripe_persons)
-    stripe_persons.find { |person| person[:relationship]&.[](:representative) } || stripe_persons.last
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)

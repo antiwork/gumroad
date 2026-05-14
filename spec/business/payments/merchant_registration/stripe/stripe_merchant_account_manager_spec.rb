@@ -11680,30 +11680,6 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
-  describe ".find_stripe_representative_person" do
-    let(:representative) do
-      Stripe::Person.construct_from(id: "person_rep", relationship: { representative: true, owner: true })
-    end
-    let(:co_owner) do
-      Stripe::Person.construct_from(id: "person_co_owner", relationship: { representative: false, owner: true })
-    end
-    let(:no_relationship_person) do
-      Stripe::Person.construct_from(id: "person_unknown")
-    end
-
-    it "returns the person flagged as representative" do
-      expect(described_class.find_stripe_representative_person([co_owner, representative])).to eq(representative)
-    end
-
-    it "falls back to the last person when no representative is set" do
-      expect(described_class.find_stripe_representative_person([no_relationship_person, co_owner])).to eq(co_owner)
-    end
-
-    it "returns nil for an empty list" do
-      expect(described_class.find_stripe_representative_person([])).to be_nil
-    end
-  end
-
   describe ".update_person" do
     let(:user) { create(:user, email: "rep@example.com") }
     let(:user_compliance_info) { create(:user_compliance_info_business, user:) }
@@ -11736,63 +11712,24 @@ describe StripeMerchantAccountManager, :vcr do
 
     before { user_compliance_info }
 
-    context "with multiple beneficial owners on the Stripe account" do
-      before do
+    context "list_persons filters by relationship.representative on Stripe's side" do
+      it "queries Stripe with relationship: { representative: true }, limit: 1 — no client-side scanning" do
         expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id)
-          .and_return("data" => [co_director_owner, representative_person, third_owner])
-      end
-
-      it "updates the representative person rather than the last person returned by Stripe" do
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
         expect(Stripe::Account).to receive(:update_person)
           .with(stripe_account.id, representative_person.id, anything)
           .and_return(true)
 
         described_class.update_person(user, stripe_account, nil, "1234")
       end
+    end
 
+    context "with the representative on the Stripe account" do
       it "sends only representative: true and lets Stripe preserve owner/title/percent_ownership set via BeneficialOwnersSection" do
-        captured_attributes = nil
-        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
-          captured_attributes = attributes
-          true
-        end
-
-        described_class.update_person(user, stripe_account, nil, "1234")
-
-        expect(captured_attributes[:relationship]).to eq(representative: true)
-      end
-    end
-
-    context "with only the representative on the Stripe account" do
-      it "sends only representative: true on single-rep state (preserves whatever the seller set in BeneficialOwnersSection)" do
         expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
           .and_return("data" => [representative_person])
-
-        captured_attributes = nil
-        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
-          captured_attributes = attributes
-          true
-        end
-
-        described_class.update_person(user, stripe_account, nil, "1234")
-
-        expect(captured_attributes[:relationship]).to eq(representative: true)
-      end
-    end
-
-    context "with a representative plus a non-owner director on the Stripe account" do
-      it "sends only representative: true (preserves owner/title/percent set via BeneficialOwnersSection)" do
-        director_only = Stripe::Person.construct_from(
-          id: "person_director_only",
-          object: "person",
-          account: stripe_account.id,
-          relationship: { representative: false, owner: false, director: true }
-        )
-        expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id)
-          .and_return("data" => [representative_person, director_only])
 
         captured_attributes = nil
         expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
@@ -11809,7 +11746,7 @@ describe StripeMerchantAccountManager, :vcr do
     context "when Stripe returns no persons for the account" do
       it "returns early without calling update_person" do
         expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
           .and_return("data" => [])
         expect(Stripe::Account).not_to receive(:update_person)
 

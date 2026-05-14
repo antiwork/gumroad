@@ -44,7 +44,7 @@ module StripeBeneficialOwnersManager
   def self.create(user, params)
     stripe_account = ensure_eligible!(user)
     validate_required_fields!(params, action: :create, user: user)
-    person_params = build_person_params(params, user)
+    person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
   end
@@ -57,7 +57,7 @@ module StripeBeneficialOwnersManager
       person_params = build_representative_update_params(params)
     else
       validate_required_fields!(params, action: :update, user: user)
-      person_params = build_person_params(params, user)
+      person_params = build_person_params(params, user, action: :update)
     end
 
     person = Stripe::Account.update_person(stripe_account.charge_processor_merchant_id, stripe_person_id, person_params)
@@ -176,7 +176,7 @@ module StripeBeneficialOwnersManager
   end
   private_class_method :build_representative_update_params
 
-  def self.build_person_params(params, user)
+  def self.build_person_params(params, user, action:)
     compliance_info = user.alive_user_compliance_info
     country_code = compliance_info&.legal_entity_country_code
 
@@ -185,8 +185,12 @@ module StripeBeneficialOwnersManager
       director: truthy?(params[:director]),
       executive: truthy?(params[:executive]),
       representative: false,
-      title: params[:title].presence || DEFAULT_TITLE,
     }
+    if params[:title].present?
+      relationship[:title] = params[:title]
+    elsif action == :create
+      relationship[:title] = DEFAULT_TITLE
+    end
     if params[:percent_ownership].present?
       relationship[:percent_ownership] = params[:percent_ownership].to_f
     end
