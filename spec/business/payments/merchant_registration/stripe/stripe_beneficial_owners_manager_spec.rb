@@ -1,0 +1,301 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe StripeBeneficialOwnersManager do
+  let(:user) { create(:user) }
+  let(:stripe_account_id) { "acct_test_1234" }
+  let(:merchant_account) do
+    create(:merchant_account, user:, country: "GB", currency: "gbp",
+                              charge_processor_merchant_id: stripe_account_id)
+  end
+
+  let(:representative_person) do
+    Stripe::StripeObject.construct_from(
+      id: "person_rep",
+      first_name: "Justin",
+      last_name: "Director",
+      relationship: { representative: true, owner: true, director: true, percent_ownership: 33.33, title: "CEO" },
+      address: { line1: "1 High St", city: "London", country: "GB", postal_code: "EC1" },
+      dob: { day: 1, month: 1, year: 1980 },
+      id_number_provided: true,
+      ssn_last_4_provided: false,
+      verification: { status: "verified" },
+      requirements: { currently_due: [] }
+    )
+  end
+
+  let(:other_owner_person) do
+    Stripe::StripeObject.construct_from(
+      id: "person_phil",
+      first_name: "Phil",
+      last_name: "Owner",
+      relationship: { representative: false, owner: true, director: true, percent_ownership: 33.33, title: "Director" },
+      address: { line1: "2 High St", city: "London", country: "GB", postal_code: "EC2" },
+      dob: { day: 2, month: 2, year: 1981 },
+      id_number_provided: true,
+      ssn_last_4_provided: false,
+      verification: { status: "verified" },
+      requirements: { currently_due: [] }
+    )
+  end
+
+  let(:third_owner_person) do
+    Stripe::StripeObject.construct_from(
+      id: "person_graham",
+      first_name: "Graham",
+      last_name: "Owner",
+      relationship: { representative: false, owner: true, director: true, percent_ownership: 33.33, title: "Director" },
+      address: { line1: "3 High St", city: "London", country: "GB", postal_code: "EC3" },
+      dob: { day: 3, month: 3, year: 1982 },
+      id_number_provided: false,
+      ssn_last_4_provided: false,
+      verification: { status: "unverified" },
+      requirements: { currently_due: ["verification.document"] }
+    )
+  end
+
+  before do
+    create(:user_compliance_info_business, user:, business_country: "United Kingdom", country: "United Kingdom")
+    merchant_account
+  end
+
+  describe ".eligible?" do
+    it "returns true for a business user with a Gumroad-managed Stripe merchant account" do
+      expect(described_class.eligible?(user)).to be true
+    end
+
+    it "returns false when the user has no Gumroad-managed Stripe account" do
+      allow(user).to receive(:stripe_account).and_return(nil)
+      expect(described_class.eligible?(user)).to be false
+    end
+
+    it "returns false when the seller is on a Stripe Connect OAuth account" do
+      allow(merchant_account).to receive(:is_a_stripe_connect_account?).and_return(true)
+      allow(user).to receive(:stripe_account).and_return(merchant_account)
+      expect(described_class.eligible?(user)).to be false
+    end
+
+    it "returns false for an individual account" do
+      individual_user = create(:user)
+      create(:user_compliance_info, user: individual_user)
+      create(:merchant_account, user: individual_user)
+      expect(described_class.eligible?(individual_user)).to be false
+    end
+  end
+
+  describe ".list" do
+    it "returns every person on the account, including the representative, with relationship flags intact" do
+      allow(Stripe::Account).to receive(:list_persons)
+        .with(stripe_account_id, limit: described_class::PERSON_LIST_LIMIT)
+        .and_return({ "data" => [representative_person, other_owner_person, third_owner_person] })
+
+      result = described_class.list(user)
+
+      expect(result.map { |o| o[:id] }).to eq(["person_rep", "person_phil", "person_graham"])
+      expect(result.first[:relationship]).to include(representative: true, owner: true, director: true, percent_ownership: 33.33, title: "CEO")
+      expect(result[1]).to include(
+        first_name: "Phil",
+        last_name: "Owner",
+        relationship: include(owner: true, director: true, representative: false, percent_ownership: 33.33, title: "Director"),
+        verification_status: "verified",
+        requirements_currently_due: [],
+      )
+      expect(result.last[:requirements_currently_due]).to eq(["verification.document"])
+    end
+
+    it "returns the lone representative when no other owners exist" do
+      allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [representative_person] })
+      result = described_class.list(user)
+      expect(result.length).to eq(1)
+      expect(result.first[:relationship][:representative]).to be true
+    end
+
+    it "does not expose the raw id_number or ssn_last_4" do
+      allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [other_owner_person] })
+      result = described_class.list(user).first
+      expect(result).not_to have_key(:id_number)
+      expect(result).not_to have_key(:ssn_last_4)
+      expect(result[:id_number_provided]).to be true
+      expect(result[:ssn_last_4_provided]).to be false
+    end
+
+    it "raises NotEligibleError for ineligible users" do
+      allow(user).to receive(:stripe_account).and_return(nil)
+      expect { described_class.list(user) }.to raise_error(StripeBeneficialOwnersManager::NotEligibleError)
+    end
+  end
+
+  describe ".create" do
+    let(:params) do
+      ActionController::Parameters.new(
+        first_name: "Phil",
+        last_name: "Owner",
+        email: "phil@example.com",
+        phone: "+447700900000",
+        id_number: "AB123456C",
+        title: "Director",
+        owner: "true",
+        director: "true",
+        executive: "false",
+        percent_ownership: "33.33",
+        dob: { day: "2", month: "2", year: "1981" },
+        address: { line1: "2 High St", city: "London", state: "Greater London", postal_code: "EC2", country: "GB" },
+      ).permit!
+    end
+
+    it "creates a Stripe person with mapped relationship flags and no representative bit" do
+      expect(Stripe::Account).to receive(:create_person) do |account_id, attrs|
+        expect(account_id).to eq(stripe_account_id)
+        expect(attrs[:first_name]).to eq("Phil")
+        expect(attrs[:last_name]).to eq("Owner")
+        expect(attrs[:email]).to eq("phil@example.com")
+        expect(attrs[:id_number]).to eq("AB123456C")
+        expect(attrs[:dob]).to eq(day: 2, month: 2, year: 1981)
+        expect(attrs[:address]).to include(line1: "2 High St", city: "London", state: "Greater London", postal_code: "EC2", country: "GB")
+        expect(attrs[:relationship]).to include(
+          owner: true, director: true, executive: false,
+          representative: false, title: "Director", percent_ownership: 33.33
+        )
+        other_owner_person
+      end
+
+      result = described_class.create(user, params)
+      expect(result[:id]).to eq("person_phil")
+    end
+
+    it "lets a Stripe ownership-percent error propagate to the caller" do
+      allow(Stripe::Account).to receive(:create_person)
+        .and_raise(Stripe::InvalidRequestError.new("The total combined ownership of the company would exceed 100 percent.", "relationship[percent_ownership]"))
+      expect { described_class.create(user, params) }.to raise_error(Stripe::InvalidRequestError, /exceed 100/)
+    end
+
+    it "raises NotEligibleError for ineligible users" do
+      allow(user).to receive(:stripe_account).and_return(nil)
+      expect { described_class.create(user, params) }.to raise_error(StripeBeneficialOwnersManager::NotEligibleError)
+    end
+
+    it "raises MissingRequiredFieldError when email or phone is missing" do
+      blank_email = params.merge(email: "")
+      expect { described_class.create(user, blank_email) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Email is required/)
+
+      blank_phone = params.merge(phone: "  ")
+      expect { described_class.create(user, blank_phone) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Phone is required/)
+
+      blank_both = params.merge(email: "", phone: nil, first_name: "")
+      expect { described_class.create(user, blank_both) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /First name, Email, and Phone are required/)
+    end
+
+    it "raises MissingRequiredFieldError when address sub-fields are missing" do
+      blank_state = params.deep_dup
+      blank_state[:address][:state] = ""
+      expect { described_class.create(user, blank_state) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /State or region is required/)
+
+      no_address = params.except(:address)
+      expect { described_class.create(user, no_address) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Street address, City, State or region, Postal code, and Country are required/)
+    end
+
+    it "raises MissingRequiredFieldError when id_number is missing on create" do
+      no_id = params.merge(id_number: "")
+      expect { described_class.create(user, no_id) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Personal tax ID number is required/)
+    end
+  end
+
+  describe ".update" do
+    let(:params) do
+      ActionController::Parameters.new(
+        first_name: "Phil",
+        last_name: "Owner",
+        email: "phil@example.com",
+        phone: "+447700900000",
+        title: "Director",
+        owner: "true",
+        director: "true",
+        executive: "false",
+        percent_ownership: "34",
+      ).permit!
+    end
+
+    it "updates the person and never sets representative: true" do
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+      expect(Stripe::Account).to receive(:update_person) do |account_id, person_id, attrs|
+        expect(account_id).to eq(stripe_account_id)
+        expect(person_id).to eq("person_phil")
+        expect(attrs[:relationship][:representative]).to be false
+        expect(attrs[:relationship][:percent_ownership]).to eq(34.0)
+        other_owner_person
+      end
+
+      described_class.update(user, "person_phil", params)
+    end
+
+    it "allows editing the representative's percent_ownership, title, and role flags only" do
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_rep").and_return(representative_person)
+
+      rep_params = ActionController::Parameters.new(
+        first_name: "ShouldBeIgnored",
+        last_name: "AlsoIgnored",
+        title: "Founder",
+        owner: "true",
+        director: "true",
+        executive: "false",
+        percent_ownership: "50",
+        dob: { day: "9", month: "9", year: "1999" },
+        address: { line1: "Ignored", city: "Ignored", postal_code: "Ignored", country: "GB" },
+      ).permit!
+
+      expect(Stripe::Account).to receive(:update_person) do |account_id, person_id, attrs|
+        expect(account_id).to eq(stripe_account_id)
+        expect(person_id).to eq("person_rep")
+        expect(attrs.keys).to eq([:relationship])
+        expect(attrs[:relationship]).to include(
+          representative: true, owner: true, director: true, executive: false,
+          title: "Founder", percent_ownership: 50.0,
+        )
+        representative_person
+      end
+
+      described_class.update(user, "person_rep", rep_params)
+    end
+
+    it "omits id_number when the form value is blank, preserving Stripe's stored value" do
+      allow(Stripe::Account).to receive(:retrieve_person).and_return(other_owner_person)
+      blank_id_params = params.merge(id_number: "")
+      expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+        expect(attrs).not_to have_key(:id_number)
+        expect(attrs).not_to have_key(:ssn_last_4)
+        other_owner_person
+      end
+
+      described_class.update(user, "person_phil", blank_id_params)
+    end
+
+    it "raises MissingRequiredFieldError when email or phone is missing on a non-rep update" do
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+      expect(Stripe::Account).not_to receive(:update_person)
+      expect { described_class.update(user, "person_phil", params.merge(email: "")) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Email is required/)
+    end
+  end
+
+  describe ".destroy" do
+    it "deletes the person and returns a confirmation hash" do
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+      expect(Stripe::Account).to receive(:delete_person).with(stripe_account_id, "person_phil")
+      expect(described_class.destroy(user, "person_phil")).to eq(deleted: true, id: "person_phil")
+    end
+
+    it "refuses to delete the representative" do
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_rep").and_return(representative_person)
+      expect(Stripe::Account).not_to receive(:delete_person)
+      expect { described_class.destroy(user, "person_rep") }
+        .to raise_error(StripeBeneficialOwnersManager::RepresentativeNotEditableError)
+    end
+  end
+end

@@ -24,6 +24,7 @@ import BankAccountSection, {
   BankAccountDetails,
   type BankAccount,
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
+import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
@@ -96,6 +97,7 @@ type PaymentsPageProps = {
   payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  can_manage_beneficial_owners: boolean;
   errors?: {
     base?: string[];
   };
@@ -215,12 +217,11 @@ export default function PaymentsPage() {
     }
   }, [errors, clientErrorMessage]);
 
-  const isStreetAddressPOBox = (input: string) => {
-    return input
+  const isStreetAddressPOBox = (input: string) =>
+    input
       .replace(/[^\w]*/gu, "")
       .toLocaleLowerCase()
       .includes("pobox");
-  };
 
   const poBoxAddressErrorMessage = (countryCode: CountryCode) => {
     if (countryCode === "US") {
@@ -234,13 +235,10 @@ export default function PaymentsPage() {
     return "We require a valid physical address. We cannot accept a P.O. Box as a valid address.";
   };
 
-  const countryRequiresPhysicalAddress = (countryCode: CountryCode) => {
-    return ["US", "GH"].includes(countryCode);
-  };
+  const countryRequiresPhysicalAddress = (countryCode: CountryCode) => ["US", "GH"].includes(countryCode);
 
-  const isPhysicalAddressRequiredAndPOBox = (countryCode: CountryCode, input: string) => {
-    return countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
-  };
+  const isPhysicalAddressRequiredAndPOBox = (countryCode: CountryCode, input: string) =>
+    countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
@@ -708,7 +706,10 @@ export default function PaymentsPage() {
         !form.data.user.business_street_address ||
         (businessStreetAddressValidationContextChanged &&
           form.data.user.business_country !== null &&
-          isPhysicalAddressRequiredAndPOBox(cast(form.data.user.business_country), form.data.user.business_street_address))
+          isPhysicalAddressRequiredAndPOBox(
+            cast(form.data.user.business_country),
+            form.data.user.business_street_address,
+          ))
       ) {
         markFieldInvalid("business_street_address");
         if (form.data.user.business_street_address) {
@@ -1156,6 +1157,15 @@ export default function PaymentsPage() {
               />
             )}
           </section>
+          {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
+            <BeneficialOwnersSection
+              countries={props.countries}
+              states={props.states}
+              defaultCountry={form.data.user.business_country ?? form.data.user.country}
+              minDobYear={props.min_dob_year}
+              isFormDisabled={props.is_form_disabled}
+            />
+          ) : null}
         </FormSection>
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection

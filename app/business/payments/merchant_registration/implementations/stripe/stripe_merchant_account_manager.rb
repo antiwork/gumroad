@@ -218,13 +218,11 @@ module StripeMerchantAccountManager
     user_compliance_info = user.alive_user_compliance_info
 
     current_attributes = person_hash(user_compliance_info, passphrase)
-    relationship_attributes = {
-      representative: true,
-      owner: true,
-      title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
-    }
-    relationship_attributes[:percent_ownership] = 100 unless other_beneficial_owners_present?(stripe_persons, stripe_person)
-    current_attributes.deep_merge!(relationship: relationship_attributes)
+    current_attributes.deep_merge!(relationship: {
+                                     representative: true,
+                                     owner: true,
+                                     title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
+                                   })
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
 
@@ -245,12 +243,6 @@ module StripeMerchantAccountManager
 
   def self.find_stripe_representative_person(stripe_persons)
     stripe_persons.find { |person| person[:relationship]&.[](:representative) } || stripe_persons.last
-  end
-
-  def self.other_beneficial_owners_present?(stripe_persons, representative_person)
-    stripe_persons.any? do |person|
-      person.id != representative_person.id && person[:relationship]&.[](:owner)
-    end
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)

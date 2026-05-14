@@ -11705,26 +11705,6 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
-  describe ".other_beneficial_owners_present?" do
-    let(:representative) do
-      Stripe::Person.construct_from(id: "person_rep", relationship: { representative: true, owner: true })
-    end
-
-    it "returns false when only the representative is an owner" do
-      director_only = Stripe::Person.construct_from(
-        id: "person_director", relationship: { representative: false, owner: false, director: true }
-      )
-      expect(described_class.other_beneficial_owners_present?([representative, director_only], representative)).to eq(false)
-    end
-
-    it "returns true when at least one other person is flagged as an owner" do
-      co_owner = Stripe::Person.construct_from(
-        id: "person_co_owner", relationship: { representative: false, owner: true }
-      )
-      expect(described_class.other_beneficial_owners_present?([representative, co_owner], representative)).to eq(true)
-    end
-  end
-
   describe ".update_person" do
     let(:user) { create(:user, email: "rep@example.com") }
     let(:user_compliance_info) { create(:user_compliance_info_business, user:) }
@@ -11787,7 +11767,7 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     context "with only the representative on the Stripe account" do
-      it "sets percent_ownership to 100 (current behavior for single-owner accounts)" do
+      it "omits percent_ownership so Stripe preserves the seeded value (100% by default, or whatever the seller has explicitly set)" do
         expect(Stripe::Account).to receive(:list_persons)
           .with(stripe_account.id)
           .and_return("data" => [representative_person])
@@ -11800,12 +11780,13 @@ describe StripeMerchantAccountManager, :vcr do
 
         described_class.update_person(user, stripe_account, nil, "1234")
 
-        expect(captured_attributes[:relationship]).to include(representative: true, owner: true, percent_ownership: 100)
+        expect(captured_attributes[:relationship]).to include(representative: true, owner: true)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
       end
     end
 
     context "with a representative plus a non-owner director on the Stripe account" do
-      it "still sets percent_ownership to 100 because no other beneficial owners exist" do
+      it "omits percent_ownership so Stripe preserves whatever the rep is currently set to" do
         director_only = Stripe::Person.construct_from(
           id: "person_director_only",
           object: "person",
@@ -11824,7 +11805,8 @@ describe StripeMerchantAccountManager, :vcr do
 
         described_class.update_person(user, stripe_account, nil, "1234")
 
-        expect(captured_attributes[:relationship]).to include(representative: true, owner: true, percent_ownership: 100)
+        expect(captured_attributes[:relationship]).to include(representative: true, owner: true)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
       end
     end
 
