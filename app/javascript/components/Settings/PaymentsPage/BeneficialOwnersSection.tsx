@@ -87,7 +87,6 @@ const STATE_LIST_LABEL: Record<string, string> = {
   AU: "State",
   MX: "State",
   AE: "Emirate",
-  IR: "Province",
   BR: "State",
   JP: "Prefecture",
   IE: "County",
@@ -669,10 +668,12 @@ const BeneficialOwnersSection = ({
                         disabled={isFormDisabled}
                         required
                         aria-label="Month"
-                        value={formState.dob_month || "Month"}
+                        value={formState.dob_month || ""}
                         onChange={(event) => updateForm({ dob_month: event.target.value })}
                       >
-                        <option disabled>Month</option>
+                        <option value="" disabled>
+                          Month
+                        </option>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                           <option key={month} value={month}>
                             {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
@@ -686,10 +687,12 @@ const BeneficialOwnersSection = ({
                         disabled={isFormDisabled}
                         required
                         aria-label="Day"
-                        value={formState.dob_day || "Day"}
+                        value={formState.dob_day || ""}
                         onChange={(event) => updateForm({ dob_day: event.target.value })}
                       >
-                        <option disabled>Day</option>
+                        <option value="" disabled>
+                          Day
+                        </option>
                         {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                           <option key={day} value={day}>
                             {day}
@@ -703,10 +706,12 @@ const BeneficialOwnersSection = ({
                         disabled={isFormDisabled}
                         required
                         aria-label="Year"
-                        value={formState.dob_year || "Year"}
+                        value={formState.dob_year || ""}
                         onChange={(event) => updateForm({ dob_year: event.target.value })}
                       >
-                        <option disabled>Year</option>
+                        <option value="" disabled>
+                          Year
+                        </option>
                         {Array.from({ length: minDobYear - 1900 }, (_, i) => i + 1900).map((year) => (
                           <option key={year} value={year}>
                             {year}
@@ -765,7 +770,7 @@ const BeneficialOwnersSection = ({
                               ? states.mx
                               : country === "AE"
                                 ? states.ae
-                                : country === "IR"
+                                : country === "IE"
                                   ? states.ir
                                   : country === "BR"
                                     ? states.br

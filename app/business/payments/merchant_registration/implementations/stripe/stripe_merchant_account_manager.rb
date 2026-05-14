@@ -509,10 +509,6 @@ module StripeMerchantAccountManager
         }
       }
 
-      if user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2
-        hash.deep_merge!(relationship: { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE })
-      end
-
       if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
         hash.deep_merge!({
                            first_name_kanji: user_compliance_info.first_name_kanji,

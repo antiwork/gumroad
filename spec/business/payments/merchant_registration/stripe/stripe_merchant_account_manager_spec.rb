@@ -528,7 +528,6 @@ describe StripeMerchantAccountManager, :vcr do
             last_name: "Bartowski",
             phone: "0000000000",
             email: user.email,
-            relationship: { title: "CEO" },
           },
           bank_account: {
             country: "US",
