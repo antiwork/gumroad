@@ -579,7 +579,7 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan
+                :installment_plan, :authenticated_offer_code_buyer
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -2874,7 +2874,7 @@ class Purchase < ApplicationRecord
   private
     def resolved_offer_code_discount_for_buyer
       if offer_code.existing_customers_only?
-        evaluated_discount = offer_code.evaluate_for_buyer(purchaser)
+        evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer)
         return nil if evaluated_discount.blank?
         return evaluated_discount if offer_code.tiered?
       end
@@ -2882,6 +2882,10 @@ class Purchase < ApplicationRecord
       offer_code.is_percent? ?
         { type: "percent", percents: offer_code.amount } :
         { type: "fixed", cents: offer_code.amount }
+    end
+
+    def offer_code_buyer
+      instance_variable_defined?(:@authenticated_offer_code_buyer) ? authenticated_offer_code_buyer : purchaser
     end
 
     def auto_delete_single_use_offer_code
