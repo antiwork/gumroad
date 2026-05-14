@@ -4813,6 +4813,18 @@ describe Purchase, :vcr do
       expect(purchase.offer_code).to be_nil
       expect(purchase.purchase_offer_code_discount).to be_nil
     end
+
+    it "keeps the existing-customer discount error when the purchase is saved" do
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+      purchase.save
+
+      expect(purchase.errors.full_messages).to include("Sorry, this discount code is only for existing customers.")
+      expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_INVALID)
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
   end
 
   describe "associations" do

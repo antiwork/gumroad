@@ -2018,6 +2018,24 @@ describe Subscription, :vcr do
       expect(new_purchase.displayed_price_cents).to eq 10_00
     end
 
+    it "applies a new offer code when also clearing the previous discount" do
+      setup_subscription(offer_code: create(:offer_code, products: [@product], amount_cents: 100))
+      new_offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        offer_code: new_offer_code,
+        clear_discount: true,
+        skip_preparing_for_charge: true
+      )
+
+      expect(new_purchase.offer_code).to eq new_offer_code
+      expect(new_purchase.purchase_offer_code_discount.offer_code).to eq new_offer_code
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq 50
+      expect(new_purchase.displayed_price_cents).to eq 10_00
+    end
+
     it "does not update the creator's balance" do
       setup_subscription
 

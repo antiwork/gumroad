@@ -1884,7 +1884,8 @@ class Purchase < ApplicationRecord
                                                 pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
                                                 duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
       else
-        errors.add(:base, "Sorry, this discount code is only for existing customers.")
+        @offer_code_invalid_for_buyer = true
+        reject_existing_customer_offer_code
         self.offer_code = nil
       end
     end
@@ -3533,6 +3534,7 @@ class Purchase < ApplicationRecord
 
     def validate_offer_code
       return if errors.present?
+      return reject_existing_customer_offer_code if @offer_code_invalid_for_buyer
       # accept the offer code that was used when the buyer preordered/subscribed
       return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || (is_installment_payment && !is_original_subscription_purchase)
       return if discount_code.blank?
@@ -3566,6 +3568,11 @@ class Purchase < ApplicationRecord
       end
 
       true
+    end
+
+    def reject_existing_customer_offer_code
+      self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
+      errors.add(:base, "Sorry, this discount code is only for existing customers.")
     end
 
     def validate_subscription

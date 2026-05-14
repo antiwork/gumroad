@@ -1012,6 +1012,13 @@ describe OfferCode do
         expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
       end
 
+      it "counts calendar months across yearly anniversaries" do
+        travel_to(Time.zone.local(2026, 5, 14, 12)) do
+          create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 1.year.ago)
+          expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
+        end
+      end
+
       it "uses the OLDEST qualifying purchase to determine ownership duration" do
         create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 24.months.ago)
         create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 2.months.ago)

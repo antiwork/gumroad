@@ -247,7 +247,12 @@ class OfferCode < ApplicationRecord
       .not_fully_refunded
       .order(:created_at)
       .pick(:created_at)
-    oldest && ((Time.current - oldest) / 1.month).floor
+    return nil if oldest.nil?
+
+    now = Time.current
+    months = (now.year * 12 + now.month) - (oldest.year * 12 + oldest.month)
+    months -= 1 if oldest.advance(months:) > now
+    [months, 0].max
   end
 
   def matching_tier_for(ownership_months)
