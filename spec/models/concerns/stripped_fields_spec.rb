@@ -2,18 +2,31 @@
 
 require "spec_helper"
 
-ActiveRecord::Schema.define do
-  create_table :test_fields, temporary: true, force: true do |t|
-    t.string :name
-    t.string :email
-    t.string :description
-    t.string :sql
-    t.string :code
-  end
-end
-
 describe StrippedFields do
+  # Use a non-temporary table to avoid connection-scoped lifetime issues.
+  # Temporary tables are lost when the DB connection is recycled, which can
+  # happen between file load time and test execution in parallel CI.
+  before(:all) do
+    ActiveRecord::Schema.define do
+      create_table :stripped_fields_test, force: true do |t|
+        t.string :name
+        t.string :email
+        t.string :description
+        t.string :sql
+        t.string :code
+      end
+    end
+  end
+
+  after(:all) do
+    ActiveRecord::Schema.define do
+      drop_table :stripped_fields_test, if_exists: true
+    end
+  end
+
   class TestField < ApplicationRecord
+    self.table_name = "stripped_fields_test"
+
     include StrippedFields
 
     stripped_fields :name, :email, transform: ->(v) { v.upcase }
