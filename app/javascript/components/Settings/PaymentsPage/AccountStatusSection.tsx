@@ -94,6 +94,20 @@ export default function AccountStatusSection({
             {accountStatus.compliance_actions.map((action, i) => (
               <ComplianceActionItem key={i} action={action} />
             ))}
+            {accountStatus.compliance_actions.some((a) => a.href) ? (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-medium">ID upload requirements</summary>
+                <ul className="mt-1 list-disc pl-5 text-sm">
+                  <li>We need a color photo of the ID, which you can take with a phone, webcam, or scanner</li>
+                  <li>
+                    If you are uploading a driver's license or identity card, we will need an image of both the front and
+                    back of the ID
+                  </li>
+                  <li>We accept JPEG and PNG file formats</li>
+                  <li>We cannot verify PDFs</li>
+                </ul>
+              </details>
+            ) : null}
             {accountStatus.compliance_actions.some((a) => !a.href) ? (
               <p>
                 Please update your information below.
