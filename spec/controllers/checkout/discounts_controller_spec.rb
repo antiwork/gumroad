@@ -317,7 +317,7 @@ describe Checkout::DiscountsController do
 
     context "when limited to existing customers" do
       let(:owned_product) { create(:product, user: seller) }
-      let(:subject_product) { create(:product, user: seller) }
+      let(:subject_product) { create(:product, user: seller, price_cents: 2_00) }
 
       it "creates an offer code with ownership products and tiers" do
         expect do

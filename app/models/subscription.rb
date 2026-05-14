@@ -202,7 +202,7 @@ class Subscription < ApplicationRecord
   def current_subscription_price_cents
     return original_purchase.minimum_paid_price_cents if is_installment_plan
 
-    if discount_applies_to_next_charge? && (original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?)
+    if reuse_original_discount_on_next_charge?
       return original_purchase.displayed_price_cents
     end
 
@@ -261,8 +261,8 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    applies_next = discount_applies_to_next_charge?
-    if applies_next && original_purchase.purchase_offer_code_discount.present?
+    reuse_original_discount = reuse_original_discount_on_next_charge?
+    if reuse_original_discount && original_purchase.purchase_offer_code_discount.present?
       original_discount = original_purchase.purchase_offer_code_discount
       purchase.offer_code = original_purchase.offer_code
       purchase.build_purchase_offer_code_discount(
@@ -272,7 +272,7 @@ class Subscription < ApplicationRecord
         pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
         duration_in_months: original_discount.duration_in_months
       )
-    elsif applies_next && original_purchase.offer_code.present?
+    elsif reuse_original_discount && original_purchase.offer_code.present?
       purchase.offer_code = original_purchase.offer_code
     elsif (auto = auto_renewal_offer_code)
       pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
@@ -519,12 +519,13 @@ class Subscription < ApplicationRecord
         new_purchase.purchase_offer_code_discount = nil
       elsif offer_code.present?
         new_purchase.offer_code = offer_code
+      elsif new_purchase.offer_code.present? && (copied_discount = new_purchase.purchase_offer_code_discount)
         new_purchase.build_purchase_offer_code_discount(
-          offer_code: offer_code,
+          offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
-          offer_code_amount: offer_code.amount,
-          offer_code_is_percent: offer_code.is_percent?,
-          duration_in_months: offer_code.duration_in_billing_cycles
+          offer_code_amount: copied_discount.offer_code_amount,
+          offer_code_is_percent: copied_discount.offer_code_is_percent,
+          duration_in_months: copied_discount.duration_in_months
         )
       elsif new_purchase.offer_code.present? && (original_discount = original_purchase.purchase_offer_code_discount)
         new_purchase.build_purchase_offer_code_discount(
@@ -950,10 +951,7 @@ class Subscription < ApplicationRecord
     def compute_auto_renewal_offer_code
       return nil if is_installment_plan
       return nil if user.nil? || link.nil?
-      if discount_applies_to_next_charge? && original_purchase &&
-         (original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?)
-        return nil
-      end
+      return nil if reuse_original_discount_on_next_charge?
 
       product_codes = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
       universal_codes = link.user.offer_codes.alive
@@ -965,7 +963,7 @@ class Subscription < ApplicationRecord
 
       candidates
         .filter_map do |offer_code|
-          next if offer_code.inactive?
+          next if offer_code.inactive? || offer_code.duration_in_billing_cycles.present?
 
           resolved = offer_code.evaluate_for_buyer(user)
           next unless resolved && resolved[:type] == "percent" && resolved[:percents].to_i.positive?
@@ -973,6 +971,17 @@ class Subscription < ApplicationRecord
         end
         .max_by(&:last)
         &.then { |offer_code, percent| AutoRenewalDiscount.new(offer_code:, resolved_percent: percent) }
+    end
+
+    def reuse_original_discount_on_next_charge?
+      return false unless discount_applies_to_next_charge? && original_purchase
+      return false if original_renewal_offer_code&.tiered?
+
+      original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?
+    end
+
+    def original_renewal_offer_code
+      original_purchase.purchase_offer_code_discount&.offer_code || original_purchase.offer_code
     end
 
     def installment_plans_cannot_be_cancelled_by_buyer

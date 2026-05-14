@@ -2007,6 +2007,17 @@ describe Subscription, :vcr do
       end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
     end
 
+    it "caches the buyer-specific amount when applying a tiered existing-customer discount" do
+      setup_subscription
+      offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code:)
+
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq 50
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq true
+      expect(new_purchase.displayed_price_cents).to eq 10_00
+    end
+
     it "does not update the creator's balance" do
       setup_subscription
 
@@ -3795,9 +3806,33 @@ describe Subscription, :vcr do
       expect(auto.resolved_percent).to eq(50)
     end
 
+    it "ignores renewal discounts capped to billing cycles" do
+      tiered_code.mark_deleted!
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             duration_in_billing_cycles: 1)
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
     it "returns nil when the original purchase already carries a still-applicable discount" do
+      offer_code = create(:offer_code,
+                          user: seller,
+                          code: "stillapplies",
+                          products: [product],
+                          ownership_products: [product],
+                          existing_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 25,
+                          currency_type: nil)
       subscription.original_purchase.create_purchase_offer_code_discount!(
-        offer_code: tiered_code,
+        offer_code:,
         offer_code_amount: 25,
         offer_code_is_percent: true,
         pre_discount_minimum_price_cents: 200,
@@ -3805,6 +3840,25 @@ describe Subscription, :vcr do
       )
 
       expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "re-evaluates tiered discounts attached to the original purchase" do
+      subscription.original_purchase.update!(offer_code: tiered_code)
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
     end
 
     it "records the auto-discovered discount on the renewal purchase" do
