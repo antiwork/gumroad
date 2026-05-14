@@ -218,6 +218,13 @@ module StripeMerchantAccountManager
 
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
+    if last_user_compliance_info&.is_individual? && user_compliance_info.is_business?
+      current_attributes.deep_merge!(relationship: {
+                                       owner: true,
+                                       title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE,
+                                       percent_ownership: 100
+                                     })
+    end
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
 

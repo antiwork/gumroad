@@ -11753,5 +11753,32 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.update_person(user, stripe_account, nil, "1234")
       end
     end
+
+    context "individual→company transition" do
+      it "seeds owner: true, title, percent_ownership: 100 when transitioning from individual to business" do
+        last_individual_info = create(:user_compliance_info, user:)
+        last_individual_info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+
+        expect(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234")
+
+        expect(captured_attributes[:relationship]).to include(
+          representative: true,
+          owner: true,
+          percent_ownership: 100,
+        )
+        expect(captured_attributes[:relationship][:title]).to be_present
+      end
+    end
   end
 end

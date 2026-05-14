@@ -237,6 +237,10 @@ module StripeBeneficialOwnersManager
       hash[:nationality] = params[:nationality]
     end
 
+    if country_code == Compliance::Countries::SGP.alpha2
+      hash[:full_name_aliases] = [""]
+    end
+
     hash.compact
   end
   private_class_method :build_person_params

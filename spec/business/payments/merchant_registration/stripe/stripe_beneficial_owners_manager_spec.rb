@@ -228,6 +228,19 @@ describe StripeBeneficialOwnersManager do
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Nationality is required/)
     end
 
+    it "sends full_name_aliases for SGP sellers (Singapore MAS rule — required on every Person)" do
+      user.alive_user_compliance_info.mark_deleted!
+      sg_compliance = create(:user_compliance_info_singapore, user: user)
+      sg_compliance.dup_and_save! { |c| c.is_business = true }
+      sg_params = params.deep_dup
+      sg_params[:nationality] = "SG"
+      expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+        expect(attrs[:full_name_aliases]).to eq([""])
+        other_owner_person
+      end
+      described_class.create(user, sg_params)
+    end
+
     it "raises MissingRequiredFieldError when id_number is missing on create" do
       no_id = params.merge(id_number: "")
       expect { described_class.create(user, no_id) }

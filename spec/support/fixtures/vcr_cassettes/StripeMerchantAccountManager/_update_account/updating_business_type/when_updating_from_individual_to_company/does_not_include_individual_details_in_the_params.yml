@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=8101924855384&metadata[tos_agreement_id]=ZSnba3gI3l9T6FblFiI_sQ%3D%3D&metadata[user_compliance_info_id]=2zrYlU8PLi75oOhQSxAM1Q%3D%3D&metadata[bank_account_id]=tZ_YkML8nQmqmFuQphSYfw%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=6062010433993&metadata[tos_agreement_id]=oPcpMet_78h1qtikJlMmWQ%3D%3D&metadata[user_compliance_info_id]=4UWTKQrxqT2aFZ7a2GpG4Q%3D%3D&metadata[bank_account_id]=T40nI9aSZeUiSMkHHBI_NQ%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -14,7 +14,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       Idempotency-Key:
-      - 914c166f-378b-4b36-b5f7-85ab8b35247c
+      - e8d36d8d-83e8-4aa8-ae44-f57176cba5a1
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -33,7 +33,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 14 May 2026 12:06:39 GMT
+      - Thu, 14 May 2026 12:51:39 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -57,18 +57,18 @@ http_interactions:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
         style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=Mq4sVyNXfeD_MhW12aY4TUj8Dp4qHKPQ66gv8AX72x2coGKrblLADMlor88eYSJGAgS-Uwu9pe3uf8el;
+        https://q.stripe.com/csp-violation?q=p3VHekEGpzWgVjBt3WrLG9ce52QAUCTtcsZGKAJ3VY1Fwbsz8prd6y5bhQGlGl8LF-TIZwWHJ86RRVGD;
         report-to csp
       Idempotency-Key:
-      - 914c166f-378b-4b36-b5f7-85ab8b35247c
+      - e8d36d8d-83e8-4aa8-ae44-f57176cba5a1
       Original-Request:
-      - req_fBSg22Rl29WqW4
+      - req_jHDeyjeSXra2gd
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Mq4sVyNXfeD_MhW12aY4TUj8Dp4qHKPQ66gv8AX72x2coGKrblLADMlor88eYSJGAgS-Uwu9pe3uf8el&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=p3VHekEGpzWgVjBt3WrLG9ce52QAUCTtcsZGKAJ3VY1Fwbsz8prd6y5bhQGlGl8LF-TIZwWHJ86RRVGD&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Mq4sVyNXfeD_MhW12aY4TUj8Dp4qHKPQ66gv8AX72x2coGKrblLADMlor88eYSJGAgS-Uwu9pe3uf8el&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=p3VHekEGpzWgVjBt3WrLG9ce52QAUCTtcsZGKAJ3VY1Fwbsz8prd6y5bhQGlGl8LF-TIZwWHJ86RRVGD&t=1"
       Request-Id:
-      - req_fBSg22Rl29WqW4
+      - req_jHDeyjeSXra2gd
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -87,7 +87,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TWy2BEeX8QP2jAL",
+          "id": "acct_1TWyjiIStpHLn3CL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -148,7 +148,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1778760397,
+          "created": 1778763097,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -156,9 +156,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TWy2BEeX8QP2jALNoBFnUGO",
+                "id": "ba_1TWyjjIStpHLn3CL9D65elrW",
                 "object": "bank_account",
-                "account": "acct_1TWy2BEeX8QP2jAL",
+                "account": "acct_1TWyjiIStpHLn3CL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -191,7 +191,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TWy2BEeX8QP2jAL/external_accounts"
+            "url": "/v1/accounts/acct_1TWyjiIStpHLn3CL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -204,9 +204,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TWy2BEeX8QP2jALMEab3k4i",
+            "id": "person_1TWyjjIStpHLn3CLYNFKFra4",
             "object": "person",
-            "account": "acct_1TWy2BEeX8QP2jAL",
+            "account": "acct_1TWyjiIStpHLn3CL",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -215,7 +215,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1778760396,
+            "created": 1778763095,
             "dob": {
               "day": 1,
               "month": 1,
@@ -280,10 +280,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "tZ_YkML8nQmqmFuQphSYfw==",
-            "tos_agreement_id": "ZSnba3gI3l9T6FblFiI_sQ==",
-            "user_compliance_info_id": "2zrYlU8PLi75oOhQSxAM1Q==",
-            "user_id": "8101924855384"
+            "bank_account_id": "T40nI9aSZeUiSMkHHBI_NQ==",
+            "tos_agreement_id": "oPcpMet_78h1qtikJlMmWQ==",
+            "user_compliance_info_id": "4UWTKQrxqT2aFZ7a2GpG4Q==",
+            "user_id": "6062010433993"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -365,10 +365,10 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Thu, 14 May 2026 12:06:39 GMT
+  recorded_at: Thu, 14 May 2026 12:51:39 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1TWy2BEeX8QP2jAL
+    uri: https://api.stripe.com/v1/accounts/acct_1TWyjiIStpHLn3CL
     body:
       encoding: US-ASCII
       string: ''
@@ -380,7 +380,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_fBSg22Rl29WqW4","request_duration_ms":5000}}'
+      - '{"last_request_metrics":{"request_id":"req_jHDeyjeSXra2gd","request_duration_ms":5359}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -399,7 +399,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 14 May 2026 12:06:40 GMT
+      - Thu, 14 May 2026 12:51:40 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -423,16 +423,16 @@ http_interactions:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
         style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o;
+        https://q.stripe.com/csp-violation?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"
       Request-Id:
-      - req_RWdpklZBQ3kgGH
+      - req_BDHYnOqH5G26Sg
       Stripe-Account:
-      - acct_1TWy2BEeX8QP2jAL
+      - acct_1TWyjiIStpHLn3CL
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -449,7 +449,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TWy2BEeX8QP2jAL",
+          "id": "acct_1TWyjiIStpHLn3CL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -510,7 +510,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1778760397,
+          "created": 1778763097,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -518,9 +518,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TWy2BEeX8QP2jALNoBFnUGO",
+                "id": "ba_1TWyjjIStpHLn3CL9D65elrW",
                 "object": "bank_account",
-                "account": "acct_1TWy2BEeX8QP2jAL",
+                "account": "acct_1TWyjiIStpHLn3CL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -553,7 +553,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TWy2BEeX8QP2jAL/external_accounts"
+            "url": "/v1/accounts/acct_1TWyjiIStpHLn3CL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -566,9 +566,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TWy2BEeX8QP2jALMEab3k4i",
+            "id": "person_1TWyjjIStpHLn3CLYNFKFra4",
             "object": "person",
-            "account": "acct_1TWy2BEeX8QP2jAL",
+            "account": "acct_1TWyjiIStpHLn3CL",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -577,7 +577,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1778760396,
+            "created": 1778763095,
             "dob": {
               "day": 1,
               "month": 1,
@@ -642,10 +642,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "tZ_YkML8nQmqmFuQphSYfw==",
-            "tos_agreement_id": "ZSnba3gI3l9T6FblFiI_sQ==",
-            "user_compliance_info_id": "2zrYlU8PLi75oOhQSxAM1Q==",
-            "user_id": "8101924855384"
+            "bank_account_id": "T40nI9aSZeUiSMkHHBI_NQ==",
+            "tos_agreement_id": "oPcpMet_78h1qtikJlMmWQ==",
+            "user_compliance_info_id": "4UWTKQrxqT2aFZ7a2GpG4Q==",
+            "user_id": "6062010433993"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -727,10 +727,10 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Thu, 14 May 2026 12:06:40 GMT
+  recorded_at: Thu, 14 May 2026 12:51:40 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1TWy2BEeX8QP2jAL/persons?limit=1&relationship%5Brepresentative%5D=true
+    uri: https://api.stripe.com/v1/accounts/acct_1TWyjiIStpHLn3CL/persons?limit=1&relationship%5Brepresentative%5D=true
     body:
       encoding: US-ASCII
       string: ''
@@ -742,7 +742,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_RWdpklZBQ3kgGH","request_duration_ms":916}}'
+      - '{"last_request_metrics":{"request_id":"req_BDHYnOqH5G26Sg","request_duration_ms":874}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -761,7 +761,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 14 May 2026 12:06:41 GMT
+      - Thu, 14 May 2026 12:51:41 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -785,16 +785,16 @@ http_interactions:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
         style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o;
+        https://q.stripe.com/csp-violation?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"
       Request-Id:
-      - req_gQbqfxITbz7vfT
+      - req_r1JexK1CC2rFlZ
       Stripe-Account:
-      - acct_1TWy2BEeX8QP2jAL
+      - acct_1TWyjiIStpHLn3CL
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -814,9 +814,9 @@ http_interactions:
           "object": "list",
           "data": [
             {
-              "id": "person_1TWy2BEeX8QP2jALMEab3k4i",
+              "id": "person_1TWyjjIStpHLn3CLYNFKFra4",
               "object": "person",
-              "account": "acct_1TWy2BEeX8QP2jAL",
+              "account": "acct_1TWyjiIStpHLn3CL",
               "additional_tos_acceptances": {
                 "account": {
                   "date": null,
@@ -832,7 +832,7 @@ http_interactions:
                 "postal_code": "94107",
                 "state": "California"
               },
-              "created": 1778760396,
+              "created": 1778763095,
               "dob": {
                 "day": 1,
                 "month": 1,
@@ -898,15 +898,15 @@ http_interactions:
             }
           ],
           "has_more": false,
-          "url": "/v1/accounts/acct_1TWy2BEeX8QP2jAL/persons"
+          "url": "/v1/accounts/acct_1TWyjiIStpHLn3CL/persons"
         }
-  recorded_at: Thu, 14 May 2026 12:06:41 GMT
+  recorded_at: Thu, 14 May 2026 12:51:41 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1TWy2BEeX8QP2jAL/persons/person_1TWy2BEeX8QP2jALMEab3k4i
+    uri: https://api.stripe.com/v1/accounts/acct_1TWyjiIStpHLn3CL/persons/person_1TWyjjIStpHLn3CLYNFKFra4
     body:
       encoding: UTF-8
-      string: email=chuck%40gum.com&phone=0000000000&relationship[representative]=true
+      string: email=chuck%40gum.com&phone=0000000000&relationship[representative]=true&relationship[owner]=true&relationship[title]=CEO&relationship[percent_ownership]=100
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -915,9 +915,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_gQbqfxITbz7vfT","request_duration_ms":463}}'
+      - '{"last_request_metrics":{"request_id":"req_r1JexK1CC2rFlZ","request_duration_ms":469}}'
       Idempotency-Key:
-      - 9e284833-6ca8-4266-a628-6bcc986fc2ed
+      - ecc6dd9a-ab71-44f7-bc77-3e6799ac75d2
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -936,11 +936,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 14 May 2026 12:06:43 GMT
+      - Thu, 14 May 2026 12:51:43 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '1644'
+      - '1742'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -960,20 +960,20 @@ http_interactions:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
         style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o;
+        https://q.stripe.com/csp-violation?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB;
         report-to csp
       Idempotency-Key:
-      - 9e284833-6ca8-4266-a628-6bcc986fc2ed
+      - ecc6dd9a-ab71-44f7-bc77-3e6799ac75d2
       Original-Request:
-      - req_fzcWGafYqiHAI0
+      - req_Gd7Q1DBA2DrERp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=NUc9VAjlQ4FMj5t4Xrj97_5pJrW482jfUQ3mUEe6n80GRC6amKj5UDknqs4scpjMTvzslCAcQaypp17o&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=jtjIiU24FxNyPTrj6oTL6UTpdAn0dp6GdEWtLIzo6vM3PTPhyGudcHgA2K6tFmX2YM89TuLV4sLN0bsB&t=1"
       Request-Id:
-      - req_fzcWGafYqiHAI0
+      - req_Gd7Q1DBA2DrERp
       Stripe-Account:
-      - acct_1TWy2BEeX8QP2jAL
+      - acct_1TWyjiIStpHLn3CL
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -992,9 +992,9 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "person_1TWy2BEeX8QP2jALMEab3k4i",
+          "id": "person_1TWyjjIStpHLn3CLYNFKFra4",
           "object": "person",
-          "account": "acct_1TWy2BEeX8QP2jAL",
+          "account": "acct_1TWyjiIStpHLn3CL",
           "additional_tos_acceptances": {
             "account": {
               "date": null,
@@ -1010,7 +1010,7 @@ http_interactions:
             "postal_code": "94107",
             "state": "California"
           },
-          "created": 1778760396,
+          "created": 1778763095,
           "dob": {
             "day": 1,
             "month": 1,
@@ -1035,10 +1035,10 @@ http_interactions:
             "director": false,
             "executive": false,
             "legal_guardian": false,
-            "owner": false,
-            "percent_ownership": null,
+            "owner": true,
+            "percent_ownership": 100.0,
             "representative": true,
-            "title": null
+            "title": "CEO"
           },
           "requirements": {
             "alternatives": [],
@@ -1047,6 +1047,10 @@ http_interactions:
             "eventually_due": [],
             "past_due": [],
             "pending_verification": [
+              "address.city",
+              "address.line1",
+              "address.postal_code",
+              "address.state",
               "id_number",
               "verification.document"
             ]
@@ -1070,5 +1074,5 @@ http_interactions:
             "status": "pending"
           }
         }
-  recorded_at: Thu, 14 May 2026 12:06:43 GMT
+  recorded_at: Thu, 14 May 2026 12:51:43 GMT
 recorded_with: VCR 6.2.0
