@@ -261,6 +261,10 @@ class OfferCode < ApplicationRecord
   end
 
   def is_amount_valid?(product)
+    if tiered?
+      return normalized_ownership_duration_tiers.all? { is_percentage_amount_valid?(product, it["amount_percentage"]) }
+    end
+
     product.available_price_cents.all? do |price_cents|
       price_after_code = price_cents - amount_off(price_cents)
       price_after_code <= 0 || price_after_code >= product.currency["min_price"]

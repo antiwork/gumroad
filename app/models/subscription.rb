@@ -210,7 +210,7 @@ class Subscription < ApplicationRecord
       return original_purchase.displayed_price_cents
     end
 
-    pre_discount = original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+    pre_discount = renewal_pre_discount_total_cents
     auto = auto_renewal_offer_code
     return pre_discount unless auto
 
@@ -1010,7 +1010,14 @@ class Subscription < ApplicationRecord
     end
 
     def renewal_pre_discount_total_cents
+      return original_purchase.displayed_price_cents if cached_zero_percent_tiered_renewal_discount?
+
       original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+    end
+
+    def cached_zero_percent_tiered_renewal_discount?
+      discount = original_purchase.purchase_offer_code_discount
+      discount&.offer_code&.tiered? && discount.offer_code_is_percent && discount.offer_code_amount.to_i.zero?
     end
 
     def renewal_pre_discount_price_cents

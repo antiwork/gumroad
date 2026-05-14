@@ -662,6 +662,20 @@ describe OfferCode do
         end
       end
     end
+
+    context "when the offer code is tiered" do
+      let!(:offer_code) { create(:tiered_offer_code, user: seller, products: [product]) }
+
+      it "returns true when all tiered discounted prices are valid" do
+        expect(offer_code.is_amount_valid?(product)).to eq(true)
+      end
+
+      it "returns false when any tiered discounted price is below the minimum" do
+        product.update!(price_cents: 150)
+
+        expect(offer_code.is_amount_valid?(product)).to eq(false)
+      end
+    end
   end
 
   describe "#applicable?" do
