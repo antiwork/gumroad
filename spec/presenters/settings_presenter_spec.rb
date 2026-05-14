@@ -583,6 +583,7 @@ describe SettingsPresenter do
         payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
+        can_manage_beneficial_owners: false,
       }
     end
 
