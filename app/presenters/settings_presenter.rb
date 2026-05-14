@@ -294,7 +294,6 @@ class SettingsPresenter
 
       id_document_fields = [
         UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
-        UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
         UserComplianceInfoFields::Individual::PASSPORT,
         UserComplianceInfoFields::Individual::VISA,
         UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,

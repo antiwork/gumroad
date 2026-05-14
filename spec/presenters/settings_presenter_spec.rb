@@ -858,7 +858,6 @@ describe SettingsPresenter do
       it "sets needs_id_upload to true for each document-type field" do
         create(:merchant_account, user: seller)
         [
-          UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
           UserComplianceInfoFields::Individual::PASSPORT,
           UserComplianceInfoFields::Individual::VISA,
           UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
@@ -876,6 +875,13 @@ describe SettingsPresenter do
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME)
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::Address::STREET)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(false)
+      end
+
+      it "sets needs_id_upload to false for additional document requests" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID)
 
         expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(false)
       end
