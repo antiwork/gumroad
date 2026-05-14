@@ -142,7 +142,10 @@ class UpdateUserComplianceInfo
       new_compliance_info.individual_tax_id =       compliance_params[:ssn_last_four]           if compliance_params[:ssn_last_four].present?
       new_compliance_info.individual_tax_id =       compliance_params[:individual_tax_id]       if compliance_params[:individual_tax_id].present?
       if compliance_params[:business_tax_id].present?
-        new_compliance_info.business_tax_id = compliance_params[:business_tax_id].gsub(/\D/, "")
+        new_compliance_info.business_tax_id = normalize_business_tax_id(
+          compliance_params[:business_tax_id],
+          country_code: new_compliance_info.legal_entity_country_code,
+        )
       end
       new_compliance_info.birthday = Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i) if compliance_params[:dob_year].present? && compliance_params[:dob_year].to_i > 0
       new_compliance_info.skip_stripe_job_on_create = true
@@ -223,10 +226,19 @@ class UpdateUserComplianceInfo
       submitted_individual_tax_id = compliance_params[:individual_tax_id].presence || compliance_params[:ssn_last_four].presence
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
-      submitted_business_tax_id = compliance_params[:business_tax_id].presence&.gsub(/\D/, "")
+      submitted_business_tax_id = normalize_business_tax_id(
+        compliance_params[:business_tax_id],
+        country_code: old_compliance_info.legal_entity_country_code,
+      )
       return true if submitted_business_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :business_tax_id) != submitted_business_tax_id
 
       false
+    end
+
+    def normalize_business_tax_id(value, country_code:)
+      return nil if value.blank?
+      return value.gsub(/\D/, "") if country_code == "US"
+      value.gsub(/[\s-]+/, "")
     end
 
     def encrypted_compliance_info_params_present?

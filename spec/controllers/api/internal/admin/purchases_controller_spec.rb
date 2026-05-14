@@ -339,6 +339,22 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
+    it "does not crash when a purchase has a deleted product" do
+      purchase = create(:free_purchase, email: "deleted-product@example.com")
+      purchase.update_columns(price_cents: 500, charge_processor_id: "stripe", stripe_transaction_id: "ch_test")
+      purchase.link.destroy!
+
+      allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
+
+      get :search, params: { query: "deleted-product@example.com" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "amount_refundable_cents_in_currency" => 500
+      )
+    end
+
     it "caps results and reports when more matches exist" do
       stub_const("#{described_class}::MAX_SEARCH_RESULTS", 2)
       buyer_email = "buyer@example.com"

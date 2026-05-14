@@ -398,7 +398,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     def amount_refundable_cents_in_currency(purchase)
       return 0 unless purchase.charge_processor_id.in?(ChargeProcessor.charge_processor_ids)
       refundable_usd_cents = purchase.price_cents - refund_amount_cents(purchase)
-      purchase.usd_cents_to_currency(purchase.link.price_currency_type, refundable_usd_cents, purchase.rate_converted_to_usd)
+      purchase.usd_cents_to_currency(purchase.displayed_price_currency_type, refundable_usd_cents, purchase.rate_converted_to_usd)
     end
 
     def latest_refund(purchase)

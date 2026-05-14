@@ -165,7 +165,7 @@ class CustomerPresenter
       partially_refunded: purchase.stripe_partially_refunded?,
       refunded: purchase.stripe_refunded?,
       amount_refundable: purchase.amount_refundable_cents_in_currency,
-      currency_type: purchase.link.price_currency_type,
+      currency_type: purchase.displayed_price_currency_type.to_s,
       transaction_url_for_seller: purchase.transaction_url_for_seller,
       is_upgrade_purchase: purchase.is_upgrade_purchase?,
       chargedback: purchase.chargedback? && !purchase.chargeback_reversed?,

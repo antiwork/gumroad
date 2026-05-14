@@ -853,6 +853,14 @@ describe SettingsPresenter do
       end
     end
 
+    context "when the seller has a non-US business_tax_id with trailing letters" do
+      it "exposes the last four characters of the stored value, preserving letters" do
+        create(:user_compliance_info_business, user: seller, country: "Ireland", business_country: "Ireland", business_tax_id: "3490731JH")
+
+        expect(presenter.payments_props[:user][:business_tax_id_last_four]).to eq("31JH")
+      end
+    end
+
     context "when the seller is from Brazil" do
       before do
         @user_compliance_info = create(:user_compliance_info, user: seller, country: "Brazil")

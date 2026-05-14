@@ -4,8 +4,19 @@ set -eu
 GREEN="\033[0;32m"
 NC="\033[0m"
 logger() {
-  echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") ecr-login: $1${NC}"
+  echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") pre-command: $1${NC}"
 }
+
+logger "Freeing up resources before step"
+logger "Disk usage before cleanup:"
+df -h / /var/lib/docker 2>/dev/null || df -h /
+docker container prune -f >/dev/null 2>&1 || true
+docker volume prune -f >/dev/null 2>&1 || true
+docker network prune -f >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --filter "until=24h" >/dev/null 2>&1 || true
+logger "Disk usage after cleanup:"
+df -h / /var/lib/docker 2>/dev/null || df -h /
 
 logger "Setting up Ruby"
 export PATH="$HOME/.rbenv/bin:$PATH"

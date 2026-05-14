@@ -5883,10 +5883,21 @@ describe Purchase, :vcr do
   describe "#amount_refundable_cents_in_currency" do
     let(:purchase) { create(:purchase, link: create(:product, price_currency_type: Currency::EUR), price_cents: 200) }
 
-    before { allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR).and_return(0.8) }
+    before do
+      allow_any_instance_of(Purchase).to receive(:get_rate).with(:eur).and_return(0.8)
+      purchase.update_columns(displayed_price_currency_type: "eur")
+    end
 
     it "returns the refundable amount in the purchase's currency" do
       expect(purchase.amount_refundable_cents_in_currency).to eq(160)
+    end
+
+    context "when the product has been deleted" do
+      before { purchase.link.destroy! }
+
+      it "uses displayed_price_currency_type from the purchase record" do
+        expect(purchase.reload.amount_refundable_cents_in_currency).to eq(160)
+      end
     end
   end
 
