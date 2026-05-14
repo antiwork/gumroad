@@ -228,6 +228,34 @@ describe StripeBeneficialOwnersManager do
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Nationality is required/)
     end
 
+    it "sends kanji/kana name + address_kanji + address_kana for JP business sellers" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      jp_params = params.deep_dup
+      jp_params[:first_name_kanji] = "太郎"
+      jp_params[:last_name_kanji] = "山田"
+      jp_params[:first_name_kana] = "タロウ"
+      jp_params[:last_name_kana] = "ヤマダ"
+      jp_params[:address] = {
+        country: "JP", state: "Tokyo", postal_code: "100-0001",
+        building_number: "1-1", building_number_kana: "1-1",
+        street_address_kanji: "千代田", street_address_kana: "チヨダ",
+      }
+      expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+        expect(attrs[:first_name_kanji]).to eq("太郎")
+        expect(attrs[:last_name_kanji]).to eq("山田")
+        expect(attrs[:first_name_kana]).to eq("タロウ")
+        expect(attrs[:last_name_kana]).to eq("ヤマダ")
+        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", country: "JP", postal_code: "100-0001")
+        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", country: "JP")
+        expect(attrs).not_to have_key(:address)
+        other_owner_person
+      end
+      described_class.create(user, jp_params)
+    end
+
     it "sends full_name_aliases for SGP sellers (Singapore MAS rule — required on every Person)" do
       user.alive_user_compliance_info.mark_deleted!
       sg_compliance = create(:user_compliance_info_singapore, user: user)

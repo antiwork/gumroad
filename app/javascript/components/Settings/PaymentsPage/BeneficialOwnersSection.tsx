@@ -31,6 +31,12 @@ type BeneficialOwner = {
     postal_code?: string | null;
     country?: string | null;
   };
+  address_kanji?: { line1?: string | null; town?: string | null; state?: string | null; postal_code?: string | null };
+  address_kana?: { line1?: string | null; town?: string | null; state?: string | null; postal_code?: string | null };
+  first_name_kanji?: string | null;
+  last_name_kanji?: string | null;
+  first_name_kana?: string | null;
+  last_name_kana?: string | null;
   relationship: {
     owner: boolean;
     director: boolean;
@@ -61,6 +67,14 @@ type FormState = {
   address_state: string;
   address_postal_code: string;
   address_country: string;
+  first_name_kanji: string;
+  last_name_kanji: string;
+  first_name_kana: string;
+  last_name_kana: string;
+  address_building_number: string;
+  address_building_number_kana: string;
+  address_street_address_kanji: string;
+  address_street_address_kana: string;
   id_number: string;
   nationality: string;
   title: string;
@@ -266,6 +280,14 @@ const blankFormState = (defaultCountry: string | null): FormState => ({
   address_state: "",
   address_postal_code: "",
   address_country: defaultCountry ?? "",
+  first_name_kanji: "",
+  last_name_kanji: "",
+  first_name_kana: "",
+  last_name_kana: "",
+  address_building_number: "",
+  address_building_number_kana: "",
+  address_street_address_kanji: "",
+  address_street_address_kana: "",
   id_number: "",
   nationality: "",
   title: DEFAULT_TITLE,
@@ -285,9 +307,17 @@ const ownerToFormState = (owner: BeneficialOwner, defaultCountry: string | null)
   dob_year: owner.dob?.year != null ? String(owner.dob.year) : "",
   address_line1: owner.address.line1 ?? "",
   address_city: owner.address.city ?? "",
-  address_state: owner.address.state ?? "",
-  address_postal_code: owner.address.postal_code ?? "",
+  address_state: owner.address.state ?? owner.address_kanji?.state ?? "",
+  address_postal_code: owner.address.postal_code ?? owner.address_kanji?.postal_code ?? "",
   address_country: owner.address.country ?? defaultCountry ?? "",
+  first_name_kanji: owner.first_name_kanji ?? "",
+  last_name_kanji: owner.last_name_kanji ?? "",
+  first_name_kana: owner.first_name_kana ?? "",
+  last_name_kana: owner.last_name_kana ?? "",
+  address_building_number: owner.address_kanji?.line1 ?? "",
+  address_building_number_kana: owner.address_kana?.line1 ?? "",
+  address_street_address_kanji: owner.address_kanji?.town ?? "",
+  address_street_address_kana: owner.address_kana?.town ?? "",
   id_number: "",
   nationality: owner.nationality ?? "",
   title: owner.relationship.title ?? DEFAULT_TITLE,
@@ -310,6 +340,10 @@ const formStatePayload = (state: FormState) => ({
     percent_ownership: state.percent_ownership === "" ? null : Number(state.percent_ownership),
     id_number: state.id_number,
     nationality: state.nationality,
+    first_name_kanji: state.first_name_kanji,
+    last_name_kanji: state.last_name_kanji,
+    first_name_kana: state.first_name_kana,
+    last_name_kana: state.last_name_kana,
     dob: { day: state.dob_day, month: state.dob_month, year: state.dob_year },
     address: {
       line1: state.address_line1,
@@ -317,6 +351,10 @@ const formStatePayload = (state: FormState) => ({
       state: state.address_state,
       postal_code: state.address_postal_code,
       country: state.address_country,
+      building_number: state.address_building_number,
+      building_number_kana: state.address_building_number_kana,
+      street_address_kanji: state.address_street_address_kanji,
+      street_address_kana: state.address_street_address_kana,
     },
   },
 });
@@ -613,6 +651,83 @@ const BeneficialOwnersSection = ({
                   </Fieldset>
                 </div>
 
+                {defaultCountry === "JP" ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-5)",
+                        gridAutoFlow: "column",
+                        gridAutoColumns: "1fr",
+                      }}
+                    >
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-first-name-kanji`}>First name (Kanji)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-first-name-kanji`}
+                          type="text"
+                          required
+                          disabled={isFormDisabled}
+                          value={formState.first_name_kanji}
+                          onChange={(event) => updateForm({ first_name_kanji: event.target.value })}
+                        />
+                      </Fieldset>
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-last-name-kanji`}>Last name (Kanji)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-last-name-kanji`}
+                          type="text"
+                          required
+                          disabled={isFormDisabled}
+                          value={formState.last_name_kanji}
+                          onChange={(event) => updateForm({ last_name_kanji: event.target.value })}
+                        />
+                      </Fieldset>
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-5)",
+                        gridAutoFlow: "column",
+                        gridAutoColumns: "1fr",
+                      }}
+                    >
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-first-name-kana`}>First name (Kana)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-first-name-kana`}
+                          type="text"
+                          required
+                          placeholder="カタカナ"
+                          disabled={isFormDisabled}
+                          value={formState.first_name_kana}
+                          onChange={(event) => updateForm({ first_name_kana: event.target.value })}
+                        />
+                      </Fieldset>
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-last-name-kana`}>Last name (Kana)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-last-name-kana`}
+                          type="text"
+                          required
+                          placeholder="カタカナ"
+                          disabled={isFormDisabled}
+                          value={formState.last_name_kana}
+                          onChange={(event) => updateForm({ last_name_kana: event.target.value })}
+                        />
+                      </Fieldset>
+                    </div>
+                  </>
+                ) : null}
+
                 <div
                   style={{
                     display: "grid",
@@ -722,19 +837,99 @@ const BeneficialOwnersSection = ({
                   </div>
                 </Fieldset>
 
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}-address-line1`}>Address</Label>
-                  </FieldsetTitle>
-                  <Input
-                    id={`${uid}-address-line1`}
-                    type="text"
-                    required
-                    disabled={isFormDisabled}
-                    value={formState.address_line1}
-                    onChange={(event) => updateForm({ address_line1: event.target.value })}
-                  />
-                </Fieldset>
+                {defaultCountry === "JP" ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-5)",
+                        gridAutoFlow: "column",
+                        gridAutoColumns: "1fr",
+                        alignItems: "end",
+                      }}
+                    >
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-building-number`}>Block / Building number</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-building-number`}
+                          type="text"
+                          required
+                          placeholder="1-1"
+                          disabled={isFormDisabled}
+                          value={formState.address_building_number}
+                          onChange={(event) => updateForm({ address_building_number: event.target.value })}
+                        />
+                      </Fieldset>
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-building-number-kana`}>Block / Building number (Kana)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-building-number-kana`}
+                          type="text"
+                          required
+                          placeholder="1-1"
+                          disabled={isFormDisabled}
+                          value={formState.address_building_number_kana}
+                          onChange={(event) => updateForm({ address_building_number_kana: event.target.value })}
+                        />
+                      </Fieldset>
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "var(--spacer-5)",
+                        gridAutoFlow: "column",
+                        gridAutoColumns: "1fr",
+                      }}
+                    >
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-street-address-kanji`}>Town/Cho-me (Kanji)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-street-address-kanji`}
+                          type="text"
+                          required
+                          placeholder="千代田"
+                          disabled={isFormDisabled}
+                          value={formState.address_street_address_kanji}
+                          onChange={(event) => updateForm({ address_street_address_kanji: event.target.value })}
+                        />
+                      </Fieldset>
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-street-address-kana`}>Town/Cho-me (Kana)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-street-address-kana`}
+                          type="text"
+                          required
+                          placeholder="チヨダ"
+                          disabled={isFormDisabled}
+                          value={formState.address_street_address_kana}
+                          onChange={(event) => updateForm({ address_street_address_kana: event.target.value })}
+                        />
+                      </Fieldset>
+                    </div>
+                  </>
+                ) : (
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-address-line1`}>Address</Label>
+                    </FieldsetTitle>
+                    <Input
+                      id={`${uid}-address-line1`}
+                      type="text"
+                      required
+                      disabled={isFormDisabled}
+                      value={formState.address_line1}
+                      onChange={(event) => updateForm({ address_line1: event.target.value })}
+                    />
+                  </Fieldset>
+                )}
 
                 <div
                   style={{
@@ -743,19 +938,21 @@ const BeneficialOwnersSection = ({
                     gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                   }}
                 >
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}-address-city`}>City</Label>
-                    </FieldsetTitle>
-                    <Input
-                      id={`${uid}-address-city`}
-                      type="text"
-                      required
-                      disabled={isFormDisabled}
-                      value={formState.address_city}
-                      onChange={(event) => updateForm({ address_city: event.target.value })}
-                    />
-                  </Fieldset>
+                  {defaultCountry === "JP" ? null : (
+                    <Fieldset>
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-address-city`}>City</Label>
+                      </FieldsetTitle>
+                      <Input
+                        id={`${uid}-address-city`}
+                        type="text"
+                        required
+                        disabled={isFormDisabled}
+                        value={formState.address_city}
+                        onChange={(event) => updateForm({ address_city: event.target.value })}
+                      />
+                    </Fieldset>
+                  )}
                   {(() => {
                     const country = formState.address_country;
                     const label = STATE_LIST_LABEL[country] ?? "State / region";

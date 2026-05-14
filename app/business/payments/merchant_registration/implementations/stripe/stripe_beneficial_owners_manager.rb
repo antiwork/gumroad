@@ -35,6 +35,22 @@ module StripeBeneficialOwnersManager
     id_number: "Personal tax ID number",
   }.freeze
 
+  REQUIRED_JP_NAME_FIELDS = {
+    first_name_kanji: "First name (Kanji)",
+    last_name_kanji: "Last name (Kanji)",
+    first_name_kana: "First name (Kana)",
+    last_name_kana: "Last name (Kana)",
+  }.freeze
+
+  REQUIRED_JP_ADDRESS_FIELDS = {
+    building_number: "Block / Building number (Kanji)",
+    street_address_kanji: "Street address (Kanji)",
+    building_number_kana: "Block / Building number (Kana)",
+    street_address_kana: "Street address (Kana)",
+    state: "Prefecture",
+    postal_code: "Postal code",
+  }.freeze
+
   def self.list(user)
     stripe_account = ensure_eligible!(user)
     persons = Stripe::Account.list_persons(stripe_account.charge_processor_merchant_id, limit: PERSON_LIST_LIMIT)["data"]
@@ -86,26 +102,39 @@ module StripeBeneficialOwnersManager
   private_class_method :ensure_eligible!
 
   def self.validate_required_fields!(params, action:, user:)
+    seller_country = user.alive_user_compliance_info&.legal_entity_country_code
+    is_jp = seller_country == Compliance::Countries::JPN.alpha2
+
     missing = REQUIRED_FIELDS_FOR_BENEFICIAL_OWNER.filter_map do |key, label|
       label if params[key].to_s.strip.empty?
+    end
+    if is_jp
+      missing += REQUIRED_JP_NAME_FIELDS.filter_map do |key, label|
+        label if params[key].to_s.strip.empty?
+      end
     end
     address = params[:address]
     address_submitted = address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
     if address_submitted
-      address_country = address[:country].to_s.strip
-      required = required_address_fields_for(address_country)
-      missing += required.filter_map do |key, label|
-        label if address[key].to_s.strip.empty?
+      if is_jp
+        missing += REQUIRED_JP_ADDRESS_FIELDS.filter_map do |key, label|
+          label if address[key].to_s.strip.empty?
+        end
+      else
+        address_country = address[:country].to_s.strip
+        required = required_address_fields_for(address_country)
+        missing += required.filter_map do |key, label|
+          label if address[key].to_s.strip.empty?
+        end
       end
     elsif action == :create
-      missing += REQUIRED_ADDRESS_FIELDS.values
+      missing += is_jp ? REQUIRED_JP_ADDRESS_FIELDS.values : REQUIRED_ADDRESS_FIELDS.values
     end
     if action == :create
       missing += REQUIRED_CREATE_ONLY_FIELDS.filter_map do |key, label|
         label if params[key].to_s.strip.empty?
       end
     end
-    seller_country = user.alive_user_compliance_info&.legal_entity_country_code
     if action == :create && COUNTRIES_REQUIRING_NATIONALITY.include?(seller_country) && params[:nationality].to_s.strip.empty?
       missing << "Nationality"
     end
@@ -159,6 +188,12 @@ module StripeBeneficialOwnersManager
       id_number_provided: !!data[:id_number_provided],
       ssn_last_4_provided: !!data[:ssn_last_4_provided],
       nationality: data[:nationality],
+      first_name_kanji: data[:first_name_kanji],
+      last_name_kanji: data[:last_name_kanji],
+      first_name_kana: data[:first_name_kana],
+      last_name_kana: data[:last_name_kana],
+      address_kanji: data[:address_kanji] || {},
+      address_kana: data[:address_kana] || {},
       verification_status: data.dig(:verification, :status),
       requirements_currently_due: data.dig(:requirements, :currently_due) || [],
     }
@@ -203,6 +238,13 @@ module StripeBeneficialOwnersManager
       relationship:,
     }
 
+    if country_code == Compliance::Countries::JPN.alpha2
+      hash[:first_name_kanji] = params[:first_name_kanji] if params[:first_name_kanji].present?
+      hash[:last_name_kanji] = params[:last_name_kanji] if params[:last_name_kanji].present?
+      hash[:first_name_kana] = params[:first_name_kana] if params[:first_name_kana].present?
+      hash[:last_name_kana] = params[:last_name_kana] if params[:last_name_kana].present?
+    end
+
     if params[:dob].is_a?(Hash) || params[:dob].is_a?(ActionController::Parameters)
       hash[:dob] = {
         day: params[:dob][:day].presence && params[:dob][:day].to_i,
@@ -213,15 +255,34 @@ module StripeBeneficialOwnersManager
     end
 
     if params[:address].is_a?(Hash) || params[:address].is_a?(ActionController::Parameters)
-      address = {
-        line1: params[:address][:line1].presence,
-        line2: params[:address][:line2].presence,
-        city: params[:address][:city].presence,
-        state: params[:address][:state].presence,
-        postal_code: params[:address][:postal_code].presence,
-        country: params[:address][:country].presence || country_code,
-      }.compact
-      hash[:address] = address if address.any?
+      if country_code == Compliance::Countries::JPN.alpha2
+        address_kanji = {
+          line1: params[:address][:building_number].presence,
+          town: params[:address][:street_address_kanji].presence,
+          state: params[:address][:state].presence,
+          country: "JP",
+          postal_code: params[:address][:postal_code].presence,
+        }.compact
+        hash[:address_kanji] = address_kanji if address_kanji.any?
+        address_kana = {
+          line1: params[:address][:building_number_kana].presence,
+          town: params[:address][:street_address_kana].presence,
+          state: params[:address][:state_kana].presence || params[:address][:state].presence,
+          country: "JP",
+          postal_code: params[:address][:postal_code].presence,
+        }.compact
+        hash[:address_kana] = address_kana if address_kana.any?
+      else
+        address = {
+          line1: params[:address][:line1].presence,
+          line2: params[:address][:line2].presence,
+          city: params[:address][:city].presence,
+          state: params[:address][:state].presence,
+          postal_code: params[:address][:postal_code].presence,
+          country: params[:address][:country].presence || country_code,
+        }.compact
+        hash[:address] = address if address.any?
+      end
     end
 
     id_number = params[:id_number].to_s.strip

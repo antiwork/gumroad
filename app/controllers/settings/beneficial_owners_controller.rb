@@ -57,8 +57,12 @@ class Settings::BeneficialOwnersController < Settings::BaseController
       params.require(:beneficial_owner).permit(
         :first_name, :last_name, :email, :phone, :id_number, :title,
         :owner, :director, :executive, :percent_ownership, :nationality,
+        :first_name_kanji, :last_name_kanji, :first_name_kana, :last_name_kana,
         dob: [:day, :month, :year],
-        address: [:line1, :line2, :city, :state, :postal_code, :country],
+        address: [
+          :line1, :line2, :city, :state, :postal_code, :country,
+          :building_number, :building_number_kana, :street_address_kanji, :street_address_kana, :state_kana,
+        ],
       )
     end
 
