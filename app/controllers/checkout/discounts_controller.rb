@@ -75,8 +75,13 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, offer_code]
 
     parse_date_times
+    update_params = offer_code_params.except(:selected_product_ids, :ownership_product_ids, :code, :ownership_duration_tiers).to_h
+    if params.key?(:ownership_duration_tiers)
+      update_params[:ownership_duration_tiers] = params[:ownership_duration_tiers].nil? ? nil : offer_code_params[:ownership_duration_tiers]
+    end
+
     if offer_code.update(
-      **offer_code_params.except(:selected_product_ids, :ownership_product_ids, :code),
+      **update_params,
       products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]),
       ownership_products: current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids])
     )

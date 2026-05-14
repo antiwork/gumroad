@@ -415,6 +415,45 @@ describe Checkout::DiscountsController do
       expect(offer_code.minimum_amount_cents).to eq(nil)
     end
 
+    it "clears ownership duration tiers when tiering is disabled" do
+      owned_product = create(:product, user: seller)
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(
+        products: [subject_product],
+        ownership_products: [owned_product],
+        existing_customers_only: true,
+        amount_cents: nil,
+        amount_percentage: 0,
+        duration_in_billing_cycles: nil,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 0 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ]
+      )
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Discount 2",
+        max_purchase_count: 2,
+        amount_percentage: 25,
+        currency_type: nil,
+        universal: false,
+        selected_product_ids: [subject_product.external_id],
+        existing_customers_only: false,
+        ownership_product_ids: [],
+        ownership_duration_tiers: nil,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      offer_code.reload
+      expect(offer_code.existing_customers_only?).to eq(false)
+      expect(offer_code.ownership_products).to eq([])
+      expect(offer_code.ownership_duration_tiers).to eq(nil)
+      expect(offer_code.amount_percentage).to eq(25)
+    end
+
     context "when the offer code has several products" do
       before do
         @product1 = create(:product, user: seller, price_cents: 1000)

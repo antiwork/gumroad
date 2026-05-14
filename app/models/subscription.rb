@@ -218,8 +218,7 @@ class Subscription < ApplicationRecord
   end
 
   def auto_renewal_offer_code
-    return @_auto_renewal_offer_code if defined?(@_auto_renewal_offer_code)
-    @_auto_renewal_offer_code = compute_auto_renewal_offer_code
+    compute_auto_renewal_offer_code
   end
 
   def current_plan_displayed_price_cents
@@ -922,15 +921,10 @@ class Subscription < ApplicationRecord
   end
 
   def discount_applies_to_next_charge?
-    return @_discount_applies_to_next_charge if defined?(@_discount_applies_to_next_charge)
+    return true if is_installment_plan
 
-    @_discount_applies_to_next_charge =
-      if is_installment_plan
-        true
-      else
-        duration = original_purchase.purchase_offer_code_discount&.duration_in_billing_cycles
-        duration.blank? || purchases.successful.count < duration
-      end
+    duration = original_purchase.purchase_offer_code_discount&.duration_in_billing_cycles
+    duration.blank? || purchases.successful.count < duration
   end
 
   def cookie_key
@@ -1016,7 +1010,7 @@ class Subscription < ApplicationRecord
     end
 
     def renewal_pre_discount_total_cents
-      renewal_pre_discount_price_cents * renewal_purchase_quantity
+      original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
     end
 
     def renewal_pre_discount_price_cents

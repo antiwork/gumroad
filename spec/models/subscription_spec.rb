@@ -3709,6 +3709,15 @@ describe Subscription, :vcr do
         it "returns false" do
           expect(subscription.discount_applies_to_next_charge?).to eq(false)
         end
+
+        it "recomputes after reload" do
+          expect(subscription.discount_applies_to_next_charge?).to eq(false)
+
+          subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          subscription.reload
+
+          expect(subscription.discount_applies_to_next_charge?).to eq(true)
+        end
       end
 
       context "when the offer code is not expired" do
@@ -3897,6 +3906,37 @@ describe Subscription, :vcr do
 
       expect(auto.offer_code).to eq(tiered_code)
       expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "uses the selected PWYW renewal price for minimum amount checks" do
+      tiered_code.update!(minimum_amount_cents: 1_200)
+      subscription.original_purchase.update!(price_cents: 1_500, displayed_price_cents: 1_500)
+
+      expect(subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount).to be < tiered_code.minimum_amount_cents
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(750)
+    end
+
+    it "recomputes after reload" do
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(tiered_code)
+
+      tiered_code.mark_deleted!
+      replacement_code = create(:offer_code,
+                                user: seller,
+                                code: "replacementrenewal",
+                                products: [product],
+                                ownership_products: [product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+      subscription.reload
+
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(replacement_code)
     end
 
     it "returns nil when the original purchase already carries a still-applicable discount" do
