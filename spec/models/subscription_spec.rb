@@ -3962,6 +3962,27 @@ describe Subscription, :vcr do
       expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
     end
 
+    it "re-evaluates soft-deleted tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.mark_deleted!
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
     it "records the auto-discovered discount on the renewal purchase" do
       renewal_purchase = subscription.build_purchase
       expect(renewal_purchase.offer_code).to eq(tiered_code)

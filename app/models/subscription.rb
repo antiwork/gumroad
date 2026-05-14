@@ -963,7 +963,10 @@ class Subscription < ApplicationRecord
         .universal_with_matching_currency(link.price_currency_type)
         .where(existing_customers_only: true)
         .includes(:ownership_products)
-      candidates = (product_codes.to_a + universal_codes.to_a).uniq
+      original_tiered_existing_customer_code = if original_renewal_offer_code&.existing_customers_only? && original_renewal_offer_code&.tiered?
+        original_renewal_offer_code
+      end
+      candidates = (product_codes.to_a + universal_codes.to_a + [original_tiered_existing_customer_code].compact).uniq
       return nil if candidates.empty?
 
       candidates
