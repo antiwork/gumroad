@@ -12,11 +12,16 @@ function ProductShowPage() {
     props = typia.assert<Props>(rawProps);
   } catch (e) {
     if (e instanceof TypeGuardError) {
-      console.error("[ProductShowPage] typia.assert<Props> failed", {
-        path: e.path,
-        expected: e.expected,
-        value: e.value,
-      });
+      const detail = `TYPIA_ASSERT_FAILED ProductShowPage<Props>\npath: ${e.path ?? "(none)"}\nexpected: ${e.expected ?? "(none)"}\nvalue: ${JSON.stringify(e.value)}`;
+      console.error(detail);
+      return (
+        <pre
+          data-testid="typia-error"
+          style={{ padding: 16, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#fff" }}
+        >
+          {detail}
+        </pre>
+      );
     }
     throw e;
   }

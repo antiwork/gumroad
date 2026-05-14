@@ -149,11 +149,16 @@ const CheckoutIndexPage = () => {
     validatedPageProps = typia.assert<CheckoutIndexPageProps>(rawPageProps);
   } catch (e) {
     if (e instanceof TypeGuardError) {
-      console.error("[CheckoutIndexPage] typia.assert<CheckoutIndexPageProps> failed", {
-        path: e.path,
-        expected: e.expected,
-        value: e.value,
-      });
+      const detail = `TYPIA_ASSERT_FAILED CheckoutIndexPage<CheckoutIndexPageProps>\npath: ${e.path ?? "(none)"}\nexpected: ${e.expected ?? "(none)"}\nvalue: ${JSON.stringify(e.value)}`;
+      console.error(detail);
+      return (
+        <pre
+          data-testid="typia-error"
+          style={{ padding: 16, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#fff" }}
+        >
+          {detail}
+        </pre>
+      );
     }
     throw e;
   }
