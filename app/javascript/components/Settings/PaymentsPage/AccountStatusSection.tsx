@@ -31,6 +31,7 @@ export type AccountStatus = {
   is_suspended: boolean;
   suspension_reason: string | null;
   compliance_actions: ComplianceAction[];
+  needs_id_upload: boolean;
   gumroad_status: string | null;
 };
 
@@ -94,7 +95,7 @@ export default function AccountStatusSection({
             {accountStatus.compliance_actions.map((action, i) => (
               <ComplianceActionItem key={i} action={action} />
             ))}
-            {accountStatus.compliance_actions.some((a) => a.href) ? (
+            {accountStatus.needs_id_upload ? (
               <details className="mt-2">
                 <summary className="cursor-pointer text-sm font-medium">ID upload requirements</summary>
                 <ul className="mt-1 list-disc pl-5 text-sm">

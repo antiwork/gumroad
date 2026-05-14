@@ -573,6 +573,7 @@ describe SettingsPresenter do
           is_suspended: false,
           suspension_reason: nil,
           compliance_actions: [],
+          needs_id_upload: false,
           gumroad_status: nil,
         },
         payouts_paused_internally: false,
@@ -794,6 +795,7 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                        ),
                                                                      }))
       end
@@ -807,6 +809,7 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
@@ -823,6 +826,7 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                        ),
                                                                      }))
       end
@@ -839,9 +843,43 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
+      end
+
+      it "sets needs_id_upload to true when document-type compliance requests exist" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(true)
+      end
+
+      it "sets needs_id_upload to true for each document-type field" do
+        create(:merchant_account, user: seller)
+        [
+          UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
+          UserComplianceInfoFields::Individual::PASSPORT,
+          UserComplianceInfoFields::Individual::VISA,
+          UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
+          UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
+        ].each do |field|
+          user = create(:user)
+          create(:merchant_account, user:)
+          create(:user_compliance_info_request, user:, field_needed: field)
+          presenter = SettingsPresenter.new(pundit_user: SellerContext.new(user:, seller: user))
+          expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(true), "expected needs_id_upload to be true for #{field}"
+        end
+      end
+
+      it "sets needs_id_upload to false when only non-document-type compliance requests exist" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::Address::STREET)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(false)
       end
     end
 

@@ -292,6 +292,17 @@ class SettingsPresenter
         "Your account has been suspended for a policy violation."
       end
 
+      id_document_fields = [
+        UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
+        UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
+        UserComplianceInfoFields::Individual::PASSPORT,
+        UserComplianceInfoFields::Individual::VISA,
+        UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
+        UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
+      ]
+      needs_id_upload = seller.user_compliance_info_requests.requested
+        .where(field_needed: id_document_fields).exists?
+
       compliance_actions = []
       if pending_compliance && seller.stripe_account.present? && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
@@ -323,6 +334,7 @@ class SettingsPresenter
         is_suspended:,
         suspension_reason:,
         compliance_actions:,
+        needs_id_upload:,
         gumroad_status:,
       }
     end
