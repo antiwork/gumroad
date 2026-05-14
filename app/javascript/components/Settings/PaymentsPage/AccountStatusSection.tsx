@@ -97,15 +97,12 @@ export default function AccountStatusSection({
             ))}
             {accountStatus.needs_id_upload ? (
               <details className="mt-2">
-                <summary className="cursor-pointer text-sm font-medium">ID upload requirements</summary>
+                <summary className="cursor-pointer text-sm font-medium">Before you upload your ID</summary>
                 <ul className="mt-1 list-disc pl-5 text-sm">
-                  <li>We need a color photo of the ID, which you can take with a phone, webcam, or scanner</li>
-                  <li>
-                    If you are uploading a driver's license or identity card, we will need an image of both the front and
-                    back of the ID
-                  </li>
-                  <li>We accept JPEG and PNG file formats</li>
-                  <li>We cannot verify PDFs</li>
+                  <li>Use a color photo or scan. You can take it with a phone, webcam, or scanner.</li>
+                  <li>For a driver's license or identity card, upload images of both the front and back of the ID.</li>
+                  <li>Use a JPEG or PNG file.</li>
+                  <li>Do not upload a PDF.</li>
                 </ul>
               </details>
             ) : null}
