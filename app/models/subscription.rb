@@ -27,7 +27,11 @@ class Subscription < ApplicationRecord
   TOKEN_VALIDITY = 24.hours
   ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR = 7.days
 
-  AutoRenewalDiscount = Struct.new(:offer_code, :resolved_percent, keyword_init: true)
+  AutoRenewalDiscount = Struct.new(:offer_code, :offer_code_amount, :offer_code_is_percent, keyword_init: true) do
+    def resolved_percent
+      offer_code_amount if offer_code_is_percent
+    end
+  end
   private_constant :AutoRenewalDiscount
 
   module ResubscriptionReason
@@ -210,7 +214,7 @@ class Subscription < ApplicationRecord
     auto = auto_renewal_offer_code
     return pre_discount unless auto
 
-    pre_discount - OfferCode.new(amount_percentage: auto.resolved_percent).amount_off(pre_discount)
+    [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
   end
 
   def auto_renewal_offer_code
@@ -279,8 +283,8 @@ class Subscription < ApplicationRecord
       purchase.offer_code = auto.offer_code
       purchase.build_purchase_offer_code_discount(
         offer_code: auto.offer_code,
-        offer_code_amount: auto.resolved_percent,
-        offer_code_is_percent: true,
+        offer_code_amount: auto.offer_code_amount,
+        offer_code_is_percent: auto.offer_code_is_percent,
         pre_discount_minimum_price_cents: pre_discount,
         duration_in_months: nil
       )
@@ -951,7 +955,7 @@ class Subscription < ApplicationRecord
 
     def compute_auto_renewal_offer_code
       return nil if is_installment_plan
-      return nil if user.nil? || link.nil?
+      return nil if user.nil? || link.nil? || original_purchase.nil?
       return nil if reuse_original_discount_on_next_charge?
 
       product_codes = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
@@ -964,14 +968,59 @@ class Subscription < ApplicationRecord
 
       candidates
         .filter_map do |offer_code|
-          next if offer_code.inactive? || offer_code.duration_in_billing_cycles.present?
+          next unless eligible_auto_renewal_offer_code?(offer_code)
 
           resolved = offer_code.evaluate_for_buyer(user)
-          next unless resolved && resolved[:type] == "percent" && resolved[:percents].to_i.positive?
-          [offer_code, resolved[:percents].to_i]
+          auto_discount = auto_renewal_discount_for(offer_code, resolved)
+          next if auto_discount.nil?
+          [auto_discount, auto_renewal_discount_amount_off_cents(auto_discount, renewal_pre_discount_total_cents)]
         end
         .max_by(&:last)
-        &.then { |offer_code, percent| AutoRenewalDiscount.new(offer_code:, resolved_percent: percent) }
+        &.first
+    end
+
+    def eligible_auto_renewal_offer_code?(offer_code)
+      return false if offer_code.inactive? || offer_code.duration_in_billing_cycles.present?
+      return false unless offer_code.is_valid_for_purchase?(purchase_quantity: renewal_purchase_quantity)
+      return false if offer_code.minimum_quantity.present? && offer_code.minimum_quantity > renewal_purchase_quantity
+      return false if offer_code.minimum_amount_cents.present? && offer_code.minimum_amount_cents > renewal_pre_discount_total_cents
+
+      true
+    end
+
+    def auto_renewal_discount_for(offer_code, resolved)
+      return nil unless resolved
+
+      case resolved[:type]
+      when "percent"
+        amount = resolved[:percents].to_i
+        return nil unless amount.positive?
+        AutoRenewalDiscount.new(offer_code:, offer_code_amount: amount, offer_code_is_percent: true)
+      when "fixed"
+        amount = resolved[:cents].to_i
+        return nil unless amount.positive?
+        AutoRenewalDiscount.new(offer_code:, offer_code_amount: amount, offer_code_is_percent: false)
+      end
+    end
+
+    def auto_renewal_discount_amount_off_cents(auto_discount, pre_discount_total_cents)
+      if auto_discount.offer_code_is_percent
+        OfferCode.new(amount_percentage: auto_discount.offer_code_amount).amount_off(pre_discount_total_cents)
+      else
+        OfferCode.new(amount_cents: auto_discount.offer_code_amount).amount_off(renewal_pre_discount_price_cents) * renewal_purchase_quantity
+      end
+    end
+
+    def renewal_pre_discount_total_cents
+      renewal_pre_discount_price_cents * renewal_purchase_quantity
+    end
+
+    def renewal_pre_discount_price_cents
+      original_purchase.minimum_paid_price_cents_per_unit_before_discount
+    end
+
+    def renewal_purchase_quantity
+      original_purchase.quantity || 1
     end
 
     def reuse_original_discount_on_next_charge?

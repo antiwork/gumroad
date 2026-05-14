@@ -2018,24 +2018,6 @@ describe Subscription, :vcr do
       expect(new_purchase.displayed_price_cents).to eq 10_00
     end
 
-    it "applies a new offer code when also clearing the previous discount" do
-      setup_subscription(offer_code: create(:offer_code, products: [@product], amount_cents: 100))
-      new_offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
-
-      new_purchase = @subscription.update_current_plan!(
-        new_variants: [@new_tier],
-        new_price: @yearly_product_price,
-        offer_code: new_offer_code,
-        clear_discount: true,
-        skip_preparing_for_charge: true
-      )
-
-      expect(new_purchase.offer_code).to eq new_offer_code
-      expect(new_purchase.purchase_offer_code_discount.offer_code).to eq new_offer_code
-      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq 50
-      expect(new_purchase.displayed_price_cents).to eq 10_00
-    end
-
     it "does not update the creator's balance" do
       setup_subscription
 
@@ -2304,7 +2286,8 @@ describe Subscription, :vcr do
         new_purchase = @subscription.update_current_plan!(
           new_variants: [@new_tier],
           new_price: @yearly_product_price,
-          offer_code: new_offer_code
+          offer_code: new_offer_code,
+          clear_discount: true
         )
 
         expect(new_purchase.offer_code).to eq(new_offer_code)
@@ -3805,6 +3788,28 @@ describe Subscription, :vcr do
       expect(auto.resolved_percent).to eq(1)
     end
 
+    it "discovers fixed-amount existing-customer renewal discounts" do
+      tiered_code.mark_deleted!
+      fixed_code = create(:offer_code,
+                          user: seller,
+                          products: [product],
+                          ownership_products: [product],
+                          existing_customers_only: true,
+                          amount_cents: 50,
+                          amount_percentage: nil,
+                          currency_type: product.price_currency_type)
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(fixed_code)
+      expect(auto.offer_code_amount).to eq(50)
+      expect(auto.offer_code_is_percent).to eq(false)
+      expect(subscription.current_subscription_price_cents).to eq(150)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+    end
+
     it "ignores inactive renewal discounts" do
       create(:offer_code,
              user: seller,
@@ -3837,6 +3842,61 @@ describe Subscription, :vcr do
              duration_in_billing_cycles: 1)
 
       expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "ignores sold-out renewal discounts" do
+      sold_out_code = create(:offer_code,
+                             user: seller,
+                             code: "soldoutrenewal",
+                             products: [product],
+                             ownership_products: [product],
+                             existing_customers_only: true,
+                             amount_cents: nil,
+                             amount_percentage: 60,
+                             currency_type: nil,
+                             max_purchase_count: 1)
+      create(:purchase, link: product, offer_code: sold_out_code)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "ignores renewal discounts with unmet minimum quantity" do
+      create(:offer_code,
+             user: seller,
+             code: "minimumquantityrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             minimum_quantity: 2)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "ignores renewal discounts with unmet minimum amount" do
+      create(:offer_code,
+             user: seller,
+             code: "minimumamountrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             minimum_amount_cents: 10_000)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
     end
 
     it "returns nil when the original purchase already carries a still-applicable discount" do
