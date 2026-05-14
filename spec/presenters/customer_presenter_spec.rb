@@ -419,7 +419,8 @@ describe CustomerPresenter do
 
     before do
       purchase.link.update!(price_currency_type: Currency::EUR, price_cents: 100)
-      allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR).and_return(0.8)
+      purchase.update_columns(displayed_price_currency_type: "eur")
+      allow_any_instance_of(Purchase).to receive(:get_rate).with(:eur).and_return(0.8)
     end
 
     it "returns the correct props" do
