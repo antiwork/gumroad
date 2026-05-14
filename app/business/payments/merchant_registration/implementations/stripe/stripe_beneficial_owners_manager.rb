@@ -23,6 +23,14 @@ module StripeBeneficialOwnersManager
     country: "Country",
   }.freeze
 
+  COUNTRIES_WITHOUT_POSTAL_CODE = ["BW"].freeze
+  COUNTRIES_REQUIRING_NATIONALITY = [
+    Compliance::Countries::ARE.alpha2,
+    Compliance::Countries::SGP.alpha2,
+    Compliance::Countries::BGD.alpha2,
+    Compliance::Countries::PAK.alpha2,
+  ].freeze
+
   REQUIRED_CREATE_ONLY_FIELDS = {
     id_number: "Personal tax ID number",
   }.freeze
@@ -35,7 +43,7 @@ module StripeBeneficialOwnersManager
 
   def self.create(user, params)
     stripe_account = ensure_eligible!(user)
-    validate_required_fields!(params, action: :create)
+    validate_required_fields!(params, action: :create, user: user)
     person_params = build_person_params(params, user)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -48,7 +56,7 @@ module StripeBeneficialOwnersManager
     if representative?(existing)
       person_params = build_representative_update_params(params)
     else
-      validate_required_fields!(params, action: :update)
+      validate_required_fields!(params, action: :update, user: user)
       person_params = build_person_params(params, user)
     end
 
@@ -77,14 +85,16 @@ module StripeBeneficialOwnersManager
   end
   private_class_method :ensure_eligible!
 
-  def self.validate_required_fields!(params, action:)
+  def self.validate_required_fields!(params, action:, user:)
     missing = REQUIRED_FIELDS_FOR_BENEFICIAL_OWNER.filter_map do |key, label|
       label if params[key].to_s.strip.empty?
     end
     address = params[:address]
     address_submitted = address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
     if address_submitted
-      missing += REQUIRED_ADDRESS_FIELDS.filter_map do |key, label|
+      address_country = address[:country].to_s.strip
+      required = required_address_fields_for(address_country)
+      missing += required.filter_map do |key, label|
         label if address[key].to_s.strip.empty?
       end
     elsif action == :create
@@ -95,10 +105,20 @@ module StripeBeneficialOwnersManager
         label if params[key].to_s.strip.empty?
       end
     end
+    seller_country = user.alive_user_compliance_info&.legal_entity_country_code
+    if action == :create && COUNTRIES_REQUIRING_NATIONALITY.include?(seller_country) && params[:nationality].to_s.strip.empty?
+      missing << "Nationality"
+    end
     return if missing.empty?
     raise MissingRequiredFieldError, "#{missing.to_sentence} #{missing.length == 1 ? "is" : "are"} required for beneficial owners — Stripe needs them to verify the person."
   end
   private_class_method :validate_required_fields!
+
+  def self.required_address_fields_for(country_code)
+    return REQUIRED_ADDRESS_FIELDS.except(:postal_code) if COUNTRIES_WITHOUT_POSTAL_CODE.include?(country_code)
+    REQUIRED_ADDRESS_FIELDS
+  end
+  private_class_method :required_address_fields_for
 
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]
@@ -138,6 +158,7 @@ module StripeBeneficialOwnersManager
       },
       id_number_provided: !!data[:id_number_provided],
       ssn_last_4_provided: !!data[:ssn_last_4_provided],
+      nationality: data[:nationality],
       verification_status: data.dig(:verification, :status),
       requirements_currently_due: data.dig(:requirements, :currently_due) || [],
     }
@@ -208,10 +229,7 @@ module StripeBeneficialOwnersManager
       end
     end
 
-    if [Compliance::Countries::ARE.alpha2,
-        Compliance::Countries::SGP.alpha2,
-        Compliance::Countries::BGD.alpha2,
-        Compliance::Countries::PAK.alpha2].include?(country_code) && params[:nationality].present?
+    if COUNTRIES_REQUIRING_NATIONALITY.include?(country_code) && params[:nationality].present?
       hash[:nationality] = params[:nationality]
     end
 

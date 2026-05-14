@@ -41,9 +41,12 @@ type BeneficialOwner = {
   };
   id_number_provided: boolean;
   ssn_last_4_provided: boolean;
+  nationality: string | null;
   verification_status: string | null;
   requirements_currently_due: string[];
 };
+
+const NATIONALITY_REQUIRED_COUNTRIES = ["AE", "SG", "BD", "PK"];
 
 type FormState = {
   first_name: string;
@@ -59,6 +62,7 @@ type FormState = {
   address_postal_code: string;
   address_country: string;
   id_number: string;
+  nationality: string;
   title: string;
   percent_ownership: string;
   owner: boolean;
@@ -264,6 +268,7 @@ const blankFormState = (defaultCountry: string | null): FormState => ({
   address_postal_code: "",
   address_country: defaultCountry ?? "",
   id_number: "",
+  nationality: "",
   title: DEFAULT_TITLE,
   percent_ownership: "",
   owner: false,
@@ -285,6 +290,7 @@ const ownerToFormState = (owner: BeneficialOwner, defaultCountry: string | null)
   address_postal_code: owner.address.postal_code ?? "",
   address_country: owner.address.country ?? defaultCountry ?? "",
   id_number: "",
+  nationality: owner.nationality ?? "",
   title: owner.relationship.title ?? DEFAULT_TITLE,
   percent_ownership: owner.relationship.percent_ownership != null ? String(owner.relationship.percent_ownership) : "",
   owner: owner.relationship.owner,
@@ -304,6 +310,7 @@ const formStatePayload = (state: FormState) => ({
     executive: state.executive,
     percent_ownership: state.percent_ownership === "" ? null : Number(state.percent_ownership),
     id_number: state.id_number,
+    nationality: state.nationality,
     dob: { day: state.dob_day, month: state.dob_month, year: state.dob_year },
     address: {
       line1: state.address_line1,
@@ -815,21 +822,23 @@ const BeneficialOwnersSection = ({
                       </Fieldset>
                     );
                   })()}
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}-address-postal-code`}>
-                        {formState.address_country === "US" ? "ZIP code" : "Postal code"}
-                      </Label>
-                    </FieldsetTitle>
-                    <Input
-                      id={`${uid}-address-postal-code`}
-                      type="text"
-                      required
-                      disabled={isFormDisabled}
-                      value={formState.address_postal_code}
-                      onChange={(event) => updateForm({ address_postal_code: event.target.value })}
-                    />
-                  </Fieldset>
+                  {formState.address_country === "BW" ? null : (
+                    <Fieldset>
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-address-postal-code`}>
+                          {formState.address_country === "US" ? "ZIP code" : "Postal code"}
+                        </Label>
+                      </FieldsetTitle>
+                      <Input
+                        id={`${uid}-address-postal-code`}
+                        type="text"
+                        required
+                        disabled={isFormDisabled}
+                        value={formState.address_postal_code}
+                        onChange={(event) => updateForm({ address_postal_code: event.target.value })}
+                      />
+                    </Fieldset>
+                  )}
                 </div>
 
                 <Fieldset>
@@ -853,6 +862,30 @@ const BeneficialOwnersSection = ({
                     ))}
                   </Select>
                 </Fieldset>
+
+                {NATIONALITY_REQUIRED_COUNTRIES.includes(defaultCountry ?? "") ? (
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
+                    </FieldsetTitle>
+                    <Select
+                      id={`${uid}-nationality`}
+                      required
+                      disabled={isFormDisabled}
+                      value={formState.nationality || ""}
+                      onChange={(event) => updateForm({ nationality: event.target.value })}
+                    >
+                      <option value="" disabled>
+                        Nationality
+                      </option>
+                      {Object.entries(countries).map(([code, name]) => (
+                        <option key={code} value={code} disabled={name.includes("(not supported)")}>
+                          {name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Fieldset>
+                ) : null}
 
                 {(() => {
                   const isUs = defaultCountry === "US";
@@ -957,7 +990,11 @@ const BeneficialOwnersSection = ({
                   step="0.01"
                   disabled={isFormDisabled}
                   value={formState.percent_ownership}
-                  onChange={(event) => updateForm({ percent_ownership: event.target.value })}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const hasOwnership = value !== "" && Number(value) > 0;
+                    updateForm({ percent_ownership: value, owner: hasOwnership ? true : formState.owner });
+                  }}
                 />
               </Fieldset>
             </div>
@@ -986,7 +1023,12 @@ const BeneficialOwnersSection = ({
                   <Checkbox
                     checked={formState.owner}
                     disabled={isFormDisabled}
-                    onChange={(event) => updateForm({ owner: event.target.checked })}
+                    onChange={(event) =>
+                      updateForm({
+                        owner: event.target.checked,
+                        percent_ownership: event.target.checked ? formState.percent_ownership : "",
+                      })
+                    }
                   />
                   Owner
                 </Label>

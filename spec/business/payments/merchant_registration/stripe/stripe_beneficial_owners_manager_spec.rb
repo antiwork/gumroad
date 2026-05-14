@@ -111,6 +111,18 @@ describe StripeBeneficialOwnersManager do
       expect(result.first[:relationship][:representative]).to be true
     end
 
+    it "exposes nationality so the React form can pre-fill it when re-editing an owner" do
+      person_with_nationality = Stripe::StripeObject.construct_from(
+        id: "person_uae",
+        first_name: "Hassan",
+        last_name: "Al-Maktoum",
+        relationship: { representative: false, owner: true, director: true },
+        nationality: "AE",
+      )
+      allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [person_with_nationality] })
+      expect(described_class.list(user).first[:nationality]).to eq("AE")
+    end
+
     it "does not expose the raw id_number or ssn_last_4" do
       allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [other_owner_person] })
       result = described_class.list(user).first
@@ -198,6 +210,22 @@ describe StripeBeneficialOwnersManager do
       no_address = params.except(:address)
       expect { described_class.create(user, no_address) }
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Street address, City, State or region, Postal code, and Country are required/)
+    end
+
+    it "does not require postal_code when the address country is Botswana (BW has no postal codes)" do
+      bw_params = params.deep_dup
+      bw_params[:address] = { line1: "Plot 50", city: "Gaborone", state: "South-East", country: "BW", postal_code: "" }
+      allow(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+      expect { described_class.create(user, bw_params) }.not_to raise_error
+    end
+
+    it "requires nationality when seller's compliance country is one of AE/SG/BD/PK" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info_uae_business, user: user)
+      missing_nationality = params.deep_dup
+      missing_nationality[:nationality] = ""
+      expect { described_class.create(user, missing_nationality) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Nationality is required/)
     end
 
     it "raises MissingRequiredFieldError when id_number is missing on create" do
