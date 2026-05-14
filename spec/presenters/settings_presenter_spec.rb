@@ -788,7 +788,6 @@ describe SettingsPresenter do
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
                                               verification_error: { code: "verification_failed_keyed_identity" })
-        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
                                                                        user: @base_us_props[:user].merge({ need_full_ssn: true }),
@@ -862,7 +861,6 @@ describe SettingsPresenter do
           UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
           UserComplianceInfoFields::Individual::PASSPORT,
           UserComplianceInfoFields::Individual::VISA,
-          UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
           UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
         ].each do |field|
           user = create(:user)

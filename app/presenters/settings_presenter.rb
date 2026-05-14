@@ -297,7 +297,6 @@ class SettingsPresenter
         UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
         UserComplianceInfoFields::Individual::PASSPORT,
         UserComplianceInfoFields::Individual::VISA,
-        UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
         UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
       ]
       needs_id_upload = seller.user_compliance_info_requests.requested
