@@ -890,9 +890,10 @@ class Purchase < ApplicationRecord
     end
 
     if offer_code.present?
+      offer_code_for_display = original_offer_code(include_deleted: true)
       json[:offer_code] = {
         code: offer_code.code,
-        displayed_amount_off: offer_code.displayed_amount_off(link.price_currency_type, with_symbol: true)
+        displayed_amount_off: offer_code_for_display&.displayed_amount_off(link.price_currency_type, with_symbol: true)
       }
       # For backwards compatibility: offer code's `name` has been renamed to `code`
       json[:offer_code][:name] = offer_code.code if version <= 2
@@ -2271,9 +2272,10 @@ class Purchase < ApplicationRecord
       end
 
       if offer_code.present?
+        offer_code_for_display = original_offer_code(include_deleted: true)
         json_data[:offer_code] = {
           code: offer_code.code,
-          displayed_amount_off: offer_code.displayed_amount_off(link.price_currency_type, with_symbol: true)
+          displayed_amount_off: offer_code_for_display&.displayed_amount_off(link.price_currency_type, with_symbol: true)
         }
       end
 

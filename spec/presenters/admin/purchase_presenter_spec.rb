@@ -5,7 +5,7 @@ require "spec_helper"
 describe Admin::PurchasePresenter do
   describe "#props" do
     let(:seller) { create(:user) }
-    let(:product) { create(:product, user: seller) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
     let(:purchase) { create(:purchase, link: product, seller: seller) }
     let(:presenter) { described_class.new(purchase) }
 
@@ -102,6 +102,22 @@ describe Admin::PurchasePresenter do
 
         it "returns the tip amount in cents" do
           expect(props[:tip]).to eq(500)
+        end
+      end
+
+      context "when purchase has a cached offer code discount" do
+        let(:offer_code) { create(:tiered_offer_code, user: seller, products: [product], amount_percentage: 0) }
+        let(:purchase) { create(:purchase, link: product, seller:, offer_code:, price_cents: 500) }
+
+        before do
+          purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+        end
+
+        it "uses the cached resolved discount amount for offer code display" do
+          expect(props[:offer_code]).to eq(
+            code: offer_code.code,
+            displayed_amount_off: "50%"
+          )
         end
       end
 

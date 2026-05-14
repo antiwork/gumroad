@@ -730,6 +730,18 @@ describe Purchase, :vcr do
       expect(@purchase.as_json[:gumroad_fee]).to eq(145) # 50c (10%) + 50c + 15c (2.9% cc fee) + 30c (fixed cc fee)
     end
 
+    it "uses the cached resolved discount amount for offer code display" do
+      product = create(:product, price_cents: 1000)
+      offer_code = create(:tiered_offer_code, user: product.user, products: [product], amount_percentage: 0)
+      purchase = create(:purchase, link: product, seller: product.user, offer_code:, price_cents: 500)
+      purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+
+      expect(purchase.as_json[:offer_code]).to include(
+        code: offer_code.code,
+        displayed_amount_off: "50%"
+      )
+    end
+
     it "has the purchaser_id if one exists" do
       expect(@purchase.as_json.key?(:purchaser_id)).to be(false)
 
@@ -5265,6 +5277,15 @@ describe Purchase, :vcr do
       )
       expect(@purchase.json_data_for_mobile(include_sale_details: true)).to eq(json_data)
     end
+
+    it "uses the cached resolved discount amount for offer code display" do
+      @purchase.create_purchase_offer_code_discount(offer_code: @offer_code, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 4000)
+
+      expect(@purchase.json_data_for_mobile(include_sale_details: true)[:offer_code]).to include(
+        code: @offer_code.code,
+        displayed_amount_off: "50%"
+      )
+    end
   end
 
   describe "price validation" do
@@ -6579,5 +6600,4 @@ describe Purchase, :vcr do
       expect(offer_code.reload).not_to be_deleted
     end
   end
-
 end
