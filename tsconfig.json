@@ -24,7 +24,7 @@
       "google.analytics",
       "facebook-js-sdk",
       "gtag.js",
-      "webpack-env",
+      "vite/client",
       "jwplayer"
     ],
     "allowJs": true,

@@ -137,7 +137,7 @@ class JSErrorReporter
         source_map = frame["url"] && @source_maps[frame["url"]]
         mapped = source_map && Sprockets::SourceMapUtils.bsearch_mappings(source_map[:mappings], [frame["lineNumber"] + 1, frame["columnNumber"]])
         if mapped
-          source = mapped[:source].start_with?("webpack://") ? mapped[:source][12..] : mapped[:source]
+          source = mapped[:source].sub(%r{\A[a-z]+://}i, "")
           "\t#{mapped[:name] || frame["functionName"]} (#{source}:#{mapped[:original][0]})"
         else
           "\t#{frame["functionName"]} (#{frame["url"]}:#{frame["lineNumber"]}:#{frame["columnNumber"]})"

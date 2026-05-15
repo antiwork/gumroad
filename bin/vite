@@ -7,7 +7,6 @@ require "bundler/setup"
 
 require "vite_ruby"
 
-# Set domain env vars that the widget build needs (same as bin/shakapacker did)
 require_relative "../config/domain"
 ENV["ROOT_DOMAIN"] = ROOT_DOMAIN
 ENV["SHORT_DOMAIN"] = SHORT_DOMAIN

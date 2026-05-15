@@ -28,9 +28,8 @@ type Props = {
 };
 
 const Read = () => {
-  const { read_id, url, url_redirect_id, purchase_id, product_file_id, latest_media_location, title } = typia.assert<Props>(
-    usePage().props,
-  );
+  const { read_id, url, url_redirect_id, purchase_id, product_file_id, latest_media_location, title } =
+    typia.assert<Props>(usePage().props);
   const [pageNumber, setPageNumber] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -120,7 +119,7 @@ const Read = () => {
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
         // @ts-expect-error pdfjs-dist worker is not typed
-        await import("pdfjs-dist/legacy/build/pdf.worker.mjs?resource"),
+        await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url"),
       ).default;
 
       const { EventBus, PDFLinkService, PDFSinglePageViewer } = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");

@@ -8,15 +8,14 @@ describe EmbeddedJavascriptsController do
   describe "overlay" do
     it "returns the correct js" do
       get :overlay, format: :js
-      expect(response.body).to match(ActionController::Base.helpers.asset_url(Shakapacker.manifest.lookup!("overlay.js")))
-      expect(response.body).to match(ActionController::Base.helpers.stylesheet_pack_tag("overlay.css", protocol: PROTOCOL, host: DOMAIN))
+      expect(response.body).to include(ActionController::Base.helpers.asset_url("/js/gumroad.js"))
     end
   end
 
   describe "embed" do
     it "returns the correct js" do
       get :embed, format: :js
-      expect(response.body).to match(Shakapacker.manifest.lookup!("embed.js"))
+      expect(response.body).to include(ActionController::Base.helpers.asset_url("/js/gumroad-embed.js"))
     end
   end
 end

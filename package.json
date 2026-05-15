@@ -129,7 +129,7 @@
   },
   "scripts": {
     "build": "npx vite build",
-    "build:widget": "npx vite build --config vite.config.widget.ts",
+    "build:widget": "WIDGET_TARGET=gumroad npx vite build --config vite.config.widget.ts && WIDGET_TARGET=gumroad-embed npx vite build --config vite.config.widget.ts",
     "lint-fast": "DISABLE_TYPE_CHECKED=1 npx eslint",
     "setup": "bundle exec rails js:export",
     "postinstall": "patch-package && ts-patch install -s"
