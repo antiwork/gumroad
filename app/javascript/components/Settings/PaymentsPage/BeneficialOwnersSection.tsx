@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -15,6 +15,10 @@ import { Select } from "$app/components/ui/Select";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 const DEFAULT_TITLE = "Director";
+
+const KANA_NAME_REGEX = /^[゠-ヿㇰ-ㇿ･-ﾟ\s\-.]*$/u;
+const KANA_ADDRESS_REGEX = /^[゠-ヿㇰ-ㇿ･-ﾟ\p{Script=Latin}\d\s\-.]*$/u;
+const HAS_KATAKANA = /[゠-ヿㇰ-ㇿ･-ﾟ]/u;
 
 type BeneficialOwner = {
   id: string;
@@ -419,7 +423,7 @@ const BeneficialOwnersSection = ({
         accept: "json",
       });
       if (!response.ok) throw new ResponseError(`Request failed (${response.status})`);
-      const data = cast<{ beneficial_owners: BeneficialOwner[] }>(await response.json());
+      const data = typia.assert<{ beneficial_owners: BeneficialOwner[] }>(await response.json());
       setOwners(data.beneficial_owners);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Couldn't load beneficial owners.");
@@ -456,9 +460,35 @@ const BeneficialOwnersSection = ({
 
   const updateForm = (patch: Partial<FormState>) => setFormState((prev) => ({ ...prev, ...patch }));
 
+  const validateJpKanaFields = (): string | null => {
+    if (defaultCountry !== "JP") return null;
+    if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
+    if (!KANA_NAME_REGEX.test(formState.first_name_kana)) {
+      return "First name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
+    }
+    if (!KANA_NAME_REGEX.test(formState.last_name_kana)) {
+      return "Last name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
+    }
+    if (!KANA_ADDRESS_REGEX.test(formState.address_building_number_kana)) {
+      return "Block / Building number (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+    }
+    if (!KANA_ADDRESS_REGEX.test(formState.address_street_address_kana)) {
+      return "Town/Cho-me (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+    }
+    if (!HAS_KATAKANA.test(formState.address_street_address_kana)) {
+      return "Town/Cho-me (Kana) must include katakana characters.";
+    }
+    return null;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editState) return;
+    const kanaError = validateJpKanaFields();
+    if (kanaError) {
+      setFormError(kanaError);
+      return;
+    }
     setIsSaving(true);
     setFormError(null);
     try {
@@ -473,7 +503,7 @@ const BeneficialOwnersSection = ({
         data: isRepresentative ? representativePayload(formState) : formStatePayload(formState),
       });
       if (!response.ok) {
-        const body = cast<{ error?: string }>(await response.json().catch(() => ({})));
+        const body = typia.assert<{ error?: string }>(await response.json().catch(() => ({})));
         throw new ResponseError(body.error || `Request failed (${response.status})`);
       }
       showAlert(isEdit ? "Beneficial owner updated." : "Beneficial owner added.", "success");
@@ -496,7 +526,7 @@ const BeneficialOwnersSection = ({
         accept: "json",
       });
       if (!response.ok) {
-        const body = cast<{ error?: string }>(await response.json().catch(() => ({})));
+        const body = typia.assert<{ error?: string }>(await response.json().catch(() => ({})));
         throw new ResponseError(body.error || `Request failed (${response.status})`);
       }
       showAlert("Beneficial owner removed.", "success");
