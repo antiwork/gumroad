@@ -399,7 +399,6 @@ describe SettingsPresenter do
       access_grant2 = Doorkeeper::AccessGrant.create!(application_id: oauth_application2.id, resource_owner_id: seller.id, redirect_uri: oauth_application2.redirect_uri,
                                                       expires_in: 1.day.from_now, scopes: Doorkeeper.configuration.public_scopes.join(" "))
 
-
       access_grant1.update!(created_at: 1.day.ago)
       access_grant2.update!(created_at: 2.days.ago)
 
