@@ -986,11 +986,12 @@ class Subscription < ApplicationRecord
     end
 
     def eligible_auto_renewal_offer_code?(offer_code)
-      return false if offer_code.inactive? && offer_code != original_renewal_offer_code
+      is_original = offer_code == original_renewal_offer_code
+      return false if offer_code.inactive? && !is_original
       return false if offer_code.duration_in_billing_cycles.present?
-      return false unless offer_code == original_renewal_offer_code || offer_code.is_valid_for_purchase?(purchase_quantity: renewal_purchase_quantity)
-      return false if offer_code.minimum_quantity.present? && offer_code.minimum_quantity > renewal_purchase_quantity
-      return false if offer_code.minimum_amount_cents.present? && offer_code.minimum_amount_cents > renewal_pre_discount_total_cents
+      return false unless is_original || offer_code.is_valid_for_purchase?(purchase_quantity: renewal_purchase_quantity)
+      return false if !is_original && offer_code.minimum_quantity.present? && offer_code.minimum_quantity > renewal_purchase_quantity
+      return false if !is_original && offer_code.minimum_amount_cents.present? && offer_code.minimum_amount_cents > renewal_pre_discount_total_cents
 
       true
     end

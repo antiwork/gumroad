@@ -4081,6 +4081,55 @@ describe Subscription, :vcr do
       expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
     end
 
+    it "re-evaluates minimum-quantity tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, quantity: 1)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(minimum_quantity: 2)
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates minimum-amount tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_125, displayed_price_cents: 1_125)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(
+        amount_percentage: 25,
+        minimum_amount_cents: 2_000,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 25 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ],
+      )
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(750)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
     it "re-evaluates inactive tiered discounts attached to the original purchase" do
       original_purchase = subscription.original_purchase
       original_purchase.update!(offer_code: tiered_code)
