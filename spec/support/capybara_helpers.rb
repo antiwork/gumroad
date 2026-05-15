@@ -75,6 +75,22 @@ module CapybaraHelpers
     page.driver.browser.switch_to.alert.accept
   end
 
+  # Reads the flash/toast alert message and immediately dismisses it.
+  # Use this instead of `have_alert` when the alert overlays content
+  # you need to interact with next — it prevents the 5s auto-dismiss
+  # from blocking clicks on elements underneath.
+  #
+  # Usage:
+  #   click_on "Save"
+  #   expect(flash_message).to eq "Changes saved!"
+  #   # alert is now dismissed, safe to interact with content beneath it
+  def flash_message
+    alert = find(:alert)
+    message = alert.text.split("\n").last
+    within(alert) { click_on "Close" }
+    message
+  end
+
   # Waits for checkout surcharges to load after country/ZIP/tax ID changes.
   # The checkout form debounces these at 300ms before firing the API call.
   def wait_for_checkout_surcharges_loaded

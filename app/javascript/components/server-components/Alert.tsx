@@ -1,3 +1,4 @@
+import { X } from "@boxicons/react";
 import * as React from "react";
 import typia from "typia";
 
@@ -21,6 +22,11 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+  };
+
+  const dismiss = () => {
+    clearTimer();
+    setIsVisible(false);
   };
 
   const startTimer = () => {
@@ -53,9 +59,17 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       }}
     >
       <Alert variant={alert?.status}>
-        <div dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}>
+        <div className="flex-1" dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}>
           {!alert?.html ? alert?.message : null}
         </div>
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer text-muted hover:text-primary"
+          aria-label="Close"
+          onClick={dismiss}
+        >
+          <X className="size-4" />
+        </button>
       </Alert>
     </div>
   );
