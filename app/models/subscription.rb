@@ -525,7 +525,7 @@ class Subscription < ApplicationRecord
       elsif clear_discount
         new_purchase.offer_code = nil
         new_purchase.purchase_offer_code_discount = nil
-      elsif clear_deleted_discount && new_purchase.offer_code.present? && !new_purchase.offer_code.tiered?
+      elsif clear_deleted_discount && new_purchase.offer_code&.deleted? && !new_purchase.offer_code.tiered?
         new_purchase.purchase_offer_code_discount = nil
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,

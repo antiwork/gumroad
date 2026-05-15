@@ -32,7 +32,7 @@ class ContactingCreatorMailer < ApplicationMailer
       @quantity = @purchase.quantity
       @variants_count = @purchase.variant_names&.count || 0
       @custom_fields = @purchase.custom_fields
-      @offer_code = @purchase.offer_code
+      @offer_code = @purchase.original_offer_code(include_deleted: true)
     else
       @product = Link.find(link_id)
       @variants = variants

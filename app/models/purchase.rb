@@ -2632,10 +2632,10 @@ class Purchase < ApplicationRecord
     return nil if offer_code&.deleted? && !include_deleted && !purchase_offer_code_discount&.offer_code&.tiered?
 
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      original_offer_code = purchase_offer_code_discount.offer_code
       purchase_offer_code_discount.offer_code_is_percent ?
-        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
-        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)
+        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name) :
+        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name)
     else
       offer_code
     end

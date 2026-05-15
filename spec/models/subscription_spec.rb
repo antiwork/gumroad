@@ -2381,6 +2381,40 @@ describe Subscription, :vcr do
         expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
         expect(new_purchase.displayed_price_cents).to eq(10_00)
       end
+
+      it "does not clear an auto-discovered replacement discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
+        @offer_code.update!(duration_in_months: 1)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 1
+        )
+        @offer_code.mark_deleted!
+        replacement_code = create(:offer_code,
+                                  code: "replacementdiscount",
+                                  user: @product.user,
+                                  products: [@product],
+                                  ownership_products: [@product],
+                                  existing_customers_only: true,
+                                  amount_cents: nil,
+                                  amount_percentage: 25,
+                                  currency_type: nil)
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          perceived_price_cents: 15_00,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(replacement_code)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+        expect(new_purchase.displayed_price_cents).to eq(15_00)
+      end
     end
 
     context "for a subscription with fixed length" do
