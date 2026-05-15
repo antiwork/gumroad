@@ -3,7 +3,7 @@ import CodeBlockLowlight, { CodeBlockLowlightOptions } from "@tiptap/extension-c
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { common, createLowlight } from "lowlight";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Select } from "$app/components/ui/Select";
@@ -58,7 +58,7 @@ const LANGUAGES = lowlight.listLanguages().map((lang) => {
 });
 
 const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) => {
-  const language = cast<string | null | undefined>(node.attrs.language);
+  const language = typia.assert<string | null | undefined>(node.attrs.language);
   const { isEditable } = editor;
 
   return (

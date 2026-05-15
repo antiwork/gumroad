@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   AnyPaymentMethodParams,
@@ -57,7 +57,7 @@ export const updateSubscription = async (
   });
 
   if (response.ok) {
-    const responseData = cast<UpdateSubscriptionResponse>(await response.json());
+    const responseData = typia.assert<UpdateSubscriptionResponse>(await response.json());
     if (responseData.success && !("requires_card_action" in responseData)) {
       return { type: "done", message: responseData.success_message, next: responseData.next ?? null };
     } else if (responseData.success && "requires_card_action" in responseData) {

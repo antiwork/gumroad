@@ -1,11 +1,11 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
 const fetchBraintreeClientToken = async (): Promise<{ clientToken: string | null }> => {
   const response = await request({ url: Routes.braintree_client_token_path(), method: "GET", accept: "json" });
-  return cast<{ clientToken: string | null }>(await response.json());
+  return typia.assert<{ clientToken: string | null }>(await response.json());
 };
 
 const BRAINTREE_TOKEN_VALIDITY_MS = 12 * 60 * 60 * 1000; // 12 hrs

@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -53,4 +53,4 @@ export const getStatistics = (id: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<AffiliateStatistics>(json));
+    .then((json) => typia.assert<AffiliateStatistics>(json));

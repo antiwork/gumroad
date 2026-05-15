@@ -174,8 +174,15 @@ describe SettingsPresenter do
   end
 
   describe "#application_props" do
-    let(:app) do create(:oauth_application, name: "Test", redirect_uri: "https://example.com/test",
-                                            uid: "uid-1234", secret: "secret-123") end
+    let(:app) do
+      create(
+        :oauth_application,
+        name: "Test",
+        redirect_uri: "https://example.com/test",
+        uid: "uid-1234",
+        secret: "secret-123"
+      )
+    end
 
     it "returns the correct data" do
       expect(presenter.application_props(app)).to eq(
@@ -265,7 +272,7 @@ describe SettingsPresenter do
     let!(:third_party_analytic) { create(:third_party_analytic, user: seller) }
 
     it "returns the correct props" do
-      expect(presenter.third_party_analytics_props).to eq ({
+      expect(presenter.third_party_analytics_props).to eq({
         disable_third_party_analytics: false,
         google_analytics_id: "",
         facebook_pixel_id: "",
@@ -398,7 +405,6 @@ describe SettingsPresenter do
 
       access_grant2 = Doorkeeper::AccessGrant.create!(application_id: oauth_application2.id, resource_owner_id: seller.id, redirect_uri: oauth_application2.redirect_uri,
                                                       expires_in: 1.day.from_now, scopes: Doorkeeper.configuration.public_scopes.join(" "))
-
 
       access_grant1.update!(created_at: 1.day.ago)
       access_grant2.update!(created_at: 2.days.ago)
@@ -573,6 +579,7 @@ describe SettingsPresenter do
           is_suspended: false,
           suspension_reason: nil,
           compliance_actions: [],
+          needs_id_upload: false,
           gumroad_status: nil,
         },
         payouts_paused_internally: false,
@@ -583,6 +590,7 @@ describe SettingsPresenter do
         payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
+        can_manage_beneficial_owners: false,
       }
     end
 
@@ -787,13 +795,13 @@ describe SettingsPresenter do
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
                                               verification_error: { code: "verification_failed_keyed_identity" })
-        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
                                                                        user: @base_us_props[:user].merge({ need_full_ssn: true }),
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                        ),
                                                                      }))
       end
@@ -807,6 +815,7 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
@@ -823,6 +832,7 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                        ),
                                                                      }))
       end
@@ -839,9 +849,48 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
+                                                                         needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
+      end
+
+      it "sets needs_id_upload to true when document-type compliance requests exist" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(true)
+      end
+
+      it "sets needs_id_upload to true for each document-type field" do
+        create(:merchant_account, user: seller)
+        [
+          UserComplianceInfoFields::Individual::PASSPORT,
+          UserComplianceInfoFields::Individual::VISA,
+          UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
+        ].each do |field|
+          user = create(:user)
+          create(:merchant_account, user:)
+          create(:user_compliance_info_request, user:, field_needed: field)
+          presenter = SettingsPresenter.new(pundit_user: SellerContext.new(user:, seller: user))
+          expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(true), "expected needs_id_upload to be true for #{field}"
+        end
+      end
+
+      it "sets needs_id_upload to false when only non-document-type compliance requests exist" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::Address::STREET)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(false)
+      end
+
+      it "sets needs_id_upload to false for additional document requests" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID)
+
+        expect(presenter.payments_props[:account_status][:needs_id_upload]).to eq(false)
       end
     end
 
@@ -850,6 +899,14 @@ describe SettingsPresenter do
         create(:user_compliance_info_business, user: seller, country: "United States", business_country: "Canada")
 
         expect(presenter.payments_props[:user][:payout_currency]).to eq("cad")
+      end
+    end
+
+    context "when the seller has a non-US business_tax_id with trailing letters" do
+      it "exposes the last four characters of the stored value, preserving letters" do
+        create(:user_compliance_info_business, user: seller, country: "Ireland", business_country: "Ireland", business_tax_id: "3490731JH")
+
+        expect(presenter.payments_props[:user][:business_tax_id_last_four]).to eq("31JH")
       end
     end
 
@@ -999,6 +1056,29 @@ describe SettingsPresenter do
         expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(nil)
+      end
+    end
+  end
+
+  describe "#payments_props :can_manage_beneficial_owners gating" do
+    before do
+      create(:user_compliance_info_business, user: seller)
+      create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test_bo_gate")
+    end
+
+    it "exposes true for the owner of a business with a Gumroad-managed Stripe account" do
+      expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(true)
+    end
+
+    context "when the logged-in user is an admin for the seller" do
+      let(:user) { create(:user) }
+
+      before do
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+      end
+
+      it "exposes false so the section is hidden from team admins who lack :update? on payments" do
+        expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(false)
       end
     end
   end

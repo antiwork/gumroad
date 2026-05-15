@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { last } from "$app/utils/array";
 
@@ -57,11 +57,11 @@ const FileUtils = {
     return encodeURIComponent(url);
   },
   determineS3BucketForForm: ($form: JQuery) => {
-    const s3Url: string = cast($form[0]?.dataset.s3Url);
+    const s3Url: string = typia.assert<string>($form[0]?.dataset.s3Url);
     return last(s3Url.split("/"));
   },
-  determineAWSAccessKeyIdForForm: ($form: JQuery) => cast<string>($form[0]?.dataset.awsAccessKeyId),
-  determineUserExternalIdForForm: ($form: JQuery) => cast<string>($form[0]?.dataset.userExternalId),
+  determineAWSAccessKeyIdForForm: ($form: JQuery) => typia.assert<string>($form[0]?.dataset.awsAccessKeyId),
+  determineUserExternalIdForForm: ($form: JQuery) => typia.assert<string>($form[0]?.dataset.userExternalId),
   isFileExtensionStreamable: (extension: string) => {
     const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi", "webm"];
     return streamableExtensions.includes(extension.toLowerCase());

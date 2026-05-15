@@ -1,6 +1,6 @@
 import { Link } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -57,7 +57,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
       url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
       accept: "json",
     });
-    setUserGuids(cast<UserGuids>(await response.json()));
+    setUserGuids(typia.assert<UserGuids>(await response.json()));
     setIsLoading(false);
   };
 

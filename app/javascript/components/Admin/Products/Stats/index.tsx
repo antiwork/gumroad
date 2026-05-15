@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
@@ -18,7 +18,7 @@ const AdminProductStats = ({ product_external_id }: { product_external_id: strin
     {
       fetchUnlessLoaded: true,
       url: Routes.views_count_admin_product_path(product_external_id),
-      responseParser: (data) => cast<{ views_count: number }>(data),
+      responseParser: (data) => typia.assert<{ views_count: number }>(data),
     },
   );
 
@@ -39,7 +39,7 @@ const AdminProductStats = ({ product_external_id }: { product_external_id: strin
     {
       fetchUnlessLoaded: true,
       url: Routes.sales_stats_admin_product_path(product_external_id),
-      responseParser: (data) => cast<{ sales_stats: AdminProductStatsSalesProps }>(data),
+      responseParser: (data) => typia.assert<{ sales_stats: AdminProductStatsSalesProps }>(data),
     },
   );
 

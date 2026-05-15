@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CreatorProfile } from "$app/parsers/profile";
 
@@ -15,7 +15,7 @@ type Props = {
 };
 
 export default function CoffeePage() {
-  const { product, purchase, creator_profile } = cast<Props>(usePage().props);
+  const { product, purchase, creator_profile } = typia.assert<Props>(usePage().props);
 
   return (
     <ProfileLayout creatorProfile={creator_profile} hideFollowForm>

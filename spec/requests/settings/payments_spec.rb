@@ -869,7 +869,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("First name", with: "CA")
         fill_in("Last name", with: "Creator")
-        fill_in("Job title", with: "General Manager")
         all('select[id$="creator-country"]').last.select("Canada")
         all('input[id$="creator-street-address"]').last.set("address_full_match")
         all('input[id$="creator-city"]').last.set("Toronto")
@@ -909,7 +908,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.business_tax_id.decrypt("1234")).to eq("111111111")
         expect(compliance_info.first_name).to eq("CA")
         expect(compliance_info.last_name).to eq("Creator")
-        expect(compliance_info.job_title).to eq("General Manager")
         expect(compliance_info.street_address).to eq("address_full_match")
         expect(compliance_info.city).to eq("Toronto")
         expect(compliance_info.state).to eq("ON")
@@ -1513,7 +1511,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("First name", with: "Canadian")
         fill_in("Last name", with: "Manager")
-        fill_in("Job title", with: "Sales Manager")
         all('select[id$="creator-country"]').last.select("Canada")
         all('input[id$="creator-street-address"]').last.set("address_full_match")
         all('input[id$="creator-city"]').last.set("Toronto")
@@ -1539,7 +1536,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Transit and institution #")
-        expect(page).to have_field("Job title", with: "Sales Manager")
 
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.is_business).to be true
@@ -1550,7 +1546,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.business_country).to eq("Canada")
         expect(compliance_info.business_zip_code).to eq("M4C 1T2")
         expect(compliance_info.business_phone).to eq("+15052426789")
-        expect(compliance_info.job_title).to eq("Sales Manager")
         expect(compliance_info.business_type).to eq("private_partnership")
         expect(compliance_info.business_tax_id.decrypt("1234")).to eq("000000000")
         expect(compliance_info.first_name).to eq("Canadian")

@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ArticleLink } from "$app/components/HelpCenterPage/types";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -62,7 +62,7 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
 };
 
 export default function HelpCenterIndex() {
-  const { categories } = cast<ArticlesIndexPageProps>(usePage().props);
+  const { categories } = typia.assert<ArticlesIndexPageProps>(usePage().props);
   const [searchTerm, setSearchTerm] = React.useState("");
 
   const filteredCategories = searchTerm

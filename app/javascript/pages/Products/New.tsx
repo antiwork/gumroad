@@ -3,7 +3,7 @@ import { Link, useForm, usePage } from "@inertiajs/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 import { useState } from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import { RecurringProductType } from "$app/data/products";
 import { ProductNativeType, ProductServiceType } from "$app/parsers/product";
@@ -83,7 +83,7 @@ const NewProductPage = () => {
     eligible_for_service_products,
     ai_generation_enabled,
     ai_promo_dismissed,
-  } = cast<NewProductPageProps>(usePage().props);
+  } = typia.assert<NewProductPageProps>(usePage().props);
 
   const formUID = React.useId();
 
@@ -104,13 +104,13 @@ const NewProductPage = () => {
     },
   });
 
-  const errors = cast<FormErrors>(form.errors);
+  const errors = typia.assert<FormErrors>(form.errors);
 
   const [aiPromoVisible, setAiPromoVisible] = useState(ai_generation_enabled && !ai_promo_dismissed);
   const [aiPopoverOpen, setAiPopoverOpen] = useState(false);
   const [isGeneratingUsingAi, setIsGeneratingUsingAi] = useState(false);
 
-  const isRecurringBilling = is<RecurringProductType>(form.data.link.native_type);
+  const isRecurringBilling = typia.is<RecurringProductType>(form.data.link.native_type);
 
   const selectedCurrency = findCurrencyByCode(form.data.link.price_currency_type);
 
@@ -119,8 +119,8 @@ const NewProductPage = () => {
       ...form.data.link,
       native_type: type,
       is_physical: type === "physical",
-      is_recurring_billing: is<RecurringProductType>(type),
-      subscription_duration: is<RecurringProductType>(type)
+      is_recurring_billing: typia.is<RecurringProductType>(type),
+      subscription_duration: typia.is<RecurringProductType>(type)
         ? form.data.link.subscription_duration || defaultRecurrence
         : null,
     });
@@ -158,7 +158,7 @@ const NewProductPage = () => {
         data: { prompt: form.data.link.ai_prompt.trim() },
       });
 
-      const result = cast<
+      const result = typia.assert<
         | {
             success: true;
             data: {
@@ -193,11 +193,11 @@ const NewProductPage = () => {
           native_type: aiData.native_type,
           number_of_content_pages: aiData.number_of_content_pages,
           price_range: aiData.price.toString(),
-          price_currency_type: is<CurrencyCode>(aiData.currency_code)
+          price_currency_type: typia.is<CurrencyCode>(aiData.currency_code)
             ? aiData.currency_code
             : form.data.link.price_currency_type,
           is_physical: aiData.native_type === "physical",
-          is_recurring_billing: is<RecurringProductType>(aiData.native_type),
+          is_recurring_billing: typia.is<RecurringProductType>(aiData.native_type),
           subscription_duration: subscriptionDuration,
         });
 
@@ -544,7 +544,7 @@ const ProductTypeSelector = ({
             disabled={disabled}
           >
             <img
-              src={cast<string>(nativeTypeIcons(`./${type}.png`))}
+              src={typia.assert<string>(nativeTypeIcons(`./${type}.png`))}
               alt={PRODUCT_TYPES[type].title}
               className="shrink-0"
               width="40"

@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
@@ -48,7 +48,7 @@ const AdminProductInfo = ({ product }: Props) => {
   } = useLazyFetch<InfoProps | null>(null, {
     fetchUnlessLoaded: false,
     url: Routes.admin_product_info_path(product.external_id, { format: "json" }),
-    responseParser: (data) => cast<{ info: InfoProps }>(data).info,
+    responseParser: (data) => typia.assert<{ info: InfoProps }>(data).info,
   });
 
   const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {

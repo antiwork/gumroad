@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, X } from "@boxicons/react";
 import { Deferred, Link, router, usePage } from "@inertiajs/react";
 import { range } from "lodash-es";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import { SearchRequest, SearchResults } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
@@ -239,7 +239,7 @@ const parseUrlParams = (href: string, curatedProductIds: string[], defaultSortOr
 };
 
 function DiscoverIndex() {
-  const props = cast<Props>(usePage().props);
+  const props = typia.assert<Props>(usePage().props);
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
 
   const [state, dispatch] = useSearchReducer({
@@ -431,7 +431,7 @@ function DiscoverIndex() {
                   ? state.results?.products.length
                     ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
                     : null
-                  : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
+                  : sortTitles[typia.is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
               </h2>
               {state.params.query || hasOfferCode ? null : (
                 <Tabs>

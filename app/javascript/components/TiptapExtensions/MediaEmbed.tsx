@@ -3,7 +3,7 @@ import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
@@ -67,11 +67,11 @@ export const Raw = TiptapNode.create({
   renderHTML: ({ HTMLAttributes }) => {
     const doc = document.createElement("div");
     doc.className = "tiptap__raw";
-    const processedHtml = sanitizeHtml(cast(HTMLAttributes.html));
+    const processedHtml = sanitizeHtml(typia.assert<string>(HTMLAttributes.html));
     doc.innerHTML = processedHtml;
-    if (HTMLAttributes.title) doc.setAttribute("data-title", cast(HTMLAttributes.title));
-    if (HTMLAttributes.url) doc.setAttribute("data-url", cast(HTMLAttributes.url));
-    if (HTMLAttributes.thumbnail) doc.setAttribute("data-thumbnail", cast(HTMLAttributes.thumbnail));
+    if (HTMLAttributes.title) doc.setAttribute("data-title", typia.assert<string>(HTMLAttributes.title));
+    if (HTMLAttributes.url) doc.setAttribute("data-url", typia.assert<string>(HTMLAttributes.url));
+    if (HTMLAttributes.thumbnail) doc.setAttribute("data-thumbnail", typia.assert<string>(HTMLAttributes.thumbnail));
     const walk = (element: Element): DOMOutputSpec => {
       const attrs: Record<string, string> = {};
       for (const attr of element.attributes) attrs[attr.name] = attr.value;
@@ -147,7 +147,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
               const iframelyUrl = `https://iframe.ly/api/oembed?iframe=1&api_key=6317bed3ca048a1a75d850&url=${encoded}&omit_script=1`;
               try {
                 const data: unknown = await (await request({ method: "GET", url: iframelyUrl, accept: "json" })).json();
-                if (is<IframelyEmbedData>(data)) {
+                if (typia.is<IframelyEmbedData>(data)) {
                   inputRef.current.value = "";
                   onEmbedReceived?.(data);
                 } else {
@@ -211,14 +211,14 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
     return ReactNodeViewRenderer(({ editor, node, deleteNode }: NodeViewProps) => (
       <NodeViewWrapper>
         <Row className="embed">
-          <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
+          <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(typia.assert<string>(node.attrs.html)) }} />
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
               <h4 className="truncate">{node.attrs.title}</h4>
               {node.attrs.url ? (
                 <div className="truncate">
-                  <a href={cast(node.attrs.url)} target="_blank" rel="noreferrer">
+                  <a href={typia.assert<string>(node.attrs.url)} target="_blank" rel="noreferrer">
                     {node.attrs.url}
                   </a>
                 </div>

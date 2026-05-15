@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -28,6 +28,6 @@ export const signupAndAddPurchaseToLibrary = async (data: SignUpAndAddPurchaseRe
     },
   });
 
-  const responseData = cast<SignUpResponse>(await response.json());
+  const responseData = typia.assert<SignUpResponse>(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 };

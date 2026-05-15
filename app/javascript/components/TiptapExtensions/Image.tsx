@@ -4,7 +4,7 @@ import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorView } from "@tiptap/pm/view";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
@@ -99,7 +99,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
   useOnOutsideClick([nodeRef], () => setHasFocus(false));
 
   const [isImageLoaded, setIsImageLoaded] = React.useState(false);
-  const isUploading = editor.isEditable && cast(attrs.uploading) && isImageLoaded;
+  const isUploading = editor.isEditable && !!attrs.uploading && isImageLoaded;
   const imageMarkup = (
     <img
       {...{ ...attrs, uploading: undefined }}
@@ -119,7 +119,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
     <NodeViewWrapper>
       <figure ref={nodeRef} style={isUploading ? { position: "relative" } : undefined}>
         {attrs.link ? (
-          <a href={cast(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
+          <a href={typia.assert<string>(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
             {imageMarkup}
           </a>
         ) : (

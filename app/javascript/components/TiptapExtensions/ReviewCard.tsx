@@ -1,7 +1,7 @@
 import { Node, NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Review as ReviewType, getReview } from "$app/data/product_reviews";
 import { assertResponseError } from "$app/utils/request";
@@ -57,7 +57,7 @@ export const ReviewCard = Node.create({
 });
 
 const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
-  const reviewId = cast<string>(node.attrs.reviewId ?? "");
+  const reviewId = typia.assert<string>(node.attrs.reviewId ?? "");
   const [review, setReview] = React.useState<ReviewType | null>(null);
   const isEditable = editor.isEditable;
   const seller = useCurrentSeller();

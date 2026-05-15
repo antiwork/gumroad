@@ -219,7 +219,7 @@ describe CartPresenter do
                 {
                   code: "INVALIDCODE",
                   fromUrl: true,
-                  products: [],
+                  products: {},
                 }
               ],
               items: [

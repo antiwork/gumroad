@@ -1,4 +1,4 @@
-import { is } from "ts-safe-cast";
+import typia from "typia";
 
 import { CardProduct } from "$app/parsers/product";
 
@@ -18,7 +18,7 @@ export const loadCartItemsCount = (src: string, cb: (value: CartItemsCount) => v
       const handler = (evt: MessageEvent) => {
         if (evt.source !== iframe.contentWindow || evt.origin !== origin) return;
 
-        if (is<{ type: "cart-items-count"; cartItemsCount: CartItemsCount }>(evt.data)) {
+        if (typia.is<{ type: "cart-items-count"; cartItemsCount: CartItemsCount }>(evt.data)) {
           window.removeEventListener("message", handler);
           iframe.remove();
           resolve(evt.data.cartItemsCount);

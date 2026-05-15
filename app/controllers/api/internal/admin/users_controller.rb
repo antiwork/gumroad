@@ -410,7 +410,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         ) : nil,
         tax_ids: {
           individual_last_four: tax_id_last_four(info.individual_tax_id),
-          business_last_four: tax_id_last_four(info.business_tax_id, digits_only: true),
+          business_last_four: tax_id_last_four(info.business_tax_id),
         },
         identity_documents: {
           stripe_identity_document_id: info.stripe_identity_document_id,
@@ -434,12 +434,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       }
     end
 
-    def tax_id_last_four(encrypted_tax_id, digits_only: false)
+    def tax_id_last_four(encrypted_tax_id)
       return nil if encrypted_tax_id.blank?
 
-      decrypted = encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s
-      decrypted = decrypted.gsub(/\D/, "") if digits_only
-      decrypted[-4..]
+      encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..]
     end
 
     def open_compliance_info_requests(user)

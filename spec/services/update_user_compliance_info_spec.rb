@@ -149,5 +149,126 @@ describe UpdateUserComplianceInfo do
         expect(result[:success]).to be true
       end
     end
+
+    context "with a non-US business" do
+      def create_ie_business_user(business_tax_id:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Ireland",
+            business_country: "Ireland",
+            business_state: "D",
+            business_city: "Dublin",
+            business_zip_code: "D02 XE80",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            business_tax_id:,
+          )
+        end
+      end
+
+      it "preserves trailing letters in an Irish business_tax_id" do
+        user = create_ie_business_user(business_tax_id: "000000000")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "3490731JH",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do |new_compliance_info|
+          stored = new_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+          expect(stored).to eq("3490731JH")
+        end
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("3490731JH")
+      end
+
+      it "detects re-adding trailing letters as a change after the bug previously stripped them" do
+        user = create_ie_business_user(business_tax_id: "3490731")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "3490731JH",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.to change { UserComplianceInfo.count }.by(1)
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("3490731JH")
+      end
+
+      it "strips internal and surrounding whitespace but preserves alphanumeric characters" do
+        user = create_ie_business_user(business_tax_id: "000000000")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "  3490731 JH  ",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("3490731JH")
+      end
+
+      it "collapses internal whitespace in a UK UTR-style business_tax_id" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "United Kingdom",
+            business_country: "United Kingdom",
+            business_state: "London",
+            business_city: "London",
+            business_zip_code: "SW1A 1AA",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            business_tax_id: "0000000000",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "1234 5678 90",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("1234567890")
+      end
+
+      it "collapses dashes in a non-US business_tax_id" do
+        user = create_ie_business_user(business_tax_id: "000000000")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "3490-731-JH",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("3490731JH")
+      end
+    end
   end
 end

@@ -1,7 +1,7 @@
 import { BookmarkX, DotsHorizontalRounded } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
@@ -34,7 +34,7 @@ type Props = {
 };
 
 export default function WishlistsFollowingPage() {
-  const { wishlists: preloadedWishlists, reviews_page_enabled } = cast<Props>(usePage().props);
+  const { wishlists: preloadedWishlists, reviews_page_enabled } = typia.assert<Props>(usePage().props);
 
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
 

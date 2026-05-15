@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 export type HeightMessage = { type: "height"; height: number };
 
@@ -31,7 +31,7 @@ export const parseProductURL = (href: string, customDomain?: string) => {
 };
 
 export const isValidHost = (url: URL, customDomain?: string) =>
-  url.host.endsWith(cast(process.env.ROOT_DOMAIN)) ||
+  url.host.endsWith(typia.assert<string>(process.env.ROOT_DOMAIN)) ||
   url.host === process.env.SHORT_DOMAIN ||
   (customDomain && url.host.endsWith(customDomain));
 

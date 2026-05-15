@@ -528,7 +528,6 @@ describe StripeMerchantAccountManager, :vcr do
             last_name: "Bartowski",
             phone: "0000000000",
             email: user.email,
-            relationship: { title: "CEO" },
           },
           bank_account: {
             country: "US",
@@ -11677,6 +11676,108 @@ describe StripeMerchantAccountManager, :vcr do
           expect(subject).not_to receive(:update_bank_account)
           subject.handle_new_bank_account(user_compliance_info)
         end
+      end
+    end
+  end
+
+  describe ".update_person" do
+    let(:user) { create(:user, email: "rep@example.com") }
+    let(:user_compliance_info) { create(:user_compliance_info_business, user:) }
+    let(:stripe_account) { Stripe::Account.construct_from(id: "acct_multi_owner_123") }
+
+    let(:representative_person) do
+      Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: stripe_account.id,
+        relationship: { representative: true, owner: true, percent_ownership: 33.33 }
+      )
+    end
+    let(:co_director_owner) do
+      Stripe::Person.construct_from(
+        id: "person_co_director",
+        object: "person",
+        account: stripe_account.id,
+        relationship: { representative: false, owner: true, percent_ownership: 33.33 }
+      )
+    end
+    let(:third_owner) do
+      Stripe::Person.construct_from(
+        id: "person_third_owner",
+        object: "person",
+        account: stripe_account.id,
+        relationship: { representative: false, owner: true, percent_ownership: 33.34 }
+      )
+    end
+
+    before { user_compliance_info }
+
+    context "list_persons filters by relationship.representative on Stripe's side" do
+      it "queries Stripe with relationship: { representative: true }, limit: 1 — no client-side scanning" do
+        expect(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+        expect(Stripe::Account).to receive(:update_person)
+          .with(stripe_account.id, representative_person.id, anything)
+          .and_return(true)
+
+        described_class.update_person(user, stripe_account, nil, "1234")
+      end
+    end
+
+    context "with the representative on the Stripe account" do
+      it "sends only representative: true and lets Stripe preserve owner/title/percent_ownership set via BeneficialOwnersSection" do
+        expect(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, nil, "1234")
+
+        expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+
+    context "when Stripe returns no persons for the account" do
+      it "returns early without calling update_person" do
+        expect(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [])
+        expect(Stripe::Account).not_to receive(:update_person)
+
+        described_class.update_person(user, stripe_account, nil, "1234")
+      end
+    end
+
+    context "individual→company transition" do
+      it "seeds owner: true, title, percent_ownership: 100 when transitioning from individual to business" do
+        last_individual_info = create(:user_compliance_info, user:)
+        last_individual_info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+
+        expect(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234")
+
+        expect(captured_attributes[:relationship]).to include(
+          representative: true,
+          owner: true,
+          percent_ownership: 100,
+        )
+        expect(captured_attributes[:relationship][:title]).to be_present
       end
     end
   end

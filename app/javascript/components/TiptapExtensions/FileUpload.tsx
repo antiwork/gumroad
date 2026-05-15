@@ -2,7 +2,7 @@ import { ArrowUp } from "@boxicons/react";
 import { NodeViewProps, Node as TiptapNode } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
@@ -41,7 +41,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
   if (!editor.isEditable) {
     return (
       <NodeViewWrapper>
-        <FileInput customFieldId={cast<string>(node.attrs.id)} />
+        <FileInput customFieldId={typia.assert<string>(node.attrs.id)} />
       </NodeViewWrapper>
     );
   }

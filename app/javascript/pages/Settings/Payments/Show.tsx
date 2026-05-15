@@ -2,7 +2,7 @@ import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
@@ -24,6 +24,7 @@ import BankAccountSection, {
   BankAccountDetails,
   type BankAccount,
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
+import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
@@ -96,6 +97,7 @@ type PaymentsPageProps = {
   payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  can_manage_beneficial_owners: boolean;
   errors?: {
     base?: string[];
   };
@@ -108,8 +110,8 @@ type ErrorMessageInfo = {
 
 export default function PaymentsPage() {
   const page = usePage();
-  const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
+  const props = typia.assert<PaymentsPageProps>(page.props);
+  const errors = typia.assert<{ base?: string[] } | undefined>(page.props.errors);
 
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -215,12 +217,11 @@ export default function PaymentsPage() {
     }
   }, [errors, clientErrorMessage]);
 
-  const isStreetAddressPOBox = (input: string) => {
-    return input
+  const isStreetAddressPOBox = (input: string) =>
+    input
       .replace(/[^\w]*/gu, "")
       .toLocaleLowerCase()
       .includes("pobox");
-  };
 
   const poBoxAddressErrorMessage = (countryCode: CountryCode) => {
     if (countryCode === "US") {
@@ -234,16 +235,13 @@ export default function PaymentsPage() {
     return "We require a valid physical address. We cannot accept a P.O. Box as a valid address.";
   };
 
-  const countryRequiresPhysicalAddress = (countryCode: CountryCode) => {
-    return ["US", "GH"].includes(countryCode);
-  };
+  const countryRequiresPhysicalAddress = (countryCode: CountryCode) => ["US", "GH"].includes(countryCode);
 
-  const isPhysicalAddressRequiredAndPOBox = (countryCode: CountryCode, input: string) => {
-    return countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
-  };
+  const isPhysicalAddressRequiredAndPOBox = (countryCode: CountryCode, input: string) =>
+    countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
-    const countryCode: CountryCode = cast(country_code);
+    const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
     return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
   };
 
@@ -596,12 +594,15 @@ export default function PaymentsPage() {
       !form.data.user.street_address ||
       (streetAddressValidationContextChanged &&
         form.data.user.country !== null &&
-        isPhysicalAddressRequiredAndPOBox(cast(form.data.user.country), form.data.user.street_address))
+        isPhysicalAddressRequiredAndPOBox(
+          typia.assert<CountryCode>(form.data.user.country),
+          form.data.user.street_address,
+        ))
     ) {
       markFieldInvalid("street_address");
       if (form.data.user.street_address) {
         setClientErrorMessage({
-          message: poBoxAddressErrorMessage(cast(form.data.user.country)),
+          message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.country)),
         });
       }
     }
@@ -648,11 +649,6 @@ export default function PaymentsPage() {
       }
       if (!form.data.user.business_name) {
         markFieldInvalid("business_name");
-      }
-      if (form.data.user.business_country === "CA") {
-        if (!form.data.user.job_title) {
-          markFieldInvalid("job_title");
-        }
       }
       if (form.data.user.business_country === "JP") {
         if (!form.data.user.business_name_kanji) {
@@ -708,12 +704,15 @@ export default function PaymentsPage() {
         !form.data.user.business_street_address ||
         (businessStreetAddressValidationContextChanged &&
           form.data.user.business_country !== null &&
-          isPhysicalAddressRequiredAndPOBox(cast(form.data.user.business_country), form.data.user.business_street_address))
+          isPhysicalAddressRequiredAndPOBox(
+            typia.assert<CountryCode>(form.data.user.business_country),
+            form.data.user.business_street_address,
+          ))
       ) {
         markFieldInvalid("business_street_address");
         if (form.data.user.business_street_address) {
           setClientErrorMessage({
-            message: poBoxAddressErrorMessage(cast(form.data.user.business_country)),
+            message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.business_country)),
           });
         }
       }
@@ -1156,6 +1155,15 @@ export default function PaymentsPage() {
               />
             )}
           </section>
+          {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
+            <BeneficialOwnersSection
+              countries={props.countries}
+              states={props.states}
+              defaultCountry={form.data.user.business_country ?? form.data.user.country}
+              minDobYear={props.min_dob_year}
+              isFormDisabled={props.is_form_disabled}
+            />
+          ) : null}
         </FormSection>
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection

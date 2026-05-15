@@ -2,7 +2,7 @@ import { Link } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
 import { classNames } from "$app/utils/classNames";
@@ -33,7 +33,7 @@ type WidgetsPageProps = {
 };
 
 export default function PublicWidgets() {
-  const props = cast<WidgetsPageProps>(usePage().props);
+  const props = typia.assert<WidgetsPageProps>(usePage().props);
 
   usePersistentExternalScript("/js/gumroad.js");
   usePersistentExternalScript("/js/gumroad-embed.js");

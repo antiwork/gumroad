@@ -2,7 +2,7 @@ import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { produce } from "immer";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
@@ -253,7 +253,7 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
 });
 
 export default function LibraryPage() {
-  const { results, creators, bundles, reviews_page_enabled, following_wishlists_enabled } = cast<Props>(
+  const { results, creators, bundles, reviews_page_enabled, following_wishlists_enabled } = typia.assert<Props>(
     usePage().props,
   );
 
@@ -265,7 +265,7 @@ export default function LibraryPage() {
   }));
   const [enteredQuery, setEnteredQuery] = React.useState(state.search.query);
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const search = is<Params>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
+    const search = typia.is<Params>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
     dispatch({ type: "set-search", search });
     setEnteredQuery(search.query);
   });

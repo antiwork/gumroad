@@ -1,5 +1,5 @@
 import { PaymentRequestPaymentMethodEvent, StripeCardElement } from "@stripe/stripe-js";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   CardPaymentMethodParams,
@@ -62,7 +62,7 @@ export const preparePaymentRequestPaymentMethodData = (
     card_country_source: "stripe",
     email: paymentMethod.billing_details.email,
     zip_code: paymentMethod.billing_details.address ? paymentMethod.billing_details.address.postal_code : null,
-    wallet_type: cast(paymentMethod.card?.wallet?.type),
+    wallet_type: typia.assert<string>(paymentMethod.card?.wallet?.type),
   };
 };
 
@@ -110,7 +110,7 @@ export const prepareFutureCharges = async <
   });
 
   if (response.ok) {
-    const responseData = cast<CreateSetupIntentSuccessResponse>(await response.json());
+    const responseData = typia.assert<CreateSetupIntentSuccessResponse>(await response.json());
     return {
       cardParams: {
         ...data.cardParams,
@@ -122,7 +122,7 @@ export const prepareFutureCharges = async <
       requiresCardSetup: "requires_card_setup" in responseData ? { client_secret: responseData.client_secret } : false,
     };
   }
-  const responseData = cast<CreateSetupIntentErrorResponse>(await response.json());
+  const responseData = typia.assert<CreateSetupIntentErrorResponse>(await response.json());
   return {
     cardParams: {
       stripe_error: {

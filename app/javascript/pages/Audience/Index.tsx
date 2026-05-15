@@ -2,7 +2,7 @@ import { ArrowInDownSquareHalf } from "@boxicons/react";
 import { Deferred, router, usePage } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { type AudienceDataByDate } from "$app/data/audience";
 
@@ -28,7 +28,7 @@ interface AudiencePageProps {
 }
 
 function Audience() {
-  const { total_follower_count, audience_data } = cast<AudiencePageProps>(usePage().props);
+  const { total_follower_count, audience_data } = typia.assert<AudiencePageProps>(usePage().props);
   const dateRange = useAnalyticsDateRange();
   const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
   const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");

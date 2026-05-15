@@ -180,8 +180,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [28]
-        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+        ci_node_total: [20]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -242,7 +242,10 @@ jobs:
       - name: Run tests
         timeout-minutes: 15
         run: |
+          mkdir -p ./test-logs
+          chmod 777 ./test-logs
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
             -e KNAPSACK_PRO_CI_NODE_TOTAL \
@@ -279,6 +282,14 @@ jobs:
           CI: true
           IN_DOCKER: true
           WEB_REPO: gumroadteam/web
+      - name: Archive flaky specs log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-specs-fast-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: ./test-logs/flaky_specs.log
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Clean up
         if: always()
         run: |
@@ -297,7 +308,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [72]
+        ci_node_total: [48]
         ci_node_index:
           [
             0,
@@ -348,30 +359,6 @@ jobs:
             45,
             46,
             47,
-            48,
-            49,
-            50,
-            51,
-            52,
-            53,
-            54,
-            55,
-            56,
-            57,
-            58,
-            59,
-            60,
-            61,
-            62,
-            63,
-            64,
-            65,
-            66,
-            67,
-            68,
-            69,
-            70,
-            71,
           ]
     steps:
       - uses: actions/checkout@v4
@@ -431,39 +418,33 @@ jobs:
           WEB_REPO: gumroadteam/web
 
       - name: Run tests
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          retry_wait_seconds: 10
-          command: |
-            # Create local directory for artifacts
-            mkdir -p ./capybara-artifacts
-            chmod 777 ./capybara-artifacts
-            mkdir -p ./test-logs
-            chmod 777 ./test-logs
+        timeout-minutes: 25
+        run: |
+          mkdir -p ./capybara-artifacts
+          chmod 777 ./capybara-artifacts
+          mkdir -p ./test-logs
+          chmod 777 ./test-logs
 
-            # Run tests with volume mount to capture capybara artifacts and test logs
-            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-              -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
-              -v "$(pwd)/test-logs:/app/log" \
-              -e RUBY_YJIT_ENABLE \
-              -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
-              -e KNAPSACK_PRO_CI_NODE_TOTAL \
-              -e KNAPSACK_PRO_CI_NODE_INDEX \
-              -e KNAPSACK_PRO_LOG_LEVEL \
-              -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
-              -e KNAPSACK_PRO_TEST_FILE_PATTERN \
-              -e KNAPSACK_PRO_COMMIT_HASH \
-              -e KNAPSACK_PRO_BRANCH \
-              -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-              -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
-              -e KNAPSACK_PRO_PROJECT_DIR \
-              -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
-              -e CI \
-              -e IN_DOCKER \
-              $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
-              /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
+            -v "$(pwd)/test-logs:/app/log" \
+            -e RUBY_YJIT_ENABLE \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL \
+            -e KNAPSACK_PRO_CI_NODE_INDEX \
+            -e KNAPSACK_PRO_LOG_LEVEL \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
+            -e KNAPSACK_PRO_TEST_FILE_PATTERN \
+            -e KNAPSACK_PRO_COMMIT_HASH \
+            -e KNAPSACK_PRO_BRANCH \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_PROJECT_DIR \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
+            -e CI \
+            -e IN_DOCKER \
+            $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         env:
           RUBY_YJIT_ENABLE: 1
           KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
@@ -496,6 +477,14 @@ jobs:
           name: test-logs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
           path: ./test-logs/test.log
           retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive flaky specs log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-specs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: ./test-logs/flaky_specs.log
+          retention-days: 14
           if-no-files-found: ignore
       - name: Clean up
         if: always()

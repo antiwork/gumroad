@@ -39,7 +39,7 @@ class CartPresenter
         {
           code: discount_code["code"],
           fromUrl: discount_code["fromUrl"],
-          products: result[:error_code].present? ? [] : result[:products_data].transform_values { _1[:discount] },
+          products: result[:error_code].present? ? {} : result[:products_data].transform_values { _1[:discount] },
         }
       end,
       items: cart_products.map do |cart_product|

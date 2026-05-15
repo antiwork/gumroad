@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -20,7 +20,7 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => cast<PagedAffiliatedProductsData>(json));
+    .then((json) => typia.assert<PagedAffiliatedProductsData>(json));
 
   return {
     response,

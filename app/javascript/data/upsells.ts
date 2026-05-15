@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -58,7 +58,7 @@ export const createUpsell = async ({
       paused,
     },
   });
-  const responseData = cast<
+  const responseData = typia.assert<
     { success: true; upsells: Upsell[]; pagination: PaginationProps } | { success: false; error: string }
   >(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error);
@@ -105,7 +105,7 @@ export const updateUpsell = async (
       paused,
     },
   });
-  const responseData = cast<
+  const responseData = typia.assert<
     { success: true; upsells: Upsell[]; pagination: PaginationProps } | { success: false; error: string }
   >(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error);
@@ -119,7 +119,7 @@ export const deleteUpsell = async (id: string) => {
     accept: "json",
     url: Routes.checkout_upsell_path(id),
   });
-  const responseData = cast<
+  const responseData = typia.assert<
     { success: true; upsells: Upsell[]; pagination: PaginationProps } | { success: false; error: string }
   >(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error);
@@ -154,7 +154,7 @@ export const getPagedUpsells = (page: number, query: string | null, sort: Sort<S
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => cast<{ upsells: Upsell[]; pagination: PaginationProps }>(json));
+    .then((json) => typia.assert<{ upsells: Upsell[]; pagination: PaginationProps }>(json));
 
   return {
     response,
@@ -176,7 +176,7 @@ export const getStatistics = (id: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<UpsellStatistics>(json));
+    .then((json) => typia.assert<UpsellStatistics>(json));
 
 export const getCartItem = (productId: string) =>
   request({
@@ -188,4 +188,4 @@ export const getCartItem = (productId: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<ProductToAdd>(json));
+    .then((json) => typia.assert<ProductToAdd>(json));

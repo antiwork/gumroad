@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -34,7 +34,7 @@ export const createTeamInvitation = async (teamInvitation: TeamInvitation) => {
     data: { team_invitation: teamInvitation },
   });
   if (response.ok) {
-    return cast<{ success: false; error_message: string } | { success: true }>(await response.json());
+    return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
   }
   return { success: false, error_message: "Sorry, something went wrong. Please try again." };
 };

@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -26,7 +26,7 @@ export const fetchAnalyticsDataByReferral = ({ startTime, endTime }: { startTime
     abortSignal: abort.signal,
   })
     .then((response) => response.json())
-    .then((json) => cast<AnalyticsDataByReferral>(json));
+    .then((json) => typia.assert<AnalyticsDataByReferral>(json));
   return { response, abort };
 };
 
@@ -51,6 +51,6 @@ export const fetchAnalyticsDataByState = ({ startTime, endTime }: { startTime: s
     abortSignal: abort.signal,
   })
     .then((response) => response.json())
-    .then((json) => cast<AnalyticsDataByState>(json));
+    .then((json) => typia.assert<AnalyticsDataByState>(json));
   return { response, abort };
 };

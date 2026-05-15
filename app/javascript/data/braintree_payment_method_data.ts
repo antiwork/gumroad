@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ReusablePayPalBraintreePaymentMethodParams } from "$app/data/payment_method_params";
 import { request } from "$app/utils/request";
@@ -22,7 +22,7 @@ const tokenizeBraintreeNonce = async (
   });
 
   if (response.ok) {
-    const responseData = cast<{ transient_customer_store_key: string | null } | { error: string }>(
+    const responseData = typia.assert<{ transient_customer_store_key: string | null } | { error: string }>(
       await response.json(),
     );
     if ("transient_customer_store_key" in responseData) {

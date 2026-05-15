@@ -1,4 +1,4 @@
-import { is } from "ts-safe-cast";
+import typia from "typia";
 
 import { HeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
 
@@ -97,13 +97,13 @@ window.addEventListener("message", (evt) => {
 
   if (evt.source !== overlayIframe.contentWindow || !isValidHost(url, customDomain)) return;
 
-  if (is<{ type: "loaded" }>(evt.data)) {
+  if (typia.is<{ type: "loaded" }>(evt.data)) {
     progressbar.style.display = "none";
     document.body.style.overflow = "hidden";
     overlay.style.display = "";
-  } else if (is<HeightMessage>(evt.data)) {
+  } else if (typia.is<HeightMessage>(evt.data)) {
     overlayIframe.style.height = `${evt.data.height}px`;
-  } else if (is<TranslationsMessage>(evt.data)) {
+  } else if (typia.is<TranslationsMessage>(evt.data)) {
     overlayCloseButton.ariaLabel = evt.data.translations.close || "";
   }
 });

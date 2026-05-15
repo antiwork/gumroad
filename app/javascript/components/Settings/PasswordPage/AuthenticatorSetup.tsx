@@ -1,6 +1,6 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -42,7 +42,7 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
           accept: "json",
           abortSignal: controller.signal,
         });
-        const json = cast<{ success: boolean; secret: string; qr_svg: string }>(await response.json());
+        const json = typia.assert<{ success: boolean; secret: string; qr_svg: string }>(await response.json());
         if (json.success) {
           setSetupData({ secret: json.secret, qr_svg: json.qr_svg });
         } else {
@@ -67,7 +67,7 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
         accept: "json",
         data: { code },
       });
-      const json = cast<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(await response.json());
+      const json = typia.assert<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(await response.json());
       if (json.success && json.recovery_codes) {
         setRecoveryCodes(json.recovery_codes);
         setStep("recovery");
