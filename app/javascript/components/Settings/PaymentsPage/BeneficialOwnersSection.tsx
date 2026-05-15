@@ -313,7 +313,7 @@ const ownerToFormState = (owner: BeneficialOwner, defaultCountry: string | null)
   address_city: owner.address.city ?? "",
   address_state: owner.address.state ?? owner.address_kanji?.state ?? "",
   address_postal_code: owner.address.postal_code ?? owner.address_kanji?.postal_code ?? "",
-  address_country: owner.address.country ?? defaultCountry ?? "",
+  address_country: owner.address.country ?? owner.address_kanji?.country ?? defaultCountry ?? "",
   first_name_kanji: owner.first_name_kanji ?? "",
   last_name_kanji: owner.last_name_kanji ?? "",
   first_name_kana: owner.first_name_kana ?? "",
