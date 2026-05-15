@@ -418,6 +418,11 @@ const BeneficialOwnersSection = ({
   const [editState, setEditState] = React.useState<EditState | null>(null);
   const [formState, setFormState] = React.useState<FormState>(() => blankFormState(defaultCountry));
   const [formError, setFormError] = React.useState<string | null>(null);
+  const formErrorRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (formError) formErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [formError]);
   const [isSaving, setIsSaving] = React.useState(false);
   const [pendingDeletion, setPendingDeletion] = React.useState<BeneficialOwner | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -649,7 +654,7 @@ const BeneficialOwnersSection = ({
             </h3>
           </SheetHeader>
           <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-4">
-            {formError ? <Alert variant="danger">{formError}</Alert> : null}
+            <div ref={formErrorRef}>{formError ? <Alert variant="danger">{formError}</Alert> : null}</div>
 
             {editState.mode === "edit" && editState.owner.relationship.representative ? (
               <Alert variant="info">
