@@ -78,7 +78,7 @@ module Radar
         Stripe::Charge.retrieve(purchase.stripe_transaction_id)
       end
 
-      charge.dig(:outcome, :risk_level)
+      charge.outcome&.risk_level
     rescue Stripe::StripeError => e
       Rails.logger.error "Radar::ChargeRiskLevelService: Failed to fetch risk level for #{purchase.stripe_transaction_id}: #{e.message}"
       nil

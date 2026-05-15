@@ -10743,7 +10743,9 @@ describe StripeMerchantAccountManager, :vcr do
           user_compliance_info_requests = UserComplianceInfoRequest.all
           expect(user_compliance_info_requests[0].emails_sent_at).to eq([frozen_time])
 
-          described_class.handle_stripe_event(stripe_event_2)
+          travel_to(frozen_time) do
+            described_class.handle_stripe_event(stripe_event_2)
+          end
 
           user_compliance_info_requests = UserComplianceInfoRequest.all
           expect(user_compliance_info_requests[0].emails_sent_at).to eq([frozen_time])

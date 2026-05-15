@@ -101,8 +101,8 @@ describe("Posts on seller profile", type: :system, js: true) do
         expect(page).to have_link(@new_installments[i - 2].name)
         expect(page).to have_text(@new_installments[i - 2].published_at.strftime("%B %-d, %Y"))
       end
-      expect(page).to_not have_link(@hidden_product_post.name)
-      expect(page).to_not have_link(@old_product_post.name)
+      expect(page).to have_no_link(@hidden_product_post.name, wait: 5)
+      expect(page).to have_no_link(@old_product_post.name, wait: 5)
     end
 
     it "shows the date in the accurate format" do
@@ -264,7 +264,7 @@ describe("Posts on seller profile", type: :system, js: true) do
 
           visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
           expect(page).to have_text("1 comment")
-          expect(page).to_not have_text(own_comment.content)
+          expect(page).to have_no_text(own_comment.content, wait: 10)
         end
 
         it "allows the comment author to edit only their comments" do

@@ -23,7 +23,15 @@ module Radar
     end
 
     def recent_efws(limit = 5)
-      efws.includes(:purchase, :charge).order(created_at: :desc).limit(limit).map do |efw|
+      recent_efw_rows(recent_efws_scope.order(created_at: :desc).limit(limit))
+    end
+
+    def recent_efws_scope
+      efws.includes(:purchase, :charge)
+    end
+
+    def recent_efw_rows(records)
+      records.map do |efw|
         {
           purchase_id: efw.purchase&.external_id || (efw.charge && "CH-#{efw.charge.external_id}"),
           fraud_type: efw.fraud_type,

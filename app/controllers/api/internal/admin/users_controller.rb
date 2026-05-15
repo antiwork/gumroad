@@ -50,6 +50,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                      })
   end
 
+  def radar_stats
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    radar_service = Radar::SellerRiskStatsService.new(user)
+    records, pagination = paginate_with_cursor(
+      radar_service.recent_efws_scope,
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       radar_stats: radar_service.stats,
+                                                       recent_efws: radar_service.recent_efw_rows(records),
+                                                       pagination:,
+                                                     })
+  end
+
   def comments
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user

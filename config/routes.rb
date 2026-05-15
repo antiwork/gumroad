@@ -332,6 +332,7 @@ Rails.application.routes.draw do
               get :comments
               get :compliance_info
               get :purchases
+              get :radar_stats
               get :related
               get :suspension
               post :reset_password

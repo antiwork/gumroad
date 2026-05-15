@@ -142,7 +142,7 @@ describe "Profile settings on product pages", type: :system, js: true do
     expect(subscribe_section).to have_attributes(header: "Subscribe to receive email updates from #{seller.name_or_username}.", product:)
 
     rich_text_section = seller.seller_profile_rich_text_sections.sole
-    Selenium::WebDriver::Wait.new(timeout: 10).until { rich_text_section.reload.text["content"].map { _1["type"] }.include?("image") }
+    Timeout.timeout(10) { sleep 0.1 until rich_text_section.reload.text["content"].map { _1["type"] }.include?("image") }
     image_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{ActiveStorage::Blob.last.key}"
     expected_rich_text = {
       type: "doc",

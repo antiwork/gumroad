@@ -1210,6 +1210,169 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :compliance_info, method: :get
   end
 
+  describe "GET radar_stats" do
+    include_examples "admin api authorization required", :get, :radar_stats
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+
+    def recent_efw_purchase_ids
+      response.parsed_body["recent_efws"].map { _1["purchase_id"] }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :radar_stats
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :radar_stats, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns empty stats and cursor pagination metadata" do
+      user = create(:user)
+
+      get :radar_stats, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(
+        {
+          success: true,
+          user_id: user.external_id,
+          radar_stats: {
+            successful_purchases: 0,
+            efw_count: 0,
+            efw_by_fraud_type: {},
+            efw_with_elevated_risk: 0,
+            efw_with_highest_risk: 0,
+            dispute_count: 0,
+            dispute_rate: 0.0,
+          },
+          recent_efws: [],
+          pagination: { next: nil, limit: 20 },
+        }.as_json
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      user = create(:user, :deleted)
+
+      get :radar_stats, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "does not write an admin audit log" do
+      user = create(:user)
+
+      expect do
+        get :radar_stats, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    it "returns seller Radar aggregates with cursor-paginated recent EFWs" do
+      seller = create(:user)
+      product = create(:product, user: seller)
+      newest_purchase = create(:purchase, link: product, seller:, created_at: 1.day.ago)
+      oldest_purchase = create(:purchase, link: product, seller:, created_at: 2.days.ago)
+      disputed_purchase = create(:purchase, link: product, seller:, created_at: 3.days.ago)
+      create(:failed_purchase, link: product, seller:, created_at: 1.day.ago)
+      create(:purchase, link: product, seller:, created_at: 100.days.ago)
+      charge = create(:charge, seller:)
+      create(:dispute, purchase: disputed_purchase, created_at: 1.day.ago)
+      create(:dispute, purchase: newest_purchase, state: "won", created_at: 1.day.ago)
+      create(:dispute, purchase: oldest_purchase, created_at: 100.days.ago)
+      newest_efw = create(:early_fraud_warning,
+                          purchase: newest_purchase,
+                          processor_id: "issfr_newest",
+                          fraud_type: EarlyFraudWarning::FRAUD_TYPE_MADE_WITH_STOLEN_CARD,
+                          charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_HIGHEST,
+                          created_at: 1.hour.ago)
+      charge_efw = create(:early_fraud_warning,
+                          purchase: nil,
+                          charge:,
+                          processor_id: "issfr_charge",
+                          fraud_type: EarlyFraudWarning::FRAUD_TYPE_MISC,
+                          charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED,
+                          resolution: EarlyFraudWarning::RESOLUTION_RESOLVED_IGNORED,
+                          created_at: 2.hours.ago)
+      oldest_efw = create(:early_fraud_warning,
+                          purchase: oldest_purchase,
+                          processor_id: "issfr_oldest",
+                          fraud_type: EarlyFraudWarning::FRAUD_TYPE_MADE_WITH_STOLEN_CARD,
+                          charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED,
+                          created_at: 3.hours.ago)
+      create(:early_fraud_warning,
+             purchase: disputed_purchase,
+             processor_id: "issfr_too_old",
+             created_at: 100.days.ago)
+      create(:early_fraud_warning, processor_id: "issfr_other")
+
+      get :radar_stats, params: { user_id: seller.external_id, limit: 2 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["radar_stats"]).to eq(
+        {
+          successful_purchases: 3,
+          efw_count: 3,
+          efw_by_fraud_type: {
+            EarlyFraudWarning::FRAUD_TYPE_MADE_WITH_STOLEN_CARD => 2,
+            EarlyFraudWarning::FRAUD_TYPE_MISC => 1,
+          },
+          efw_with_elevated_risk: 2,
+          efw_with_highest_risk: 1,
+          dispute_count: 1,
+          dispute_rate: 33.33,
+        }.as_json
+      )
+      expect(recent_efw_purchase_ids).to eq([newest_purchase.external_id, "CH-#{charge.external_id}"])
+      expect(response.parsed_body["recent_efws"].first).to include(
+        "purchase_id" => newest_purchase.external_id,
+        "fraud_type" => EarlyFraudWarning::FRAUD_TYPE_MADE_WITH_STOLEN_CARD,
+        "charge_risk_level" => EarlyFraudWarning::CHARGE_RISK_LEVEL_HIGHEST,
+        "resolution" => EarlyFraudWarning::RESOLUTION_UNKNOWN,
+        "created_at" => newest_efw.created_at.as_json
+      )
+      expect(response.parsed_body["recent_efws"].second).to include(
+        "purchase_id" => "CH-#{charge.external_id}",
+        "fraud_type" => EarlyFraudWarning::FRAUD_TYPE_MISC,
+        "charge_risk_level" => EarlyFraudWarning::CHARGE_RISK_LEVEL_ELEVATED,
+        "resolution" => EarlyFraudWarning::RESOLUTION_RESOLVED_IGNORED,
+        "created_at" => charge_efw.created_at.as_json
+      )
+      cursor = response.parsed_body["pagination"]["next"]
+      expect(cursor).to be_present
+      expect(response.parsed_body["pagination"]["limit"]).to eq(2)
+      expected_radar_stats = response.parsed_body["radar_stats"]
+
+      get :radar_stats, params: { user_id: seller.external_id, limit: 2, cursor: }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["radar_stats"]).to eq(expected_radar_stats)
+      expect(recent_efw_purchase_ids).to eq([oldest_purchase.external_id])
+      expect(response.parsed_body["recent_efws"].first["created_at"]).to eq(oldest_efw.created_at.as_json)
+      expect(response.parsed_body["pagination"]).to eq({ "next" => nil, "limit" => 2 })
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      user = create(:user)
+
+      get :radar_stats, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    include_examples "supports user lookup by user_id", :radar_stats, method: :get
+  end
+
   describe "GET purchases" do
     include_examples "admin api authorization required", :get, :purchases
 

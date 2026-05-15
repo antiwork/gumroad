@@ -352,8 +352,7 @@ describe SettingsPresenter do
 
       before do
         oauth_application1.get_or_generate_access_token
-        @access_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application1.id, resource_owner_id: seller.id, redirect_uri: oauth_application1.redirect_uri,
-                                                        expires_in: 1.day.from_now, scopes: Doorkeeper.configuration.public_scopes.join(" "))
+        @access_grant = oauth_application1.access_grants.find_by!(resource_owner_id: seller.id)
       end
 
       it "returns props with only applications which have access grants" do

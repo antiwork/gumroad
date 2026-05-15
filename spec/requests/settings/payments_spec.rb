@@ -6554,7 +6554,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         within_section "Account status", section_element: :section do
           expect(page).to have_text("Please provide your tax ID.")
-          expect(page).to have_link("contact support", href: "https://help.gumroad.com")
+          expect(page).to have_link("contact support", href: help_center_root_path)
           expect(page).not_to have_text("Action needed")
         end
       end
