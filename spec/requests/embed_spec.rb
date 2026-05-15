@@ -99,7 +99,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     let!(:offer_code) { create(:offer_code, user: product.user, products: [product]) }
 
     it "applies the discount code" do
-      visit(create_embed_page(product, url: "#{product.long_url}/#{offer_code.code}", outbound: false))
+      visit(create_embed_page(product, url: product.long_url(code: offer_code.code), outbound: false))
 
       within_frame do
         expect(page).to have_status(text: "$1 off will be applied at checkout (Code SXSW)", wait: 15)
@@ -124,7 +124,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     end
 
     it "successfully credits the affiliate commission for the product bought using its affiliated product URL" do
-      visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false))
+      visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false, query_params: { Affiliate::QUERY_PARAM => direct_affiliate.external_id_numeric }))
 
       within_frame do
         expect(page).to have_text("$75", wait: 15)
