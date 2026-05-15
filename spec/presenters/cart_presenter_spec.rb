@@ -295,6 +295,24 @@ describe CartPresenter do
             ]
           ))
         end
+
+        context "when the accepted cross-sell has an existing-customer discount" do
+          let(:existing_customer_offer_code) do
+            create(:offer_code, :for_existing_customers, user: seller, products: [offered_product], amount_cents: nil, amount_percentage: 1, currency_type: nil)
+          end
+          let(:cross_sell) { create(:upsell, seller:, product: offered_product, selected_products: [product], offer_code: existing_customer_offer_code, cross_sell: true) }
+
+          it "does not expose the discount to anonymous users" do
+            expect(presenter.cart_props).to match(a_hash_including(
+              items: include(
+                a_hash_including(
+                  product: a_hash_including(permalink: offered_product.unique_permalink),
+                  accepted_offer: a_hash_including(discount: nil),
+                )
+              ),
+            ))
+          end
+        end
       end
     end
   end

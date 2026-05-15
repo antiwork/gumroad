@@ -210,6 +210,7 @@ class OfferCode < ApplicationRecord
   end
 
   def discount_for_display(buyer: nil)
+    return nil if existing_customers_only? && buyer.nil?
     return evaluate_for_buyer(buyer) if buyer.present?
     return discount unless tiered?
 

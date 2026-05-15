@@ -2354,6 +2354,30 @@ describe Subscription, :vcr do
         expect(new_purchase.displayed_price_cents).to eq(new_purchase.minimum_paid_price_cents_per_unit_before_discount)
         expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(0)
       end
+
+      it "keeps a deleted tiered offer code discount when clear_deleted_discount is true" do
+        tiered_code = create(:tiered_offer_code, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
+        @original_purchase.update!(offer_code: tiered_code)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: tiered_code,
+          offer_code_amount: 50,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: nil
+        )
+        tiered_code.mark_deleted!
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(tiered_code)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+        expect(new_purchase.displayed_price_cents).to eq(10_00)
+      end
     end
 
     context "for a subscription with fixed length" do
@@ -3980,6 +4004,31 @@ describe Subscription, :vcr do
       expect(auto.offer_code).to eq(tiered_code)
       expect(auto.resolved_percent).to eq(25)
       expect(subscription.current_subscription_price_cents).to eq(1_125)
+    end
+
+    it "applies advanced tiers to the selected PWYW renewal price after a non-zero cached tier" do
+      tiered_code.update!(
+        amount_percentage: 30,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 30 },
+          { "months" => 12, "amount_percentage" => 60 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 420, displayed_price_cents: 420)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 30,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 500,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(60)
+      expect(subscription.current_subscription_price_cents).to eq(240)
     end
 
     it "applies the advanced tier to the selected PWYW renewal price" do

@@ -523,7 +523,7 @@ class Subscription < ApplicationRecord
       elsif clear_discount
         new_purchase.offer_code = nil
         new_purchase.purchase_offer_code_discount = nil
-      elsif clear_deleted_discount && new_purchase.offer_code.present?
+      elsif clear_deleted_discount && new_purchase.offer_code.present? && !new_purchase.offer_code.tiered?
         new_purchase.purchase_offer_code_discount = nil
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
@@ -1029,10 +1029,11 @@ class Subscription < ApplicationRecord
       discount = original_purchase.purchase_offer_code_discount
       return nil unless discount&.offer_code&.tiered? && discount.offer_code_is_percent
 
-      cached_pre_discount_total_cents = discount.pre_discount_minimum_price_cents * renewal_purchase_quantity
-      return nil unless original_purchase.displayed_price_cents > cached_pre_discount_total_cents
-
       cached_percent = discount.offer_code_amount.to_i
+      cached_pre_discount_total_cents = discount.pre_discount_minimum_price_cents * renewal_purchase_quantity
+      discounted_base_total_cents = (cached_pre_discount_total_cents * (1 - cached_percent / 100.0)).round
+      return nil unless original_purchase.displayed_price_cents > discounted_base_total_cents
+
       return original_purchase.displayed_price_cents if cached_percent.zero?
 
       (original_purchase.displayed_price_cents / (1 - cached_percent / 100.0)).round

@@ -2629,7 +2629,7 @@ class Purchase < ApplicationRecord
   end
 
   def original_offer_code(include_deleted: false)
-    return nil if offer_code&.deleted? && !include_deleted
+    return nil if offer_code&.deleted? && !include_deleted && !purchase_offer_code_discount&.offer_code&.tiered?
 
     if has_cached_offer_code?
       code = purchase_offer_code_discount.offer_code.code
