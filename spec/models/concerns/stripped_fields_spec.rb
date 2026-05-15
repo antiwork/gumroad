@@ -24,19 +24,21 @@ describe StrippedFields do
     end
   end
 
-  class TestField < ApplicationRecord
-    self.table_name = "stripped_fields_test"
+  let(:test_model) do
+    Class.new(ApplicationRecord) do
+      self.table_name = "stripped_fields_test"
 
-    include StrippedFields
+      include StrippedFields
 
-    stripped_fields :name, :email, transform: ->(v) { v&.upcase }
-    stripped_fields :description, nilify_blanks: false
-    stripped_fields :sql, remove_duplicate_spaces: false
-    stripped_fields :code, transform: ->(v) { v&.gsub(/\s/, "") }
+      stripped_fields :name, :email, transform: ->(v) { v&.upcase }
+      stripped_fields :description, nilify_blanks: false
+      stripped_fields :sql, remove_duplicate_spaces: false
+      stripped_fields :code, transform: ->(v) { v&.gsub(/\s/, "") }
+    end
   end
 
   let(:record) do
-    TestField.new(
+    test_model.new(
       name: "  my   name ",
       email: "   ",
       description: " ",
@@ -45,13 +47,28 @@ describe StrippedFields do
     )
   end
 
-  it "updates values" do
+  it "applies transform and default blank nilification" do
     record.validate
 
     expect(record.name).to eq("MY NAME")
     expect(record.email).to be_nil
+  end
+
+  it "keeps blank strings when nilify_blanks is false" do
+    record.validate
+
     expect(record.description).to eq("")
+  end
+
+  it "preserves duplicate spaces when remove_duplicate_spaces is false" do
+    record.validate
+
     expect(record.sql).to eq("keep  extra  spaces")
+  end
+
+  it "applies custom transform for code" do
+    record.validate
+
     expect(record.code).to eq("12345678")
   end
 end

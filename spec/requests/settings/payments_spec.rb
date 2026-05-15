@@ -20,7 +20,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       login_as user
     end
 
-    it "render Payments tab navigation" do
+    it "renders Payments tab navigation" do
       visit settings_payments_path
 
       expect(page).to have_tab_button("Payments", open: true)
@@ -109,7 +109,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       include_context "with switching account to user as admin for seller"
 
-      it "does not Connect with Paypal button link" do
+      it "does not show the Connect with Paypal button link" do
         visit settings_payments_path
 
         expect(page).not_to have_link("Connect with Paypal")

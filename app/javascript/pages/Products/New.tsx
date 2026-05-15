@@ -143,7 +143,7 @@ const NewProductPage = () => {
   const generateWithAi = async () => {
     if (form.data.link.ai_prompt.trim().length < MIN_AI_PROMPT_LENGTH) {
       showAlert(
-        `Please enter a detailed prompt for your product idea with a price in mind (minimum ${MIN_AI_PROMPT_LENGTH} characters)`,
+        `Please enter a detailed prompt for your product idea (minimum ${MIN_AI_PROMPT_LENGTH} characters)`,
         "error",
       );
       return;
@@ -423,6 +423,12 @@ const NewProductPage = () => {
                       let newValue = e.target.value;
                       newValue = newValue.replace(/[.,]+/gu, ".");
                       newValue = newValue.replace(/[^0-9.]/gu, "");
+                      const firstDotIndex = newValue.indexOf(".");
+                      if (firstDotIndex !== -1) {
+                        newValue =
+                          newValue.slice(0, firstDotIndex + 1) +
+                          newValue.slice(firstDotIndex + 1).replace(/\./gu, "");
+                      }
                       form.setData("link.price_range", newValue);
                       form.clearErrors("link.price_range");
                     }}
@@ -564,6 +570,7 @@ const ProductTypeSelector = ({
         typeButton
       );
     })}
+    {/* Grid spacers: keep the button grid visually balanced when fewer than 3 product types are available. */}
     {types.length < 2 ? <div /> : null}
     {types.length < 3 ? <div /> : null}
   </Tabs>
