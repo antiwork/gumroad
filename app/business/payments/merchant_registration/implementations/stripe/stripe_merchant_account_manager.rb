@@ -729,7 +729,7 @@ module StripeMerchantAccountManager
       stripe_account["individual"] || {}
     else
       person = Stripe::Account.list_persons(stripe_account_id, { limit: 1 }).first
-      if person && !person["relationship"]&.[]("representative")
+      if person && person["relationship"] && person["relationship"]["representative"] == false
         person = Stripe::Account.list_persons(stripe_account_id, relationship: { representative: true }, limit: 1).first
       end
       person || {}
