@@ -366,6 +366,10 @@ class CheckoutPresenter
 
       return nil unless subscription.discount_applies_to_next_charge?
 
+      original_purchase = subscription.original_purchase
+      original_offer_code = original_purchase&.purchase_offer_code_discount&.offer_code || original_purchase&.offer_code
+      return nil if original_offer_code&.existing_customers_only? && original_offer_code&.tiered?
+
       subscription.original_offer_code&.discount_for_display
     end
 end

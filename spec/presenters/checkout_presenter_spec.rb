@@ -720,6 +720,47 @@ describe CheckoutPresenter do
         expect(result[:subscription][:discount]).to be_nil
       end
 
+      it "does not return an ineligible tiered existing-customer discount",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        buyer = create(:user)
+        ownership_product = create(:product, user: @product.user)
+        qualifying_purchase = create(:purchase,
+                                     purchaser: buyer,
+                                     link: ownership_product,
+                                     seller: @product.user,
+                                     created_at: 13.months.ago)
+        discounted_price_cents = @original_price_cents -
+                                 OfferCode.new(amount_percentage: 25).amount_off(@original_price_cents)
+        offer_code = create(:offer_code,
+                            user: @product.user,
+                            products: [@product],
+                            ownership_products: [ownership_product],
+                            existing_customers_only: true,
+                            amount_cents: nil,
+                            amount_percentage: 25,
+                            ownership_duration_tiers: [
+                              { "months" => 0, "amount_percentage" => 25 },
+                              { "months" => 12, "amount_percentage" => 50 },
+                            ])
+        @subscription.update!(user: buyer)
+        @purchase.update!(purchaser: buyer,
+                          offer_code:,
+                          price_cents: discounted_price_cents,
+                          displayed_price_cents: discounted_price_cents)
+        @purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @purchase.minimum_paid_price_cents_per_unit_before_discount
+        )
+        qualifying_purchase.update!(stripe_refunded: true)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        expect(result[:subscription][:price]).to eq(@original_price_cents)
+        expect(result[:subscription][:discount]).to be_nil
+      end
+
       context "membership missing variants" do
         before :each do
           @purchase.variant_attributes = []
