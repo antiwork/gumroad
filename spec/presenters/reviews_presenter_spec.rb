@@ -19,8 +19,8 @@ describe ReviewsPresenter do
     let!(:product1) { create(:product, user: seller, name: "Product 1") }
     let!(:product2) { create(:product, user: seller, name: "Product 2") }
     let!(:product3) { create(:product, name: "Product 3") }
-    let!(:purchase1) { create(:purchase, purchaser: user, link: product1) }
-    let!(:purchase2) { create(:purchase, purchaser: user, link: product2) }
+    let!(:purchase1) { create(:purchase, purchaser: user, link: product1, created_at: 2.days.ago) }
+    let!(:purchase2) { create(:purchase, purchaser: user, link: product2, created_at: 1.day.ago) }
     let!(:purchase3) { create(:purchase, purchaser: user, link: product3, created_at: 3.years.ago) }
     let!(:thumbnail1) { create(:thumbnail, product: product1) }
 
@@ -81,13 +81,13 @@ describe ReviewsPresenter do
           ],
           purchases: [
             {
-              id: purchase1.external_id,
-              email_digest: purchase1.email_digest,
+              id: purchase2.external_id,
+              email_digest: purchase2.email_digest,
               product: {
-                name: product1.name,
-                url: product1.long_url(recommended_by: "library"),
-                permalink: product1.unique_permalink,
-                thumbnail_url: thumbnail1.url,
+                name: product2.name,
+                url: product2.long_url(recommended_by: "library"),
+                permalink: product2.unique_permalink,
+                thumbnail_url: nil,
                 native_type: "digital",
                 seller: {
                   name: "Seller",
@@ -96,13 +96,13 @@ describe ReviewsPresenter do
               }
             },
             {
-              id: purchase2.external_id,
-              email_digest: purchase2.email_digest,
+              id: purchase1.external_id,
+              email_digest: purchase1.email_digest,
               product: {
-                name: product2.name,
-                url: product2.long_url(recommended_by: "library"),
-                permalink: product2.unique_permalink,
-                thumbnail_url: nil,
+                name: product1.name,
+                url: product1.long_url(recommended_by: "library"),
+                permalink: product1.unique_permalink,
+                thumbnail_url: thumbnail1.url,
                 native_type: "digital",
                 seller: {
                   name: "Seller",
