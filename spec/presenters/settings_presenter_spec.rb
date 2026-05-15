@@ -265,7 +265,7 @@ describe SettingsPresenter do
     let!(:third_party_analytic) { create(:third_party_analytic, user: seller) }
 
     it "returns the correct props" do
-      expect(presenter.third_party_analytics_props).to eq ({
+      expect(presenter.third_party_analytics_props).to eq({
         disable_third_party_analytics: false,
         google_analytics_id: "",
         facebook_pixel_id: "",
