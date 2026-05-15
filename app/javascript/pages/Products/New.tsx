@@ -237,7 +237,6 @@ const NewProductPage = () => {
       form.setError("link.price_range", "is required");
       if (!hasFocused) {
         priceInputRef.current?.focus();
-        hasFocused = true;
       }
       hasErrors = true;
     } else {
