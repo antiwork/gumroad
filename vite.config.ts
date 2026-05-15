@@ -22,25 +22,33 @@ function stripCjsExportsPlugin() {
 
 // Vite's default progress spinner overwrites a single "transforming..." line, which
 // stays static in CI (non-TTY) — you see the start, then nothing until done. This
-// plugin replaces it with timestamped heartbeats every TRANSFORM_TICK modules and a
-// final duration line, so CI logs show actual progress. Build-only, CI-only.
+// plugin replaces it with timestamped heartbeats and a final duration line. We emit
+// on whichever comes first: every TRANSFORM_TICK modules or every TIME_TICK_MS. The
+// time-based fallback matters because the first hundreds of modules can take >1min
+// when typia AOT / dependency resolution dominate, leaving CI looking hung.
+// Build-only, CI-only.
 function ciProgressPlugin() {
   if (!process.env.CI) return null;
-  const TRANSFORM_TICK = 250;
+  const TRANSFORM_TICK = 100;
+  const TIME_TICK_MS = 15_000;
   let start = 0;
   let count = 0;
+  let lastTick = 0;
   return {
     name: "ci-progress",
     apply: "build" as const,
     buildStart() {
       start = Date.now();
+      lastTick = start;
       console.log(`[vite] build start ${new Date().toISOString()}`);
     },
     transform() {
       count++;
-      if (count % TRANSFORM_TICK === 0) {
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const now = Date.now();
+      if (count % TRANSFORM_TICK === 0 || now - lastTick >= TIME_TICK_MS) {
+        const elapsed = ((now - start) / 1000).toFixed(1);
         console.log(`[vite] transformed ${count} modules in ${elapsed}s`);
+        lastTick = now;
       }
     },
     buildEnd(err?: Error) {
