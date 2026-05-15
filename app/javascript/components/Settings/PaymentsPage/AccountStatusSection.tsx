@@ -2,13 +2,11 @@ import * as React from "react";
 
 import { Alert } from "$app/components/ui/Alert";
 
-const HELP_URL = "https://help.gumroad.com";
-
 const SupportLink = () => (
   <>
     {" "}
     If you have questions,{" "}
-    <a href={HELP_URL} className="underline">
+    <a href={Routes.help_center_root_path()} className="underline">
       contact support
     </a>
     .
