@@ -366,6 +366,6 @@ class CheckoutPresenter
         )
       end
 
-      subscription.original_offer_code(include_deleted: true)&.discount_for_display
+      subscription.original_offer_code&.discount_for_display
     end
 end

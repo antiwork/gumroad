@@ -703,6 +703,22 @@ describe CheckoutPresenter do
                              })
       end
 
+      it "does not return a deleted original offer code discount" do
+        offer_code = create(:offer_code, products: [@product])
+        @purchase.update!(offer_code:)
+        @purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          pre_discount_minimum_price_cents: @purchase.minimum_paid_price_cents_per_unit_before_discount
+        )
+        offer_code.mark_deleted!
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        expect(result[:subscription][:discount]).to be_nil
+      end
+
       context "membership missing variants" do
         before :each do
           @purchase.variant_attributes = []

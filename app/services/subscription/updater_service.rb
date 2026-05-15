@@ -110,6 +110,7 @@ class Subscription::UpdaterService
             perceived_price_cents: params[:price_range],
             offer_code: params[:offer_code],
             clear_discount: params[:clear_discount],
+            clear_deleted_discount: should_clear_original_discount?,
           )
           subscription.reload
         end
@@ -203,6 +204,10 @@ class Subscription::UpdaterService
         logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed} ; params: #{params}")
         raise Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price."
       end
+    end
+
+    def should_clear_original_discount?
+      params[:offer_code].blank? && original_purchase.offer_code&.deleted?
     end
 
     def new_price_cents

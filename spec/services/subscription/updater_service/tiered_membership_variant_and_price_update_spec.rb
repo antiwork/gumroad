@@ -226,6 +226,31 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
             end
 
+            it "keeps a deleted original offer code without discounting the new plan" do
+              offer_code = create(:universal_offer_code, amount_cents: 200)
+              setup_subscription(offer_code:)
+              offer_code.mark_deleted!
+              travel_to(@originally_subscribed_at + 1.month)
+
+              result = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params: upgrade_tier_params.merge(
+                  perceived_price_cents: @new_tier_quarterly_price.price_cents,
+                  perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents - @subscription.prorated_discount_price_cents(calculate_as_of: Time.current.end_of_day)
+                ),
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              expect(result[:success]).to eq true
+
+              updated_purchase = @subscription.reload.original_purchase
+              expect(updated_purchase.offer_code).to eq offer_code
+              expect(updated_purchase.displayed_price_cents).to eq @new_tier_quarterly_price.price_cents
+              expect(updated_purchase.purchase_offer_code_discount.offer_code_amount).to eq 0
+            end
+
             it "charges the pro-rated rate for the new variant for the remainder of the period" do
               expect do
                 Subscription::UpdaterService.new(

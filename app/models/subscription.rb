@@ -476,7 +476,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -523,6 +523,15 @@ class Subscription < ApplicationRecord
       elsif clear_discount
         new_purchase.offer_code = nil
         new_purchase.purchase_offer_code_discount = nil
+      elsif clear_deleted_discount && new_purchase.offer_code.present?
+        new_purchase.purchase_offer_code_discount = nil
+        new_purchase.build_purchase_offer_code_discount(
+          offer_code: new_purchase.offer_code,
+          pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          offer_code_amount: 0,
+          offer_code_is_percent: false,
+          duration_in_months: nil
+        )
       elsif new_purchase.offer_code.present? && (copied_discount = new_purchase.purchase_offer_code_discount)
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,

@@ -2333,6 +2333,27 @@ describe Subscription, :vcr do
         expect(new_purchase.offer_code).to be_nil
         expect(new_purchase.purchase_offer_code_discount).to be_nil
       end
+
+      it "keeps a deleted offer code without applying its discount when clear_deleted_discount is true" do
+        @offer_code.mark_deleted!
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(@offer_code)
+        expect(new_purchase.displayed_price_cents).to eq(new_purchase.minimum_paid_price_cents_per_unit_before_discount)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(0)
+      end
     end
 
     context "for a subscription with fixed length" do
