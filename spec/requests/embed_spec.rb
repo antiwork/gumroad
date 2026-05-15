@@ -15,10 +15,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, url: product.long_url, gumroad_params: "&email=sam@test.com", outbound: false))
 
-    within_frame do
-      expect(page).to have_link("Add to cart", wait: 15)
-      click_link "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -30,10 +27,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(pwyw_product, url: "#{direct_affiliate.referral_url_for_product(pwyw_product)}?email=john@test.com", gumroad_params: "&price=75", outbound: false))
 
-    within_frame do
-      expect(page).to have_link("Add to cart", wait: 15)
-      click_link "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     expect do
       check_out(pwyw_product, email: nil)
@@ -74,10 +68,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, url: short_link_url(product, host: "#{PROTOCOL}://#{DOMAIN}"), outbound: false))
 
-    within_frame do
-      expect(page).to have_link("Add to cart", wait: 15)
-      click_link "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -87,10 +78,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, insert_anchor_tag: false, outbound: false))
 
-    within_frame do
-      expect(page).to have_link("Add to cart", wait: 15)
-      click_link "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -99,7 +87,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     let!(:offer_code) { create(:offer_code, user: product.user, products: [product]) }
 
     it "applies the discount code" do
-      visit(create_embed_page(product, url: product.long_url(code: offer_code.code), outbound: false))
+      visit(create_embed_page(product, url: "#{product.long_url}/#{offer_code.code}", outbound: false))
 
       within_frame do
         expect(page).to have_status(text: "$1 off will be applied at checkout (Code SXSW)", wait: 15)
@@ -124,7 +112,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     end
 
     it "successfully credits the affiliate commission for the product bought using its affiliated product URL" do
-      visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false, query_params: { Affiliate::QUERY_PARAM => direct_affiliate.external_id_numeric }))
+      visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false))
 
       within_frame do
         expect(page).to have_text("$75", wait: 15)
@@ -144,10 +132,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
       it "successfully credits the affiliate commission for the product bought from a page that contains '#{query_param}' query parameter" do
         visit(create_embed_page(product, url: short_link_url(product, host: UrlService.domain_with_protocol), outbound: false, query_params: { query_param => direct_affiliate.external_id_numeric }))
 
-        within_frame do
-          expect(page).to have_link("Add to cart", wait: 15)
-          click_link "Add to cart"
-        end
+        within_frame { click_on "Add to cart" }
 
         check_out(product)
 
@@ -174,16 +159,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     ]
     physical_skus_product.save!
 
-    selected_sku = physical_skus_product.skus.find_by!(name: "Blue - Extra Large - Polo")
-    gumroad_params = {
-      "quantity" => 2,
-      "price" => 3,
-      "Age" => 21,
-      "Gender" => "Male",
-      "option" => selected_sku.external_id,
-    }.to_query
-
-    embed_page_url = create_embed_page(physical_skus_product, template_name: "embed_page.html.erb", outbound: false, gumroad_params:)
+    embed_page_url = create_embed_page(physical_skus_product, template_name: "embed_page.html.erb", outbound: false, gumroad_params: "quantity=2&price=3&Age=21&Gender=Male&option=#{physical_skus_product.skus.find_by(name: "Blue - Extra Large - Polo").external_id}")
     visit(embed_page_url)
 
     within_frame do
