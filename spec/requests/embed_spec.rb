@@ -15,10 +15,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, url: product.long_url, gumroad_params: "&email=sam@test.com", outbound: false))
 
-    within_frame do
-      expect(page).to have_button("Add to cart", wait: 15)
-      click_on "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -30,10 +27,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(pwyw_product, url: "#{direct_affiliate.referral_url_for_product(pwyw_product)}?email=john@test.com", gumroad_params: "&price=75", outbound: false))
 
-    within_frame do
-      expect(page).to have_button("Add to cart", wait: 15)
-      click_on "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     expect do
       check_out(pwyw_product, email: nil)
@@ -74,10 +68,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, url: short_link_url(product, host: "#{PROTOCOL}://#{DOMAIN}"), outbound: false))
 
-    within_frame do
-      expect(page).to have_button("Add to cart", wait: 15)
-      click_on "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -87,10 +78,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     visit(create_embed_page(product, insert_anchor_tag: false, outbound: false))
 
-    within_frame do
-      expect(page).to have_button("Add to cart", wait: 15)
-      click_on "Add to cart"
-    end
+    within_frame { click_on "Add to cart" }
 
     check_out(product)
   end
@@ -144,10 +132,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
       it "successfully credits the affiliate commission for the product bought from a page that contains '#{query_param}' query parameter" do
         visit(create_embed_page(product, url: short_link_url(product, host: UrlService.domain_with_protocol), outbound: false, query_params: { query_param => direct_affiliate.external_id_numeric }))
 
-        within_frame do
-          expect(page).to have_button("Add to cart", wait: 15)
-          click_on "Add to cart"
-        end
+        within_frame { click_on "Add to cart" }
 
         check_out(product)
 
