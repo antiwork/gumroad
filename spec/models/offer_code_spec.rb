@@ -976,6 +976,12 @@ describe OfferCode do
       expect(offer_code.discount_for_display).to be_nil
     end
 
+    it "returns configured discounts for seller display when the code is existing-customers-only" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+
+      expect(offer_code.configured_discount_for_display).to include(type: "percent", percents: 30)
+    end
+
     it "returns nil when the buyer has not purchased any ownership product" do
       offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
       expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
@@ -1033,6 +1039,16 @@ describe OfferCode do
 
       it "returns nil for unauthenticated display" do
         expect(offer_code.discount_for_display).to be_nil
+      end
+
+      it "returns the configured tier range for seller display" do
+        expect(offer_code.configured_discount_for_display).to include(
+          type: "percent",
+          percents: 50,
+          tiered: true,
+          min_percents: 10,
+          max_percents: 50
+        )
       end
 
       it "ignores purchases that do not grant library ownership" do

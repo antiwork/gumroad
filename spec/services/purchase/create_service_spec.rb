@@ -349,7 +349,8 @@ describe Purchase::CreateService, :vcr do
         params[:purchase][:perceived_price_cents] = 0
       end
 
-      it "creates the cross-sell purchase without applying the ineligible offer code" do
+      it "creates the cross-sell purchase without applying the ineligible offer code",
+         vcr: { cassette_name: "Purchase_CreateService/when_the_purchase_has_a_cross-sell/when_the_cross-sell_is_valid/creates_an_upsell_purchase_record" } do
         purchase, error = Purchase::CreateService.new(
           product:,
           params:,

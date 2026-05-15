@@ -2007,7 +2007,8 @@ describe Subscription, :vcr do
       end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
     end
 
-    it "caches the buyer-specific amount when applying a tiered existing-customer discount" do
+    it "caches the buyer-specific amount when applying a tiered existing-customer discount",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
       offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
 
@@ -2334,7 +2335,8 @@ describe Subscription, :vcr do
         expect(new_purchase.purchase_offer_code_discount).to be_nil
       end
 
-      it "keeps a deleted offer code without applying its discount when clear_deleted_discount is true" do
+      it "keeps a deleted offer code without applying its discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
         @offer_code.mark_deleted!
         @original_purchase.create_purchase_offer_code_discount!(
           offer_code: @offer_code,
@@ -2355,7 +2357,8 @@ describe Subscription, :vcr do
         expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(0)
       end
 
-      it "keeps a deleted tiered offer code discount when clear_deleted_discount is true" do
+      it "keeps a deleted tiered offer code discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
         tiered_code = create(:tiered_offer_code, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
         @original_purchase.update!(offer_code: tiered_code)
         @original_purchase.create_purchase_offer_code_discount!(
@@ -3977,8 +3980,14 @@ describe Subscription, :vcr do
         duration_in_months: nil,
       )
 
-      expect(subscription.auto_renewal_offer_code).to be_nil
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(0)
       expect(subscription.current_subscription_price_cents).to eq(1_500)
+      expect(renewal_purchase.offer_code).to eq(tiered_code)
+      expect(renewal_purchase.purchase_offer_code_discount).to be_nil
     end
 
     it "keeps the selected PWYW renewal price when the cached tier is non-zero percent" do

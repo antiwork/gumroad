@@ -280,13 +280,15 @@ class Subscription < ApplicationRecord
     elsif (auto = auto_renewal_offer_code)
       pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
       purchase.offer_code = auto.offer_code
-      purchase.build_purchase_offer_code_discount(
-        offer_code: auto.offer_code,
-        offer_code_amount: auto.offer_code_amount,
-        offer_code_is_percent: auto.offer_code_is_percent,
-        pre_discount_minimum_price_cents: pre_discount,
-        duration_in_months: nil
-      )
+      if auto.offer_code_amount.positive?
+        purchase.build_purchase_offer_code_discount(
+          offer_code: auto.offer_code,
+          offer_code_amount: auto.offer_code_amount,
+          offer_code_is_percent: auto.offer_code_is_percent,
+          pre_discount_minimum_price_cents: pre_discount,
+          duration_in_months: nil
+        )
+      end
     end
 
     purchase.purchaser = user
@@ -1002,7 +1004,7 @@ class Subscription < ApplicationRecord
       case resolved[:type]
       when "percent"
         amount = resolved[:percents].to_i
-        return nil unless amount.positive?
+        return nil unless amount.positive? || (offer_code.tiered? && amount.zero?)
         AutoRenewalDiscount.new(offer_code:, offer_code_amount: amount, offer_code_is_percent: true)
       when "fixed"
         amount = resolved[:cents].to_i

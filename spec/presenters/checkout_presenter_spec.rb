@@ -703,7 +703,8 @@ describe CheckoutPresenter do
                              })
       end
 
-      it "does not return a deleted original offer code discount" do
+      it "does not return a deleted original offer code discount",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
         offer_code = create(:offer_code, products: [@product])
         @purchase.update!(offer_code:)
         @purchase.create_purchase_offer_code_discount!(

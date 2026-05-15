@@ -226,9 +226,21 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
             end
 
-            it "keeps a deleted original offer code without discounting the new plan" do
+            it "keeps a deleted original offer code without discounting the new plan",
+               vcr: { cassette_name: "Subscription_UpdaterService_Tiered_Membership_Variant_And_Price_Update_Scenarios/_perform/tiered_membership_subscription/when_variant_has_changed/but_has_the_same_recurrence_period/and_is_more_expensive/charges_the_pro-rated_rate_for_the_new_variant_for_the_remainder_of_the_period" } do
               offer_code = create(:universal_offer_code, amount_cents: 200)
-              setup_subscription(offer_code:)
+              @original_purchase.update!(
+                offer_code:,
+                price_cents: @original_tier_quarterly_price.price_cents - offer_code.amount_cents,
+                displayed_price_cents: @original_tier_quarterly_price.price_cents - offer_code.amount_cents,
+              )
+              @original_purchase.create_purchase_offer_code_discount!(
+                offer_code:,
+                offer_code_amount: offer_code.amount_cents,
+                offer_code_is_percent: false,
+                pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+                duration_in_months: nil,
+              )
               offer_code.mark_deleted!
               travel_to(@originally_subscribed_at + 1.month)
 

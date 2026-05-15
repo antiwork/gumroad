@@ -212,6 +212,11 @@ class OfferCode < ApplicationRecord
   def discount_for_display(buyer: nil)
     return nil if existing_customers_only? && buyer.nil?
     return evaluate_for_buyer(buyer) if buyer.present?
+
+    configured_discount_for_display
+  end
+
+  def configured_discount_for_display
     return discount unless tiered?
 
     percentages = normalized_ownership_duration_tiers.map { _1["amount_percentage"] }

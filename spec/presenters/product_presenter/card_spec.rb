@@ -141,6 +141,15 @@ describe ProductPresenter::Card do
         expect(data[:price_cents]).to eq 10_00
         expect(data).not_to have_key(:original_price_cents)
       end
+
+      it "does not apply existing-customer-only discounts to anonymous cards" do
+        offer_code.update!(existing_customers_only: true, ownership_products: [product_with_offer_code])
+
+        data = described_class.new(product: product_with_offer_code).for_web
+
+        expect(data[:price_cents]).to eq 10_00
+        expect(data).not_to have_key(:original_price_cents)
+      end
     end
   end
 

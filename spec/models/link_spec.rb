@@ -70,9 +70,9 @@ describe Link, :vcr do
     end
 
     it "fails if price exceeds the maximum storable value" do
-      expect {
+      expect do
         build(:product, user: create(:user, verified: true), price_cents: 2_147_483_648)
-      }.to raise_error(Link::LinkInvalid, "Sorry, the price entered is too large.")
+      end.to raise_error(Link::LinkInvalid, "Sorry, the price entered is too large.")
     end
 
     it "fails if price is too low" do
@@ -2236,6 +2236,17 @@ describe Link, :vcr do
 
         expect(product.default_price).to eq yearly_price
       end
+    end
+  end
+
+  describe "#validate_product_price_against_all_offer_codes?" do
+    it "uses tiered discount amounts across membership tier prices" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      create(:tiered_offer_code, products: [product], user: product.user)
+      product.tiers.first.prices.alive.is_buy.first.update!(price_cents: 1_50)
+
+      expect(product.validate_product_price_against_all_offer_codes?).to eq(false)
+      expect(product.errors.full_messages).to include("An existing discount code puts the price of this product below the $0.99 minimum after discount.")
     end
   end
 

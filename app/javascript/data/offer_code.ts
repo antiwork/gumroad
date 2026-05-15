@@ -108,8 +108,8 @@ export const getPagedDiscounts = (page: number, query: string | null, sort: Sort
 const buildDiscountPayload = (payload: DiscountPayload) => ({
   name: payload.name,
   code: payload.code,
-  amount_percentage: payload.discount.type === "percent" ? payload.discount.value : undefined,
-  amount_cents: payload.discount.type === "cents" ? payload.discount.value : undefined,
+  amount_percentage: payload.discount.type === "percent" ? payload.discount.value : null,
+  amount_cents: payload.discount.type === "cents" ? payload.discount.value : null,
   selected_product_ids: payload.universal ? null : payload.selectedProductIds,
   universal: payload.universal,
   max_purchase_count: payload.maxQuantity,
@@ -158,7 +158,9 @@ export const deleteDiscount = async (id: string) => {
     accept: "json",
     url: Routes.checkout_discount_path(id),
   });
-  const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(await response.json());
+  const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(
+    await response.json(),
+  );
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 };
 

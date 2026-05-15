@@ -74,6 +74,7 @@ class ProductPresenter::Card
     def compute_discounted_price_cents(base_price_cents)
       offer_code = product.default_offer_code
       return base_price_cents unless offer_code.present?
+      return base_price_cents if offer_code.existing_customers_only?
 
       discount_amount_cents = offer_code.amount_off(base_price_cents)
       [base_price_cents - discount_amount_cents, 0].max
