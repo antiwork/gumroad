@@ -111,6 +111,7 @@ class Subscription::UpdaterService
             offer_code: params[:offer_code],
             clear_discount: params[:clear_discount],
             clear_deleted_discount: should_clear_original_discount?,
+            authenticated_offer_code_buyer: logged_in_user,
           )
           subscription.reload
         end

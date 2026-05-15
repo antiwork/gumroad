@@ -34,6 +34,9 @@ class Subscription < ApplicationRecord
   end
   private_constant :AutoRenewalDiscount
 
+  AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED = Object.new
+  private_constant :AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+
   module ResubscriptionReason
     PAYMENT_ISSUE_RESOLVED = "payment_issue_resolved"
   end
@@ -218,7 +221,14 @@ class Subscription < ApplicationRecord
   end
 
   def auto_renewal_offer_code
-    compute_auto_renewal_offer_code
+    return @_auto_renewal_offer_code if instance_variable_defined?(:@_auto_renewal_offer_code)
+
+    @_auto_renewal_offer_code = compute_auto_renewal_offer_code
+  end
+
+  def reload(*)
+    remove_instance_variable(:@_auto_renewal_offer_code) if instance_variable_defined?(:@_auto_renewal_offer_code)
+    super
   end
 
   def current_plan_displayed_price_cents
@@ -478,7 +488,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -506,6 +516,9 @@ class Subscription < ApplicationRecord
       new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
+      unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+        new_purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
+      end
 
       license = original_purchase.license
       license.purchase = new_purchase if license.present?

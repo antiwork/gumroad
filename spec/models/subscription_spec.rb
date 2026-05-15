@@ -2019,6 +2019,31 @@ describe Subscription, :vcr do
       expect(new_purchase.displayed_price_cents).to eq 10_00
     end
 
+    it "does not use the subscription owner to qualify unauthenticated discount updates",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      ownership_product = create(:product, user: @product.user)
+      create(:purchase, link: ownership_product, seller: @product.user, purchaser: @user, price_cents: ownership_product.price_cents)
+      offer_code = create(:offer_code,
+                          code: "existingbuyer",
+                          amount_cents: nil,
+                          amount_percentage: 100,
+                          products: [@product],
+                          ownership_products: [ownership_product],
+                          existing_customers_only: true,
+                          user: @product.user)
+
+      expect do
+        @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code:,
+          authenticated_offer_code_buyer: nil,
+        )
+      end.to raise_error Subscription::UpdateFailed, "Sorry, this discount code is only for existing customers."
+      expect(@subscription.reload.original_purchase).to eq(@original_purchase)
+    end
+
     it "does not update the creator's balance" do
       setup_subscription
 
@@ -4108,6 +4133,14 @@ describe Subscription, :vcr do
       subscription.reload
 
       expect(subscription.auto_renewal_offer_code.offer_code).to eq(replacement_code)
+    end
+
+    it "memoizes missing renewal discounts until reload" do
+      tiered_code.mark_deleted!
+      expect(subscription).to receive(:compute_auto_renewal_offer_code).once.and_call_original
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+      expect(subscription.auto_renewal_offer_code).to be_nil
     end
 
     it "returns nil when the original purchase already carries a still-applicable discount" do

@@ -2866,6 +2866,7 @@ describe Subscription::UpdaterService, :vcr do
         new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)
 
         expect(@subscription).to receive(:send_restart_notifications!)
+        expect(@subscription).to receive(:update_current_plan!).with(hash_including(authenticated_offer_code_buyer: @user)).and_call_original
         result = described_class.new(
           subscription: @subscription,
           gumroad_guid: @gumroad_guid,
