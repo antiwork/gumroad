@@ -650,11 +650,6 @@ export default function PaymentsPage() {
       if (!form.data.user.business_name) {
         markFieldInvalid("business_name");
       }
-      if (form.data.user.business_country === "CA") {
-        if (!form.data.user.job_title) {
-          markFieldInvalid("job_title");
-        }
-      }
       if (form.data.user.business_country === "JP") {
         if (!form.data.user.business_name_kanji) {
           markFieldInvalid("business_name_kanji");

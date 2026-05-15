@@ -264,10 +264,12 @@ module StripeBeneficialOwnersManager
           postal_code: params[:address][:postal_code].presence,
         }.compact
         hash[:address_kanji] = address_kanji if address_kanji.any?
+        kana_state = params[:address][:state_kana].presence ||
+                     (params[:address][:state].presence && Compliance::Countries.japan_prefecture_kana(params[:address][:state]))
         address_kana = {
           line1: params[:address][:building_number_kana].presence,
           town: params[:address][:street_address_kana].presence,
-          state: params[:address][:state_kana].presence || params[:address][:state].presence,
+          state: kana_state,
           country: "JP",
           postal_code: params[:address][:postal_code].presence,
         }.compact

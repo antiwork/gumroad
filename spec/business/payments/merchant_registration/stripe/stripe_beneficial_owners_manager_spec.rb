@@ -239,7 +239,7 @@ describe StripeBeneficialOwnersManager do
       jp_params[:first_name_kana] = "タロウ"
       jp_params[:last_name_kana] = "ヤマダ"
       jp_params[:address] = {
-        country: "JP", state: "Tokyo", postal_code: "100-0001",
+        country: "JP", state: "東京都", postal_code: "100-0001",
         building_number: "1-1", building_number_kana: "1-1",
         street_address_kanji: "千代田", street_address_kana: "チヨダ",
       }
@@ -248,8 +248,8 @@ describe StripeBeneficialOwnersManager do
         expect(attrs[:last_name_kanji]).to eq("山田")
         expect(attrs[:first_name_kana]).to eq("タロウ")
         expect(attrs[:last_name_kana]).to eq("ヤマダ")
-        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", country: "JP", postal_code: "100-0001")
-        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", country: "JP")
+        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", state: "東京都", country: "JP", postal_code: "100-0001")
+        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", state: "トウキョウト", country: "JP")
         expect(attrs).not_to have_key(:address)
         other_owner_person
       end
