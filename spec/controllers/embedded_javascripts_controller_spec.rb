@@ -24,7 +24,7 @@ describe EmbeddedJavascriptsController do
     it "returns the correct js" do
       get :embed, format: :js
 
-      expect(response.body).to include("/js/gumroad-embed.js")
+      expect(response.body).to include("/js/gumroad-embed-bundle.js")
     end
   end
 end
