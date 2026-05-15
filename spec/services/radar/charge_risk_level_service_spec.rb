@@ -108,6 +108,17 @@ describe Radar::ChargeRiskLevelService do
       expect(results[purchase.id]).to be_nil
     end
 
+    it "caches nil results when charge outcome is nil and does not re-fetch from Stripe" do
+      charge = Stripe::Charge.construct_from(outcome: nil)
+      expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(charge)
+
+      results = described_class.fetch_bulk([purchase])
+      expect(results[purchase.id]).to be_nil
+
+      results = described_class.fetch_bulk([purchase])
+      expect(results[purchase.id]).to be_nil
+    end
+
     it "uses cache for already-fetched purchases" do
       charge = Stripe::Charge.construct_from(outcome: { risk_level: "highest" })
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(charge)
