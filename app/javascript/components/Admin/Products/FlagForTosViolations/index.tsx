@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
@@ -34,7 +34,7 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
       format: "json",
     }),
     responseParser: (data) => {
-      const parsed = cast<{ tos_violation_flags: TosViolationFlags[] }>(data);
+      const parsed = typia.assert<{ tos_violation_flags: TosViolationFlags[] }>(data);
       return parsed.tos_violation_flags;
     },
   });

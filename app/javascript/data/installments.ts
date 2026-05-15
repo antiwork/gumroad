@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
@@ -103,7 +103,7 @@ export async function getAudienceCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return cast<{ count: number }>(await response.json());
+  return typia.assert<{ count: number }>(await response.json());
 }
 
 type RecipientCountRequestPayload = {
@@ -131,7 +131,7 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<{ recipient_count: number; audience_count: number }>(json));
+    .then((json) => typia.assert<{ recipient_count: number; audience_count: number }>(json));
 
   return {
     response,
@@ -146,5 +146,5 @@ export async function previewInstallment(externalId: string) {
     url: Routes.internal_installment_preview_email_path(externalId),
   });
 
-  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
 }

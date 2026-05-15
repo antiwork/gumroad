@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
@@ -184,7 +184,7 @@ export const getPagedCustomers = ({
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => cast<{ customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
+    .then((json) => typia.assert<{ customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
 
   return {
     response,
@@ -208,7 +208,7 @@ export const getMissedPosts = (purchaseId: string, purchaseEmail: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<MissedPost[]>(json));
+    .then((json) => typia.assert<MissedPost[]>(json));
 
 export type CustomerEmail = { id: string; name: string; state: string; state_at: string } & (
   | { type: "receipt"; url: string }
@@ -224,7 +224,7 @@ export const getCustomerEmails = (purchaseId: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<CustomerEmail[]>(json));
+    .then((json) => typia.assert<CustomerEmail[]>(json));
 
 export const resendReceipt = (purchaseId: string) =>
   request({
@@ -241,7 +241,7 @@ export const resendPost = async (purchaseId: string, postId: string) => {
     accept: "json",
     url: Routes.send_for_purchase_path(postId, purchaseId),
   });
-  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
 };
 
 export const updatePurchase = (
@@ -275,7 +275,7 @@ export const getProductPurchases = (purchaseId: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<Customer[]>(json));
+    .then((json) => typia.assert<Customer[]>(json));
 
 export const updateLicense = (licenseId: string, enabled: boolean) =>
   request({ method: "PUT", accept: "json", url: Routes.license_path(licenseId, { enabled }) }).then((response) => {
@@ -332,7 +332,7 @@ export const getCharges = (purchaseId: string, purchaseEmail: string) =>
       if (!response.ok) throw new ResponseError();
       return response.json();
     })
-    .then((json) => cast<Charge[]>(json));
+    .then((json) => typia.assert<Charge[]>(json));
 
 export const refund = (purchaseId: string, amount: number) =>
   request({
@@ -344,7 +344,7 @@ export const refund = (purchaseId: string, amount: number) =>
       if (!response.ok) throw new ResponseError();
       return response.json();
     })
-    .then((json) => cast<{ success: true } | { success: false; message: string }>(json))
+    .then((json) => typia.assert<{ success: true } | { success: false; message: string }>(json))
     .then((response) => {
       if (!response.success) throw new ResponseError(response.message);
     });
@@ -377,7 +377,7 @@ export const getOptions = (productPermalink: string) =>
       if (!response.ok) throw new ResponseError();
       return response.json();
     })
-    .then((json) => cast<Option[]>(json));
+    .then((json) => typia.assert<Option[]>(json));
 
 export const updateOption = (purchaseId: string, optionId: string, quantity: number) =>
   request({
@@ -435,7 +435,7 @@ export const completeCommission = async (commissionId: string) => {
   });
 
   if (!response.ok) {
-    throw new ResponseError(cast<{ errors: string[] }>(await response.json()).errors[0]);
+    throw new ResponseError(typia.assert<{ errors: string[] }>(await response.json()).errors[0]);
   }
 };
 

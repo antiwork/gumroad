@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -16,7 +16,7 @@ export const getExportablePayouts = async (year: number) => {
 
   if (!response.ok) throw new ResponseError();
 
-  return cast<{
+  return typia.assert<{
     selected_year: number;
     years_with_payouts: number[];
     payouts_in_selected_year: ExportablePayout[];

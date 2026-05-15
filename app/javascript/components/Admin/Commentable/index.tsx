@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
@@ -27,7 +27,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
   } = useLazyPaginatedFetch<CommentProps[]>([], {
     url: endpoint,
     responseParser: (data: unknown) => {
-      const result = cast<{ comments: CommentProps[] }>(data);
+      const result = typia.assert<{ comments: CommentProps[] }>(data);
       return result.comments;
     },
     mode: "append",

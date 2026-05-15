@@ -1,9 +1,9 @@
+import UnpluginTypia from "@typia/unplugin/webpack";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import fs from "fs";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
 import { fileURLToPath } from "node:url";
 import path from "path";
-import tsCast from "ts-safe-cast/transformer.js";
 import webpack from "webpack";
 import WebpackAssetsManifest from "webpack-assets-manifest";
 import { BundleAnalyzerPlugin } from "webpack-bundle-analyzer";
@@ -43,10 +43,6 @@ const jsRule = {
     {
       loader: "esbuild-loader",
       options: { target: "es2019", supported: { "import-meta": true } },
-    },
-    {
-      loader: path.join(dirname, "loaders", "transformerLoader.js"),
-      options: { getTransformers: (program) => [tsCast(program)] },
     },
   ],
 };
@@ -176,6 +172,7 @@ const config = {
   },
 
   plugins: [
+    UnpluginTypia(),
     webpackAssetsManifestPlugin,
     miniCssExtractPlugin,
     new webpack.ProvidePlugin({ Routes: "$app/utils/routes" }),
@@ -209,6 +206,7 @@ const widgetConfig = {
     rules: [sassRule, assetRule, jsRule],
   },
   plugins: [
+    UnpluginTypia(),
     webpackAssetsManifestPlugin,
     miniCssExtractPlugin,
     new webpack.EnvironmentPlugin(["ROOT_DOMAIN", "SHORT_DOMAIN", "DOMAIN", "PROTOCOL"]),

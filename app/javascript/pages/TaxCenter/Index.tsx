@@ -2,7 +2,7 @@ import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
 
@@ -89,7 +89,7 @@ const FAQ_ITEMS: {
 ];
 
 const TaxCenterIndex = () => {
-  const { documents, available_years, selected_year } = cast<{
+  const { documents, available_years, selected_year } = typia.assert<{
     documents: TaxDocument[];
     available_years: number[];
     selected_year: number | null;

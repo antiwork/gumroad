@@ -1,5 +1,5 @@
 import { StripeError } from "@stripe/stripe-js";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { AnyPaymentMethodResult } from "$app/data/payment_method_result";
 import { Discount } from "$app/parsers/checkout";
@@ -380,5 +380,5 @@ const confirmPaymentAfterAction = async ({
     },
   });
   if (!response.ok) throw new ResponseError();
-  return cast<LineItemResult>(await response.json());
+  return typia.assert<LineItemResult>(await response.json());
 };

@@ -4,7 +4,7 @@ import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
 import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
@@ -326,7 +326,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
               })
                 .then((response) => response.json())
-                .then((data) => resolve(cast<{ url: string }>(data).url))
+                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
                 .catch((e: unknown) => {
                   assertResponseError(e);
                   reject(e);

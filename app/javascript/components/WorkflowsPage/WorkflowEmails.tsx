@@ -5,7 +5,7 @@ import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   AbandonedCartProduct,
@@ -144,7 +144,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                 url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
               })
                 .then((response) => response.json())
-                .then((data) => resolve(cast<{ url: string }>(data).url))
+                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
                 .catch((e: unknown) => {
                   assertResponseError(e);
                   reject(e);
@@ -518,7 +518,7 @@ const EmailRow = ({
                 <Select
                   value={email.delayed_delivery_time_period}
                   aria-label="Period"
-                  onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
+                  onChange={(e) => onChange({ delayed_delivery_time_period: typia.assert<InstallmentDeliveryTimePeriod>(e.target.value) })}
                   onFocus={() => onFocus("delayed_delivery_time_period")}
                 >
                   {INSTALLMENT_DELIVERY_TIME_PERIODS.map((period) => (

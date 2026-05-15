@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
@@ -24,7 +24,7 @@ const AdminProductDetails = ({ product }: Props) => {
     fetchUnlessLoaded: open,
     url: Routes.admin_product_details_path(product.external_id, { format: "json" }),
     responseParser: (data) => {
-      const parsed = cast<{ details: DetailsProps }>(data);
+      const parsed = typia.assert<{ details: DetailsProps }>(data);
       return parsed.details;
     },
   });

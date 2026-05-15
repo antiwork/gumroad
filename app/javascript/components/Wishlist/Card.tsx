@@ -1,7 +1,7 @@
 import { Bookmark, BookmarkPlus, FileDetail } from "@boxicons/react";
 import { FastAverageColor } from "fast-average-color";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import useLazyLoadingProps from "$app/hooks/useLazyLoadingProps";
 import { classNames } from "$app/utils/classNames";
@@ -57,7 +57,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
       } = await new FastAverageColor().getColorAsync(thumbnailUrl);
 
       const distances = validColors.map((hex) => {
-        const [vr, vg, vb] = cast<[number, number, number]>(
+        const [vr, vg, vb] = typia.assert<[number, number, number]>(
           hex
             .slice(1)
             .match(/.{2}/gu)
@@ -86,7 +86,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
         {wishlist.thumbnails.map(({ url, native_type }, index) => (
           <img
             key={index}
-            src={url ?? cast(nativeTypeThumbnails(`./${native_type}.svg`))}
+            src={url ?? typia.assert<string>(nativeTypeThumbnails(`./${native_type}.svg`))}
             role="presentation"
             crossOrigin="anonymous"
             className="rounded border"

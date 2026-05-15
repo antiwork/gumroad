@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assert } from "$app/utils/assert";
 
@@ -23,7 +23,7 @@ export type CurrentSeller = {
 const Context = React.createContext<CurrentSeller | null | undefined>(undefined);
 
 export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
-  const parsed = cast<{
+  const parsed = typia.assert<{
     id: string;
     email: string | null;
     name: string | null;

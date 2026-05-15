@@ -1,7 +1,7 @@
 import { router, useForm, usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
@@ -106,7 +106,7 @@ export default function SubscriptionsManage() {
     us_states,
     ca_provinces,
     used_card,
-  } = cast<Props>(usePage().props);
+  } = typia.assert<Props>(usePage().props);
 
   const url = new URL(useOriginalLocation());
 

@@ -293,6 +293,15 @@ class SettingsPresenter
         "Your account has been suspended for a policy violation."
       end
 
+      id_document_fields = [
+        UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
+        UserComplianceInfoFields::Individual::PASSPORT,
+        UserComplianceInfoFields::Individual::VISA,
+        UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
+      ]
+      needs_id_upload = seller.user_compliance_info_requests.requested
+        .where(field_needed: id_document_fields).exists?
+
       compliance_actions = []
       if pending_compliance && seller.stripe_account.present? && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
@@ -324,6 +333,7 @@ class SettingsPresenter
         is_suspended:,
         suspension_reason:,
         compliance_actions:,
+        needs_id_upload:,
         gumroad_status:,
       }
     end
@@ -359,7 +369,7 @@ class SettingsPresenter
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
         individual_tax_id_last_four: user_compliance_info.individual_tax_id.present? ? user_compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
-        business_tax_id_last_four: user_compliance_info.business_tax_id.present? ? user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s.gsub(/\D/, "")[-4..] : nil,
+        business_tax_id_last_four: user_compliance_info.business_tax_id.present? ? user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
         requires_credit_card: seller.requires_credit_card?,
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,

@@ -2,7 +2,7 @@ import { ArrowUpRight } from "@boxicons/react";
 import { Head, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { PaginatedComments } from "$app/data/comments";
 import { incrementPostViews } from "$app/data/view_event";
@@ -56,7 +56,7 @@ export default function PostsShow() {
     comments_max_allowed_depth,
     creator_profile,
     custom_styles,
-  } = cast<PageProps>(usePage().props);
+  } = typia.assert<PageProps>(usePage().props);
 
   const userAgentInfo = useUserAgentInfo();
   const [pageLoaded, setPageLoaded] = React.useState(false);

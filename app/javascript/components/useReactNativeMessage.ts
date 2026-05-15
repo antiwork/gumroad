@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import Mobile from "$app/utils/mobile";
 
@@ -22,7 +22,7 @@ export const useReactNativeMessage = (handler: (data: ReactNativeMessage) => voi
       if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
       let data: ReactNativeMessage;
       try {
-        data = cast<ReactNativeMessage>(JSON.parse(event.data));
+        data = typia.assert<ReactNativeMessage>(JSON.parse(event.data));
       } catch {
         return;
       }

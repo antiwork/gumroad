@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
@@ -62,7 +62,7 @@ export const UpsellSelectModal = ({
           accept: "json",
           url: Routes.checkout_upsells_products_path(),
         });
-        const responseData = cast<Product[]>(await response.json());
+        const responseData = typia.assert<Product[]>(await response.json());
         setProducts(responseData);
       } catch (error) {
         assertResponseError(error);

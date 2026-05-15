@@ -2,7 +2,7 @@ import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   CancellationRebuttalOption,
@@ -73,7 +73,7 @@ type FormData = {
 };
 
 export default function Show() {
-  const { dispute_evidence, disputable, products } = cast<Props>(usePage().props);
+  const { dispute_evidence, disputable, products } = typia.assert<Props>(usePage().props);
 
   const reasonForWinningUID = React.useId();
   const cancellationRebuttalUID = React.useId();
@@ -251,7 +251,7 @@ export default function Show() {
               <Radio
                 name="reasonForWinning"
                 value={option}
-                onChange={(evt) => setReasonForWinningOption(cast<ReasonForWinningOption>(evt.target.value))}
+                onChange={(evt) => setReasonForWinningOption(typia.assert<ReasonForWinningOption>(evt.target.value))}
               />
               {reasonForWinningOptions[option]}
             </Label>
@@ -278,7 +278,7 @@ export default function Show() {
                 <Radio
                   name="cancellationRebuttal"
                   value={option}
-                  onChange={(evt) => setCancellationRebuttalOption(cast<CancellationRebuttalOption>(evt.target.value))}
+                  onChange={(evt) => setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))}
                 />
                 {message}
               </Label>

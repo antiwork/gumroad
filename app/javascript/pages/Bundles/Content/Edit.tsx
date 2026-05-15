@@ -1,7 +1,7 @@
 import { Plus, Search } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { BundleContentUpdatedStatus } from "$app/components/BundleEdit/ContentTab/BundleContentUpdatedStatus";
 import { BundleProductItem } from "$app/components/BundleEdit/ContentTab/BundleProductItem";
@@ -49,7 +49,7 @@ type ContentFormData = {
 
 export default function BundlesContentEdit() {
   const page = usePage();
-  const props = cast<ContentPageProps>(page.props);
+  const props = typia.assert<ContentPageProps>(page.props);
   const {
     bundle,
     id,

@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/rea
 import { usePage } from "@inertiajs/react";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import typia from "typia";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
 
@@ -28,7 +28,7 @@ type Props = {
 };
 
 const Read = () => {
-  const { read_id, url, url_redirect_id, purchase_id, product_file_id, latest_media_location, title } = cast<Props>(
+  const { read_id, url, url_redirect_id, purchase_id, product_file_id, latest_media_location, title } = typia.assert<Props>(
     usePage().props,
   );
   const [pageNumber, setPageNumber] = React.useState(1);
@@ -89,7 +89,7 @@ const Read = () => {
         ?.split("=")[1];
       if (cookieValue) {
         const json: unknown = JSON.parse(cookieValue);
-        if (is<{ timestamp?: string | null; location?: number | null }>(json)) return json;
+        if (typia.is<{ timestamp?: string | null; location?: number | null }>(json)) return json;
       }
       return {};
     };
@@ -118,7 +118,7 @@ const Read = () => {
       const container = contentRef.current;
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      pdfjs.GlobalWorkerOptions.workerSrc = cast<{ default: string }>(
+      pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
         // @ts-expect-error pdfjs-dist worker is not typed
         await import("pdfjs-dist/legacy/build/pdf.worker.mjs?resource"),
       ).default;

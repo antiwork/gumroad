@@ -3,7 +3,7 @@ import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorView } from "@tiptap/pm/view";
 import { Editor, EditorContent } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assertDefined } from "$app/utils/assert";
 import FileUtils, { ALLOWED_EXTENSIONS } from "$app/utils/file";
@@ -260,7 +260,7 @@ export const DescriptionEditor = ({
             })
               .then((response) => response.json())
               .then((data) => {
-                const fileId = cast<{ id: string }>(data).id;
+                const fileId = typia.assert<{ id: string }>(data).id;
                 updatePublicFiles((prev) => {
                   const file = prev.find((file) => file.id === src);
                   if (file) {
@@ -327,7 +327,7 @@ export const DescriptionEditor = ({
                 url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
               })
                 .then((response) => response.json())
-                .then((data) => resolve(cast<{ url: string }>(data).url))
+                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
                 .catch((e: unknown) => {
                   assertResponseError(e);
                   reject(e);

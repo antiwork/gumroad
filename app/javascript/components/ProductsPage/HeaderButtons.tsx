@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Search } from "$app/components/Search";
@@ -16,7 +16,7 @@ type PageProps = {
 };
 
 export const HeaderButtons = ({ query, setQuery }: Props) => {
-  const { can_create_product: canCreateProduct, has_products: hasProducts } = cast<PageProps>(usePage().props);
+  const { can_create_product: canCreateProduct, has_products: hasProducts } = typia.assert<PageProps>(usePage().props);
 
   return (
     <>

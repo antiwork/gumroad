@@ -1,7 +1,7 @@
 import { ArrowRight } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
@@ -22,7 +22,7 @@ type PageProps = {
 };
 
 const AdminNavFooter = () => {
-  const { current_user, authenticity_token: authenticityToken } = cast<PageProps>(usePage().props);
+  const { current_user, authenticity_token: authenticityToken } = typia.assert<PageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
 
   const handleUnbecome = (ev: React.MouseEvent<HTMLAnchorElement>) => {
@@ -40,7 +40,7 @@ const AdminNavFooter = () => {
         });
 
         if (response.ok) {
-          const data: ResponseData = cast<ResponseData>(await response.json());
+          const data: ResponseData = typia.assert<ResponseData>(await response.json());
           window.location.href = data.redirect_to;
         }
       } catch (error) {

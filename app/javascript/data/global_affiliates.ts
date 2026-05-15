@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
@@ -16,7 +16,7 @@ export const searchGlobalAffiliatesProductEligibility = async ({ query }: { quer
     url: Routes.global_affiliates_product_eligibility_path(query),
   });
   if (!response.ok) throw new ResponseError();
-  const responseData = cast<{ success: true; product: Product } | { success: false; error: string }>(
+  const responseData = typia.assert<{ success: true; product: Product } | { success: false; error: string }>(
     await response.json(),
   );
   if (!responseData.success) throw new ResponseError(responseData.error);

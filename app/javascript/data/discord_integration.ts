@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -10,7 +10,7 @@ export const fetchServerInfo = async (code: string): Promise<ServerInfo> => {
     accept: "json",
   });
   if (response.ok) {
-    const responseData = cast<
+    const responseData = typia.assert<
       { success: true; server_id: string; server_name: string; username: string } | { success: false }
     >(await response.json());
     if (responseData.success) {
@@ -36,7 +36,7 @@ export const joinServer = async (
     accept: "json",
   });
   if (response.ok) {
-    const responseData = cast<{ success: true; server_name: string } | { success: false }>(await response.json());
+    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(await response.json());
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }
@@ -52,7 +52,7 @@ export const leaveServer = async (purchaseId: string): Promise<{ ok: true; serve
     accept: "json",
   });
   if (response.ok) {
-    const responseData = cast<{ success: true; server_name: string } | { success: false }>(await response.json());
+    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(await response.json());
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }

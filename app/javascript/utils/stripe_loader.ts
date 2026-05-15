@@ -1,5 +1,5 @@
 import { loadStripe, Stripe, StripeConstructorOptions } from "@stripe/stripe-js";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 let stripeInstance: Promise<Stripe> | undefined;
 
@@ -14,7 +14,7 @@ export const getConnectedAccountStripeInstance = async (stripeAccount: string) =
 const loadStripeInstance = async (stripeAccount?: string) => {
   const publicKeyTag = document.querySelector<HTMLElement>("meta[property='stripe:pk']");
   const apiVersionTag = document.querySelector<HTMLElement>("meta[property='stripe:api_version']");
-  const publicKey = cast<string>(publicKeyTag?.getAttribute("value"));
+  const publicKey = typia.assert<string>(publicKeyTag?.getAttribute("value"));
   const apiVersion = apiVersionTag?.getAttribute("value");
 
   const options: StripeConstructorOptions = {};

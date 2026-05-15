@@ -1,6 +1,6 @@
 import { Pencil } from "@boxicons/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 
@@ -63,7 +63,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       <ProductIconCell
         href={review.product.url}
         thumbnail={review.product.thumbnail_url ?? null}
-        placeholder={<img src={cast(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />}
+        placeholder={<img src={typia.assert<string>(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />}
       />
       <TableCell className="break-words">
         <div>

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import useLazyLoadingProps from "$app/hooks/useLazyLoadingProps";
 import { ProductNativeType } from "$app/parsers/product";
@@ -22,6 +22,6 @@ export const Thumbnail = ({
   return url ? (
     <img src={url} {...lazyLoadingProps} className={className} />
   ) : (
-    <img src={cast(nativeTypeThumbnails(`./${nativeType}.svg`))} {...lazyLoadingProps} className={className} />
+    <img src={typia.assert<string>(nativeTypeThumbnails(`./${nativeType}.svg`))} {...lazyLoadingProps} className={className} />
   );
 };

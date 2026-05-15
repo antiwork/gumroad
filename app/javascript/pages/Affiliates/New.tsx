@@ -1,7 +1,7 @@
 import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { isValidEmail } from "$app/utils/email";
 import { isUrlValid } from "$app/utils/url";
@@ -23,7 +23,7 @@ type Props = {
 };
 
 export default function AffiliatesNew() {
-  const props = cast<Props>(usePage().props);
+  const props = typia.assert<Props>(usePage().props);
   const loggedInUser = useLoggedInUser();
 
   const form = useForm<{

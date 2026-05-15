@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { SettingPage } from "$app/parsers/settings";
 
@@ -23,7 +23,7 @@ type Props = {
 };
 
 export default function EditApplicationPage() {
-  const props = cast<Props>(usePage().props);
+  const props = typia.assert<Props>(usePage().props);
 
   return (
     <Layout currentPage="advanced" pages={props.settings_pages}>

@@ -1,6 +1,6 @@
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
@@ -28,7 +28,7 @@ type PasswordPageProps = {
 };
 
 export default function PasswordPage() {
-  const props = cast<PasswordPageProps>(usePage().props);
+  const props = typia.assert<PasswordPageProps>(usePage().props);
   const uid = React.useId();
   const [requireOldPassword, setRequireOldPassword] = React.useState(props.require_old_password);
   const [settingUp, setSettingUp] = React.useState(false);
@@ -74,7 +74,7 @@ export default function PasswordPage() {
         method: "DELETE",
         accept: "json",
       });
-      const result = cast<{ success: boolean; error_message?: string }>(await response.json());
+      const result = typia.assert<{ success: boolean; error_message?: string }>(await response.json());
       if (!response.ok || !result.success) {
         throw new ResponseError(result.error_message ?? "Sorry, something went wrong. Please try again.");
       }
@@ -99,7 +99,7 @@ export default function PasswordPage() {
         method: "POST",
         accept: "json",
       });
-      const result = cast<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(
+      const result = typia.assert<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(
         await response.json(),
       );
       if (!response.ok || !result.success) {

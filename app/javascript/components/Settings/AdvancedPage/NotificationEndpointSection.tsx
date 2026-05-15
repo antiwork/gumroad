@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -40,7 +40,7 @@ const NotificationEndpointSection = ({
         accept: "json",
         data: { url: pingEndpoint.trim() },
       });
-      const responseData = cast<{ success: true; message: string } | { success: false; error_message: string }>(
+      const responseData = typia.assert<{ success: true; message: string } | { success: false; error_message: string }>(
         await response.json(),
       );
       if (!responseData.success) throw new ResponseError(responseData.error_message);

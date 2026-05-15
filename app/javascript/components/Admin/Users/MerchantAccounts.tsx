@@ -1,6 +1,6 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -52,7 +52,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
         url: Routes.admin_user_merchant_accounts_path(user.external_id),
         accept: "json",
       });
-      setData(cast<AdminUserMerchantAccountsData>(await response.json()));
+      setData(typia.assert<AdminUserMerchantAccountsData>(await response.json()));
       setIsLoading(false);
       setHasFetched(true);
     };

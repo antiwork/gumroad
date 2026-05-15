@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { CreatorProfile } from "$app/parsers/profile";
 
@@ -12,7 +12,7 @@ type PageProps = Props & {
 };
 
 function ProfileProductShowPage() {
-  const props = cast<PageProps>(usePage().props);
+  const props = typia.assert<PageProps>(usePage().props);
 
   return (
     <ProfileLayout creatorProfile={props.creator_profile}>

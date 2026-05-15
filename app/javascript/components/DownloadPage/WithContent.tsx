@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
@@ -380,7 +380,7 @@ export const WithContent = ({
 
 const findFileEmbeds = (node: RichContent): string[] =>
   node.content?.flatMap((child) => {
-    if (child.type === FileEmbed.name && child.attrs?.id) return cast(child.attrs.id);
+    if (child.type === FileEmbed.name && child.attrs?.id) return typia.assert<string>(child.attrs.id);
     return findFileEmbeds(child);
   }) ?? [];
 

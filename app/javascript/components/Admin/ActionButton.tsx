@@ -4,7 +4,7 @@
 //! but it keeps showing the done label that was initially set in the prop of this component
 
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -49,7 +49,7 @@ export const AdminActionButton = ({
 
     setState("loading");
 
-    const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
 
     try {
       const response = await request({
@@ -61,7 +61,7 @@ export const AdminActionButton = ({
 
       if (!response.ok) throw new ResponseError("Something went wrong.");
 
-      const { success, message, redirect_to } = cast<{ success?: boolean; message?: string; redirect_to?: string }>(
+      const { success, message, redirect_to } = typia.assert<{ success?: boolean; message?: string; redirect_to?: string }>(
         await response.json(),
       );
       if (!success) throw new ResponseError(message || "Something went wrong.");

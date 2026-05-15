@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ResponseError, assertResponseError, request } from "$app/utils/request";
 
@@ -33,7 +33,7 @@ export const Form = ({
     const form = event.currentTarget;
     const formData = new FormData(form);
 
-    const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
     formData.append("authenticity_token", csrfToken);
 
     setIsLoading(true);
@@ -47,7 +47,7 @@ export const Form = ({
       });
 
       if (!response.ok) {
-        const { message } = cast<{ message?: string }>(await response.json());
+        const { message } = typia.assert<{ message?: string }>(await response.json());
         throw new ResponseError(message ?? "Something went wrong.");
       }
 

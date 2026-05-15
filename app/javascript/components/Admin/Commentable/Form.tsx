@@ -1,6 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -53,7 +53,7 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
         accept: "json",
       });
       if (response.ok) {
-        const { comment } = cast<{ comment: CommentProps }>(await response.json());
+        const { comment } = typia.assert<{ comment: CommentProps }>(await response.json());
         showAlert("Successfully added comment.", "success");
         form.reset();
         onCommentAdded(comment);

@@ -2,7 +2,7 @@ import { Star } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
@@ -81,7 +81,7 @@ export const UpsellCard = TiptapNode.create({
         default: null,
         parseHTML: (element) => {
           const discount = element.getAttribute("discount");
-          return discount ? cast<OfferCode | null>(JSON.parse(discount)) : null;
+          return discount ? typia.assert<OfferCode | null>(JSON.parse(discount)) : null;
         },
         renderHTML: (attributes) => {
           if (attributes.discount) {
@@ -123,10 +123,10 @@ const getUpsellUrl = (id: string, permalink: string) => {
 };
 
 const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
-  const id = cast<string | null>(node.attrs.id);
-  const productId = cast<string>(node.attrs.productId);
-  const variantId = cast<string | null>(node.attrs.variantId);
-  const discount = cast<OfferCode | null>(node.attrs.discount);
+  const id = typia.assert<string | null>(node.attrs.id);
+  const productId = typia.assert<string>(node.attrs.productId);
+  const variantId = typia.assert<string | null>(node.attrs.variantId);
+  const discount = typia.assert<OfferCode | null>(node.attrs.discount);
   const [product, setProduct] = React.useState<Product | null>(null);
   const [variant, setVariant] = React.useState<ProductOption | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -141,7 +141,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
           accept: "json",
           url: Routes.checkout_upsells_product_path(productId),
         });
-        const productData = cast<Product>(await response.json());
+        const productData = typia.assert<Product>(await response.json());
         setProduct(productData);
         setVariant(productData.options.find(({ id }) => id === variantId) || null);
       } catch (error) {

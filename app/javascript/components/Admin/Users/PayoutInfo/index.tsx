@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -26,7 +26,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
         url: Routes.admin_user_payout_info_path(user.external_id),
         accept: "json",
       });
-      setData(cast<PayoutInfoProps>(await response.json()));
+      setData(typia.assert<PayoutInfoProps>(await response.json()));
       setIsLoading(false);
       setHasFetched(true);
     };

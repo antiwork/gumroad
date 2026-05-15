@@ -1,7 +1,7 @@
 import { FontFamily, TwitterX } from "@boxicons/react";
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
@@ -43,7 +43,7 @@ const FONT_DESCRIPTIONS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, settings_pages, ...profileProps } = cast<ProfilePageProps>(
+  const { creator_profile, profile_settings, settings_pages, ...profileProps } = typia.assert<ProfilePageProps>(
     usePage().props,
   );
   const { rootDomain, scheme } = useDomains();

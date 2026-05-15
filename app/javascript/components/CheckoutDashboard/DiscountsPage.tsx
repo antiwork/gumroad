@@ -2,7 +2,7 @@ import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@b
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import { is } from "ts-safe-cast";
+import typia from "typia";
 
 import {
   OfferCodeStatistics,
@@ -197,7 +197,7 @@ const DiscountsPage = ({
 
   // Handle browser actions for navigating to the previous/next page
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const params = is<QueryParams>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
+    const params = typia.is<QueryParams>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
     const newSort = params.sort;
     const newQuery = params.query;
     const page = params.page ?? 1;

@@ -1,5 +1,5 @@
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -86,7 +86,7 @@ const AdminUserEmailChanges = ({ user }: AdminUserEmailChangesProps) => {
       url: Routes.admin_user_email_changes_path(user.external_id),
       accept: "json",
     });
-    const data = cast<{ email_changes: EmailChangesProps; fields: FieldsProps }>(await response.json());
+    const data = typia.assert<{ email_changes: EmailChangesProps; fields: FieldsProps }>(await response.json());
     setData(data);
     setIsLoading(false);
   };

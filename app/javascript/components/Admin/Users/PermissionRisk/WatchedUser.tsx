@@ -1,6 +1,6 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { ResponseError, assertResponseError, request } from "$app/utils/request";
@@ -126,7 +126,7 @@ const RemoveFromWatchlistButton = ({ user }: { user: User }) => {
     setIsLoading(true);
 
     try {
-      const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+      const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
       const response = await request({
         url: Routes.admin_user_watchlist_path(user.external_id),
         method: "DELETE",
@@ -135,7 +135,7 @@ const RemoveFromWatchlistButton = ({ user }: { user: User }) => {
       });
 
       if (!response.ok) {
-        const { message } = cast<{ message?: string }>(await response.json());
+        const { message } = typia.assert<{ message?: string }>(await response.json());
         throw new ResponseError(message ?? "Something went wrong.");
       }
 

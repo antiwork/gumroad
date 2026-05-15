@@ -1,6 +1,6 @@
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import AdminUsersProductsProduct, { type Product as ProductType } from "$app/components/Admin/Products/Product";
 import AdminUserAndProductsTabs from "$app/components/Admin/UserAndProductsTabs";
@@ -46,7 +46,7 @@ type AdminUsersProductsProps = {
 };
 
 const AdminUsersProducts = ({ isAffiliateUser = false }: Props) => {
-  const { user, products, pagination } = cast<AdminUsersProductsProps>(usePage().props);
+  const { user, products, pagination } = typia.assert<AdminUsersProductsProps>(usePage().props);
   const onChangePage = (page: number) => router.reload({ data: { page }, only: ["products", "pagination"] });
 
   return (

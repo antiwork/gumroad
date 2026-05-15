@@ -1,4 +1,4 @@
-import { cast } from "ts-safe-cast";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
@@ -31,5 +31,5 @@ export const saveThirdPartyAnalytics = async (thirdPartyAnalytics: Omit<ThirdPar
   });
   if (!response.ok) return { success: false, error_message: "Sorry, something went wrong. Please try again." };
 
-  return cast<{ success: false; error_message: string } | { success: true }>(await response.json());
+  return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
 };
