@@ -999,6 +999,15 @@ describe OfferCode do
       expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
     end
 
+    it "treats refunded membership purchases as not qualifying" do
+      membership = create(:subscription_product, user: seller, price_cents: 10_00)
+      offer_code = create(:offer_code, :for_existing_customers, products: [membership], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      subscription = create(:subscription, link: membership, user: buyer)
+      create(:membership_purchase, purchaser: buyer, link: membership, seller:, subscription:, price_cents: membership.price_cents, stripe_refunded: true)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
     it "treats chargedback purchases (not reversed) as not qualifying" do
       offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
       create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, chargeback_date: 1.day.ago)

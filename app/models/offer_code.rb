@@ -267,7 +267,7 @@ class OfferCode < ApplicationRecord
       .not_is_additional_contribution
       .not_recurring_charge
       .not_is_gift_sender_purchase
-      .not_refunded_except_subscriptions
+      .not_fully_refunded
       .not_chargedback_or_chargedback_reversed
       .not_is_access_revoked
       .where(purchaser_id: buyer.id, link_id: ownership_products.map(&:id))
