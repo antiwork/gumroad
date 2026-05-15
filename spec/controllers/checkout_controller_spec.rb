@@ -296,7 +296,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         cart = controller.logged_in_user.alive_cart
         expect(cart).to have_attributes(
-          email: "john@example.com",
+          email: seller.email,
           return_url: "https://example.com",
           reject_ppp_discount: false,
           discount_codes: [{ "code" => "BLACKFRIDAY", "fromUrl" => false }]
@@ -404,6 +404,15 @@ describe CheckoutController, type: :controller, inertia: true do
           accepted_offer_details: { "original_product_id" => product3.external_id, "original_variant_id" => nil },
           pay_in_installments: true
         )
+      end
+
+      it "forces the cart email to the signed-in user's email regardless of the submitted email" do
+        cart = create(:cart, user: seller, email: "stale@example.com")
+
+        patch :update, params: { cart: { email: "stale@example.com", items: [], discountCodes: [] } }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(cart.reload.email).to eq(seller.email)
       end
 
       it "updates `browser_guid` with the value of the `_gumroad_guid` cookie" do

@@ -30,7 +30,7 @@ class CheckoutController < ApplicationController
       cart = Cart.fetch_by(user: logged_in_user, browser_guid:) || Cart.new(user: logged_in_user, browser_guid:)
       cart.ip_address = request.remote_ip
       cart.browser_guid = browser_guid
-      cart.email = update_permitted_params[:email].presence || logged_in_user&.email
+      cart.email = logged_in_user&.email || update_permitted_params[:email].presence
       cart.return_url = update_permitted_params[:returnUrl]
       cart.reject_ppp_discount = update_permitted_params[:rejectPppDiscount] || false
       cart.discount_codes = update_permitted_params[:discountCodes].to_a.map { { code: _1[:code], fromUrl: _1[:fromUrl] } }

@@ -167,7 +167,7 @@ const CheckoutIndexPage = () => {
   } = typia.assert<CheckoutIndexPageProps>(usePage().props);
 
   const user = useLoggedInUser();
-  const email = props.cart?.email ?? user?.email ?? "";
+  const email = user?.email ?? props.cart?.email ?? "";
   const cartForm = useForm<{ cart: CartState }>(() => {
     const initialCart = clear_cart ? newCartState() : (props.cart ?? newCartState());
     const url = new URL(window.location.href);
