@@ -24,6 +24,7 @@ module StripeBeneficialOwnersManager
   }.freeze
 
   COUNTRIES_WITHOUT_POSTAL_CODE = ["BW"].freeze
+  COUNTRIES_WITH_STATE_LIST = %w[US CA AU MX AE IE BR JP].freeze
   COUNTRIES_REQUIRING_NATIONALITY = [
     Compliance::Countries::ARE.alpha2,
     Compliance::Countries::SGP.alpha2,
@@ -143,14 +144,19 @@ module StripeBeneficialOwnersManager
     if action == :create && COUNTRIES_REQUIRING_NATIONALITY.include?(seller_country) && params[:nationality].to_s.strip.empty?
       missing << "Nationality"
     end
+    if truthy?(params[:owner]) && params[:percent_ownership].to_s.strip.empty?
+      missing << "Ownership percentage"
+    end
     return if missing.empty?
     raise MissingRequiredFieldError, "#{missing.to_sentence} #{missing.length == 1 ? "is" : "are"} required for beneficial owners — Stripe needs them to verify the person."
   end
   private_class_method :validate_required_fields!
 
   def self.required_address_fields_for(country_code)
-    return REQUIRED_ADDRESS_FIELDS.except(:postal_code) if COUNTRIES_WITHOUT_POSTAL_CODE.include?(country_code)
-    REQUIRED_ADDRESS_FIELDS
+    fields = REQUIRED_ADDRESS_FIELDS
+    fields = fields.except(:postal_code) if COUNTRIES_WITHOUT_POSTAL_CODE.include?(country_code)
+    fields = fields.except(:state) unless COUNTRIES_WITH_STATE_LIST.include?(country_code)
+    fields
   end
   private_class_method :required_address_fields_for
 

@@ -1060,7 +1060,6 @@ const BeneficialOwnersSection = ({
                           <Input
                             id={`${uid}-address-state`}
                             type="text"
-                            required
                             disabled={isFormDisabled}
                             value={formState.address_state}
                             onChange={(event) => updateForm({ address_state: event.target.value })}
@@ -1247,6 +1246,7 @@ const BeneficialOwnersSection = ({
                   min={0}
                   max={100}
                   step="0.01"
+                  required={formState.owner}
                   disabled={isFormDisabled}
                   value={formState.percent_ownership}
                   onChange={(event) => {

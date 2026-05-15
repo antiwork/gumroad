@@ -203,7 +203,7 @@ describe StripeBeneficialOwnersManager do
 
     it "raises MissingRequiredFieldError when address sub-fields are missing" do
       blank_state = params.deep_dup
-      blank_state[:address][:state] = ""
+      blank_state[:address] = blank_state[:address].merge(country: "US", state: "")
       expect { described_class.create(user, blank_state) }
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /State or region is required/)
 
@@ -312,6 +312,29 @@ describe StripeBeneficialOwnersManager do
       partial_dob[:dob][:day] = ""
       expect { described_class.create(user, partial_dob) }
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Date of birth is required/)
+    end
+
+    it "accepts a blank address.state for countries outside the curated state-list set (Singapore, mirroring the rep flow)" do
+      user.alive_user_compliance_info.mark_deleted!
+      sg_compliance = create(:user_compliance_info_singapore, user: user)
+      sg_compliance.dup_and_save! { |c| c.is_business = true }
+      sg_params = params.deep_dup
+      sg_params[:nationality] = "SG"
+      sg_params[:address] = sg_params[:address].merge(country: "SG", state: "")
+      expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+      described_class.create(user, sg_params)
+    end
+
+    it "raises MissingRequiredFieldError when owner=true but percent_ownership is blank" do
+      bad = params.merge(owner: "true", percent_ownership: "")
+      expect { described_class.create(user, bad) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Ownership percentage is required/)
+    end
+
+    it "allows owner=false with blank percent_ownership (director-only BO)" do
+      ok = params.merge(owner: "false", director: "true", percent_ownership: "")
+      expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+      described_class.create(user, ok)
     end
   end
 
