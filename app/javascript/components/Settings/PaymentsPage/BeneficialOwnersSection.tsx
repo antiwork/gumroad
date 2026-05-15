@@ -461,23 +461,25 @@ const BeneficialOwnersSection = ({
   const updateForm = (patch: Partial<FormState>) => setFormState((prev) => ({ ...prev, ...patch }));
 
   const validateJpKanaFields = (): string | null => {
-    if (defaultCountry !== "JP") return null;
     if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
-    if (!KANA_NAME_REGEX.test(formState.first_name_kana)) {
-      return "First name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
+    if (defaultCountry === "JP") {
+      if (!KANA_NAME_REGEX.test(formState.first_name_kana)) {
+        return "First name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
+      }
+      if (!KANA_NAME_REGEX.test(formState.last_name_kana)) {
+        return "Last name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
+      }
     }
-    if (!KANA_NAME_REGEX.test(formState.last_name_kana)) {
-      return "Last name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
-    }
-    if (formState.address_country !== "JP") return null;
-    if (!KANA_ADDRESS_REGEX.test(formState.address_building_number_kana)) {
-      return "Block / Building number (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
-    }
-    if (!KANA_ADDRESS_REGEX.test(formState.address_street_address_kana)) {
-      return "Town/Cho-me (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
-    }
-    if (!HAS_KATAKANA.test(formState.address_street_address_kana)) {
-      return "Town/Cho-me (Kana) must include katakana characters.";
+    if (formState.address_country === "JP") {
+      if (!KANA_ADDRESS_REGEX.test(formState.address_building_number_kana)) {
+        return "Block / Building number (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+      }
+      if (!KANA_ADDRESS_REGEX.test(formState.address_street_address_kana)) {
+        return "Town/Cho-me (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+      }
+      if (!HAS_KATAKANA.test(formState.address_street_address_kana)) {
+        return "Town/Cho-me (Kana) must include katakana characters.";
+      }
     }
     return null;
   };

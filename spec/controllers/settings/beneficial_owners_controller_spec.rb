@@ -129,7 +129,8 @@ describe Settings::BeneficialOwnersController, type: :controller do
         beneficial_owner: {
           first_name: "Phil", last_name: "Owner",
           email: "phil@example.com", phone: "+447700900000",
-          title: "Director", owner: "true", director: "true", percent_ownership: "34"
+          title: "Director", owner: "true", director: "true", percent_ownership: "34",
+          dob: { day: "2", month: "2", year: "1981" },
         },
       }
     end

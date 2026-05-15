@@ -113,6 +113,11 @@ module StripeBeneficialOwnersManager
         label if params[key].to_s.strip.empty?
       end
     end
+    dob = params[:dob]
+    dob_submitted = dob.is_a?(Hash) || dob.is_a?(ActionController::Parameters)
+    if !dob_submitted || %i[day month year].any? { |k| dob[k].to_s.strip.empty? }
+      missing << "Date of birth"
+    end
     address = params[:address]
     address_submitted = address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
     if address_submitted
@@ -301,7 +306,7 @@ module StripeBeneficialOwnersManager
       hash[:nationality] = params[:nationality]
     end
 
-    if country_code == Compliance::Countries::SGP.alpha2
+    if country_code == Compliance::Countries::SGP.alpha2 && action == :create
       hash[:full_name_aliases] = [""]
     end
 

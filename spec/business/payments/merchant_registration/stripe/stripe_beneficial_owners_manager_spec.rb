@@ -300,6 +300,19 @@ describe StripeBeneficialOwnersManager do
       expect { described_class.create(user, no_id) }
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Personal tax ID number is required/)
     end
+
+    it "raises MissingRequiredFieldError when dob is missing entirely (API client bypassing the UI)" do
+      no_dob = params.except(:dob)
+      expect { described_class.create(user, no_dob) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Date of birth is required/)
+    end
+
+    it "raises MissingRequiredFieldError when one of day/month/year is blank" do
+      partial_dob = params.deep_dup
+      partial_dob[:dob][:day] = ""
+      expect { described_class.create(user, partial_dob) }
+        .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Date of birth is required/)
+    end
   end
 
   describe ".update" do
@@ -314,6 +327,7 @@ describe StripeBeneficialOwnersManager do
         director: "true",
         executive: "false",
         percent_ownership: "34",
+        dob: { day: "2", month: "2", year: "1981" },
       ).permit!
     end
 
@@ -376,6 +390,21 @@ describe StripeBeneficialOwnersManager do
       expect(Stripe::Account).not_to receive(:update_person)
       expect { described_class.update(user, "person_phil", params.merge(email: "")) }
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Email is required/)
+    end
+
+    it "does not re-assert full_name_aliases on SGP non-rep updates so externally-set aliases are preserved" do
+      user.alive_user_compliance_info.mark_deleted!
+      sg_compliance = create(:user_compliance_info_singapore, user: user)
+      sg_compliance.dup_and_save! { |c| c.is_business = true }
+      allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+      sg_params = params.deep_dup
+      sg_params[:nationality] = "SG"
+      expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+        expect(attrs).not_to have_key(:full_name_aliases)
+        other_owner_person
+      end
+
+      described_class.update(user, "person_phil", sg_params)
     end
   end
 
