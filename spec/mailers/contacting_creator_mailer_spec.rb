@@ -638,6 +638,13 @@ describe ContactingCreatorMailer do
       upsell = create(:upsell, product:, name: "Complete course", seller:, offer_code:)
       upsell_variant = create(:upsell_variant, upsell:, selected_variant: product.alive_variants.first, offered_variant: product.alive_variants.second)
       upsell_purchase = create(:upsell_purchase, upsell:, upsell_variant:)
+      upsell_purchase.purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 20,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: product.price_cents,
+        duration_in_months: nil
+      )
       mail = ContactingCreatorMailer.notify(upsell_purchase.purchase.id)
       expect(mail.body.encoded).to include "Upsell"
       expect(mail.body.encoded).to include "Complete course (20% off)"
