@@ -174,8 +174,15 @@ describe SettingsPresenter do
   end
 
   describe "#application_props" do
-    let(:app) do create(:oauth_application, name: "Test", redirect_uri: "https://example.com/test",
-                                            uid: "uid-1234", secret: "secret-123") end
+    let(:app) do
+      create(
+        :oauth_application,
+        name: "Test",
+        redirect_uri: "https://example.com/test",
+        uid: "uid-1234",
+        secret: "secret-123"
+      )
+    end
 
     it "returns the correct data" do
       expect(presenter.application_props(app)).to eq(
