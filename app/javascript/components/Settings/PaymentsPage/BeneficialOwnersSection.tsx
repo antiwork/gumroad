@@ -469,6 +469,7 @@ const BeneficialOwnersSection = ({
     if (!KANA_NAME_REGEX.test(formState.last_name_kana)) {
       return "Last name (Kana) may only contain katakana characters, spaces, dashes, and dots.";
     }
+    if (formState.address_country !== "JP") return null;
     if (!KANA_ADDRESS_REGEX.test(formState.address_building_number_kana)) {
       return "Block / Building number (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
     }
@@ -867,7 +868,7 @@ const BeneficialOwnersSection = ({
                   </div>
                 </Fieldset>
 
-                {defaultCountry === "JP" ? (
+                {formState.address_country === "JP" ? (
                   <>
                     <div
                       style={{
@@ -968,7 +969,7 @@ const BeneficialOwnersSection = ({
                     gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                   }}
                 >
-                  {defaultCountry === "JP" ? null : (
+                  {formState.address_country === "JP" ? null : (
                     <Fieldset>
                       <FieldsetTitle>
                         <Label htmlFor={`${uid}-address-city`}>City</Label>

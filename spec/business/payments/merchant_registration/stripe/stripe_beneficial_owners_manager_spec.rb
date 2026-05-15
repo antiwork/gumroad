@@ -256,6 +256,32 @@ describe StripeBeneficialOwnersManager do
       described_class.create(user, jp_params)
     end
 
+    it "sends kanji/kana names with a Latin address when a JP seller adds a non-JP-resident BO" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      jp_params = params.deep_dup
+      jp_params[:first_name_kanji] = "太郎"
+      jp_params[:last_name_kanji] = "山田"
+      jp_params[:first_name_kana] = "タロウ"
+      jp_params[:last_name_kana] = "ヤマダ"
+      jp_params[:address] = {
+        line1: "1 Market St", line2: "Suite 100", city: "San Francisco",
+        state: "CA", postal_code: "94105", country: "US",
+      }
+      expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+        expect(attrs[:first_name_kanji]).to eq("太郎")
+        expect(attrs[:last_name_kanji]).to eq("山田")
+        expect(attrs[:address]).to include(line1: "1 Market St", line2: "Suite 100", city: "San Francisco",
+                                           state: "CA", postal_code: "94105", country: "US")
+        expect(attrs).not_to have_key(:address_kanji)
+        expect(attrs).not_to have_key(:address_kana)
+        other_owner_person
+      end
+      described_class.create(user, jp_params)
+    end
+
     it "sends full_name_aliases for SGP sellers (Singapore MAS rule — required on every Person)" do
       user.alive_user_compliance_info.mark_deleted!
       sg_compliance = create(:user_compliance_info_singapore, user: user)

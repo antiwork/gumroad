@@ -103,12 +103,12 @@ module StripeBeneficialOwnersManager
 
   def self.validate_required_fields!(params, action:, user:)
     seller_country = user.alive_user_compliance_info&.legal_entity_country_code
-    is_jp = seller_country == Compliance::Countries::JPN.alpha2
+    is_jp_seller = seller_country == Compliance::Countries::JPN.alpha2
 
     missing = REQUIRED_FIELDS_FOR_BENEFICIAL_OWNER.filter_map do |key, label|
       label if params[key].to_s.strip.empty?
     end
-    if is_jp
+    if is_jp_seller
       missing += REQUIRED_JP_NAME_FIELDS.filter_map do |key, label|
         label if params[key].to_s.strip.empty?
       end
@@ -116,19 +116,19 @@ module StripeBeneficialOwnersManager
     address = params[:address]
     address_submitted = address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
     if address_submitted
-      if is_jp
+      address_country = address[:country].to_s.strip
+      if address_country == Compliance::Countries::JPN.alpha2
         missing += REQUIRED_JP_ADDRESS_FIELDS.filter_map do |key, label|
           label if address[key].to_s.strip.empty?
         end
       else
-        address_country = address[:country].to_s.strip
         required = required_address_fields_for(address_country)
         missing += required.filter_map do |key, label|
           label if address[key].to_s.strip.empty?
         end
       end
     elsif action == :create
-      missing += is_jp ? REQUIRED_JP_ADDRESS_FIELDS.values : REQUIRED_ADDRESS_FIELDS.values
+      missing += is_jp_seller ? REQUIRED_JP_ADDRESS_FIELDS.values : REQUIRED_ADDRESS_FIELDS.values
     end
     if action == :create
       missing += REQUIRED_CREATE_ONLY_FIELDS.filter_map do |key, label|
@@ -255,7 +255,8 @@ module StripeBeneficialOwnersManager
     end
 
     if params[:address].is_a?(Hash) || params[:address].is_a?(ActionController::Parameters)
-      if country_code == Compliance::Countries::JPN.alpha2
+      address_country = params[:address][:country].to_s.strip.presence || country_code
+      if address_country == Compliance::Countries::JPN.alpha2
         address_kanji = {
           line1: params[:address][:building_number].presence,
           town: params[:address][:street_address_kanji].presence,
@@ -281,7 +282,7 @@ module StripeBeneficialOwnersManager
           city: params[:address][:city].presence,
           state: params[:address][:state].presence,
           postal_code: params[:address][:postal_code].presence,
-          country: params[:address][:country].presence || country_code,
+          country: address_country,
         }.compact
         hash[:address] = address if address.any?
       end
