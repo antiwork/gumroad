@@ -703,7 +703,7 @@ describe "Sales page", type: :system, js: true do
           fill_in "Email", with: "newcustomer2@gumroad.com"
           click_on "Save"
         end
-        expect(page).to have_alert(text: "Email updated successfully.")
+        expect(flash_message).to eq "Email updated successfully."
 
         within_section "Email", section_element: :section do
           expect(page).to have_button("Edit")
@@ -716,7 +716,7 @@ describe "Sales page", type: :system, js: true do
 
           uncheck "Receives emails", checked: true
         end
-        expect(page).to have_alert(text: "Your customer will no longer receive your posts.")
+        expect(flash_message).to eq "Your customer will no longer receive your posts."
 
         within_section "Giftee email", section_element: :section do
           expect(page).to have_text("customer1@gumroad.com")
@@ -850,14 +850,14 @@ describe "Sales page", type: :system, js: true do
           click_on "Disable"
         end
         wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
+        expect(flash_message).to eq "Changes saved!"
         expect(purchase2.license.reload.disabled_at).to_not be_nil
 
         within_section "License key", section_element: :section do
           click_on "Enable"
         end
         wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
+        expect(flash_message).to eq "Changes saved!"
         expect(purchase2.license.reload.disabled_at).to be_nil
 
         within_section "Seats", section_element: :section do
@@ -990,7 +990,7 @@ describe "Sales page", type: :system, js: true do
           visit customer_sale_path(purchase1.external_id)
 
           click_on "Resend ping"
-          expect(page).to have_alert(text: "Ping resent.")
+          expect(flash_message).to eq "Ping resent."
           expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase1.id, nil)
 
           visit customer_sale_path(purchase2.external_id)
@@ -998,7 +998,7 @@ describe "Sales page", type: :system, js: true do
             click_on "Resend ping"
           end
           wait_for_ajax
-          expect(page).to have_alert(text: "Ping resent.")
+          expect(flash_message).to eq "Ping resent."
           expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase2.id, nil)
 
           within_section "$0", match: :first do
@@ -1097,7 +1097,7 @@ describe "Sales page", type: :system, js: true do
           end
           wait_for_ajax
         end
-        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+        expect(flash_message).to eq "Refund amount cannot be greater than the purchase price."
 
         within_section "Charges", section_element: :section do
           find_field("2", with: "3").fill_in with: "2"
@@ -1323,7 +1323,7 @@ describe "Sales page", type: :system, js: true do
       it "allows revoking and re-enabling access" do
         visit customer_sale_path(purchase1.external_id)
         click_on "Revoke access"
-        expect(page).to have_alert(text: "Access revoked")
+        expect(flash_message).to eq "Access revoked"
         expect(purchase1.reload.is_access_revoked?).to eq(true)
         click_on "Re-enable access"
         expect(page).to have_alert(text: "Access re-enabled")
@@ -1389,7 +1389,7 @@ describe "Sales page", type: :system, js: true do
             click_on "Confirm refund"
           end
         end
-        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+        expect(flash_message).to eq "Refund amount cannot be greater than the purchase price."
 
         within_section "Refund", section_element: :section do
           fill_in "2", with: "2"
@@ -1568,7 +1568,7 @@ describe "Sales page", type: :system, js: true do
           fill_in "Add a response to the review", with: "Thank you!"
           click_on "Submit"
         end
-        expect(page).to have_alert(text: "Response submitted successfully!")
+        expect(flash_message).to eq "Response submitted successfully!"
         expect(review.response.reload.message).to eq("Thank you!")
 
         within_section "Review" do
@@ -1576,7 +1576,7 @@ describe "Sales page", type: :system, js: true do
           fill_in "Add a response to the review", with: "Thank you, again!"
           click_on "Update"
         end
-        expect(page).to have_alert(text: "Response updated successfully!")
+        expect(flash_message).to eq "Response updated successfully!"
         expect(review.response.reload.message).to eq("Thank you, again!")
 
         within_section "Review" do
@@ -1716,7 +1716,7 @@ describe "Sales page", type: :system, js: true do
 
         fill_in "Call URL", with: "https://zoom.us/j/dumb"
         click_on "Save"
-        expect(page).to have_alert(text: "Call URL updated!")
+        expect(flash_message).to eq "Call URL updated!"
         expect(call_purchase.call.reload.call_url).to eq("https://zoom.us/j/dumb")
 
         visit customer_sale_path(call_purchase.external_id)

@@ -172,7 +172,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Last 4 digits of SSN", with: "1235")
 
       click_on("Update settings")
-      expect(page).to have_alert("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
+      expect(flash_message).to eq "You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers."
 
       fill_in("Account number", with: "000123456789")
       fill_in("Confirm account number", with: "000123456789")
@@ -352,7 +352,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       click_on "Update settings"
       wait_for_ajax
 
-      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(flash_message).to eq "Thanks! You're all set."
       expect(creator.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
     end
 
@@ -699,7 +699,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect do
           click_on "Update settings"
           wait_for_ajax
-          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(flash_message).to eq "Thanks! You're all set."
         end.to change { @user.alive_user_compliance_info.reload.street_address }.to("123, Smith street")
 
         choose "Business"
@@ -719,7 +719,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect do
           click_on "Update settings"
           wait_for_ajax
-          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(flash_message).to eq "Thanks! You're all set."
           sleep 0.5 # Since the previous Alerts takes time to disappear, checking alert returns early before the api call is complete
         end.to change { @user.alive_user_compliance_info.reload.business_street_address }.to("123 North street")
         find(:css, "input[id$='creator-street-address']").set("po box 123 smith street")
@@ -1254,7 +1254,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         select("Rio de Janeiro", from: "State")
         click_on("Update settings")
-        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(flash_message).to eq "Thanks! You're all set."
       end
 
       it "allows the (non-US based) creator to enter their kyc and paypal email address and it'll save it properly" do
@@ -6569,7 +6569,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
         click_on "Update settings"
 
-        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(flash_message).to eq "Thanks! You're all set."
         expect(user.reload.payouts_paused_by_user?).to be true
 
         refresh
@@ -6711,7 +6711,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         click_on "Update settings"
 
-        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(flash_message).to eq "Thanks! You're all set."
         expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
 
         refresh

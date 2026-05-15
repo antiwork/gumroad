@@ -21,7 +21,7 @@ describe("Checkout form page", type: :system, js: true) do
         expect(page).to have_field("Discount code")
       end
       click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(seller.reload.display_offer_code_field).to eq(true)
 
       visit checkout_form_path
@@ -43,7 +43,7 @@ describe("Checkout form page", type: :system, js: true) do
 
       click_on "Save changes"
       expect(find_field("Label")["aria-invalid"]).to eq "true"
-      expect(page).to have_alert(text: "Please complete all required fields.")
+      expect(flash_message).to eq "Please complete all required fields."
 
       fill_in "Label", with: "You should totally check this - out!"
       in_preview do
@@ -54,12 +54,12 @@ describe("Checkout form page", type: :system, js: true) do
       click_on "Save changes"
       expect(find_field("Label")["aria-invalid"]).to eq "false"
       expect(find_field("Products")["aria-invalid"]).to eq "true"
-      expect(page).to have_alert(text: "Please complete all required fields.")
+      expect(flash_message).to eq "Please complete all required fields."
 
       check "All products"
       click_on "Save changes"
       expect(find_field("Products")["aria-invalid"]).to eq "false"
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(seller.custom_fields.count).to eq(1)
       field = seller.custom_fields.last
       expect(field.name).to eq "You should totally check this - out!"
@@ -79,7 +79,7 @@ describe("Checkout form page", type: :system, js: true) do
       end
       click_on "Save changes"
       expect(find_field("Terms URL")["aria-invalid"]).to eq "false"
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(field.reload.type).to eq "terms"
       expect(field.name).to eq "https://www.gumroad.com"
 
@@ -124,7 +124,7 @@ describe("Checkout form page", type: :system, js: true) do
         expect(page).to_not have_section("Customers who bought this item also bought")
       end
       click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(seller.reload.recommendation_type).to eq(User::RecommendationType::NO_RECOMMENDATIONS)
 
       visit checkout_form_path
@@ -137,7 +137,7 @@ describe("Checkout form page", type: :system, js: true) do
       end
       click_on "Save changes"
       wait_for_ajax
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(seller.reload.recommendation_type).to eq(User::RecommendationType::OWN_PRODUCTS)
 
       choose "Recommend all products and earn a commission with Gumroad Affiliates"
@@ -149,7 +149,7 @@ describe("Checkout form page", type: :system, js: true) do
       end
       click_on "Save changes"
       wait_for_ajax
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(flash_message).to eq "Changes saved!"
       expect(seller.reload.recommendation_type).to eq(User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
 
       choose "Recommend my products and products I'm an affiliate of"

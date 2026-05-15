@@ -207,12 +207,12 @@ describe "Collaborators", type: :system, js: true do
         # invalid email
         fill_in "email", with: "foo"
         click_on "Add collaborator"
-        expect(page).to have_alert(text: "Please enter a valid email")
+        expect(flash_message).to eq "Please enter a valid email"
 
         # no user with that email
         fill_in "email", with: "foo@example.com"
         click_on "Add collaborator"
-        expect(page).to have_alert(text: "The email address isn't associated with a Gumroad account.")
+        expect(flash_message).to eq "The email address isn't associated with a Gumroad account."
 
         # no products selected
         fill_in "email", with: collaborating_user.email
@@ -222,7 +222,7 @@ describe "Collaborators", type: :system, js: true do
           end
         end
         click_on "Add collaborator"
-        expect(page).to have_alert(text: "At least one product must be selected")
+        expect(flash_message).to eq "At least one product must be selected"
 
         # invalid default percent commission
         within find(:table_row, { "Product" => product1.name }) do
@@ -235,7 +235,7 @@ describe "Collaborators", type: :system, js: true do
         within find(:table_row, { "Product" => "All products" }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(flash_message).to eq "Collaborator cut must be 50% or less"
 
         # invalid product percent commission
         uncheck "All products"
@@ -247,7 +247,7 @@ describe "Collaborators", type: :system, js: true do
         within find(:table_row, { "Product" => product1.name }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(flash_message).to eq "Collaborator cut must be 50% or less"
         within find(:table_row, { "Product" => product1.name }) do
           fill_in "Percentage", with: 40
           expect(page).not_to have_selector("fieldset.danger")
@@ -257,7 +257,7 @@ describe "Collaborators", type: :system, js: true do
         within find(:table_row, { "Product" => product1.name }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(flash_message).to eq "Collaborator cut must be 50% or less"
 
         # missing default percent commission
         check "All products"
@@ -268,7 +268,7 @@ describe "Collaborators", type: :system, js: true do
         within find(:table_row, { "Product" => "All products" }) do
           expect(find("fieldset.danger")).to have_field("Percentage")
         end
-        expect(page).to have_alert(text: "Collaborator cut must be 50% or less")
+        expect(flash_message).to eq "Collaborator cut must be 50% or less"
 
         # missing product percent commission
         uncheck "All products"

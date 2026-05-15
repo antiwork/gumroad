@@ -334,13 +334,13 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       fill_in "Enter URL", with: ""
       click_on "Add link"
     end
-    expect(page).to have_alert(text: "Please enter a valid URL.")
+    expect(flash_message).to eq "Please enter a valid URL."
 
     expect(page).to_not have_alert(text: "Please enter a valid URL.")
     fill_in "Enter text", with: "An invalid link 2"
     fill_in "Enter URL", with: "/broken:link"
     click_on "Add link"
-    expect(page).to have_alert(text: "Please enter a valid URL.")
+    expect(flash_message).to eq "Please enter a valid URL."
 
     expect(page).to_not have_alert(text: "Please enter a valid URL.")
     fill_in "Enter text", with: "Valid link 1"
@@ -559,14 +559,14 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       attach_file file_fixture("test.pdf") do
         click_on "Insert audio"
       end
-      expect(page).to have_alert(text: "Only audio files are allowed")
+      expect(flash_message).to eq "Only audio files are allowed"
       expect(page).to_not have_embed(name: "test")
 
       # Validate that large files are not allowed
       attach_file file_fixture("big-music-file.mp3") do
         click_on "Insert audio"
       end
-      expect(page).to have_alert(text: "File is too large (max allowed size is 5.0 MB)")
+      expect(flash_message).to eq "File is too large (max allowed size is 5.0 MB)"
       expect(page).to_not have_embed(name: "big-music-file")
 
       # Upload a valid audio file
@@ -788,7 +788,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         end
       end
       click_on "Save changes"
-      expect(page).to have_alert(text: "You must add titles to all of your inputs")
+      expect(flash_message).to eq "You must add titles to all of your inputs"
       fill_in "Title", with: "New short answer"
 
       select_disclosure "Insert" do
