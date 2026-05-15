@@ -35,8 +35,20 @@ type BeneficialOwner = {
     postal_code?: string | null;
     country?: string | null;
   };
-  address_kanji?: { line1?: string | null; town?: string | null; state?: string | null; postal_code?: string | null };
-  address_kana?: { line1?: string | null; town?: string | null; state?: string | null; postal_code?: string | null };
+  address_kanji?: {
+    line1?: string | null;
+    town?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+  };
+  address_kana?: {
+    line1?: string | null;
+    town?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+  };
   first_name_kanji?: string | null;
   last_name_kanji?: string | null;
   first_name_kana?: string | null;
