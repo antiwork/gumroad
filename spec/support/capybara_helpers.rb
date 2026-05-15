@@ -97,7 +97,7 @@ module CapybaraHelpers
   def flash_message
     toast = find("[data-testid='toast-alert']")
     message = toast.text
-    within(toast) { click_on "Close" }
+    within(toast) { find('button[aria-label="Close"]').click }
     message
   end
 
