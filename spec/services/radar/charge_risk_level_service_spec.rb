@@ -31,8 +31,8 @@ describe Radar::ChargeRiskLevelService do
       expect(described_class.fetch(purchase)).to eq("elevated")
     end
 
-    it "returns nil when the charge has no outcome" do
-      stripe_charge = Stripe::Charge.construct_from({})
+    it "returns nil when the charge has no risk assessment" do
+      stripe_charge = Stripe::Charge.construct_from(outcome: nil)
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(stripe_charge)
 
       expect(described_class.fetch(purchase)).to be_nil
