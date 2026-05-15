@@ -807,6 +807,36 @@ describe CheckoutPresenter do
       end
     end
 
+    it "returns an auto-renewal discount after the original discount duration is exhausted" do
+      presenter = described_class.new(logged_in_user: nil, ip: "127.0.0.1")
+      offer_code = instance_double(
+        OfferCode,
+        discount: {
+          type: "percent",
+          percents: 0,
+          product_ids: nil,
+          expires_at: nil,
+          minimum_quantity: nil,
+          duration_in_billing_cycles: nil,
+          minimum_amount_cents: nil,
+        }
+      )
+      auto = double(offer_code:, offer_code_is_percent: true, offer_code_amount: 25)
+      subscription = instance_double(Subscription, auto_renewal_offer_code: auto, discount_applies_to_next_charge?: false)
+
+      result = presenter.send(:subscription_discount_for_next_charge, subscription)
+
+      expect(result).to eq(
+        type: "percent",
+        percents: 25,
+        product_ids: nil,
+        expires_at: nil,
+        minimum_quantity: nil,
+        duration_in_billing_cycles: nil,
+        minimum_amount_cents: nil,
+      )
+    end
+
     context "non-tiered membership product" do
       context "subscription missing variants" do
         it "returns a nil option_id" do

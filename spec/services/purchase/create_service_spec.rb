@@ -332,6 +332,38 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the cross-sell offer code is only for existing customers" do
+      let(:ownership_product) { create(:product, user:) }
+      let(:existing_customer_offer_code) do
+        create(:percentage_offer_code,
+               user:,
+               products: [product],
+               ownership_products: [ownership_product],
+               existing_customers_only: true,
+               amount_percentage: 1)
+      end
+      let(:cross_sell) { create(:upsell, seller: user, product:, variant: product.alive_variants.first, selected_products: [selected_product], offer_code: existing_customer_offer_code, cross_sell: true) }
+
+      before do
+        product.update!(price_cents: 0)
+        params[:purchase][:perceived_price_cents] = 0
+      end
+
+      it "creates the cross-sell purchase without applying the ineligible offer code" do
+        purchase, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(purchase.upsell_purchase.upsell).to eq(cross_sell)
+        expect(purchase.upsell_purchase.selected_product).to eq(selected_product)
+        expect(purchase.offer_code).to be_nil
+        expect(purchase.purchase_offer_code_discount).to be_nil
+        expect(error).to be_nil
+      end
+    end
+
     context "when the selected product isn't in the cart" do
       before do
         params[:cart_items] = [{ permalink: product.unique_permalink, price_cents: 0 }]

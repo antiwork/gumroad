@@ -358,13 +358,13 @@ class CheckoutPresenter
     end
 
     def subscription_discount_for_next_charge(subscription)
-      return nil unless subscription.discount_applies_to_next_charge?
-
       if (auto = subscription.auto_renewal_offer_code)
         return auto.offer_code.discount.merge(
           auto.offer_code_is_percent ? { type: "percent", percents: auto.offer_code_amount } : { type: "fixed", cents: auto.offer_code_amount }
         )
       end
+
+      return nil unless subscription.discount_applies_to_next_charge?
 
       subscription.original_offer_code&.discount_for_display
     end
