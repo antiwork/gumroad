@@ -76,7 +76,7 @@ describe Radar::ChargeRiskLevelService do
 
   describe ".fetch_bulk" do
     let(:purchase) { create_test_purchase }
-    let(:purchase2) { p = create_test_purchase; p.update_column(:stripe_transaction_id, "ch_unique_#{p.id}"); p }
+    let(:purchase2) { new_purchase = create_test_purchase; new_purchase.update_column(:stripe_transaction_id, "ch_unique_#{new_purchase.id}"); new_purchase }
 
     it "bulk fetches risk levels and skips non-Stripe purchases" do
       non_stripe = create_test_purchase
