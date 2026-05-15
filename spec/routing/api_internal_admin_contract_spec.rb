@@ -13,6 +13,7 @@ describe "internal admin API routing" do
     expect(route_for("/internal/admin/licenses/lookup", :get)).to include(controller: "api/internal/admin/licenses", action: "lookup")
     expect(route_for("/internal/admin/users/info", :get)).to include(controller: "api/internal/admin/users", action: "info")
     expect(route_for("/internal/admin/users/affiliates", :get)).to include(controller: "api/internal/admin/users", action: "affiliates")
+    expect(route_for("/internal/admin/users/comments", :get)).to include(controller: "api/internal/admin/users", action: "comments")
     expect(route_for("/internal/admin/users/compliance_info", :get)).to include(controller: "api/internal/admin/users", action: "compliance_info")
     expect(route_for("/internal/admin/users/purchases", :get)).to include(controller: "api/internal/admin/users", action: "purchases")
     expect(route_for("/internal/admin/users/radar_stats", :get)).to include(controller: "api/internal/admin/users", action: "radar_stats")
