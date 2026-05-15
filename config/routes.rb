@@ -332,6 +332,7 @@ Rails.application.routes.draw do
               get :comments
               get :compliance_info
               get :purchases
+              get :radar_stats
               get :related
               get :suspension
               post :reset_password
@@ -560,6 +561,7 @@ Rails.application.routes.draw do
         get :paypal_connect
         post :remove_credit_card
       end
+      resources :beneficial_owners, only: %i[index create update destroy], defaults: { format: :json }
       resource :stripe, controller: :stripe, only: [] do
         collection do
           post :disconnect

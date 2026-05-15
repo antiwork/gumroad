@@ -205,9 +205,11 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8080" # Required by AnyCable
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
-    config.csp[:script_src] << "localhost:3036" # Required by Vite dev server
-    config.csp[:connect_src] << "localhost:3036" # Required by Vite dev server
-    config.csp[:connect_src] << "ws://localhost:3036" # Required by Vite HMR
+    %w[localhost app.localhost].each do |host|
+      config.csp[:script_src] << "#{host}:3036" # Vite dev server
+      config.csp[:connect_src] << "#{host}:3036" # Vite dev server
+      config.csp[:connect_src] << "ws://#{host}:3036" # Vite HMR websocket
+    end
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
     cable_port = PROTOCOL == "https" ? 8081 : 8080
     config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable

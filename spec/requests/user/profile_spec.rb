@@ -444,7 +444,7 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_alert(text: "Changes saved!")
         expect(page).to_not have_alert
         section = seller.seller_profile_rich_text_sections.sole
-        Selenium::WebDriver::Wait.new(timeout: 10).until { section.reload.text["content"].map { _1["type"] }.include?("image") }
+        Timeout.timeout(10) { sleep 0.1 until section.reload.text["content"].map { _1["type"] }.include?("image") }
         image_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{ActiveStorage::Blob.last.key}"
         expected_rich_text = {
           type: "doc",

@@ -745,7 +745,11 @@ const AccountDetailsSection = ({
                     <Input
                       id={`${uid}-${businessTaxIdConfig.idSuffix}`}
                       type="text"
-                      value={getMaskedValue(businessTaxIdConfig.placeholder, user.business_tax_id_last_four, showBusinessTaxId)}
+                      value={getMaskedValue(
+                        businessTaxIdConfig.placeholder,
+                        user.business_tax_id_last_four,
+                        showBusinessTaxId,
+                      )}
                       disabled
                       readOnly
                     />
@@ -762,7 +766,7 @@ const AccountDetailsSection = ({
                   </div>
                   <button
                     type="button"
-                    className="cursor-pointer self-start underline all-unset text-sm"
+                    className="cursor-pointer self-start text-sm underline all-unset"
                     onClick={() => setIsEditingBusinessTaxId(true)}
                     disabled={isFormDisabled}
                   >
@@ -838,22 +842,6 @@ const AccountDetailsSection = ({
             />
           </Fieldset>
         </div>
-        {complianceInfo.is_business && complianceInfo.country === "CA" ? (
-          <Fieldset state={errorFieldNames.has("job_title") ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}-creator-job-title`}>Job title</Label>
-            </FieldsetTitle>
-            <Input
-              id={`${uid}-creator-job-title`}
-              type="text"
-              value={complianceInfo.job_title || ""}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("job_title")}
-              required
-              onChange={(evt) => updateComplianceInfo({ job_title: evt.target.value })}
-            />
-          </Fieldset>
-        ) : null}
         {complianceInfo.country === "JP" ? (
           <>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
@@ -1264,7 +1252,7 @@ const AccountDetailsSection = ({
                 </div>
                 <button
                   type="button"
-                  className="cursor-pointer self-start underline all-unset text-sm"
+                  className="cursor-pointer self-start text-sm underline all-unset"
                   onClick={() => setIsEditingIndividualTaxId(true)}
                   disabled={isFormDisabled}
                 >

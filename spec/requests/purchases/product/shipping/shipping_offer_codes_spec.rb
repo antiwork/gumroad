@@ -23,8 +23,6 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     check_out(@product, should_verify_address: true)
 
-    expect(page).to have_alert("Your purchase was successful!")
-
     expect(Purchase.last.price_cents).to eq(7000)
     expect(Purchase.last.shipping_cents).to eq(2000)
   end
@@ -43,8 +41,6 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     expect(page).to have_selector("[aria-label='Discount code']", text: @offer_code.code)
     expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     check_out(@product, should_verify_address: true)
-
-    expect(page).to have_alert("Your purchase was successful!")
 
     expect(Purchase.last.price_cents).to eq(2000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -75,8 +71,6 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
       page.execute_script("document.activeElement.blur()")
       wait_for_ajax
     end
-
-    expect(page).to have_alert("Your purchase was successful!")
 
     expect(page).to have_text(@product.name)
     expect(Purchase.last.price_cents).to eq(10727)

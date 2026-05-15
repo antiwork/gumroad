@@ -23,7 +23,6 @@
       </main>
     </div>
     <%= javascript_include_tag "application" %>
-    <%= vite_client_tag %>
     <% unless @hide_layouts %>
       <%= vite_typescript_tag "base", skip_style_tags: true %>
     <% end %>

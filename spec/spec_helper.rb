@@ -40,7 +40,7 @@ unless BUILDING_ON_CI
   SuperDiff.configure { |config| config.actual_color = :green }
 end
 
-# NOTE Add only valid errors here. Do not errors we should handle and fix on specs themselves
+# NOTE Add only valid errors here. Do not add errors we should handle and fix on specs themselves
 JSErrorReporter.set_global_ignores [
   /Warning: %s: Support for defaultProps will be removed from function components in a future major release/,
   /(Component closed|Object|zoid destroyed all components)\n\t \(https:\/\/www.paypal.com\/sdk\/js/,
@@ -391,10 +391,10 @@ RSpec.configure do |config|
     config.instance_variable_set(:@curr_file_path, example.metadata[:example_group][:file_path])
     Mongoid.purge!
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
-    options.each { |opt| send(:"setup_#{ opt }", example.metadata[opt.to_sym]) }
+    options.each { |opt| send("setup_#{opt}".to_sym, example.metadata[opt.to_sym]) }
     stub_webmock
     example.run
-    options.each { |opt| send(:"teardown_#{ opt }", example.metadata[opt.to_sym]) }
+    options.each { |opt| send("teardown_#{opt}".to_sym, example.metadata[opt.to_sym]) }
     Rails.cache.clear
     travel_back
   ensure

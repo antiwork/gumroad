@@ -210,21 +210,21 @@ module StripeMerchantAccountManager
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
-    stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-    stripe_person = find_stripe_representative_person(stripe_persons)
+    stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
     user_compliance_info = user.alive_user_compliance_info
 
     current_attributes = person_hash(user_compliance_info, passphrase)
-    relationship_attributes = {
-      representative: true,
-      owner: true,
-      title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
-    }
-    relationship_attributes[:percent_ownership] = 100 unless other_beneficial_owners_present?(stripe_persons, stripe_person)
-    current_attributes.deep_merge!(relationship: relationship_attributes)
+    current_attributes.deep_merge!(relationship: { representative: true })
+    if last_user_compliance_info&.is_individual? && user_compliance_info.is_business?
+      current_attributes.deep_merge!(relationship: {
+                                       owner: true,
+                                       title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE,
+                                       percent_ownership: 100
+                                     })
+    end
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
 
@@ -241,16 +241,6 @@ module StripeMerchantAccountManager
     end
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
-  end
-
-  def self.find_stripe_representative_person(stripe_persons)
-    stripe_persons.find { |person| person[:relationship]&.[](:representative) } || stripe_persons.last
-  end
-
-  def self.other_beneficial_owners_present?(stripe_persons, representative_person)
-    stripe_persons.any? do |person|
-      person.id != representative_person.id && person[:relationship]&.[](:owner)
-    end
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
@@ -521,10 +511,6 @@ module StripeMerchantAccountManager
         }
       }
 
-      if user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2
-        hash.deep_merge!(relationship: { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE })
-      end
-
       if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
         hash.deep_merge!({
                            first_name_kanji: user_compliance_info.first_name_kanji,
@@ -742,7 +728,11 @@ module StripeMerchantAccountManager
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
     else
-      Stripe::Account.list_persons(stripe_account_id, { limit: 1 }).first || {}
+      person = Stripe::Account.list_persons(stripe_account_id, { limit: 1 }).first
+      if person && person["relationship"] && person["relationship"]["representative"] == false
+        person = Stripe::Account.list_persons(stripe_account_id, relationship: { representative: true }, limit: 1).first
+      end
+      person || {}
     end
     individual_verification_status = individual["verification"].try(:[], "status")
     merchant_account.mark_charge_processor_verified! if individual_verification_status == "verified"

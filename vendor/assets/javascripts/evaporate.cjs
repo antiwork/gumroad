@@ -754,4 +754,4 @@ var Evaporate = function(config){
   }
 };
 
-module.exports = Evaporate;
+export default Evaporate;

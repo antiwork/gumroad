@@ -15,6 +15,7 @@ describe "internal admin API routing" do
     expect(route_for("/internal/admin/users/affiliates", :get)).to include(controller: "api/internal/admin/users", action: "affiliates")
     expect(route_for("/internal/admin/users/compliance_info", :get)).to include(controller: "api/internal/admin/users", action: "compliance_info")
     expect(route_for("/internal/admin/users/purchases", :get)).to include(controller: "api/internal/admin/users", action: "purchases")
+    expect(route_for("/internal/admin/users/radar_stats", :get)).to include(controller: "api/internal/admin/users", action: "radar_stats")
     expect(route_for("/internal/admin/users/suspension", :get)).to include(controller: "api/internal/admin/users", action: "suspension")
     expect(route_for("/internal/admin/payouts", :get)).to include(controller: "api/internal/admin/payouts", action: "index")
   end

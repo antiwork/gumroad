@@ -23,13 +23,19 @@ describe Radar::ChargeRiskLevelService do
     end
 
     it "fetches risk level from Stripe and caches it" do
-      stripe_charge = double("Stripe::Charge")
-      allow(stripe_charge).to receive(:dig).with(:outcome, :risk_level).and_return("elevated")
+      stripe_charge = Stripe::Charge.construct_from(outcome: { risk_level: "elevated" })
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(stripe_charge)
 
       expect(described_class.fetch(purchase)).to eq("elevated")
       # Second call uses cache
       expect(described_class.fetch(purchase)).to eq("elevated")
+    end
+
+    it "returns nil when the charge has no risk assessment" do
+      stripe_charge = Stripe::Charge.construct_from(outcome: nil)
+      expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(stripe_charge)
+
+      expect(described_class.fetch(purchase)).to be_nil
     end
 
     context "with a Stripe Connect merchant account" do
@@ -41,8 +47,7 @@ describe Radar::ChargeRiskLevelService do
       end
 
       it "fetches from the connect account" do
-        stripe_charge = double("Stripe::Charge")
-        allow(stripe_charge).to receive(:dig).with(:outcome, :risk_level).and_return("highest")
+        stripe_charge = Stripe::Charge.construct_from(outcome: { risk_level: "highest" })
         expect(Stripe::Charge).to receive(:retrieve).with(
           { id: purchase.stripe_transaction_id },
           { stripe_account: merchant_account.charge_processor_merchant_id }
@@ -52,8 +57,7 @@ describe Radar::ChargeRiskLevelService do
       end
 
       it "falls back to Gumroad account on connect account error" do
-        stripe_charge = double("Stripe::Charge")
-        allow(stripe_charge).to receive(:dig).with(:outcome, :risk_level).and_return("normal")
+        stripe_charge = Stripe::Charge.construct_from(outcome: { risk_level: "normal" })
         expect(Stripe::Charge).to receive(:retrieve).with(
           { id: purchase.stripe_transaction_id },
           { stripe_account: merchant_account.charge_processor_merchant_id }
@@ -78,10 +82,8 @@ describe Radar::ChargeRiskLevelService do
       non_stripe = create_test_purchase
       non_stripe.update_column(:stripe_transaction_id, nil)
 
-      charge1 = double("Stripe::Charge")
-      charge2 = double("Stripe::Charge")
-      allow(charge1).to receive(:dig).with(:outcome, :risk_level).and_return("normal")
-      allow(charge2).to receive(:dig).with(:outcome, :risk_level).and_return("elevated")
+      charge1 = Stripe::Charge.construct_from(outcome: { risk_level: "normal" })
+      charge2 = Stripe::Charge.construct_from(outcome: { risk_level: "elevated" })
 
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).and_return(charge1)
       expect(Stripe::Charge).to receive(:retrieve).with(purchase2.stripe_transaction_id).and_return(charge2)
@@ -94,8 +96,7 @@ describe Radar::ChargeRiskLevelService do
     end
 
     it "caches nil results and does not re-fetch from Stripe" do
-      charge = double("Stripe::Charge")
-      allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return(nil)
+      charge = Stripe::Charge.construct_from(outcome: { risk_level: nil })
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(charge)
 
       # First bulk fetch — calls Stripe, gets nil
@@ -108,8 +109,7 @@ describe Radar::ChargeRiskLevelService do
     end
 
     it "uses cache for already-fetched purchases" do
-      charge = double("Stripe::Charge")
-      allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return("highest")
+      charge = Stripe::Charge.construct_from(outcome: { risk_level: "highest" })
       expect(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).once.and_return(charge)
 
       described_class.fetch_bulk([purchase])
@@ -122,8 +122,7 @@ describe Radar::ChargeRiskLevelService do
       duplicate = create_test_purchase
       duplicate.update_column(:stripe_transaction_id, shared_txn_id)
 
-      charge = double("Stripe::Charge")
-      allow(charge).to receive(:dig).with(:outcome, :risk_level).and_return("elevated")
+      charge = Stripe::Charge.construct_from(outcome: { risk_level: "elevated" })
       expect(Stripe::Charge).to receive(:retrieve).with(shared_txn_id).once.and_return(charge)
 
       results = described_class.fetch_bulk([purchase, duplicate])

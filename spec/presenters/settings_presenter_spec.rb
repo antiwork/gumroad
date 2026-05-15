@@ -174,8 +174,15 @@ describe SettingsPresenter do
   end
 
   describe "#application_props" do
-    let(:app) do create(:oauth_application, name: "Test", redirect_uri: "https://example.com/test",
-                                            uid: "uid-1234", secret: "secret-123") end
+    let(:app) do
+      create(
+        :oauth_application,
+        name: "Test",
+        redirect_uri: "https://example.com/test",
+        uid: "uid-1234",
+        secret: "secret-123"
+      )
+    end
 
     it "returns the correct data" do
       expect(presenter.application_props(app)).to eq(
@@ -265,7 +272,7 @@ describe SettingsPresenter do
     let!(:third_party_analytic) { create(:third_party_analytic, user: seller) }
 
     it "returns the correct props" do
-      expect(presenter.third_party_analytics_props).to eq ({
+      expect(presenter.third_party_analytics_props).to eq({
         disable_third_party_analytics: false,
         google_analytics_id: "",
         facebook_pixel_id: "",
@@ -398,7 +405,6 @@ describe SettingsPresenter do
 
       access_grant2 = Doorkeeper::AccessGrant.create!(application_id: oauth_application2.id, resource_owner_id: seller.id, redirect_uri: oauth_application2.redirect_uri,
                                                       expires_in: 1.day.from_now, scopes: Doorkeeper.configuration.public_scopes.join(" "))
-
 
       access_grant1.update!(created_at: 1.day.ago)
       access_grant2.update!(created_at: 2.days.ago)
@@ -584,6 +590,7 @@ describe SettingsPresenter do
         payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
+        can_manage_beneficial_owners: false,
       }
     end
 
@@ -1049,6 +1056,29 @@ describe SettingsPresenter do
         expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(nil)
+      end
+    end
+  end
+
+  describe "#payments_props :can_manage_beneficial_owners gating" do
+    before do
+      create(:user_compliance_info_business, user: seller)
+      create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test_bo_gate")
+    end
+
+    it "exposes true for the owner of a business with a Gumroad-managed Stripe account" do
+      expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(true)
+    end
+
+    context "when the logged-in user is an admin for the seller" do
+      let(:user) { create(:user) }
+
+      before do
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+      end
+
+      it "exposes false so the section is hidden from team admins who lack :update? on payments" do
+        expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(false)
       end
     end
   end

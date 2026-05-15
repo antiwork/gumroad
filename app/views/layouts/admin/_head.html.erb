@@ -8,6 +8,8 @@
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
   <% end %>
+  <%= vite_client_tag %>
+  <%= vite_react_refresh_tag(nonce: SecureHeaders.content_security_policy_script_nonce(request)) %>
   <%= vite_entrypoint_stylesheet_tag "admin" %>
   <%= inertia_rendering? ? inertia_meta_tags : erb_meta_tags %>
   <%= yield :style %>
