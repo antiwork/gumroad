@@ -165,6 +165,29 @@ def reset_browser_session(example)
   force_browser_restart!
 end
 
+FLAKY_SPECS_LOG_PATH = Rails.root.join("log", "flaky_specs.log").freeze
+
+def record_flaky_spec(example)
+  exception = example.exception
+  return unless exception
+
+  metadata = example.metadata
+  location = metadata[:location] || "#{metadata[:file_path]}:#{metadata[:line_number]}"
+  entry = {
+    timestamp: Time.now.utc.iso8601,
+    location: location,
+    description: example.full_description,
+    exception_class: exception.class.name,
+    exception_message: exception.message.to_s[0, 500],
+    attempt: metadata[:retry_attempts].to_i + 1,
+    build: ENV["GITHUB_RUN_ID"] || ENV["KNAPSACK_PRO_CI_NODE_BUILD_ID"],
+    shard: ENV["KNAPSACK_PRO_CI_NODE_INDEX"] || ENV["CI_NODE_INDEX"],
+  }
+  File.open(FLAKY_SPECS_LOG_PATH, "a") { |f| f.puts(entry.to_json) }
+rescue StandardError => e
+  Rails.logger.warn("[RSpec retry] Failed to record flaky spec: #{e.class}: #{e.message}")
+end
+
 # Harden teardown_fixtures so that a corrupted SAVEPOINT doesn't skip pool
 # unlock and connection cleanup. Without this, a single SAVEPOINT failure
 # poisons every subsequent retry because lock_thread is never reset and
@@ -214,10 +237,15 @@ RSpec.configure do |config|
     config.verbose_retry = true
     # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
-    config.default_retry_count = 3
+    config.default_retry_count = 1
+    config.around(:each, type: :system) do |example|
+      example.metadata[:retry] ||= 2
+      example.run
+    end
     config.retry_callback = proc do |example|
       reset_db_connection(example)
       reset_browser_session(example)
+      record_flaky_spec(example)
     end
   end
 
