@@ -31,7 +31,7 @@ describe("Product checkout - with affiliate", type: :system, js: true) do
       expect(affiliate_cookie).to be_present
 
       add_to_cart(product)
-      Selenium::WebDriver::Wait.new.until { Cart.alive.one? }
+      Timeout.timeout(10) { sleep 0.1 until Cart.alive.one? }
       expect(Cart.first.cart_products.first).to have_attributes(product:, affiliate:)
     end
 

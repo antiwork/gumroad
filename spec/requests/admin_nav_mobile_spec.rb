@@ -17,7 +17,8 @@ describe("Admin - Nav - Mobile", :js, :mobile_view, type: :system) do
     expect(page).to have_link("Block emails")
 
     click_on "Block emails"
-    expect(page).to_not have_link("Suspend users")
-    expect(page).to_not have_link("Block emails")
+    expect(page).to have_current_path(admin_blocked_emails_path)
+    expect(page).to have_no_link("Suspend users", wait: 10)
+    expect(page).to have_no_link("Block emails", wait: 10)
   end
 end

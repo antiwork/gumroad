@@ -13,7 +13,7 @@ module CapybaraHelpers
 
   def wait_for_ajax
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until finished_all_ajax_requests?
+      sleep 0.05 until finished_all_ajax_requests?
     end
   end
 
@@ -27,7 +27,7 @@ module CapybaraHelpers
     page.visit(url)
     return if Capybara.current_driver == :rack_test
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until page.evaluate_script("document.readyState") == "complete"
+      sleep 0.05 until page.evaluate_script("document.readyState") == "complete"
     end
     wait_for_ajax
   end
@@ -70,7 +70,7 @@ module CapybaraHelpers
 
   def accept_browser_dialog
     page.driver.browser.switch_to.alert.accept
-  rescue Selenium::WebDriver::Error::NoSuchAlertError
+  rescue StandardError
     sleep 0.5
     page.driver.browser.switch_to.alert.accept
   end
