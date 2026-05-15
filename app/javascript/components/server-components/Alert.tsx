@@ -59,17 +59,19 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       }}
     >
       <Alert variant={alert?.status}>
-        <div className="flex-1" dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}>
-          {!alert?.html ? alert?.message : null}
+        <div className="flex items-center gap-2">
+          <div className="flex-1" dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}>
+            {!alert?.html ? alert?.message : null}
+          </div>
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer text-muted hover:text-primary"
+            aria-label="Close"
+            onClick={dismiss}
+          >
+            <X className="size-4" />
+          </button>
         </div>
-        <button
-          type="button"
-          className="shrink-0 cursor-pointer text-muted hover:text-primary"
-          aria-label="Close"
-          onClick={dismiss}
-        >
-          <X className="size-4" />
-        </button>
       </Alert>
     </div>
   );
