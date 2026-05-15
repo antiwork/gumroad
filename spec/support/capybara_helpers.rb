@@ -95,9 +95,9 @@ module CapybaraHelpers
   #   expect(flash_message).to eq "Changes saved!"
   #   # alert is now dismissed, safe to interact with content beneath it
   def flash_message
-    alert = find(:alert)
-    message = alert.text.split("\n").last
-    within(alert) { click_on "Close" }
+    toast = find("[data-testid='toast-alert']")
+    message = toast.text
+    within(toast) { click_on "Close" }
     message
   end
 
