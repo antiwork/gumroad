@@ -174,7 +174,16 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     ]
     physical_skus_product.save!
 
-    embed_page_url = create_embed_page(physical_skus_product, template_name: "embed_page.html.erb", outbound: false, gumroad_params: "quantity=2&price=3&Age=21&Gender=Male&option=#{physical_skus_product.skus.find_by(name: "Blue - Extra Large - Polo").external_id}")
+    selected_sku = physical_skus_product.skus.find_by!(name: "Blue - Extra Large - Polo")
+    gumroad_params = {
+      "quantity" => 2,
+      "price" => 3,
+      "Age" => 21,
+      "Gender" => "Male",
+      "option" => selected_sku.external_id,
+    }.to_query
+
+    embed_page_url = create_embed_page(physical_skus_product, template_name: "embed_page.html.erb", outbound: false, gumroad_params:)
     visit(embed_page_url)
 
     within_frame do
