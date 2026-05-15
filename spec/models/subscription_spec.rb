@@ -3936,6 +3936,31 @@ describe Subscription, :vcr do
       expect(subscription.current_subscription_price_cents).to eq(1_500)
     end
 
+    it "keeps the selected PWYW renewal price when the cached tier is non-zero percent" do
+      tiered_code.update!(
+        amount_percentage: 25,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 25 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_125, displayed_price_cents: 1_125, created_at: 1.month.ago)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(25)
+      expect(subscription.current_subscription_price_cents).to eq(1_125)
+    end
+
     it "applies the advanced tier to the selected PWYW renewal price" do
       original_purchase = subscription.original_purchase
       original_purchase.update!(offer_code: tiered_code, price_cents: 1_500, displayed_price_cents: 1_500)

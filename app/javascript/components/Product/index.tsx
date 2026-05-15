@@ -198,6 +198,20 @@ export const getStandalonePrice = (product: Product) =>
     0,
   );
 
+const formatDiscountAmount = (discount: Discount, currencyCode: CurrencyCode) => {
+  if (discount.type === "percent") {
+    return discount.tiered && discount.min_percents !== undefined && discount.max_percents !== undefined
+      ? discount.min_percents === discount.max_percents
+        ? `${discount.max_percents}%`
+        : `${discount.min_percents}%–${discount.max_percents}%`
+      : `${discount.percents}%`;
+  }
+
+  return formatPriceCentsWithCurrencySymbol(currencyCode, discount.cents, {
+    symbolFormat: "long",
+  });
+};
+
 export const useSelectionFromUrl = (product: Product) => {
   const { searchParams } = new URL(useOriginalLocation());
   return React.useState<PriceSelection>(() => {
@@ -489,18 +503,8 @@ export const Product = ({
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity
-                      ? `Get ${
-                          discountCode.discount.type === "percent"
-                            ? `${discountCode.discount.percents}%`
-                            : formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
-                                symbolFormat: "long",
-                              })
-                        } off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
-                      : discountCode.discount.type === "percent"
-                        ? `${discountCode.discount.percents}% off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
-                        : `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
-                            symbolFormat: "long",
-                          })} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
+                      ? `Get ${formatDiscountAmount(discountCode.discount, product.currency_code)} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                      : `${formatDiscountAmount(discountCode.discount, product.currency_code)} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
                     ) : null}

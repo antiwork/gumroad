@@ -1026,6 +1026,24 @@ describe OfferCode do
         expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
       end
 
+      it "returns tier metadata for unauthenticated display" do
+        expect(offer_code.discount_for_display).to include(
+          type: "percent",
+          percents: 50,
+          tiered: true,
+          min_percents: 10,
+          max_percents: 50,
+        )
+      end
+
+      it "ignores purchases that do not grant library ownership" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_gift_sender_purchase: true)
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_access_revoked: true)
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_additional_contribution: true)
+
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
       it "counts calendar months across yearly anniversaries" do
         travel_to(Time.zone.local(2026, 5, 14, 12)) do
           create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 1.year.ago)

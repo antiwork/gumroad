@@ -209,6 +209,22 @@ class OfferCode < ApplicationRecord
     )
   end
 
+  def discount_for_display(buyer: nil)
+    return evaluate_for_buyer(buyer) if buyer.present?
+    return discount unless tiered?
+
+    percentages = normalized_ownership_duration_tiers.map { _1["amount_percentage"] }
+    min_percentage = percentages.min
+    max_percentage = percentages.max
+    discount.merge(
+      type: "percent",
+      percents: max_percentage,
+      tiered: true,
+      min_percents: min_percentage,
+      max_percents: max_percentage
+    )
+  end
+
   def tiered?
     ownership_duration_tiers.present?
   end
@@ -241,10 +257,14 @@ class OfferCode < ApplicationRecord
     return nil if ownership_products.empty?
 
     oldest = Purchase
-      .where(purchaser_id: buyer.id, link_id: ownership_products.map(&:id))
       .all_success_states
+      .not_is_additional_contribution
+      .not_recurring_charge
+      .not_is_gift_sender_purchase
+      .not_refunded_except_subscriptions
       .not_chargedback_or_chargedback_reversed
-      .not_fully_refunded
+      .not_is_access_revoked
+      .where(purchaser_id: buyer.id, link_id: ownership_products.map(&:id))
       .order(:created_at)
       .pick(:created_at)
     return nil if oldest.nil?

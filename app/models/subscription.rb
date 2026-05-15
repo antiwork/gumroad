@@ -1010,14 +1010,22 @@ class Subscription < ApplicationRecord
     end
 
     def renewal_pre_discount_total_cents
-      return original_purchase.displayed_price_cents if cached_zero_percent_tiered_renewal_discount?
+      return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
 
       original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
     end
 
-    def cached_zero_percent_tiered_renewal_discount?
+    def cached_tiered_pwyw_renewal_pre_discount_total_cents
       discount = original_purchase.purchase_offer_code_discount
-      discount&.offer_code&.tiered? && discount.offer_code_is_percent && discount.offer_code_amount.to_i.zero?
+      return nil unless discount&.offer_code&.tiered? && discount.offer_code_is_percent
+
+      cached_pre_discount_total_cents = discount.pre_discount_minimum_price_cents * renewal_purchase_quantity
+      return nil unless original_purchase.displayed_price_cents > cached_pre_discount_total_cents
+
+      cached_percent = discount.offer_code_amount.to_i
+      return original_purchase.displayed_price_cents if cached_percent.zero?
+
+      (original_purchase.displayed_price_cents / (1 - cached_percent / 100.0)).round
     end
 
     def renewal_pre_discount_price_cents
