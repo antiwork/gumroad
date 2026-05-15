@@ -4131,6 +4131,40 @@ describe Subscription, :vcr do
       expect(subscription.auto_renewal_offer_code).to be_nil
     end
 
+    it "ignores deleted zeroed original discounts when discovering renewal discounts" do
+      tiered_code.mark_deleted!
+      deleted_code = create(:offer_code,
+                            user: seller,
+                            code: "deletedoriginal",
+                            products: [product],
+                            amount_cents: 50,
+                            currency_type: product.price_currency_type)
+      subscription.original_purchase.update!(offer_code: deleted_code)
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code: deleted_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: false,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      deleted_code.mark_deleted!
+      replacement_code = create(:offer_code,
+                                user: seller,
+                                code: "replacementafterdeleted",
+                                products: [product],
+                                ownership_products: [product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(replacement_code)
+      expect(auto.resolved_percent).to eq(25)
+      expect(subscription.current_subscription_price_cents).to eq(150)
+    end
+
     it "re-evaluates tiered discounts attached to the original purchase" do
       subscription.original_purchase.update!(offer_code: tiered_code)
       subscription.original_purchase.create_purchase_offer_code_discount!(
