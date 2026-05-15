@@ -7,6 +7,8 @@ describe "internal admin API routing" do
     Rails.application.routes.recognize_path("https://#{API_DOMAIN}#{path}", method:)
   end
 
+  # Contract for gumroad-cli: these are read-only GET routes the CLI depends on.
+  # "Safe" here means no server-side state mutation (unlike write/refund/watch endpoints below).
   it "routes the safe read endpoints that gumroad-cli consumes" do
     expect(route_for("/internal/admin/purchases/123", :get)).to include(controller: "api/internal/admin/purchases", action: "show", id: "123")
     expect(route_for("/internal/admin/purchases/search", :get)).to include(controller: "api/internal/admin/purchases", action: "search")
