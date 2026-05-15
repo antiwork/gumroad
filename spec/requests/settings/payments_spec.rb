@@ -869,7 +869,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("First name", with: "CA")
         fill_in("Last name", with: "Creator")
-        fill_in("Job title", with: "General Manager")
         all('select[id$="creator-country"]').last.select("Canada")
         all('input[id$="creator-street-address"]').last.set("address_full_match")
         all('input[id$="creator-city"]').last.set("Toronto")

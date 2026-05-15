@@ -728,7 +728,11 @@ module StripeMerchantAccountManager
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
     else
-      Stripe::Account.list_persons(stripe_account_id, relationship: { representative: true }, limit: 1).first || {}
+      person = Stripe::Account.list_persons(stripe_account_id, { limit: 1 }).first
+      if person && !person["relationship"]&.[]("representative")
+        person = Stripe::Account.list_persons(stripe_account_id, relationship: { representative: true }, limit: 1).first
+      end
+      person || {}
     end
     individual_verification_status = individual["verification"].try(:[], "status")
     merchant_account.mark_charge_processor_verified! if individual_verification_status == "verified"
