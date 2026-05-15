@@ -212,7 +212,9 @@ const DiscountsPage = ({
 
   // Handle browser actions for navigating to the previous/next page
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const params = typia.is<QueryParams>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
+    const params = typia.is<QueryParams>(e.state)
+      ? e.state
+      : extractParams(new URLSearchParams(window.location.search));
     const newSort = params.sort;
     const newQuery = params.query;
     const page = params.page ?? 1;
