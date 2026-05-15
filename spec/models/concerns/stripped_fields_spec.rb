@@ -29,7 +29,7 @@ describe StrippedFields do
 
     include StrippedFields
 
-    stripped_fields :name, :email, transform: ->(v) { v.upcase }
+    stripped_fields :name, :email, transform: ->(v) { v&.upcase }
     stripped_fields :description, nilify_blanks: false
     stripped_fields :sql, remove_duplicate_spaces: false
     stripped_fields :code, transform: ->(v) { v.gsub(/\s/, "") }
