@@ -391,10 +391,10 @@ RSpec.configure do |config|
     config.instance_variable_set(:@curr_file_path, example.metadata[:example_group][:file_path])
     Mongoid.purge!
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
-    options.each { |opt| send(:"setup_#{ opt }", example.metadata[opt.to_sym]) }
+    options.each { |opt| send("setup_#{opt}".to_sym, example.metadata[opt.to_sym]) }
     stub_webmock
     example.run
-    options.each { |opt| send(:"teardown_#{ opt }", example.metadata[opt.to_sym]) }
+    options.each { |opt| send("teardown_#{opt}".to_sym, example.metadata[opt.to_sym]) }
     Rails.cache.clear
     travel_back
   ensure
