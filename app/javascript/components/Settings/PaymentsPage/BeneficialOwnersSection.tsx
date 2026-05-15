@@ -1083,7 +1083,19 @@ const BeneficialOwnersSection = ({
                     disabled={isFormDisabled}
                     required
                     value={formState.address_country || ""}
-                    onChange={(event) => updateForm({ address_country: event.target.value, address_state: "" })}
+                    onChange={(event) =>
+                      updateForm({
+                        address_country: event.target.value,
+                        address_line1: "",
+                        address_city: "",
+                        address_state: "",
+                        address_postal_code: "",
+                        address_building_number: "",
+                        address_building_number_kana: "",
+                        address_street_address_kanji: "",
+                        address_street_address_kana: "",
+                      })
+                    }
                   >
                     <option value="" disabled>
                       Country
