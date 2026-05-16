@@ -1072,6 +1072,7 @@ class Subscription < ApplicationRecord
       return false unless discount_applies_to_next_charge? && original_purchase
       return false if original_renewal_offer_code&.tiered?
       return false if original_purchase.offer_code&.deleted? &&
+        original_purchase.purchase_offer_code_discount.present? &&
         original_purchase.purchase_offer_code_discount&.offer_code_amount.to_i.zero?
 
       original_purchase.purchase_offer_code_discount.present? || original_purchase.offer_code.present?

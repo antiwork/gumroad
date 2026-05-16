@@ -1007,6 +1007,7 @@ describe Subscription, :vcr do
           end
 
           it "allows recurring charges to go through and create new purchase row", :vcr do
+            expect(@subscription.current_subscription_price_cents).to eq(0)
             expect { @subscription.charge! }.to change { Purchase.count }.by(1)
           end
 
