@@ -179,7 +179,7 @@ class CheckoutPresenter
     if tier.present? && !options.any? { |option| option[:id] == tier.external_id }
       options << tier.to_option(subscription_attrs: tier_attrs)
     end
-    discount = subscription_discount_for_next_charge(subscription)
+    discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
     prices = product.prices.alive.is_buy.to_a
     if !prices.any? { |price| price.recurrence == subscription.recurrence }
       prices << product.prices.is_buy.where(recurrence: subscription.recurrence).order(deleted_at: :desc).take
@@ -210,7 +210,7 @@ class CheckoutPresenter
         id: subscription.external_id,
         option_id: (subscription.original_purchase.variant_attributes[0] || product.default_tier)&.external_id,
         recurrence: subscription.recurrence,
-        price: subscription.current_subscription_price_cents,
+        price: subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user),
         prorated_discount_price_cents: subscription.prorated_discount_price_cents,
         quantity: subscription.original_purchase.quantity,
         alive: subscription.alive?(include_pending_cancellation: false),
@@ -357,8 +357,8 @@ class CheckoutPresenter
       purchased_product_variant_set.include?([product&.id, variant&.id])
     end
 
-    def subscription_discount_for_next_charge(subscription)
-      if (auto = subscription.auto_renewal_offer_code)
+    def subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
+      if (auto = subscription.auto_renewal_offer_code(authenticated_offer_code_buyer: buyer))
         return auto.offer_code.discount.merge(
           auto.offer_code_is_percent ? { type: "percent", percents: auto.offer_code_amount } : { type: "fixed", cents: auto.offer_code_amount }
         )
@@ -370,6 +370,6 @@ class CheckoutPresenter
       original_offer_code = original_purchase&.purchase_offer_code_discount&.offer_code || original_purchase&.offer_code
       return nil if original_offer_code&.existing_customers_only? && original_offer_code&.tiered?
 
-      subscription.original_offer_code&.discount_for_display
+      subscription.original_offer_code&.discount_for_display(buyer:)
     end
 end

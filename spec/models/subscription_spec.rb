@@ -4093,6 +4093,28 @@ describe Subscription, :vcr do
       expect(renewal_purchase.purchase_offer_code_discount).to be_nil
     end
 
+    it "handles a cached 100 percent PWYW tier" do
+      tiered_code.update!(
+        amount_percentage: 100,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 100 },
+          { "months" => 12, "amount_percentage" => 100 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update_columns(offer_code_id: tiered_code.id, price_cents: 0, displayed_price_cents: 1_500, created_at: 1.month.ago)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      expect { subscription.current_subscription_price_cents }.not_to raise_error
+      expect(subscription.current_subscription_price_cents).to eq(0)
+    end
+
     it "keeps the selected PWYW renewal price when the cached tier is non-zero percent" do
       tiered_code.update!(
         amount_percentage: 25,

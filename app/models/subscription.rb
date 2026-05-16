@@ -1055,6 +1055,7 @@ class Subscription < ApplicationRecord
       return nil unless original_purchase.displayed_price_cents > discounted_base_total_cents
 
       return original_purchase.displayed_price_cents if cached_percent.zero?
+      return original_purchase.displayed_price_cents if cached_percent >= 100
 
       (original_purchase.displayed_price_cents / (1 - cached_percent / 100.0)).round
     end
