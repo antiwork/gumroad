@@ -2019,6 +2019,50 @@ describe Subscription, :vcr do
       expect(new_purchase.displayed_price_cents).to eq 10_00
     end
 
+    it "does not use the subscription owner to auto-discover discounts for unauthenticated updates",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      create(:tiered_offer_code, code: "autovictim", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: @new_tier_yearly_price.price_cents,
+        authenticated_offer_code_buyer: nil,
+      )
+
+      expect(new_purchase.offer_code).to be_nil
+      expect(new_purchase.purchase_offer_code_discount).to be_nil
+      expect(new_purchase.displayed_price_cents).to eq(@new_tier_yearly_price.price_cents)
+    end
+
+    it "keeps a re-resolved tiered discount when clear_discount is true",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      offer_code = create(:tiered_offer_code, code: "tieredrestart", products: [@product], ownership_products: [@product], user: @product.user)
+      @original_purchase.update!(offer_code:)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: nil,
+      )
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 10_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      expect(new_purchase.offer_code).to eq(offer_code)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(new_purchase.displayed_price_cents).to eq(10_00)
+    end
+
     it "does not use the subscription owner to qualify unauthenticated discount updates",
        vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
@@ -4137,10 +4181,16 @@ describe Subscription, :vcr do
 
     it "memoizes missing renewal discounts until reload" do
       tiered_code.mark_deleted!
-      expect(subscription).to receive(:compute_auto_renewal_offer_code).once.and_call_original
+      expect(subscription).to receive(:compute_auto_renewal_offer_code).with(buyer).once.and_call_original
 
       expect(subscription.auto_renewal_offer_code).to be_nil
       expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "does not reuse subscriber-memoized discounts for explicit guest checks" do
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(tiered_code)
+
+      expect(subscription.auto_renewal_offer_code(authenticated_offer_code_buyer: nil)).to be_nil
     end
 
     it "returns nil when the original purchase already carries a still-applicable discount" do

@@ -206,7 +206,7 @@ class Subscription < ApplicationRecord
     payment_option.price
   end
 
-  def current_subscription_price_cents
+  def current_subscription_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     return original_purchase.minimum_paid_price_cents if is_installment_plan
 
     if reuse_original_discount_on_next_charge?
@@ -214,16 +214,20 @@ class Subscription < ApplicationRecord
     end
 
     pre_discount = renewal_pre_discount_total_cents
-    auto = auto_renewal_offer_code
+    auto = auto_renewal_offer_code(authenticated_offer_code_buyer:)
     return pre_discount unless auto
 
     [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
   end
 
-  def auto_renewal_offer_code
+  def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+      return compute_auto_renewal_offer_code(authenticated_offer_code_buyer)
+    end
+
     return @_auto_renewal_offer_code if instance_variable_defined?(:@_auto_renewal_offer_code)
 
-    @_auto_renewal_offer_code = compute_auto_renewal_offer_code
+    @_auto_renewal_offer_code = compute_auto_renewal_offer_code(user)
   end
 
   def reload(*)
@@ -246,9 +250,9 @@ class Subscription < ApplicationRecord
     save! if persisted?
   end
 
-  def build_purchase(override_params: {}, from_failed_charge_email: false)
+  def build_purchase(override_params: {}, from_failed_charge_email: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     perceived_price_cents = override_params.delete(:perceived_price_cents)
-    perceived_price_cents ||= current_subscription_price_cents
+    perceived_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
     is_upgrade_purchase = override_params.delete(:is_upgrade_purchase)
 
     purchase_params = { price_range: perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0),
@@ -273,6 +277,9 @@ class Subscription < ApplicationRecord
     purchase_params.merge!(override_params)
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
+    unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+      purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
+    end
 
     reuse_original_discount = reuse_original_discount_on_next_charge?
     if reuse_original_discount && original_purchase.purchase_offer_code_discount.present?
@@ -287,7 +294,7 @@ class Subscription < ApplicationRecord
       )
     elsif reuse_original_discount && original_purchase.offer_code.present?
       purchase.offer_code = original_purchase.offer_code
-    elsif (auto = auto_renewal_offer_code)
+    elsif (auto = auto_renewal_offer_code(authenticated_offer_code_buyer:))
       pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
       purchase.offer_code = auto.offer_code
       if auto.offer_code_amount.positive?
@@ -498,7 +505,8 @@ class Subscription < ApplicationRecord
       # build new original subscription purchase
       new_purchase = build_purchase(override_params: { is_original_subscription_purchase: true,
                                                        email: original_purchase.email,
-                                                       is_free_trial_purchase: original_purchase.is_free_trial_purchase })
+                                                       is_free_trial_purchase: original_purchase.is_free_trial_purchase },
+                                    authenticated_offer_code_buyer:)
       # avoid failing `Purchase#variants_available` validation if reverting back to the original set of variants & those variants are unavailable
       new_purchase.original_variant_attributes = original_purchase.variant_attributes
       # avoid failing `Purchase#price_not_too_low` validation if reverting back to the original subscription price & price has been deleted
@@ -516,9 +524,6 @@ class Subscription < ApplicationRecord
       new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
-      unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
-        new_purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
-      end
 
       license = original_purchase.license
       license.purchase = new_purchase if license.present?
@@ -535,7 +540,7 @@ class Subscription < ApplicationRecord
       if offer_code.present?
         new_purchase.offer_code = offer_code
         new_purchase.purchase_offer_code_discount = nil
-      elsif clear_discount
+      elsif clear_discount && !new_purchase.offer_code&.tiered?
         new_purchase.offer_code = nil
         new_purchase.purchase_offer_code_discount = nil
       elsif clear_deleted_discount && new_purchase.offer_code&.deleted? && !new_purchase.offer_code.tiered?
@@ -971,9 +976,9 @@ class Subscription < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(*args)
     end
 
-    def compute_auto_renewal_offer_code
+    def compute_auto_renewal_offer_code(offer_code_buyer)
       return nil if is_installment_plan
-      return nil if user.nil? || link.nil? || original_purchase.nil?
+      return nil if offer_code_buyer.nil? || link.nil? || original_purchase.nil?
       return nil if reuse_original_discount_on_next_charge?
 
       product_codes = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
@@ -991,7 +996,7 @@ class Subscription < ApplicationRecord
         .filter_map do |offer_code|
           next unless eligible_auto_renewal_offer_code?(offer_code)
 
-          resolved = offer_code.evaluate_for_buyer(user)
+          resolved = offer_code.evaluate_for_buyer(offer_code_buyer)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
           [auto_discount, auto_renewal_discount_amount_off_cents(auto_discount, renewal_pre_discount_total_cents)]
