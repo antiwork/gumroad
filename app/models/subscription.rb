@@ -560,7 +560,7 @@ class Subscription < ApplicationRecord
           offer_code_is_percent: copied_discount.offer_code_is_percent,
           duration_in_months: copied_discount.duration_in_months
         )
-      elsif new_purchase.offer_code.present? && (original_discount = original_purchase.purchase_offer_code_discount)
+      elsif new_purchase.offer_code.present? && new_purchase.offer_code == original_purchase.offer_code && (original_discount = original_purchase.purchase_offer_code_discount)
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,

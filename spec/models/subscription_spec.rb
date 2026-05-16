@@ -2037,6 +2037,42 @@ describe Subscription, :vcr do
       expect(new_purchase.displayed_price_cents).to eq(@new_tier_yearly_price.price_cents)
     end
 
+    it "does not copy an exhausted original discount onto a different auto-discovered tiered discount",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      @original_purchase.update!(created_at: 1.month.ago)
+      original_offer_code = create(:offer_code,
+                                   code: "singlecycle",
+                                   products: [@product],
+                                   amount_cents: nil,
+                                   amount_percentage: 50,
+                                   currency_type: nil,
+                                   duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 50,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1,
+      )
+      tiered_offer_code = create(:tiered_offer_code, code: "zeroseedplan", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      expect(new_purchase.offer_code).to eq(tiered_offer_code)
+      expect(new_discount.offer_code).to eq(tiered_offer_code)
+      expect(new_discount.offer_code_amount).to eq(0)
+      expect(new_discount.offer_code_is_percent).to eq(true)
+      expect(new_discount.duration_in_months).to be_nil
+      expect(new_purchase.displayed_price_cents).to eq(@new_tier_yearly_price.price_cents)
+    end
+
     it "keeps a re-resolved tiered discount when clear_discount is true",
        vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
