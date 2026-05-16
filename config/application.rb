@@ -53,7 +53,7 @@ module Gumroad
     config.eager_load_paths += %w[./lib/errors]
     config.eager_load_paths += Dir[Rails.root.join("app", "business", "**/")]
 
-    config.middleware.insert_before(ActionDispatch::Cookies, Rack::SSL, exclude: ->(env) { env["HTTP_HOST"] != DOMAIN || Rails.env.test? || Rails.env.development? })
+    config.middleware.insert_before(ActionDispatch::Cookies, ActionDispatch::SSL, redirect: { exclude: ->(request) { request.host != DOMAIN || Rails.env.test? || Rails.env.development? } })
 
     config.action_view.sanitized_allowed_tags = ["div", "p", "a", "u", "strong", "b", "em", "i", "br"]
     config.action_view.sanitized_allowed_attributes = ["href", "class", "target"]

@@ -6,9 +6,7 @@ describe WithFileProperties do
   PROPERTIES = %i[size duration width height framerate bitrate pagelength].freeze
 
   def stub_for_word_doc
-    output_double = double
-    allow(output_double).to receive(:output).and_return("Number of Pages = 2")
-    allow(Subexec).to receive(:run).and_return(output_double)
+    allow(Open3).to receive(:capture3).with("wvSummary", anything).and_return(["Number of Pages = 2", "", double(success?: true)])
   end
 
   def stub_for_pdf
@@ -18,9 +16,7 @@ describe WithFileProperties do
   end
 
   def stub_for_ppt
-    output_double = double
-    allow(output_double).to receive(:output).and_return("Number of Slides = 7")
-    allow(Subexec).to receive(:run).and_return(output_double)
+    allow(Open3).to receive(:capture3).with("bash", "-c", anything).and_return(["Number of Slides = 7", "", double(success?: true)])
   end
 
   before do
