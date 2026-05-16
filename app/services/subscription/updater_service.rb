@@ -295,7 +295,8 @@ class Subscription::UpdaterService
       self.upgrade_purchase = subscription.charge!(
         override_params: purchase_params,
         from_failed_charge_email: ActiveModel::Type::Boolean.new.cast(params[:declined]),
-        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?
+        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?,
+        authenticated_offer_code_buyer: logged_in_user,
       )
 
       subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||

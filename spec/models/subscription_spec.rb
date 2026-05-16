@@ -437,6 +437,30 @@ describe Subscription, :vcr do
   end
 
   describe "#charge!" do
+    it "uses the authenticated buyer when resolving charge discounts" do
+      ownership_product = create(:product, user: @product.user)
+      authenticated_buyer = create(:user)
+      create(:purchase, link: ownership_product, seller: @product.user, purchaser: authenticated_buyer, price_cents: ownership_product.price_cents)
+      offer_code = create(:offer_code,
+                          code: "authenticatedbuyer",
+                          user: @product.user,
+                          products: [@product],
+                          ownership_products: [ownership_product],
+                          existing_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 1,
+                          currency_type: nil)
+      allow(@subscription).to receive(:process_purchase!) { |purchase, _from_failed_charge_email, off_session:| purchase }
+
+      @new_purchase = @subscription.charge!(authenticated_offer_code_buyer: authenticated_buyer)
+
+      expect(@new_purchase.offer_code).to eq(offer_code)
+      expect(@new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(1)
+      expect(@new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+    end
+  end
+
+  describe "#charge!" do
     before do
       @subscription.user.update!(credit_card: create(:credit_card))
     end
@@ -2103,6 +2127,48 @@ describe Subscription, :vcr do
       expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
       expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
       expect(new_purchase.displayed_price_cents).to eq(10_00)
+    end
+
+    it "keeps a re-resolved non-tiered discount when clear_discount is true",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      original_offer_code = create(:offer_code,
+                                   code: "singlecycle",
+                                   products: [@product],
+                                   amount_cents: nil,
+                                   amount_percentage: 20,
+                                   currency_type: nil,
+                                   duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 20,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1,
+      )
+      replacement_code = create(:offer_code,
+                                code: "loyalrestart",
+                                user: @product.user,
+                                products: [@product],
+                                ownership_products: [@product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 15_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      expect(new_purchase.offer_code).to eq(replacement_code)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(new_purchase.displayed_price_cents).to eq(15_00)
     end
 
     it "does not use the subscription owner to qualify unauthenticated discount updates",

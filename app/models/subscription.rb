@@ -397,8 +397,8 @@ class Subscription < ApplicationRecord
 
   # Public: Charge the user and create a new purchase
   # Returns the new `Purchase` object
-  def charge!(override_params: {}, from_failed_charge_email: false, off_session: true)
-    purchase = build_purchase(override_params:, from_failed_charge_email:)
+  def charge!(override_params: {}, from_failed_charge_email: false, off_session: true, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    purchase = build_purchase(override_params:, from_failed_charge_email:, authenticated_offer_code_buyer:)
     process_purchase!(purchase, from_failed_charge_email, off_session:)
   end
 
@@ -541,7 +541,7 @@ class Subscription < ApplicationRecord
       if offer_code.present?
         new_purchase.offer_code = offer_code
         new_purchase.purchase_offer_code_discount = nil
-      elsif clear_discount && !new_purchase.offer_code&.tiered?
+      elsif clear_discount && new_purchase.offer_code == original_purchase.offer_code && !new_purchase.offer_code&.tiered?
         new_purchase.offer_code = nil
         new_purchase.purchase_offer_code_discount = nil
       elsif clear_deleted_discount && new_purchase.offer_code&.deleted? && !new_purchase.offer_code.tiered?

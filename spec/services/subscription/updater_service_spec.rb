@@ -2785,6 +2785,33 @@ describe Subscription::UpdaterService, :vcr do
 
         expect(service.send(:price_changed?)).to eq(false)
       end
+
+      it "passes the logged in user when charging an immediate update" do
+        service.is_resubscribing = false
+        upgrade_purchase = instance_double(Purchase,
+                                           successful?: true,
+                                           test_successful?: false,
+                                           in_progress?: false,
+                                           errors: double(full_messages: []),
+                                           error_code: nil,
+                                           external_id: "upgrade-purchase")
+        allow(service).to receive(:amount_owed).and_return(12_34)
+        allow(service).to receive(:prorated_discount_price_cents).and_return(0)
+        allow(service).to receive(:upgrade?).and_return(true)
+        allow(service).to receive(:use_existing_card?).and_return(true)
+        allow(service).to receive(:send_subscription_updated_api_notification)
+        allow(service).to receive(:same_variants?).and_return(true)
+        allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+        allow(subscription).to receive(:credit_card_to_charge).and_return(nil)
+        expect(subscription).to receive(:charge!).with(
+          override_params: hash_including(perceived_price_cents: 12_34, is_upgrade_purchase: true),
+          from_failed_charge_email: nil,
+          off_session: true,
+          authenticated_offer_code_buyer: logged_in_user,
+        ).and_return(upgrade_purchase)
+
+        expect(service.send(:charge_user!)[:success]).to eq(true)
+      end
     end
 
     context "when restarting with offer code changes" do
