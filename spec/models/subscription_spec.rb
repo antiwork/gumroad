@@ -9,6 +9,8 @@ describe Subscription, :vcr do
   let(:seller) { create(:user) }
 
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     @product = create(:subscription_product, user: seller, is_licensed: true)
     @subscription = create(:subscription, user: create(:user), link: @product)
     @purchase = create(:purchase, link: @product, email: @subscription.user.email, full_name: "squiddy",
@@ -747,6 +749,9 @@ describe Subscription, :vcr do
 
       context "when a generic Braintree error occurs" do
         before do
+          MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+            create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                      charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
           paypal_card = CreditCard.create(build(:paypal_chargeable), nil, @subscription.user)
           @subscription.user.credit_card = paypal_card
           @subscription.user.save!

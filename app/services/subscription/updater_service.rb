@@ -212,7 +212,11 @@ class Subscription::UpdaterService
     end
 
     def new_price_cents
-      new_purchase.present? ? new_purchase.displayed_price_cents : subscription.current_subscription_price_cents
+      new_purchase.present? ? new_purchase.displayed_price_cents : current_subscription_price_cents
+    end
+
+    def current_subscription_price_cents
+      subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
     end
 
     def get_chargeable
@@ -430,7 +434,7 @@ class Subscription::UpdaterService
       return false if pwyw?
       tier_price = subscription.send(:tier_price)
       return false unless tier_price.present?
-      subscription.current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
+      current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
     end
 
     def same_pwyw_price?

@@ -142,7 +142,8 @@ class CustomerLowPriorityMailer < ApplicationMailer
         "Upcoming automatic membership renewal"
       end
     @date = @subscription.end_time_of_subscription.strftime("%B %e, %Y")
-    @price = @subscription.original_purchase.formatted_total_price
+    original_purchase = @subscription.original_purchase
+    @price = original_purchase.format_price_in_currency(@subscription.current_subscription_price_cents)
     @delivery_options = { reply_to: @subscription.seller.support_or_form_email }
   end
 

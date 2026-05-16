@@ -131,6 +131,21 @@ describe CustomerLowPriorityMailer do
         expect(mail.body.encoded).to include "Questions about your product?"
         expect(mail.reply_to).to eq [purchase.link.user.email]
       end
+
+      it "shows the upcoming renewal price instead of the original signup price" do
+        purchase = create(:membership_purchase)
+        subscription = purchase.subscription
+        allow(Subscription).to receive(:find).with(subscription.id).and_return(subscription)
+        allow(subscription).to receive(:current_subscription_price_cents).and_return(5_00)
+        allow(subscription).to receive(:original_purchase).and_return(purchase)
+        allow(purchase).to receive(:format_price_in_currency).with(5_00).and_return("$5")
+        allow(purchase).to receive(:formatted_total_price).and_return("$10")
+
+        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)
+
+        expect(mail.body.encoded).to include "You're paying $5."
+        expect(mail.body.encoded).not_to include "You're paying $10."
+      end
     end
 
     context "installment plans" do

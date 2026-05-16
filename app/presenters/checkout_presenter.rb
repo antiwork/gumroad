@@ -168,7 +168,7 @@ class CheckoutPresenter
     tier_attrs = {
       recurrence: subscription.recurrence,
       variants: subscription.original_purchase.tiers,
-      price_cents: subscription.current_plan_displayed_price_cents / subscription.original_purchase.quantity,
+      price_cents: subscription.current_plan_displayed_price_cents(authenticated_offer_code_buyer: logged_in_user) / subscription.original_purchase.quantity,
     }
     show_current_prices = subscription.deactivated? ||
       (subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence))

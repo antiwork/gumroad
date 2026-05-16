@@ -69,7 +69,7 @@ class Stripe::SetupIntentsController < ApplicationController
         # In case of subscription update, create mandate with current subscription price,
         # as price in params is 0 if there's no change in price
         subscription_id = params.permit(products: [:subscription_id]).to_h.values.first[0]["subscription_id"] rescue nil
-        subscription_current_amount = subscription_id.present? ? Subscription.find_by_external_id(subscription_id).current_subscription_price_cents : 0
+        subscription_current_amount = subscription_id.present? ? Subscription.find_by_external_id(subscription_id).current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user) : 0
 
         mandate_amount = max_product_price > 0 ? max_product_price : subscription_current_amount
 

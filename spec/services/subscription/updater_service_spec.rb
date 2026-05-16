@@ -2758,6 +2758,35 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
 
+    context "buyer-aware fallback pricing" do
+      let(:logged_in_user) { create(:user) }
+      let(:subscription) { instance_double(Subscription) }
+      let(:service) do
+        described_class.new(
+          subscription:,
+          gumroad_guid: "abc123",
+          params: {},
+          logged_in_user:,
+          remote_ip: "127.0.0.1",
+        )
+      end
+
+      it "uses the logged in user when validating the unchanged plan price" do
+        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+
+        expect(service.send(:new_price_cents)).to eq(12_34)
+      end
+
+      it "uses the logged in user when checking whether the subscription price changed" do
+        service.original_purchase = instance_double(Purchase, quantity: 2)
+        allow(service).to receive(:pwyw?).and_return(false)
+        allow(subscription).to receive(:send).with(:tier_price).and_return(instance_double(Price, price_cents: 6_17))
+        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+
+        expect(service.send(:price_changed?)).to eq(false)
+      end
+    end
+
     context "when restarting with offer code changes" do
       let(:free_trial) { false }
 

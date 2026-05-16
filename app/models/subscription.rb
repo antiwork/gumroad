@@ -235,10 +235,11 @@ class Subscription < ApplicationRecord
     super
   end
 
-  def current_plan_displayed_price_cents
+  def current_plan_displayed_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     # For PWYW subscriptions, show tier minimum price if tier price is less than
     # current subscription price. Otherwise, show current subscription price.
-    if tier&.customizable_price? && tier_price.present? && tier_price.price_cents <= current_subscription_price_cents
+    current_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    if tier&.customizable_price? && tier_price.present? && tier_price.price_cents <= current_price_cents
       tier_price.price_cents
     else
       original_purchase.displayed_price_cents_before_offer_code || original_purchase.displayed_price_cents

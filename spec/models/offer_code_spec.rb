@@ -5,6 +5,8 @@ require "shared_examples/max_purchase_count_concern"
 
 describe OfferCode do
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     @product = create(:product, user: create(:user), price_cents: 2000, price_currency_type: "usd")
   end
 

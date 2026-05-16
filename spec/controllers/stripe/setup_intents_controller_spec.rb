@@ -46,6 +46,20 @@ describe Stripe::SetupIntentsController, :vcr do
         post :create, params: card_with_sca.to_stripejs_params.merge!(products: [{ price: 10_00 }, { price: 5_00 }, { price: 7_00 }])
       end
 
+      it "uses the logged in user when deriving a subscription update mandate amount" do
+        logged_in_user = create(:user)
+        subscription = create(:subscription)
+        chargeable = double(requires_mandate?: true)
+        allow(controller).to receive(:logged_in_user).and_return(logged_in_user)
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 0, subscription_id: subscription.external_id }]))
+        allow(Subscription).to receive(:find_by_external_id).with(subscription.external_id).and_return(subscription)
+        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+
+        mandate_options = controller.send(:mandate_options_for_stripe, chargeable)
+
+        expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(12_34)
+      end
+
       context "when setup intent succeeds" do
         it "renders a successful response" do
           post :create, params: StripePaymentMethodHelper.success_with_sca.to_stripejs_params

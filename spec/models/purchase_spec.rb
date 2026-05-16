@@ -17,6 +17,13 @@ describe Purchase, :vcr do
   let(:chargeable) { create :chargeable }
 
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id) ||
+      create(:merchant_account_paypal, user: nil, charge_processor_merchant_id: "paypal_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
     allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
   end
 
@@ -1227,7 +1234,7 @@ describe Purchase, :vcr do
     end
 
     describe "purchase is on a creator's merchant account" do
-      let(:purchase) { create(:purchase, merchant_account: create(:merchant_account)) }
+      let(:purchase) { create(:purchase, merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")) }
 
       it "returns a Gumroad merchant account" do
         expect(purchase.affiliate_merchant_account.user_id).to eq(nil)
