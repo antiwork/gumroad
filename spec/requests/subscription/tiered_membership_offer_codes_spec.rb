@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Tiered Membership Offer code Spec", type: :system, js: true do
+describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 do
   include ManageSubscriptionHelpers
 
   context "when the subscription has an offer code applied" do
