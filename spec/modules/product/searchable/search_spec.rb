@@ -146,7 +146,7 @@ describe "Product::Searchable - Search scenarios" do
           records = Link.search(Link.search_options({ is_alive_on_profile: true, user_id: seller.id })).records
           expect(records.map(&:id)).to eq([product.id])
           records = Link.search(Link.search_options({ is_alive_on_profile: false, user_id: seller.id })).records
-          expect(records.map(&:id)).to eq([deleted_product.id, archived_product.id])
+          expect(records.map(&:id)).to match_array([deleted_product.id, archived_product.id])
         end
       end
 

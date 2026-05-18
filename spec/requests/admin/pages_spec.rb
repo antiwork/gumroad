@@ -132,9 +132,14 @@ describe "Admin Pages Scenario", type: :system, js: true do
       expect(page).to have_text("product #29")
       expect(page).to have_text("product #28")
       expect(page).not_to have_text("product #0")
-      first("main").scroll_to :bottom
-
-      expect(page).to have_text("product #0")
+      find("main").scroll_to :bottom
+      # IntersectionObserver needs time to fire after scroll, then AJAX
+      # loads the next page. Use Capybara's built-in retry with longer wait.
+      # Scroll a second time in case the first scroll didn't reach the sentinel.
+      unless page.has_text?("product #0", wait: 5)
+        find("main").scroll_to :bottom
+      end
+      expect(page).to have_text("product #0", wait: 10)
     end
   end
 

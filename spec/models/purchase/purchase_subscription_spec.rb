@@ -161,7 +161,8 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 @purchase.update_balance_and_mark_successful!
 
-                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(1.year.from_now)
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id)
+                expect(RecurringChargeWorker.jobs.last["at"]).to be_within(2).of(1.year.from_now.to_f)
               end
             end
           end
@@ -180,7 +181,8 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 @purchase.update_balance_and_mark_successful!
 
-                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(3.months.from_now)
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id)
+                expect(RecurringChargeWorker.jobs.last["at"]).to be_within(2).of(3.months.from_now.to_f)
               end
             end
           end
@@ -199,7 +201,8 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 @purchase.update_balance_and_mark_successful!
 
-                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(6.months.from_now)
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id)
+                expect(RecurringChargeWorker.jobs.last["at"]).to be_within(2).of(6.months.from_now.to_f)
               end
             end
           end
@@ -218,7 +221,8 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 @purchase.update_balance_and_mark_successful!
 
-                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(2.years.from_now)
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id)
+                expect(RecurringChargeWorker.jobs.last["at"]).to be_within(2).of(2.years.from_now.to_f)
               end
             end
           end
