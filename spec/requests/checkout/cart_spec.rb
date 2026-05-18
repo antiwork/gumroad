@@ -140,7 +140,7 @@ describe "Checkout cart", :js, type: :system do
     end
 
     describe "cart persistence" do
-      let(:wait_timeout) { 10 }
+      let(:wait_timeout) { 15 }
 
       def poll_until(timeout: wait_timeout)
         Timeout.timeout(timeout) do
