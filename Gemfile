@@ -147,6 +147,7 @@ gem "public_suffix", "~> 5.0"
 gem "rack-attack", "~> 6.6"
 gem "rack-cors", "~> 2.0"
 gem "rack-mini-profiler", "~> 4.0", require: false
+gem "rack-ssl", "~> 1.4"
 gem "rack-timeout", "~> 0.6", require: "rack/timeout/base"
 gem "rack-utf8_sanitizer", "~> 1.8"
 gem "ratelimit", "~> 1.0"
