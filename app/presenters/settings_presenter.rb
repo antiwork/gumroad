@@ -302,11 +302,14 @@ class SettingsPresenter
       needs_id_upload = seller.user_compliance_info_requests.requested
         .where(field_needed: id_document_fields).exists?
 
+      stripe_account = seller.stripe_account
+      stripe_rejected = stripe_account&.stripe_rejected? || false
+
       compliance_actions = []
-      if pending_compliance && seller.stripe_account.present? && payments_policy.update?
+      if pending_compliance && stripe_account.present? && !stripe_rejected && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
       end
-      if pending_compliance && seller.stripe_account.blank?
+      if pending_compliance && stripe_account.blank?
         user_compliance_info = seller.fetch_or_build_user_compliance_info
         missing_fields = []
         seller.user_compliance_info_requests.requested.each do |request|
@@ -326,7 +329,7 @@ class SettingsPresenter
         "Your account is under review and payouts are on hold until it's resolved."
       end
 
-      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any?
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any? || stripe_rejected
 
       {
         show_section:,
@@ -335,6 +338,7 @@ class SettingsPresenter
         compliance_actions:,
         needs_id_upload:,
         gumroad_status:,
+        stripe_rejected:,
       }
     end
 

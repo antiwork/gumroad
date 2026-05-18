@@ -15,6 +15,7 @@ class MerchantAccount < ApplicationRecord
 
   attr_json_data_accessor :meta
   attr_json_data_accessor :unclaimed_balance_collection_transfer_id
+  attr_json_data_accessor :stripe_disabled_reason
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -127,6 +128,10 @@ class MerchantAccount < ApplicationRecord
 
     self.charge_processor_verified_at = nil
     save!
+  end
+
+  def stripe_rejected?
+    stripe_disabled_reason.to_s.start_with?("rejected.")
   end
 
   def paypal_account_details

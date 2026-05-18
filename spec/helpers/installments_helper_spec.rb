@@ -11,7 +11,7 @@ describe InstallmentsHelper do
 
     context "when url is missing" do
       it "displays the post title as plain text" do
-        is_expected.to eq("<span class=\"title\">#{post.subject}</span>")
+        is_expected.to eq("<span class=\"title\">#{ERB::Util.html_escape(post.subject)}</span>")
       end
     end
 
@@ -19,7 +19,7 @@ describe InstallmentsHelper do
       let(:url) { "https://example.com/p/#{post.slug}" }
 
       it "displays the post title as an anchor tag" do
-        is_expected.to eq("<a target=\"_blank\" class=\"title\" href=\"#{url}\">#{post.subject}</a>")
+        is_expected.to eq("<a target=\"_blank\" class=\"title\" href=\"#{url}\">#{ERB::Util.html_escape(post.subject)}</a>")
       end
     end
   end

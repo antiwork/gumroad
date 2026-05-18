@@ -113,6 +113,23 @@ describe MerchantAccount do
     end
   end
 
+  describe "#stripe_rejected?" do
+    it "returns true when stripe_disabled_reason begins with rejected." do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: "rejected.listed")
+      expect(merchant_account.stripe_rejected?).to be(true)
+    end
+
+    it "returns false for non-rejected disabled reasons" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: "requirements.past_due")
+      expect(merchant_account.stripe_rejected?).to be(false)
+    end
+
+    it "returns false when stripe_disabled_reason is blank" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: nil)
+      expect(merchant_account.stripe_rejected?).to be(false)
+    end
+  end
+
   describe "#holder_of_funds" do
     it "returns the holder of funds for a known charge processor" do
       merchant_account = create(:merchant_account, charge_processor_id: ChargeProcessor.charge_processor_ids.first)

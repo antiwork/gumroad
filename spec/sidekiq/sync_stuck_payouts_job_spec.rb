@@ -123,17 +123,18 @@ describe SyncStuckPayoutsJob do
       end
 
       it "syncs Stripe payouts stuck in creating with Stripe IDs to their actual status" do
+        arrival_timestamp = 1.day.ago.to_i
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                                    stripe_transfer_id: "po_creating", stripe_connect_account_id: "acct_creating",
                                    created_at: 3.days.ago)
 
-        stripe_payout = { "status" => "paid", "arrival_date" => 1.day.ago.to_i }
+        stripe_payout = { "status" => "paid", "arrival_date" => arrival_timestamp }
         allow(Stripe::Payout).to receive(:retrieve).with("po_creating", { stripe_account: "acct_creating" }).and_return(stripe_payout)
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
 
         expect(payment.reload.state).to eq("completed")
-        expect(payment.arrival_date).to eq(1.day.ago.to_i)
+        expect(payment.arrival_date).to eq(arrival_timestamp)
       end
 
       it "does not sync Stripe payouts still in creating under 24 hours" do
@@ -227,7 +228,7 @@ describe SyncStuckPayoutsJob do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                                    stripe_transfer_id: "po_today", stripe_connect_account_id: "acct_today",
                                    created_at: 2.days.ago)
-        payment.update!(arrival_date: Date.current.beginning_of_day.to_i)
+        payment.update!(arrival_date: Time.current.middle_of_day.to_i)
 
         expect(Stripe::Payout).not_to receive(:retrieve)
 

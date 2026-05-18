@@ -719,11 +719,17 @@ module StripeMerchantAccountManager
     requirements = stripe_account["requirements"] || {}
     future_requirements = stripe_account["future_requirements"] || {}
 
+    should_save = false
     if stripe_account["default_currency"] && stripe_account["country"]
       merchant_account.currency = stripe_account["default_currency"]
       merchant_account.country = stripe_account["country"]
-      merchant_account.save!
+      should_save = true
     end
+    if merchant_account.stripe_disabled_reason != requirements["disabled_reason"]
+      merchant_account.stripe_disabled_reason = requirements["disabled_reason"]
+      should_save = true
+    end
+    merchant_account.save! if should_save
 
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}

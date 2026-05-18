@@ -1942,6 +1942,40 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
     end
+
+    context "when the Stripe account has been permanently rejected" do
+      let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_rejected") }
+      let!(:compliance_request) { create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID) }
+
+      before do
+        allow(Stripe::AccountLink).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("An account link cannot be created for this account because the account has been rejected.", nil)
+        )
+      end
+
+      it "redirects back to settings with an alert instead of raising" do
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
+
+        get :remediation
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:alert]).to eq("We couldn't open the verification page. Please contact support.")
+      end
+
+      it "records rejected.other on the merchant account so the rejection alert renders on the next page load" do
+        get :remediation
+
+        expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.other")
+      end
+
+      it "does not overwrite an existing stripe_disabled_reason" do
+        merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+
+        get :remediation
+
+        expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.listed")
+      end
+    end
   end
 
   describe "GET verify_stripe_remediation" do

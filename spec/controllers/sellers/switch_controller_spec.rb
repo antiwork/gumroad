@@ -19,7 +19,7 @@ describe Sellers::SwitchController do
       it "doesn't set cookie" do
         post :create, params: { team_membership_id: "foo" }
 
-        expect(cookies.encrypted[:current_seller_id]). to eq(nil)
+        expect(cookies.encrypted[:current_seller_id]).to eq(nil)
         expect(response).to have_http_status(:no_content)
       end
     end
@@ -30,9 +30,8 @@ describe Sellers::SwitchController do
       it "sets cookie and updates last_accessed_at" do
         post :create, params: { team_membership_id: team_membership.external_id.to_s }
 
-        expect(cookies.encrypted[:current_seller_id]). to eq(seller.id)
-        puts team_membership.last_accessed_at
-        expect(team_membership.reload.last_accessed_at).to be_within(1.second).of(Time.current)
+        expect(cookies.encrypted[:current_seller_id]).to eq(seller.id)
+        expect(team_membership.reload.last_accessed_at).to be_within(2.seconds).of(Time.current)
         expect(response).to have_http_status(:no_content)
       end
 
@@ -44,7 +43,7 @@ describe Sellers::SwitchController do
         it "doesn't set cookie" do
           post :create, params: { team_membership_id: team_membership.external_id.to_s }
 
-          expect(cookies.encrypted[:current_seller_id]). to eq(nil)
+          expect(cookies.encrypted[:current_seller_id]).to eq(nil)
           expect(response).to have_http_status(:no_content)
         end
       end

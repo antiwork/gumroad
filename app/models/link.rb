@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "zip/zipfilesystem"
+require "zip/filesystem"
 
 class Link < ApplicationRecord
   has_paper_trail
