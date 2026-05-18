@@ -217,7 +217,7 @@ class ProductPresenter
           id: default_offer_code.external_id,
           code: default_offer_code.code,
           name: default_offer_code.name.presence || "",
-          discount: default_offer_code.discount,
+          discount: default_offer_code.configured_discount_for_display,
         } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),

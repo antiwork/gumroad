@@ -579,7 +579,7 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan
+                :installment_plan, :authenticated_offer_code_buyer
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -890,9 +890,10 @@ class Purchase < ApplicationRecord
     end
 
     if offer_code.present?
+      offer_code_for_display = original_offer_code(include_deleted: true)
       json[:offer_code] = {
         code: offer_code.code,
-        displayed_amount_off: offer_code.displayed_amount_off(link.price_currency_type, with_symbol: true)
+        displayed_amount_off: offer_code_for_display&.displayed_amount_off(link.price_currency_type, with_symbol: true)
       }
       # For backwards compatibility: offer code's `name` has been renamed to `code`
       json[:offer_code][:name] = offer_code.code if version <= 2
@@ -1876,9 +1877,18 @@ class Purchase < ApplicationRecord
 
   def set_price_and_rate
     if offer_code.present? && !has_cached_offer_code?
-      self.build_purchase_offer_code_discount(offer_code:, offer_code_amount: offer_code.amount, offer_code_is_percent: offer_code.is_percent?,
-                                              pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
-                                              duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
+      resolved_discount = resolved_offer_code_discount_for_buyer
+      if resolved_discount.present?
+        offer_code_is_percent = resolved_discount[:type] == "percent"
+        offer_code_amount = offer_code_is_percent ? resolved_discount[:percents] : resolved_discount[:cents]
+        self.build_purchase_offer_code_discount(offer_code:, offer_code_amount:, offer_code_is_percent:,
+                                                pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+                                                duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
+      else
+        @offer_code_invalid_for_buyer = true
+        reject_existing_customer_offer_code
+        self.offer_code = nil
+      end
     end
 
     self.build_purchasing_power_parity_info(factor: purchasing_power_parity_factor) if is_purchasing_power_parity_discounted? && purchasing_power_parity_factor < 1
@@ -2262,9 +2272,10 @@ class Purchase < ApplicationRecord
       end
 
       if offer_code.present?
+        offer_code_for_display = original_offer_code(include_deleted: true)
         json_data[:offer_code] = {
           code: offer_code.code,
-          displayed_amount_off: offer_code.displayed_amount_off(link.price_currency_type, with_symbol: true)
+          displayed_amount_off: offer_code_for_display&.displayed_amount_off(link.price_currency_type, with_symbol: true)
         }
       end
 
@@ -2618,13 +2629,13 @@ class Purchase < ApplicationRecord
   end
 
   def original_offer_code(include_deleted: false)
-    return nil if offer_code&.deleted? && !include_deleted
+    return nil if offer_code&.deleted? && !include_deleted && !purchase_offer_code_discount&.offer_code&.tiered?
 
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      original_offer_code = purchase_offer_code_discount.offer_code
       purchase_offer_code_discount.offer_code_is_percent ?
-        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
-        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)
+        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name) :
+        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name)
     else
       offer_code
     end
@@ -2863,6 +2874,22 @@ class Purchase < ApplicationRecord
   end
 
   private
+    def resolved_offer_code_discount_for_buyer
+      if offer_code.existing_customers_only?
+        evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer)
+        return nil if evaluated_discount.blank?
+        return evaluated_discount if offer_code.tiered?
+      end
+
+      offer_code.is_percent? ?
+        { type: "percent", percents: offer_code.amount } :
+        { type: "fixed", cents: offer_code.amount }
+    end
+
+    def offer_code_buyer
+      instance_variable_defined?(:@authenticated_offer_code_buyer) ? authenticated_offer_code_buyer : purchaser
+    end
+
     def auto_delete_single_use_offer_code
       offer_code.auto_delete_if_single_use_exhausted!
     rescue => e
@@ -3513,6 +3540,7 @@ class Purchase < ApplicationRecord
 
     def validate_offer_code
       return if errors.present?
+      return reject_existing_customer_offer_code if @offer_code_invalid_for_buyer
       # accept the offer code that was used when the buyer preordered/subscribed
       return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || (is_installment_payment && !is_original_subscription_purchase)
       return if discount_code.blank?
@@ -3546,6 +3574,11 @@ class Purchase < ApplicationRecord
       end
 
       true
+    end
+
+    def reject_existing_customer_offer_code
+      self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
+      errors.add(:base, "Sorry, this discount code is only for existing customers.")
     end
 
     def validate_subscription

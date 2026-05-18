@@ -5,6 +5,8 @@ require "shared_examples/max_purchase_count_concern"
 
 describe OfferCode do
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     @product = create(:product, user: create(:user), price_cents: 2000, price_currency_type: "usd")
   end
 
@@ -662,6 +664,20 @@ describe OfferCode do
         end
       end
     end
+
+    context "when the offer code is tiered" do
+      let!(:offer_code) { create(:tiered_offer_code, user: seller, products: [product]) }
+
+      it "returns true when all tiered discounted prices are valid" do
+        expect(offer_code.is_amount_valid?(product)).to eq(true)
+      end
+
+      it "returns false when any tiered discounted price is below the minimum" do
+        product.update!(price_cents: 150)
+
+        expect(offer_code.is_amount_valid?(product)).to eq(false)
+      end
+    end
   end
 
   describe "#applicable?" do
@@ -858,4 +874,214 @@ describe OfferCode do
     end
   end
 
+  describe "existing customer discount validations" do
+    it "requires at least one ownership product when existing_customers_only is on" do
+      offer_code = OfferCode.new(
+        code: "renew",
+        user: @product.user,
+        products: [@product],
+        amount_percentage: 50,
+        existing_customers_only: true,
+      )
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Pick at least one product the customer must already own.")
+    end
+
+    it "is valid when existing_customers_only is on and ownership products are set" do
+      offer_code = OfferCode.new(
+        code: "renew",
+        user: @product.user,
+        products: [@product],
+        ownership_products: [@product],
+        amount_percentage: 50,
+        existing_customers_only: true,
+      )
+
+      expect(offer_code).to be_valid
+    end
+
+    it "rejects ownership tiers without existing_customers_only" do
+      offer_code = build(:tiered_offer_code, products: [@product], existing_customers_only: false, ownership_products: [])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Turn on \"Limit to existing customers\" to use tiered discounts.")
+    end
+
+    it "rejects ownership tiers combined with duration_in_billing_cycles" do
+      offer_code = build(:tiered_offer_code, products: [@product], duration_in_billing_cycles: 1)
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Remove the membership duration to use tiered discounts.")
+    end
+
+    it "rejects ownership tiers combined with a fixed-amount discount" do
+      offer_code = build(:tiered_offer_code, products: [@product], amount_cents: 500, amount_percentage: nil, currency_type: "usd")
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Switch the discount type to percentage to use tiers.")
+    end
+
+    it "rejects tiers that don't start at zero months" do
+      offer_code = build(:tiered_offer_code, products: [@product], ownership_duration_tiers: [{ "months" => 3, "amount_percentage" => 50 }])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("The first tier must start at 0 months.")
+    end
+
+    it "rejects duplicate tier months" do
+      offer_code = build(:tiered_offer_code, products: [@product], ownership_duration_tiers: [
+                           { "months" => 0, "amount_percentage" => 10 },
+                           { "months" => 0, "amount_percentage" => 50 },
+                         ])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Each tier needs a different starting month.")
+    end
+
+    it "rejects tiers with out-of-range percentages" do
+      offer_code = build(:tiered_offer_code, products: [@product], ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 150 }])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Each tier percentage must be between 0 and 100.")
+    end
+
+    it "rejects tiers that discount a product below the minimum price" do
+      offer_code = build(:tiered_offer_code,
+                         products: [@product],
+                         ownership_duration_tiers: [
+                           { "months" => 0, "amount_percentage" => 0 },
+                           { "months" => 12, "amount_percentage" => 99 },
+                         ])
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("The price after discount for all of your products must be either $0 or at least $0.99.")
+    end
+  end
+
+  describe "#evaluate_for_buyer" do
+    let(:seller) { @product.user }
+    let(:buyer) { create(:user) }
+
+    it "returns the standard discount when the code is not existing-customers-only" do
+      offer_code = create(:offer_code, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      expect(offer_code.evaluate_for_buyer(buyer)).to eq(offer_code.discount)
+    end
+
+    it "returns nil when the buyer is nil and the code is existing-customers-only" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      expect(offer_code.evaluate_for_buyer(nil)).to be_nil
+    end
+
+    it "returns nil for unauthenticated display when the code is existing-customers-only" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      expect(offer_code.discount_for_display).to be_nil
+    end
+
+    it "returns configured discounts for seller display when the code is existing-customers-only" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+
+      expect(offer_code.configured_discount_for_display).to include(type: "percent", percents: 30)
+    end
+
+    it "returns nil when the buyer has not purchased any ownership product" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    it "returns the standard discount when the buyer owns an ownership product" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: buyer, link: @product, price_cents: @product.price_cents)
+      expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+    end
+
+    it "treats refunded purchases as not qualifying" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, stripe_refunded: true)
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    it "treats refunded membership purchases as not qualifying" do
+      membership = create(:subscription_product, user: seller, price_cents: 10_00)
+      offer_code = create(:offer_code, :for_existing_customers, products: [membership], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      subscription = create(:subscription, link: membership, user: buyer)
+      create(:membership_purchase, purchaser: buyer, link: membership, seller:, subscription:, price_cents: membership.price_cents, stripe_refunded: true)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    it "treats chargedback purchases (not reversed) as not qualifying" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, chargeback_date: 1.day.ago)
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    context "with tiered discounts" do
+      let(:offer_code) do
+        create(:offer_code,
+               user: seller,
+               products: [@product],
+               ownership_products: [@product],
+               existing_customers_only: true,
+               amount_cents: nil,
+               amount_percentage: 0,
+               currency_type: nil,
+               ownership_duration_tiers: [
+                 { "months" => 0, "amount_percentage" => 10 },
+                 { "months" => 6, "amount_percentage" => 30 },
+                 { "months" => 12, "amount_percentage" => 50 },
+               ])
+      end
+
+      it "returns the lowest tier when the buyer has 0 months of ownership" do
+        create(:purchase, purchaser: buyer, link: @product, price_cents: @product.price_cents)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 10)
+      end
+
+      it "returns the matching tier based on ownership duration" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 7.months.ago)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "returns the highest tier when ownership exceeds the last threshold" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 24.months.ago)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
+      end
+
+      it "returns nil for unauthenticated display" do
+        expect(offer_code.discount_for_display).to be_nil
+      end
+
+      it "returns the configured tier range for seller display" do
+        expect(offer_code.configured_discount_for_display).to include(
+          type: "percent",
+          percents: 50,
+          tiered: true,
+          min_percents: 10,
+          max_percents: 50
+        )
+      end
+
+      it "ignores purchases that do not grant library ownership" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_gift_sender_purchase: true)
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_access_revoked: true)
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, is_additional_contribution: true)
+
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "counts calendar months across yearly anniversaries" do
+        travel_to(Time.zone.local(2026, 5, 14, 12)) do
+          create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 1.year.ago)
+          expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
+        end
+      end
+
+      it "uses the OLDEST qualifying purchase to determine ownership duration" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 24.months.ago)
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 2.months.ago)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
+      end
+    end
+  end
 end

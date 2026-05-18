@@ -138,8 +138,7 @@ module Product::Prices
   def validate_product_price_against_all_offer_codes?
     all_alive_offer_codes = product_and_universal_offer_codes
     all_alive_offer_codes.each do |offer_code|
-      price_after_code = default_price_cents - offer_code.amount_off(default_price_cents)
-      next if price_after_code <= 0 || price_after_code >= currency["min_price"]
+      next if offer_code.is_amount_valid?(self)
 
       errors.add(:base, "An existing discount code puts the price of this product below the #{min_price_formatted} minimum after discount.")
       return false

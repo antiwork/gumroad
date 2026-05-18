@@ -25,7 +25,7 @@ jobs:
 
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    runs-on: ubicloud-standard-8
+    runs-on: ${{ fromJSON(vars.CI_BUILD_RUNNER || '["ubicloud-standard-8"]') }}
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     env:
@@ -94,12 +94,23 @@ jobs:
           TAG=test-$(BASE_TEST_SHA=$WEB_BASE_TEST_SHA docker/base/generate_tag_for_test_image.sh)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Computed test image tag: $TAG"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Restore asset precompile cache
+        id: asset_cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/asset-cache
+          key: asset-precompile-${{ hashFiles('app/assets/**', 'app/javascript/**', 'config/webpack/**', 'config/shakapacker.yml', 'Gemfile.lock', 'package-lock.json', '.ruby-version') }}
+          restore-keys: |
+            asset-precompile-
       - name: Build and push test image
         env:
           WEB_BASE_REPO: gumroadteam/web_base
           WEB_BASE_TEST_REPO: gumroadteam/web_base_test
           WEB_REPO: gumroadteam/web
           TEST_IMAGE_TAG: ${{ steps.test_image_tag.outputs.tag }}
+          ASSET_CACHE_HIT: ${{ steps.asset_cache.outputs.cache-hit }}
         run: |
           set -e
           GREEN='\033[0;32m'
@@ -109,66 +120,137 @@ jobs:
           }
           docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
           WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
-          # Only pull/push test-cache when we're actually going to build.
-          # On a manifest-inspect HIT (e.g. doc-only PR, re-run), skip the
-          # cache pull entirely — it's ~2m wasted otherwise.
-          if docker manifest inspect $WEB_REPO:$TEST_IMAGE_TAG > /dev/null 2>&1; then
-            TEST_IMAGE_NEEDS_BUILD=false
-            logger "$WEB_REPO:$TEST_IMAGE_TAG already exists; skipping test-cache pull"
+
+          # Check if both images already exist (content-addressed cache hit).
+          BASE_TEST_EXISTS=false
+          TEST_EXISTS=false
+          docker manifest inspect $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA > /dev/null 2>&1 && BASE_TEST_EXISTS=true
+          docker manifest inspect $WEB_REPO:$TEST_IMAGE_TAG > /dev/null 2>&1 && TEST_EXISTS=true
+
+          if [ "$TEST_EXISTS" = "true" ]; then
+            logger "$WEB_REPO:$TEST_IMAGE_TAG already exists — nothing to build"
           else
-            TEST_IMAGE_NEEDS_BUILD=true
-            docker pull --quiet $WEB_REPO:test-cache 2>/dev/null || logger "$WEB_REPO:test-cache not yet available; building without registry cache"
-          fi
-          build_and_push() {
-            local repo=$1
-            local tag=$2
-            local make_target=$3
-            if ! docker manifest inspect $repo:$tag > /dev/null 2>&1; then
-              logger "building $repo:$tag"
-              NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO NEW_WEB_REPO=$WEB_REPO \
+            # Build web_base_test if needed
+            if [ "$BASE_TEST_EXISTS" = "false" ]; then
+              logger "building $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
+              NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO \
                 WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye \
-                BRANCH_CACHE_UPLOAD_ENABLED=false \
-                  BRANCH_CACHE_RESTORE_ENABLED=false \
-                  NEW_WEB_TAG=${TEST_IMAGE_TAG#test-} \
-                  COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
-                  make $make_target
-              logger "pushing $repo:$tag"
+                make build_base_test
+              logger "pushing $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
               for i in {1..3}; do
-                logger "Push attempt $i"
-                if docker push --quiet $repo:$tag; then
-                  logger "Pushed $repo:$tag"
-                  break
-                elif [ $i -eq 3 ]; then
-                  logger "Failed to push $repo:$tag"
-                  exit 1
-                else
-                  sleep 5
-                fi
+                if docker push --quiet $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA; then
+                  logger "Pushed $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"; break
+                elif [ $i -eq 3 ]; then exit 1; else sleep 5; fi
               done
             else
-              logger "$repo:$tag already exists"
+              logger "$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA already exists"
             fi
-          }
 
-          build_and_push $WEB_BASE_TEST_REPO $WEB_BASE_TEST_SHA build_base_test
-          build_and_push $WEB_REPO $TEST_IMAGE_TAG build_test
+            # Build test image using GHA cache instead of pulling test-cache
+            # from Docker Hub (~3 min saved by avoiding the registry round-trip).
+            logger "building $WEB_REPO:$TEST_IMAGE_TAG (with GHA cache)"
+            WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
+            # Pull the FROM images that the multi-stage Dockerfile needs.
+            docker pull --quiet $WEB_BASE_REPO:$WEB_BASE_SHA &
+            docker pull --quiet $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA &
+            wait
+            WEB_DOCKERFILE_FROM=$WEB_BASE_REPO:$WEB_BASE_SHA \
+              WEB_BASE_TEST_DOCKERFILE_FROM=$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA \
+            docker buildx build \
+              --load \
+              --cache-from type=gha,scope=test-image \
+              --cache-to type=gha,mode=max,scope=test-image \
+              --build-arg WEB_DOCKERFILE_FROM \
+              --build-arg WEB_BASE_TEST_DOCKERFILE_FROM \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              --file docker/web/Dockerfile.test \
+              -t $WEB_REPO:test-${TEST_IMAGE_TAG#test-} \
+              .
+            docker tag $WEB_REPO:test-${TEST_IMAGE_TAG#test-} $WEB_REPO:$TEST_IMAGE_TAG
 
-          # Only update the floating :test-cache tag when we actually built
-          # the test image this run. On manifest-inspect hits the existing
-          # test-cache is already correct (or close enough), so we skip the
-          # ~30s of retag/push and avoid an unnecessary docker pull.
-          if [ "$TEST_IMAGE_NEEDS_BUILD" = "true" ]; then
-            docker tag $WEB_REPO:$TEST_IMAGE_TAG $WEB_REPO:test-cache
-            for i in {1..3}; do
-              if docker push --quiet $WEB_REPO:test-cache; then
-                logger "Pushed $WEB_REPO:test-cache"
-                break
-              elif [ $i -eq 3 ]; then
-                logger "Failed to push $WEB_REPO:test-cache (non-fatal, build still succeeds)"
-              else
-                sleep 5
-              fi
+            # Run asset precompile + docker commit (Makefile's post-build steps).
+            # Volume-mount cached precompile artifacts so Sprockets/Shakapacker
+            # can skip recompiling unchanged assets (~4 min → ~30s on cache hit).
+            COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
+              docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis mongo elasticsearch
+            docker run --rm --entrypoint="" \
+              --network web_${{ github.run_id }}_${{ github.run_attempt }}_default \
+              $WEB_REPO:$TEST_IMAGE_TAG \
+              docker/ci/wait_on_connection.sh db_test 3306
+
+            # Prepare cached asset precompile artifacts.
+            # Copy cached outputs into the container BEFORE running precompile
+            # so Sprockets/Shakapacker can skip recompiling unchanged assets.
+            # (Volume mounts won't work — docker commit ignores mounted paths.)
+            ASSET_MOUNTS=""
+            if [ "$ASSET_CACHE_HIT" = "true" ] || [ -d /tmp/asset-cache/public_assets ]; then
+              logger "Restoring cached asset precompile artifacts"
+              ASSET_MOUNTS="-v /tmp/asset-cache:/tmp/asset-cache:ro"
+            else
+              logger "No asset cache found — full precompile will run"
+            fi
+
+            # shellcheck disable=SC2086
+            docker run \
+              --network web_${{ github.run_id }}_${{ github.run_attempt }}_default \
+              --entrypoint="" \
+              --shm-size="2g" \
+              --memory-swappiness="0" \
+              -e RAILS_ENV="test" \
+              $ASSET_MOUNTS \
+              --label routes_compiled=true \
+              --name worker_web_${{ github.run_id }}_${{ github.run_attempt }} \
+              $WEB_REPO:$TEST_IMAGE_TAG \
+              bash -c '
+                # Restore cached assets if available (before precompile).
+                if [ -d /tmp/asset-cache/public_assets ]; then
+                  echo "Copying cached assets into container..."
+                  cp -a /tmp/asset-cache/public_assets /app/public/assets 2>/dev/null || true
+                  cp -a /tmp/asset-cache/public_packs_test /app/public/packs-test 2>/dev/null || true
+                  mkdir -p /app/tmp/cache
+                  cp -a /tmp/asset-cache/tmp_cache_assets /app/tmp/cache/assets 2>/dev/null || true
+                  cp -a /tmp/asset-cache/tmp_shakapacker /app/tmp/shakapacker 2>/dev/null || true
+                  chown -R app:app /app/public/assets /app/public/packs-test /app/tmp/cache /app/tmp/shakapacker 2>/dev/null || true
+                fi
+                su -c "npm run setup && bundle exec rake db:setup assets:precompile --trace" app
+              '
+
+            # Extract updated asset artifacts for next run's cache.
+            logger "Saving asset precompile artifacts to cache"
+            CONTAINER=worker_web_${{ github.run_id }}_${{ github.run_attempt }}
+            mkdir -p /tmp/asset-cache
+            for dir_pair in \
+              "public/assets:public_assets" \
+              "public/packs-test:public_packs_test" \
+              "tmp/cache/assets:tmp_cache_assets" \
+              "tmp/shakapacker:tmp_shakapacker"; do
+              src="${dir_pair%%:*}"
+              dst="${dir_pair##*:}"
+              rm -rf "/tmp/asset-cache/$dst"
+              docker cp "$CONTAINER:/app/$src" "/tmp/asset-cache/$dst" 2>/dev/null || true
             done
+
+            docker ps -lq \
+              --filter='label=routes_compiled=true' \
+              --filter='exited=0' \
+              --filter="name=worker_web_${{ github.run_id }}_${{ github.run_attempt }}" \
+              | xargs -I{} docker commit {} $WEB_REPO:$TEST_IMAGE_TAG
+            COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
+              docker compose -f docker/docker-compose-test-and-ci.yml down
+
+            # Push the final image to Docker Hub.
+            logger "pushing $WEB_REPO:$TEST_IMAGE_TAG"
+            for i in {1..3}; do
+              if docker push --quiet $WEB_REPO:$TEST_IMAGE_TAG; then
+                logger "Pushed $WEB_REPO:$TEST_IMAGE_TAG"; break
+              elif [ $i -eq 3 ]; then exit 1; else sleep 5; fi
+            done
+
+            # Update floating test-cache tag.
+            docker tag $WEB_REPO:$TEST_IMAGE_TAG $WEB_REPO:test-cache
+            docker push --quiet $WEB_REPO:test-cache 2>/dev/null \
+              && logger "Pushed $WEB_REPO:test-cache" \
+              || logger "Failed to push test-cache (non-fatal)"
           fi
 
   test_fast:

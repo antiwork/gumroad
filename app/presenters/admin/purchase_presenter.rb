@@ -108,7 +108,10 @@ class Admin::PurchasePresenter
                        url_redirect: purchase.url_redirect ? url_redirect_props(purchase.url_redirect) : nil,
                        offer_code: purchase.offer_code ? {
                          code: purchase.offer_code.code,
-                         displayed_amount_off: purchase.offer_code.displayed_amount_off(purchase.link.price_currency_type, with_symbol: true),
+                         displayed_amount_off: purchase.original_offer_code(include_deleted: true)&.displayed_amount_off(
+                           purchase.link.price_currency_type,
+                           with_symbol: true
+                         ),
                        } : nil,
                        street_address: purchase.street_address,
                        full_name: purchase.full_name,

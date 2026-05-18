@@ -344,5 +344,34 @@ describe BestOfferCodeService do
         expect(subject.result&.dig(:valid)).to be(true)
       end
     end
+
+    context "with an existing-customer-only code" do
+      let(:buyer) { create(:user) }
+      let!(:url_offer_code) do
+        create(:offer_code,
+               user: seller,
+               products: [product],
+               ownership_products: [product],
+               existing_customers_only: true,
+               code: "RENEW50",
+               amount_cents: nil,
+               amount_percentage: 50,
+               currency_type: nil)
+      end
+      let(:url_code) { "RENEW50" }
+
+      subject { described_class.new(product: product, url_code: url_code, buyer: buyer) }
+
+      it "rejects when buyer does not own the required product" do
+        result = subject.result
+        expect(result).to include(valid: false, error_code: :not_existing_customer)
+      end
+
+      it "applies when buyer owns the required product" do
+        create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+        expect(subject.result&.dig(:valid)).to be(true)
+        expect(subject.result&.dig(:code)).to eq("RENEW50")
+      end
+    end
   end
 end

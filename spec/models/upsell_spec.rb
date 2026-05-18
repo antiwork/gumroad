@@ -260,5 +260,12 @@ describe Upsell do
         }
       )
     end
+
+    it "includes configured discounts for existing-customer offer codes" do
+      offer_code = create(:offer_code, :for_existing_customers, code: "existingupsell", products: [product2], user: seller, amount_cents: nil, amount_percentage: 15, currency_type: nil)
+      upsell2.update!(offer_code:)
+
+      expect(upsell2.as_json[:discount]).to include(type: "percent", percents: 15)
+    end
   end
 end

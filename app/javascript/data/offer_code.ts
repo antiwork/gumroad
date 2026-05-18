@@ -41,7 +41,8 @@ export type OfferCodeResponseData =
         | "invalid_offer"
         | "insufficient_times_of_use"
         | "inactive"
-        | "unmet_minimum_purchase_quantity";
+        | "unmet_minimum_purchase_quantity"
+        | "not_existing_customer";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount> };
@@ -82,6 +83,9 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  existingCustomersOnly: boolean;
+  ownershipProductIds: string[];
+  ownershipDurationTiers: { months: number; amount_percentage: number }[] | null;
 };
 
 export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
@@ -101,39 +105,31 @@ export const getPagedDiscounts = (page: number, query: string | null, sort: Sort
   };
 };
 
-export const createDiscount = async ({
-  name,
-  code,
-  discount,
-  selectedProductIds,
-  universal,
-  currencyCode,
-  maxQuantity,
-  validAt,
-  expiresAt,
-  minimumQuantity,
-  durationInBillingCycles,
-  minimumAmount,
-}: DiscountPayload) => {
+const buildDiscountPayload = (payload: DiscountPayload) => ({
+  name: payload.name,
+  code: payload.code,
+  amount_percentage: payload.discount.type === "percent" ? payload.discount.value : null,
+  amount_cents: payload.discount.type === "cents" ? payload.discount.value : null,
+  selected_product_ids: payload.universal ? null : payload.selectedProductIds,
+  universal: payload.universal,
+  max_purchase_count: payload.maxQuantity,
+  currency_type: payload.currencyCode,
+  valid_at: payload.validAt,
+  expires_at: payload.expiresAt,
+  minimum_quantity: payload.minimumQuantity,
+  duration_in_billing_cycles: payload.durationInBillingCycles,
+  minimum_amount_cents: payload.minimumAmount,
+  existing_customers_only: payload.existingCustomersOnly,
+  ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],
+  ownership_duration_tiers: payload.existingCustomersOnly ? payload.ownershipDurationTiers : null,
+});
+
+export const createDiscount = async (payload: DiscountPayload) => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.checkout_discounts_path(),
-    data: {
-      name,
-      code,
-      amount_percentage: discount.type === "percent" ? discount.value : undefined,
-      amount_cents: discount.type === "cents" ? discount.value : undefined,
-      selected_product_ids: universal ? null : selectedProductIds,
-      universal,
-      max_purchase_count: maxQuantity,
-      currency_type: currencyCode,
-      valid_at: validAt,
-      expires_at: expiresAt,
-      minimum_quantity: minimumQuantity,
-      duration_in_billing_cycles: durationInBillingCycles,
-      minimum_amount_cents: minimumAmount,
-    },
+    data: buildDiscountPayload(payload),
   });
   const responseData = typia.assert<
     { success: true; offer_codes: OfferCode[]; pagination: PaginationProps } | { success: false; error_message: string }
@@ -142,42 +138,12 @@ export const createDiscount = async ({
   return responseData;
 };
 
-export const updateDiscount = async (
-  id: string,
-  {
-    name,
-    code,
-    discount,
-    selectedProductIds,
-    universal,
-    currencyCode,
-    maxQuantity,
-    validAt,
-    expiresAt,
-    minimumQuantity,
-    durationInBillingCycles,
-    minimumAmount,
-  }: DiscountPayload,
-) => {
+export const updateDiscount = async (id: string, payload: DiscountPayload) => {
   const response = await request({
     method: "PUT",
     accept: "json",
     url: Routes.checkout_discount_path(id),
-    data: {
-      name,
-      code,
-      amount_percentage: discount.type === "percent" ? discount.value : undefined,
-      amount_cents: discount.type === "cents" ? discount.value : undefined,
-      selected_product_ids: universal ? null : selectedProductIds,
-      universal,
-      max_purchase_count: maxQuantity,
-      currency_type: currencyCode,
-      valid_at: validAt,
-      expires_at: expiresAt,
-      minimum_quantity: minimumQuantity,
-      duration_in_billing_cycles: durationInBillingCycles,
-      minimum_amount_cents: minimumAmount,
-    },
+    data: buildDiscountPayload(payload),
   });
   const responseData = typia.assert<
     { success: true; offer_codes: OfferCode[]; pagination: PaginationProps } | { success: false; error_message: string }
@@ -192,7 +158,9 @@ export const deleteDiscount = async (id: string) => {
     accept: "json",
     url: Routes.checkout_discount_path(id),
   });
-  const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(await response.json());
+  const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(
+    await response.json(),
+  );
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 };
 

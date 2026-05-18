@@ -25,6 +25,23 @@ FactoryBot.define do
       products { [] }
     end
 
+    trait :for_existing_customers do
+      existing_customers_only { true }
+      ownership_products { products }
+    end
+
+    factory :tiered_offer_code, traits: [:for_existing_customers] do
+      products { [FactoryBot.create(:product, user:, price_cents: 2_00)] }
+      amount_cents { nil }
+      amount_percentage { 0 }
+      ownership_duration_tiers do
+        [
+          { "months" => 0, "amount_percentage" => 0 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ]
+      end
+    end
+
     factory :cancellation_discount_offer_code do
       is_cancellation_discount { true }
       duration_in_billing_cycles { 3 }

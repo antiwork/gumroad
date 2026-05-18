@@ -110,6 +110,8 @@ class Subscription::UpdaterService
             perceived_price_cents: params[:price_range],
             offer_code: params[:offer_code],
             clear_discount: params[:clear_discount],
+            clear_deleted_discount: should_clear_original_discount?,
+            authenticated_offer_code_buyer: logged_in_user,
           )
           subscription.reload
         end
@@ -205,8 +207,16 @@ class Subscription::UpdaterService
       end
     end
 
+    def should_clear_original_discount?
+      params[:offer_code].blank? && original_purchase.offer_code&.deleted?
+    end
+
     def new_price_cents
-      new_purchase.present? ? new_purchase.displayed_price_cents : subscription.current_subscription_price_cents
+      new_purchase.present? ? new_purchase.displayed_price_cents : current_subscription_price_cents
+    end
+
+    def current_subscription_price_cents
+      subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
     end
 
     def get_chargeable
@@ -285,7 +295,8 @@ class Subscription::UpdaterService
       self.upgrade_purchase = subscription.charge!(
         override_params: purchase_params,
         from_failed_charge_email: ActiveModel::Type::Boolean.new.cast(params[:declined]),
-        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?
+        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?,
+        authenticated_offer_code_buyer: logged_in_user,
       )
 
       subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||
@@ -424,7 +435,7 @@ class Subscription::UpdaterService
       return false if pwyw?
       tier_price = subscription.send(:tier_price)
       return false unless tier_price.present?
-      subscription.current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
+      current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
     end
 
     def same_pwyw_price?

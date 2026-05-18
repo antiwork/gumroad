@@ -505,6 +505,14 @@ describe ProductPresenter do
           discount: offer_code.discount,
         )
       end
+
+      it "includes existing-customer-only default offer code data in edit_props" do
+        offer_code.update!(existing_customers_only: true, ownership_products: [product])
+
+        product_data = presenter.edit_props[:product]
+
+        expect(product_data[:default_offer_code]).to include(discount: a_hash_including(type: "fixed", cents: 100))
+      end
     end
 
     context "membership" do

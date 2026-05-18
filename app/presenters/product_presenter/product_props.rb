@@ -70,7 +70,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
-      discount_code: discount_code_props(discount_code, quantity),
+      discount_code: discount_code_props(discount_code, quantity, pundit_user&.user),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
@@ -81,11 +81,12 @@ class ProductPresenter::ProductProps
   private
     attr_reader :product, :seller
 
-    def discount_code_props(discount_code_from_url, quantity)
+    def discount_code_props(discount_code_from_url, quantity, buyer)
       BestOfferCodeService.new(
         product: product,
         url_code: discount_code_from_url,
-        quantity: quantity
+        quantity: quantity,
+        buyer: buyer
       ).result
     end
 

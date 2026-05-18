@@ -17,6 +17,13 @@ describe Purchase, :vcr do
   let(:chargeable) { create :chargeable }
 
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id) ||
+      create(:merchant_account_paypal, user: nil, charge_processor_merchant_id: "paypal_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
     allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
   end
 
@@ -730,6 +737,18 @@ describe Purchase, :vcr do
       expect(@purchase.as_json[:gumroad_fee]).to eq(145) # 50c (10%) + 50c + 15c (2.9% cc fee) + 30c (fixed cc fee)
     end
 
+    it "uses the cached resolved discount amount for offer code display" do
+      product = create(:product, price_cents: 1000)
+      offer_code = create(:tiered_offer_code, user: product.user, products: [product], amount_percentage: 0)
+      purchase = create(:purchase, link: product, seller: product.user, offer_code:, price_cents: 500)
+      purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+
+      expect(purchase.as_json[:offer_code]).to include(
+        code: offer_code.code,
+        displayed_amount_off: "50%"
+      )
+    end
+
     it "has the purchaser_id if one exists" do
       expect(@purchase.as_json.key?(:purchaser_id)).to be(false)
 
@@ -1215,7 +1234,7 @@ describe Purchase, :vcr do
     end
 
     describe "purchase is on a creator's merchant account" do
-      let(:purchase) { create(:purchase, merchant_account: create(:merchant_account)) }
+      let(:purchase) { create(:purchase, merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")) }
 
       it "returns a Gumroad merchant account" do
         expect(purchase.affiliate_merchant_account.user_id).to eq(nil)
@@ -4777,6 +4796,56 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#set_price_and_rate" do
+    let(:seller) { create(:user) }
+    let(:buyer) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+    let(:offer_code) do
+      create(:tiered_offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             amount_percentage: 0,
+             ownership_duration_tiers: [
+               { "months" => 0, "amount_percentage" => 0 },
+               { "months" => 12, "amount_percentage" => 50 },
+             ])
+    end
+
+    it "caches the buyer-specific tiered discount amount" do
+      create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents, created_at: 13.months.ago)
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+
+      expect(purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(purchase.displayed_price_cents).to eq(500)
+    end
+
+    it "rejects an existing-customer discount when the buyer does not qualify" do
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+
+      expect(purchase.errors.full_messages).to include("Sorry, this discount code is only for existing customers.")
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
+
+    it "keeps the existing-customer discount error when the purchase is saved" do
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+      purchase.save
+
+      expect(purchase.errors.full_messages).to include("Sorry, this discount code is only for existing customers.")
+      expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_INVALID)
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
+  end
+
   describe "associations" do
     let(:circle_integration) { create(:circle_integration) }
     let(:discord_integration) { create(:discord_integration) }
@@ -5214,6 +5283,15 @@ describe Purchase, :vcr do
         }
       )
       expect(@purchase.json_data_for_mobile(include_sale_details: true)).to eq(json_data)
+    end
+
+    it "uses the cached resolved discount amount for offer code display" do
+      @purchase.create_purchase_offer_code_discount(offer_code: @offer_code, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 4000)
+
+      expect(@purchase.json_data_for_mobile(include_sale_details: true)[:offer_code]).to include(
+        code: @offer_code.code,
+        displayed_amount_off: "50%"
+      )
     end
   end
 
@@ -6540,5 +6618,4 @@ describe Purchase, :vcr do
       expect(offer_code.reload).not_to be_deleted
     end
   end
-
 end

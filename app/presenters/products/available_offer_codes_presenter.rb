@@ -17,7 +17,7 @@ class Products::AvailableOfferCodesPresenter
         id: offer_code.external_id,
         code: offer_code.code,
         name: offer_code.name.presence || "",
-        discount: offer_code.discount,
+        discount: offer_code.configured_discount_for_display,
       }
     end
 end

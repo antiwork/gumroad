@@ -32,7 +32,7 @@ class Subscription::RestartAtCheckoutService
 
     def updater_service_params
       perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i ||
-                              subscription.current_subscription_price_cents
+                              subscription.current_subscription_price_cents(authenticated_offer_code_buyer: buyer)
       original_discount = subscription.original_purchase.purchase_offer_code_discount
       new_discount_code = params.dig(:purchase, :discount_code)
       new_offer_code = new_discount_code.present? ? product.find_offer_code(code: new_discount_code.downcase.strip) : nil

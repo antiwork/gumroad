@@ -1246,3 +1246,4 @@ class User < ApplicationRecord
       value.present? && value.to_s == value.to_i.to_s
     end
 end
+# warm cache benchmark

@@ -362,6 +362,25 @@ describe ContactingCreatorMailer do
       expect_push_alert(seller.id, mail.subject)
     end
 
+    it "displays the resolved tiered offer code discount" do
+      product = create(:product, user: seller, price_cents: 2_00)
+      offer_code = create(:tiered_offer_code, name: "Renewal discount", products: [product], ownership_products: [product], user: seller)
+      purchase = create(:purchase, link: product, seller: product.user, purchaser: buyer, email: buyer.email, offer_code:, displayed_price_cents: 1_00, price_cents: 1_00)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 50,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 2_00,
+        duration_in_months: nil
+      )
+
+      mail = ContactingCreatorMailer.notify(purchase.id)
+
+      expect(mail.body.decoded).to include("Renewal discount")
+      expect(mail.body.decoded).to include("50% off")
+      expect(mail.body.decoded).not_to include("(0% off)")
+    end
+
     it "works for $0 purchases" do
       product = create(:product, user: seller, price_cents: 0, customizable_price: true)
       purchase = create(:purchase, link: product, seller: product.user, stripe_transaction_id: nil, stripe_fingerprint: nil)
@@ -619,6 +638,13 @@ describe ContactingCreatorMailer do
       upsell = create(:upsell, product:, name: "Complete course", seller:, offer_code:)
       upsell_variant = create(:upsell_variant, upsell:, selected_variant: product.alive_variants.first, offered_variant: product.alive_variants.second)
       upsell_purchase = create(:upsell_purchase, upsell:, upsell_variant:)
+      upsell_purchase.purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 20,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: product.price_cents,
+        duration_in_months: nil
+      )
       mail = ContactingCreatorMailer.notify(upsell_purchase.purchase.id)
       expect(mail.body.encoded).to include "Upsell"
       expect(mail.body.encoded).to include "Complete course (20% off)"

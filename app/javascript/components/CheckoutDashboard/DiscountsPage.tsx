@@ -1,4 +1,4 @@
-import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@boxicons/react";
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, X } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -14,6 +14,7 @@ import {
 } from "$app/data/offer_code";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { between } from "$app/utils/math";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 import { writeQueryParams } from "$app/utils/url";
@@ -42,6 +43,7 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -71,6 +73,8 @@ type Product = {
 
 export type Duration = 1;
 
+export type OwnershipDurationTier = { months: number; amount_percentage: number };
+
 export type OfferCode = {
   id: string;
   can_update: boolean;
@@ -85,6 +89,9 @@ export type OfferCode = {
   duration_in_billing_cycles: Duration | null;
   minimum_quantity: number | null;
   minimum_amount_cents: number | null;
+  existing_customers_only: boolean;
+  ownership_products: Product[];
+  ownership_duration_tiers: OwnershipDurationTier[] | null;
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -104,12 +111,20 @@ const formatProducts = (offerCode: OfferCode) => {
     ? `${products}, and ${offerCode.products.length - 2} ${offerCode.products.length - 2 === 1 ? "other" : "others"}`
     : products;
 };
-const formatAmount = (offerCode: OfferCode) =>
-  offerCode.discount.type === "cents"
+const formatAmount = (offerCode: OfferCode) => {
+  if (offerCode.ownership_duration_tiers?.length) {
+    const percentages = offerCode.ownership_duration_tiers.map(({ amount_percentage }) => amount_percentage);
+    const minPercentage = Math.min(...percentages);
+    const maxPercentage = Math.max(...percentages);
+    return minPercentage === maxPercentage ? `${minPercentage}%` : `${minPercentage}%–${maxPercentage}%`;
+  }
+
+  return offerCode.discount.type === "cents"
     ? formatPriceCentsWithCurrencySymbol(offerCode.currency_type, offerCode.discount.value, {
         symbolFormat: "short",
       })
     : `${offerCode.discount.value}%`;
+};
 const formatRevenue = (revenue: number) => formatPriceCentsWithCurrencySymbol("usd", revenue, { symbolFormat: "long" });
 const formatUses = (uses: number, limit: number | null) => `${uses}/${limit ?? "∞"}`;
 
@@ -197,7 +212,9 @@ const DiscountsPage = ({
 
   // Handle browser actions for navigating to the previous/next page
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const params = typia.is<QueryParams>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
+    const params = typia.is<QueryParams>(e.state)
+      ? e.state
+      : extractParams(new URLSearchParams(window.location.search));
     const newSort = params.sort;
     const newQuery = params.query;
     const page = params.page ?? 1;
@@ -666,6 +683,9 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            existingCustomersOnly: offerCode.existing_customers_only,
+            ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
+            ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -709,6 +729,9 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            existingCustomersOnly: offerCode.existing_customers_only,
+            ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
+            ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -729,6 +752,39 @@ const DiscountsPage = ({
 };
 
 const generateCode = () => Math.random().toString(36).substring(2, 9);
+
+const TierField = ({
+  value,
+  onChange,
+  ariaLabel,
+  ariaInvalid,
+  suffix,
+  onBlur,
+}: {
+  value: number | null;
+  onChange: (value: number | null) => void;
+  ariaLabel: string;
+  ariaInvalid: boolean;
+  suffix: string;
+  onBlur?: () => void;
+}) => (
+  <InputGroup className="w-fit">
+    <NumberInput value={value} onChange={onChange}>
+      {(inputProps) => (
+        <Input
+          {...inputProps}
+          aria-label={ariaLabel}
+          className="w-12 !px-0 text-center tabular-nums"
+          maxLength={3}
+          aria-invalid={ariaInvalid}
+          onBlur={onBlur}
+        />
+      )}
+    </NumberInput>
+    <span className="text-muted-foreground -mr-2 flex h-12 items-center border-l border-border pl-2">{suffix}</span>
+  </InputGroup>
+);
+
 const Form = ({
   title,
   offerCode,
@@ -811,17 +867,89 @@ const Form = ({
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
+  const [existingCustomersOnly, setExistingCustomersOnly] = React.useState(!!offerCode?.existing_customers_only);
+  const [ownershipProductIds, setOwnershipProductIds] = React.useState<{ value: string[]; error?: boolean }>({
+    value: offerCode?.ownership_products?.map(({ id }) => id) ?? [],
+  });
+  const ownershipProductsFieldRef = React.useRef<SelectInstance<Option, true, GroupBase<Option>>>(null);
+  const ownershipProducts = products.filter(({ id }) => ownershipProductIds.value.includes(id));
+
+  const initialTiers = offerCode?.ownership_duration_tiers ?? null;
+  const tierIdRef = React.useRef(0);
+  const nextTierId = () => `tier-${++tierIdRef.current}`;
+  type TierRow = {
+    id: string;
+    months: number | null;
+    amountPercentage: number | null;
+    monthsError?: boolean;
+    percentError?: boolean;
+  };
+  const [useTieredDiscounts, setUseTieredDiscounts] = React.useState(!!initialTiers?.length);
+  const [tiers, setTiers] = React.useState<TierRow[]>(() => {
+    if (initialTiers?.length) {
+      return initialTiers.map((tier) => ({
+        id: nextTierId(),
+        months: tier.months,
+        amountPercentage: tier.amount_percentage,
+      }));
+    }
+    return [{ id: nextTierId(), months: 0, amountPercentage: 0 }];
+  });
+
+  const updateTier = (id: string, patch: Partial<TierRow>) =>
+    setTiers((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  const byMonths = (a: TierRow, b: TierRow) => (a.months ?? Infinity) - (b.months ?? Infinity);
+  const sortTiersByMonths = () =>
+    setTiers((prev) => {
+      const sorted = [...prev].sort(byMonths);
+      return sorted.every((tier, index) => tier.id === prev[index]?.id) ? prev : sorted;
+    });
+  const sortedTiers = React.useMemo(() => [...tiers].sort(byMonths), [tiers]);
+  const rangeLabelFor = (tierId: string) => {
+    const idx = sortedTiers.findIndex((tier) => tier.id === tierId);
+    if (idx === -1) return "";
+    const current = sortedTiers[idx];
+    const next = sortedTiers[idx + 1];
+    if (!current) return "";
+    const start = current.months ?? 0;
+    return next ? `${start}–${next.months ?? 0} months` : `${start}+ months`;
+  };
+
   const uid = React.useId();
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
     const isCodeInvalid = code.value === "";
-    const isDiscountInvalid = discount.value === null;
+    const isDiscountInvalid = !useTieredDiscounts && discount.value === null;
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
     const isExpiresAtInvalid = !hasNoEndDate && validAt > expiresAt.value;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
+    const isOwnershipProductsInvalid = existingCustomersOnly && ownershipProductIds.value.length === 0;
+
+    let tierErrors: TierRow[] = tiers;
+    let isTiersInvalid = false;
+    if (existingCustomersOnly && useTieredDiscounts) {
+      const seenMonths = new Set<number>();
+      tierErrors = tiers.map((tier) => {
+        const monthsValid =
+          tier.months !== null && Number.isFinite(tier.months) && tier.months >= 0 && Number.isInteger(tier.months);
+        const duplicate = tier.months !== null && seenMonths.has(tier.months);
+        if (tier.months !== null) seenMonths.add(tier.months);
+        const percentValid =
+          tier.amountPercentage !== null &&
+          Number.isFinite(tier.amountPercentage) &&
+          tier.amountPercentage >= 0 &&
+          tier.amountPercentage <= 100;
+        const monthsError = !monthsValid || duplicate;
+        const percentError = !percentValid;
+        if (monthsError || percentError) isTiersInvalid = true;
+        return { ...tier, monthsError, percentError };
+      });
+      const minMonths = Math.min(...tiers.map((tier) => tier.months ?? Infinity));
+      if (minMonths !== 0) isTiersInvalid = true;
+    }
 
     const hasValidationErrors =
       isNameInvalid ||
@@ -831,7 +959,9 @@ const Form = ({
       isExpiresAtInvalid ||
       isSelectedProductsInvalid ||
       isMinimumQuantityInvalid ||
-      isMinimumAmountInvalid;
+      isMinimumAmountInvalid ||
+      isOwnershipProductsInvalid ||
+      isTiersInvalid;
 
     if (hasValidationErrors) {
       setName((prev) => ({ ...prev, error: isNameInvalid }));
@@ -842,11 +972,14 @@ const Form = ({
       setSelectedProductIds((prev) => ({ ...prev, error: isSelectedProductsInvalid }));
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
+      setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
+      if (isTiersInvalid) setTiers(tierErrors);
 
       const invalidFieldRefs = [];
       if (isNameInvalid) invalidFieldRefs.push(nameFieldRef);
       if (isCodeInvalid) invalidFieldRefs.push(codeFieldRef);
       if (isSelectedProductsInvalid) invalidFieldRefs.push(selectedProductsFieldRef);
+      if (isOwnershipProductsInvalid) invalidFieldRefs.push(ownershipProductsFieldRef);
 
       if (invalidFieldRefs[0]?.current) {
         invalidFieldRefs[0].current.focus();
@@ -856,18 +989,28 @@ const Form = ({
       return;
     }
 
+    const tieredPayload: OwnershipDurationTier[] | null =
+      existingCustomersOnly && useTieredDiscounts
+        ? sortedTiers.map((tier) => ({ months: tier.months ?? 0, amount_percentage: tier.amountPercentage ?? 0 }))
+        : null;
+
     save({
       name: name.value,
       code: code.value,
       products: universal ? null : selectedProducts.map((product) => ({ ...product, uses: 0 })),
-      discount: { type: discount.type, value: discount.value ?? 0 },
+      discount: useTieredDiscounts
+        ? { type: "percent", value: sortedTiers[0]?.amountPercentage ?? 0 }
+        : { type: discount.type, value: discount.value ?? 0 },
       limit: limitQuantity ? maxQuantity.value : null,
       currency_type: currencyCode,
       valid_at: limitValidity ? validAt.toISOString() : null,
       expires_at: limitValidity && !hasNoEndDate ? expiresAt.value.toISOString() : null,
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
-      duration_in_billing_cycles: canSetDuration ? durationInBillingCycles : null,
+      duration_in_billing_cycles: canSetDuration && !useTieredDiscounts ? durationInBillingCycles : null,
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+      existing_customers_only: existingCustomersOnly,
+      ownership_products: existingCustomersOnly ? ownershipProducts : [],
+      ownership_duration_tiers: tieredPayload,
     });
   };
 
@@ -996,7 +1139,7 @@ const Form = ({
               All products
             </Label>
           </Fieldset>
-          {canSetDuration ? (
+          {canSetDuration && !useTieredDiscounts ? (
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}duration`}>Discount duration for memberships</Label>
@@ -1012,27 +1155,29 @@ const Form = ({
               />
             </Fieldset>
           ) : null}
-          <Fieldset>
-            <FieldsetTitle>Type</FieldsetTitle>
-            <DiscountInput
-              discount={discount}
-              setDiscount={setDiscount}
-              currencyCode={currencyCode}
-              currencyCodeSelector={
-                universal
-                  ? {
-                      options: [...new Set(products.map(({ currency_type }) => currency_type))],
-                      onChange: setCurrencyCode,
-                    }
-                  : undefined
-              }
-              disableFixedAmount={
-                discount.type === "percent" &&
-                !universal &&
-                !selectedProducts.every(({ currency_type }) => currency_type === currencyCode)
-              }
-            />
-          </Fieldset>
+          {useTieredDiscounts ? null : (
+            <Fieldset>
+              <FieldsetTitle>Type</FieldsetTitle>
+              <DiscountInput
+                discount={discount}
+                setDiscount={setDiscount}
+                currencyCode={currencyCode}
+                currencyCodeSelector={
+                  universal
+                    ? {
+                        options: [...new Set(products.map(({ currency_type }) => currency_type))],
+                        onChange: setCurrencyCode,
+                      }
+                    : undefined
+                }
+                disableFixedAmount={
+                  discount.type === "percent" &&
+                  !universal &&
+                  !selectedProducts.every(({ currency_type }) => currency_type === currencyCode)
+                }
+              />
+            </Fieldset>
+          )}
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
             <Details open={limitQuantity}>
@@ -1102,6 +1247,126 @@ const Form = ({
                     aria-invalid={expiresAt.error ?? false}
                   />
                 </Fieldset>
+              </Dropdown>
+            </Details>
+            <Details open={existingCustomersOnly}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={existingCustomersOnly}
+                  onChange={(evt) => {
+                    setExistingCustomersOnly(evt.target.checked);
+                    if (!evt.target.checked) setUseTieredDiscounts(false);
+                  }}
+                  label="Limit to existing customers"
+                />
+              </DetailsToggle>
+              <Dropdown className="gap-4">
+                <Fieldset state={ownershipProductIds.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}ownershipProducts`}>Must have purchased</Label>
+                  </FieldsetTitle>
+                  <Select
+                    ref={ownershipProductsFieldRef}
+                    inputId={`${uid}ownershipProducts`}
+                    instanceId={`${uid}ownershipProducts`}
+                    options={products
+                      .filter((product) => !product.archived)
+                      .map((product) => ({ id: product.id, label: product.name }))}
+                    value={ownershipProducts.map(({ id, name: label }) => ({ id, label }))}
+                    isMulti
+                    isClearable
+                    placeholder="Choose products"
+                    onChange={(selectedIds) => setOwnershipProductIds({ value: selectedIds.map(({ id }) => id) })}
+                    aria-invalid={ownershipProductIds.error}
+                  />
+                </Fieldset>
+                <Label>
+                  <Checkbox
+                    checked={useTieredDiscounts}
+                    onChange={(evt) => setUseTieredDiscounts(evt.target.checked)}
+                  />
+                  Tiered discounts by ownership duration
+                </Label>
+                {useTieredDiscounts ? (
+                  <Fieldset className="gap-3">
+                    <FieldsetTitle>
+                      <Label>Tiers</Label>
+                    </FieldsetTitle>
+                    <FieldsetDescription>Add a tier for each ownership milestone.</FieldsetDescription>
+                    <div className="flex flex-col gap-2">
+                      {tiers.map((tier, index) => (
+                        <div
+                          key={tier.id}
+                          className="rounded border border-border p-3 text-sm sm:flex sm:flex-wrap sm:items-center sm:gap-1"
+                        >
+                          <div className="flex items-start justify-between gap-2 sm:contents">
+                            <span className="sm:text-muted-foreground text-base font-semibold whitespace-nowrap tabular-nums sm:w-[5.5rem] sm:text-sm sm:font-normal">
+                              {rangeLabelFor(tier.id)}
+                            </span>
+                            {index > 0 ? (
+                              <button
+                                type="button"
+                                aria-label={`Remove tier ${index + 1}`}
+                                className="cursor-pointer rounded p-1 all-unset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:order-last sm:ml-auto"
+                                onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
+                              >
+                                <X className="size-5" />
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 grid w-fit grid-cols-[auto_auto] items-center gap-x-2 gap-y-2 sm:mt-0 sm:contents">
+                            <span className="text-muted-foreground sm:hidden">Discount</span>
+                            <TierField
+                              value={tier.amountPercentage}
+                              ariaLabel={`Tier ${index + 1} percentage`}
+                              ariaInvalid={!!tier.percentError}
+                              suffix="%"
+                              onChange={(value) => {
+                                updateTier(tier.id, {
+                                  amountPercentage: value === null ? null : between(value, 0, 100),
+                                  percentError: false,
+                                });
+                              }}
+                            />
+                            <span
+                              className={classNames(
+                                "text-muted-foreground hidden sm:inline",
+                                index > 0 && "sm:after:content-[',']",
+                              )}
+                            >
+                              discount
+                            </span>
+                            {index > 0 ? (
+                              <>
+                                <span className="text-muted-foreground sm:hidden">Starts after</span>
+                                <span className="text-muted-foreground hidden sm:inline">starts after</span>
+                                <TierField
+                                  value={tier.months}
+                                  ariaLabel={`Tier ${index + 1} starting month`}
+                                  ariaInvalid={!!tier.monthsError}
+                                  suffix="months"
+                                  onBlur={sortTiersByMonths}
+                                  onChange={(value) => {
+                                    if (value !== null && value < 0) return;
+                                    updateTier(tier.id, { months: value, monthsError: false });
+                                  }}
+                                />
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={() => {
+                        const maxMonths = Math.max(...tiers.map((tier) => tier.months ?? 0), 0);
+                        setTiers((prev) => [...prev, { id: nextTierId(), months: maxMonths + 1, amountPercentage: 0 }]);
+                      }}
+                    >
+                      Add tier
+                    </Button>
+                  </Fieldset>
+                ) : null}
               </Dropdown>
             </Details>
             <Details open={hasMinimumAmount}>

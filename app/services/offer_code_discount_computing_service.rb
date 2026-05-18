@@ -11,9 +11,10 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products)
+  def initialize(code, products, buyer: nil)
     @code = code
     @products = products
+    @buyer = buyer
   end
 
   def process
@@ -26,12 +27,14 @@ class OfferCodeDiscountComputingService
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
-      if eligible?(offer_code, purchase_quantity)
+      resolved_discount = offer_code.evaluate_for_buyer(buyer)
+
+      if resolved_discount && eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
-        products_data[link.unique_permalink] = { discount: offer_code.discount }
+        products_data[link.unique_permalink] = { discount: resolved_discount }
         optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
-        track_ineligibility(offer_code, purchase_quantity)
+        track_ineligibility(offer_code, purchase_quantity, resolved_discount)
       end
     end
 
@@ -42,7 +45,7 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products
+    attr_reader :code, :products, :buyer
 
     def links
       @_links ||= Link.visible
@@ -102,8 +105,12 @@ class OfferCodeDiscountComputingService
       @remaining_times_of_use[offer_code.id] -= purchase_quantity
     end
 
-    def track_ineligibility(offer_code, purchase_quantity)
+    def track_ineligibility(offer_code, purchase_quantity, resolved_discount)
       @product_level_ineligibilities ||= {}
+
+      if resolved_discount.nil? && offer_code.existing_customers_only?
+        @product_level_ineligibilities[:not_existing_customer] = true
+      end
 
       unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         @product_level_ineligibilities[:unmet_minimum_purchase_quantity] = true
@@ -119,6 +126,7 @@ class OfferCodeDiscountComputingService
     end
 
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
+      :not_existing_customer,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,
@@ -143,7 +151,10 @@ class OfferCodeDiscountComputingService
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
-        products_data[cross_sell.product.unique_permalink] = { discount: offer_code.discount }
+        resolved_discount = offer_code.evaluate_for_buyer(buyer)
+        next unless resolved_discount
+
+        products_data[cross_sell.product.unique_permalink] = { discount: resolved_discount }
       end
     end
 end

@@ -47,6 +47,16 @@ describe Products::AvailableOfferCodesController do
           expect(first_code).to have_key("name")
           expect(first_code).to have_key("discount")
         end
+
+        it "returns configured discounts for existing-customer offer codes" do
+          existing_customer_code = create(:offer_code, :for_existing_customers, user: seller, name: "Renewal", code: "RENEWAL", products: [product], amount_cents: nil, amount_percentage: 1, currency_type: nil)
+
+          get :index, format: :json, params: { product_id: product.unique_permalink, query: "RENEWAL" }
+
+          expect(response).to be_successful
+          expect(response.parsed_body.first["id"]).to eq(existing_customer_code.external_id)
+          expect(response.parsed_body.first["discount"]).to include("type" => "percent", "percents" => 1)
+        end
       end
 
       context "with search query" do

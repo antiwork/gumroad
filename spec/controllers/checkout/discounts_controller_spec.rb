@@ -314,6 +314,57 @@ describe Checkout::DiscountsController do
         expect(response.parsed_body["error_message"]).to eq("Discount code must be unique.")
       end
     end
+
+    context "when limited to existing customers" do
+      let(:owned_product) { create(:product, user: seller) }
+      let(:subject_product) { create(:product, user: seller, price_cents: 2_00) }
+
+      it "creates an offer code with ownership products and tiers" do
+        expect do
+          post :create, params: {
+            name: "Renewal discount",
+            code: "renew",
+            amount_percentage: 0,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: true,
+            ownership_product_ids: [owned_product.external_id],
+            ownership_duration_tiers: [
+              { months: 0, amount_percentage: 0 },
+              { months: 12, amount_percentage: 50 },
+            ],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        offer_code = seller.offer_codes.last
+        expect(offer_code.existing_customers_only?).to eq(true)
+        expect(offer_code.ownership_products).to eq([owned_product])
+        expect(offer_code.normalized_ownership_duration_tiers).to eq([
+                                                                       { "months" => 0, "amount_percentage" => 0 },
+                                                                       { "months" => 12, "amount_percentage" => 50 },
+                                                                     ])
+      end
+
+      it "rejects ownership tiers without an existing-customers flag" do
+        expect do
+          post :create, params: {
+            name: "Bad",
+            code: "bad",
+            amount_percentage: 0,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: false,
+            ownership_product_ids: [],
+            ownership_duration_tiers: [{ months: 0, amount_percentage: 50 }],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(0)
+
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
   end
 
   describe "PUT update" do
@@ -362,6 +413,45 @@ describe Checkout::DiscountsController do
       expect(offer_code.minimum_quantity).to eq(nil)
       expect(offer_code.duration_in_billing_cycles).to eq(nil)
       expect(offer_code.minimum_amount_cents).to eq(nil)
+    end
+
+    it "clears ownership duration tiers when tiering is disabled" do
+      owned_product = create(:product, user: seller)
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(
+        products: [subject_product],
+        ownership_products: [owned_product],
+        existing_customers_only: true,
+        amount_cents: nil,
+        amount_percentage: 0,
+        duration_in_billing_cycles: nil,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 0 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ]
+      )
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Discount 2",
+        max_purchase_count: 2,
+        amount_percentage: 25,
+        currency_type: nil,
+        universal: false,
+        selected_product_ids: [subject_product.external_id],
+        existing_customers_only: false,
+        ownership_product_ids: [],
+        ownership_duration_tiers: nil,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      offer_code.reload
+      expect(offer_code.existing_customers_only?).to eq(false)
+      expect(offer_code.ownership_products).to eq([])
+      expect(offer_code.ownership_duration_tiers).to eq(nil)
+      expect(offer_code.amount_percentage).to eq(25)
     end
 
     context "when the offer code has several products" do

@@ -2758,6 +2758,62 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
 
+    context "buyer-aware fallback pricing" do
+      let(:logged_in_user) { create(:user) }
+      let(:subscription) { instance_double(Subscription) }
+      let(:service) do
+        described_class.new(
+          subscription:,
+          gumroad_guid: "abc123",
+          params: {},
+          logged_in_user:,
+          remote_ip: "127.0.0.1",
+        )
+      end
+
+      it "uses the logged in user when validating the unchanged plan price" do
+        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+
+        expect(service.send(:new_price_cents)).to eq(12_34)
+      end
+
+      it "uses the logged in user when checking whether the subscription price changed" do
+        service.original_purchase = instance_double(Purchase, quantity: 2)
+        allow(service).to receive(:pwyw?).and_return(false)
+        allow(subscription).to receive(:send).with(:tier_price).and_return(instance_double(Price, price_cents: 6_17))
+        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+
+        expect(service.send(:price_changed?)).to eq(false)
+      end
+
+      it "passes the logged in user when charging an immediate update" do
+        service.is_resubscribing = false
+        upgrade_purchase = instance_double(Purchase,
+                                           successful?: true,
+                                           test_successful?: false,
+                                           in_progress?: false,
+                                           errors: double(full_messages: []),
+                                           error_code: nil,
+                                           external_id: "upgrade-purchase")
+        allow(service).to receive(:amount_owed).and_return(12_34)
+        allow(service).to receive(:prorated_discount_price_cents).and_return(0)
+        allow(service).to receive(:upgrade?).and_return(true)
+        allow(service).to receive(:use_existing_card?).and_return(true)
+        allow(service).to receive(:send_subscription_updated_api_notification)
+        allow(service).to receive(:same_variants?).and_return(true)
+        allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+        allow(subscription).to receive(:credit_card_to_charge).and_return(nil)
+        expect(subscription).to receive(:charge!).with(
+          override_params: hash_including(perceived_price_cents: 12_34, is_upgrade_purchase: true),
+          from_failed_charge_email: nil,
+          off_session: true,
+          authenticated_offer_code_buyer: logged_in_user,
+        ).and_return(upgrade_purchase)
+
+        expect(service.send(:charge_user!)[:success]).to eq(true)
+      end
+    end
+
     context "when restarting with offer code changes" do
       let(:free_trial) { false }
 
@@ -2866,6 +2922,7 @@ describe Subscription::UpdaterService, :vcr do
         new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)
 
         expect(@subscription).to receive(:send_restart_notifications!)
+        expect(@subscription).to receive(:update_current_plan!).with(hash_including(authenticated_offer_code_buyer: @user)).and_call_original
         result = described_class.new(
           subscription: @subscription,
           gumroad_guid: @gumroad_guid,

@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class BestOfferCodeService
-  def initialize(product:, url_code: nil, quantity: 1)
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil)
     @product = product
     @url_code = url_code.presence
     @quantity = quantity
+    @buyer = buyer
     @default_code = @product.default_offer_code&.code
   end
 
@@ -24,9 +25,8 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    # Both are valid, compare discount amounts
-    url_code_amount = compute_amount_off(@url_code)
-    default_code_amount = compute_amount_off(@default_code)
+    url_code_amount = amount_off_from_discount(url_code_result[:discount])
+    default_code_amount = amount_off_from_discount(default_code_result[:discount])
 
     url_code_amount > default_code_amount ? url_code_result : default_code_result
   end
@@ -45,7 +45,8 @@ class BestOfferCodeService
             permalink: @product.unique_permalink,
             quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max
           }
-        }
+        },
+        buyer: @buyer
       ).process
 
       if response[:error_code].present?
@@ -55,16 +56,15 @@ class BestOfferCodeService
       {
         valid: true,
         code: code,
-        discount: offer_code.discount
+        discount: response[:products_data][@product.unique_permalink][:discount]
       }
     end
 
-    def compute_amount_off(code)
-      return 0 if code.blank?
-
-      offer_code = @product.find_offer_code(code: code)
-      return 0 unless offer_code
-
-      offer_code.amount_off(@product.price_cents)
+    def amount_off_from_discount(discount)
+      return 0 unless discount
+      transient = discount[:type] == "fixed" ?
+        OfferCode.new(amount_cents: discount[:cents]) :
+        OfferCode.new(amount_percentage: discount[:percents])
+      transient.amount_off(@product.price_cents)
     end
 end

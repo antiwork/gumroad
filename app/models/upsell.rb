@@ -58,7 +58,7 @@ class Upsell < ApplicationRecord
           name: variant.name
         } : nil,
       },
-      discount: offer_code&.discount,
+      discount: offer_code&.configured_discount_for_display,
       selected_products: selected_products.map do |product|
         {
           id: product.external_id,

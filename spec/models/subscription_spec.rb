@@ -9,6 +9,8 @@ describe Subscription, :vcr do
   let(:seller) { create(:user) }
 
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     @product = create(:subscription_product, user: seller, is_licensed: true)
     @subscription = create(:subscription, user: create(:user), link: @product)
     @purchase = create(:purchase, link: @product, email: @subscription.user.email, full_name: "squiddy",
@@ -435,6 +437,30 @@ describe Subscription, :vcr do
   end
 
   describe "#charge!" do
+    it "uses the authenticated buyer when resolving charge discounts" do
+      ownership_product = create(:product, user: @product.user)
+      authenticated_buyer = create(:user)
+      create(:purchase, link: ownership_product, seller: @product.user, purchaser: authenticated_buyer, price_cents: ownership_product.price_cents)
+      offer_code = create(:offer_code,
+                          code: "authenticatedbuyer",
+                          user: @product.user,
+                          products: [@product],
+                          ownership_products: [ownership_product],
+                          existing_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 1,
+                          currency_type: nil)
+      allow(@subscription).to receive(:process_purchase!) { |purchase, _from_failed_charge_email, off_session:| purchase }
+
+      @new_purchase = @subscription.charge!(authenticated_offer_code_buyer: authenticated_buyer)
+
+      expect(@new_purchase.offer_code).to eq(offer_code)
+      expect(@new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(1)
+      expect(@new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+    end
+  end
+
+  describe "#charge!" do
     before do
       @subscription.user.update!(credit_card: create(:credit_card))
     end
@@ -747,6 +773,9 @@ describe Subscription, :vcr do
 
       context "when a generic Braintree error occurs" do
         before do
+          MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+            create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                      charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
           paypal_card = CreditCard.create(build(:paypal_chargeable), nil, @subscription.user)
           @subscription.user.credit_card = paypal_card
           @subscription.user.save!
@@ -1007,6 +1036,7 @@ describe Subscription, :vcr do
           end
 
           it "allows recurring charges to go through and create new purchase row", :vcr do
+            expect(@subscription.current_subscription_price_cents).to eq(0)
             expect { @subscription.charge! }.to change { Purchase.count }.by(1)
           end
 
@@ -2007,6 +2037,165 @@ describe Subscription, :vcr do
       end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
     end
 
+    it "caches the buyer-specific amount when applying a tiered existing-customer discount",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code:)
+
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq 50
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq true
+      expect(new_purchase.displayed_price_cents).to eq 10_00
+    end
+
+    it "does not use the subscription owner to auto-discover discounts for unauthenticated updates",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      create(:tiered_offer_code, code: "autovictim", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: @new_tier_yearly_price.price_cents,
+        authenticated_offer_code_buyer: nil,
+      )
+
+      expect(new_purchase.offer_code).to be_nil
+      expect(new_purchase.purchase_offer_code_discount).to be_nil
+      expect(new_purchase.displayed_price_cents).to eq(@new_tier_yearly_price.price_cents)
+    end
+
+    it "does not copy an exhausted original discount onto a different auto-discovered tiered discount",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      @original_purchase.update!(created_at: 1.month.ago)
+      original_offer_code = create(:offer_code,
+                                   code: "singlecycle",
+                                   products: [@product],
+                                   amount_cents: nil,
+                                   amount_percentage: 50,
+                                   currency_type: nil,
+                                   duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 50,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1,
+      )
+      tiered_offer_code = create(:tiered_offer_code, code: "zeroseedplan", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      expect(new_purchase.offer_code).to eq(tiered_offer_code)
+      expect(new_discount.offer_code).to eq(tiered_offer_code)
+      expect(new_discount.offer_code_amount).to eq(0)
+      expect(new_discount.offer_code_is_percent).to eq(true)
+      expect(new_discount.duration_in_months).to be_nil
+      expect(new_purchase.displayed_price_cents).to eq(@new_tier_yearly_price.price_cents)
+    end
+
+    it "keeps a re-resolved tiered discount when clear_discount is true",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      offer_code = create(:tiered_offer_code, code: "tieredrestart", products: [@product], ownership_products: [@product], user: @product.user)
+      @original_purchase.update!(offer_code:)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: nil,
+      )
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 10_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      expect(new_purchase.offer_code).to eq(offer_code)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(new_purchase.displayed_price_cents).to eq(10_00)
+    end
+
+    it "keeps a re-resolved non-tiered discount when clear_discount is true",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      original_offer_code = create(:offer_code,
+                                   code: "singlecycle",
+                                   products: [@product],
+                                   amount_cents: nil,
+                                   amount_percentage: 20,
+                                   currency_type: nil,
+                                   duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 20,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1,
+      )
+      replacement_code = create(:offer_code,
+                                code: "loyalrestart",
+                                user: @product.user,
+                                products: [@product],
+                                ownership_products: [@product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 15_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user,
+      )
+
+      expect(new_purchase.offer_code).to eq(replacement_code)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+      expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+      expect(new_purchase.displayed_price_cents).to eq(15_00)
+    end
+
+    it "does not use the subscription owner to qualify unauthenticated discount updates",
+       vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
+      setup_subscription
+      ownership_product = create(:product, user: @product.user)
+      create(:purchase, link: ownership_product, seller: @product.user, purchaser: @user, price_cents: ownership_product.price_cents)
+      offer_code = create(:offer_code,
+                          code: "existingbuyer",
+                          amount_cents: nil,
+                          amount_percentage: 100,
+                          products: [@product],
+                          ownership_products: [ownership_product],
+                          existing_customers_only: true,
+                          user: @product.user)
+
+      expect do
+        @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code:,
+          authenticated_offer_code_buyer: nil,
+        )
+      end.to raise_error Subscription::UpdateFailed, "Sorry, this discount code is only for existing customers."
+      expect(@subscription.reload.original_purchase).to eq(@original_purchase)
+    end
+
     it "does not update the creator's balance" do
       setup_subscription
 
@@ -2275,7 +2464,8 @@ describe Subscription, :vcr do
         new_purchase = @subscription.update_current_plan!(
           new_variants: [@new_tier],
           new_price: @yearly_product_price,
-          offer_code: new_offer_code
+          offer_code: new_offer_code,
+          clear_discount: true
         )
 
         expect(new_purchase.offer_code).to eq(new_offer_code)
@@ -2320,6 +2510,87 @@ describe Subscription, :vcr do
 
         expect(new_purchase.offer_code).to be_nil
         expect(new_purchase.purchase_offer_code_discount).to be_nil
+      end
+
+      it "keeps a deleted offer code without applying its discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
+        @offer_code.mark_deleted!
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(@offer_code)
+        expect(new_purchase.displayed_price_cents).to eq(new_purchase.minimum_paid_price_cents_per_unit_before_discount)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(0)
+      end
+
+      it "keeps a deleted tiered offer code discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
+        tiered_code = create(:tiered_offer_code, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
+        @original_purchase.update!(offer_code: tiered_code)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: tiered_code,
+          offer_code_amount: 50,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: nil
+        )
+        tiered_code.mark_deleted!
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(tiered_code)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+        expect(new_purchase.displayed_price_cents).to eq(10_00)
+      end
+
+      it "does not clear an auto-discovered replacement discount when clear_deleted_discount is true",
+         vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
+        @offer_code.update!(duration_in_months: 1)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 1
+        )
+        @offer_code.mark_deleted!
+        replacement_code = create(:offer_code,
+                                  code: "replacementdiscount",
+                                  user: @product.user,
+                                  products: [@product],
+                                  ownership_products: [@product],
+                                  existing_customers_only: true,
+                                  amount_cents: nil,
+                                  amount_percentage: 25,
+                                  currency_type: nil)
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          perceived_price_cents: 15_00,
+          clear_deleted_discount: true
+        )
+
+        expect(new_purchase.offer_code).to eq(replacement_code)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+        expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+        expect(new_purchase.displayed_price_cents).to eq(15_00)
       end
     end
 
@@ -2987,6 +3258,19 @@ describe Subscription, :vcr do
             @subscription.prorated_discount_price_cents(calculate_as_of: Time.utc(2021, 03, 01))
           ).to eq 0
         end
+      end
+    end
+
+    context "when a renewal cycle's price diverges from the signup cycle" do
+      it "prorates against the most recent successful charge, not the signup-cycle price" do
+        renewal_price_cents = 150 # signup was 300; this renewal charged half
+        renewal_succeeded_at = @succeeded_at + 1.month
+        create(:purchase, subscription: @subscription, succeeded_at: renewal_succeeded_at, price_cents: renewal_price_cents)
+        calculate_as_of = renewal_succeeded_at + @subscription.current_billing_period_seconds / 2
+
+        expect(
+          @subscription.prorated_discount_price_cents(calculate_as_of:)
+        ).to eq renewal_price_cents / 2
       end
     end
   end
@@ -3697,6 +3981,15 @@ describe Subscription, :vcr do
         it "returns false" do
           expect(subscription.discount_applies_to_next_charge?).to eq(false)
         end
+
+        it "recomputes after reload" do
+          expect(subscription.discount_applies_to_next_charge?).to eq(false)
+
+          subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          subscription.reload
+
+          expect(subscription.discount_applies_to_next_charge?).to eq(true)
+        end
       end
 
       context "when the offer code is not expired" do
@@ -3720,6 +4013,532 @@ describe Subscription, :vcr do
       it "returns true even if the offer code is only for one membership cycle" do
         expect(subscription.discount_applies_to_next_charge?).to eq(true)
       end
+    end
+  end
+
+  describe "#auto_renewal_offer_code" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+    let(:buyer) { create(:user) }
+    let(:subscription) do
+      purchase = create(:membership_purchase,
+                        link: product,
+                        purchaser: buyer,
+                        variant_attributes: [product.alive_variants.first],
+                        price_cents: 200,
+                        created_at: 13.months.ago)
+      purchase.subscription.update!(user: buyer)
+      purchase.subscription
+    end
+
+    let!(:tiered_code) do
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 0,
+             currency_type: nil,
+             ownership_duration_tiers: [
+               { "months" => 0, "amount_percentage" => 0 },
+               { "months" => 12, "amount_percentage" => 50 },
+             ])
+    end
+
+    it "discovers the best tiered renewal discount for the subscriber" do
+      auto = subscription.auto_renewal_offer_code
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "discovers universal existing-customer renewal discounts" do
+      tiered_code.mark_deleted!
+      universal_code = create(:universal_offer_code,
+                              user: seller,
+                              code: "universalrenewal",
+                              ownership_products: [product],
+                              existing_customers_only: true,
+                              amount_cents: nil,
+                              amount_percentage: 1,
+                              currency_type: nil)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(universal_code)
+      expect(auto.resolved_percent).to eq(1)
+    end
+
+    it "discovers fixed-amount existing-customer renewal discounts" do
+      tiered_code.mark_deleted!
+      fixed_code = create(:offer_code,
+                          user: seller,
+                          products: [product],
+                          ownership_products: [product],
+                          existing_customers_only: true,
+                          amount_cents: 50,
+                          amount_percentage: nil,
+                          currency_type: product.price_currency_type)
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(fixed_code)
+      expect(auto.offer_code_amount).to eq(50)
+      expect(auto.offer_code_is_percent).to eq(false)
+      expect(subscription.current_subscription_price_cents).to eq(150)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+    end
+
+    it "ignores inactive renewal discounts" do
+      create(:offer_code,
+             user: seller,
+             code: "expiredrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             valid_at: 2.days.ago,
+             expires_at: 1.day.ago)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "ignores renewal discounts capped to billing cycles" do
+      tiered_code.mark_deleted!
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             duration_in_billing_cycles: 1)
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "ignores sold-out renewal discounts" do
+      sold_out_code = create(:offer_code,
+                             user: seller,
+                             code: "soldoutrenewal",
+                             products: [product],
+                             ownership_products: [product],
+                             existing_customers_only: true,
+                             amount_cents: nil,
+                             amount_percentage: 60,
+                             currency_type: nil,
+                             max_purchase_count: 1)
+      create(:purchase, link: product, offer_code: sold_out_code)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "ignores renewal discounts with unmet minimum quantity" do
+      create(:offer_code,
+             user: seller,
+             code: "minimumquantityrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             minimum_quantity: 2)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "ignores renewal discounts with unmet minimum amount" do
+      create(:offer_code,
+             user: seller,
+             code: "minimumamountrenewal",
+             products: [product],
+             ownership_products: [product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 60,
+             currency_type: nil,
+             minimum_amount_cents: 10_000)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "uses the selected PWYW renewal price for minimum amount checks" do
+      tiered_code.update!(minimum_amount_cents: 1_200)
+      subscription.original_purchase.update!(price_cents: 1_500, displayed_price_cents: 1_500)
+
+      expect(subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount).to be < tiered_code.minimum_amount_cents
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(750)
+    end
+
+    it "keeps the selected PWYW renewal price when the cached tier is zero percent" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_500, displayed_price_cents: 1_500, created_at: 1.month.ago)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(0)
+      expect(subscription.current_subscription_price_cents).to eq(1_500)
+      expect(renewal_purchase.offer_code).to eq(tiered_code)
+      expect(renewal_purchase.purchase_offer_code_discount).to be_nil
+    end
+
+    it "handles a cached 100 percent PWYW tier" do
+      tiered_code.update!(
+        amount_percentage: 100,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 100 },
+          { "months" => 12, "amount_percentage" => 100 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update_columns(offer_code_id: tiered_code.id, price_cents: 0, displayed_price_cents: 1_500, created_at: 1.month.ago)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      expect { subscription.current_subscription_price_cents }.not_to raise_error
+      expect(subscription.current_subscription_price_cents).to eq(0)
+    end
+
+    it "keeps the selected PWYW renewal price when the cached tier is non-zero percent" do
+      tiered_code.update!(
+        amount_percentage: 25,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 25 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_125, displayed_price_cents: 1_125, created_at: 1.month.ago)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(25)
+      expect(subscription.current_subscription_price_cents).to eq(1_125)
+    end
+
+    it "applies advanced tiers to the selected PWYW renewal price after a non-zero cached tier" do
+      tiered_code.update!(
+        amount_percentage: 30,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 30 },
+          { "months" => 12, "amount_percentage" => 60 },
+        ],
+      )
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 420, displayed_price_cents: 420)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 30,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 500,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(60)
+      expect(subscription.current_subscription_price_cents).to eq(240)
+    end
+
+    it "applies the advanced tier to the selected PWYW renewal price" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_500, displayed_price_cents: 1_500)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(750)
+    end
+
+    it "recomputes after reload" do
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(tiered_code)
+
+      tiered_code.mark_deleted!
+      replacement_code = create(:offer_code,
+                                user: seller,
+                                code: "replacementrenewal",
+                                products: [product],
+                                ownership_products: [product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+      subscription.reload
+
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(replacement_code)
+    end
+
+    it "memoizes missing renewal discounts until reload" do
+      tiered_code.mark_deleted!
+      expect(subscription).to receive(:compute_auto_renewal_offer_code).with(buyer).once.and_call_original
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+      expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "does not reuse subscriber-memoized discounts for explicit guest checks" do
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(tiered_code)
+
+      expect(subscription.auto_renewal_offer_code(authenticated_offer_code_buyer: nil)).to be_nil
+    end
+
+    it "returns nil when the original purchase already carries a still-applicable discount" do
+      offer_code = create(:offer_code,
+                          user: seller,
+                          code: "stillapplies",
+                          products: [product],
+                          ownership_products: [product],
+                          existing_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 25,
+                          currency_type: nil)
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      expect(subscription.auto_renewal_offer_code).to be_nil
+    end
+
+    it "ignores deleted zeroed original discounts when discovering renewal discounts" do
+      tiered_code.mark_deleted!
+      deleted_code = create(:offer_code,
+                            user: seller,
+                            code: "deletedoriginal",
+                            products: [product],
+                            amount_cents: 50,
+                            currency_type: product.price_currency_type)
+      subscription.original_purchase.update!(offer_code: deleted_code)
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code: deleted_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: false,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      deleted_code.mark_deleted!
+      replacement_code = create(:offer_code,
+                                user: seller,
+                                code: "replacementafterdeleted",
+                                products: [product],
+                                ownership_products: [product],
+                                existing_customers_only: true,
+                                amount_cents: nil,
+                                amount_percentage: 25,
+                                currency_type: nil)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(replacement_code)
+      expect(auto.resolved_percent).to eq(25)
+      expect(subscription.current_subscription_price_cents).to eq(150)
+    end
+
+    it "re-evaluates tiered discounts attached to the original purchase" do
+      subscription.original_purchase.update!(offer_code: tiered_code)
+      subscription.original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates capped tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, quantity: 1)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(max_purchase_count: 1)
+
+      expect(tiered_code.reload).not_to be_is_valid_for_purchase
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates minimum-quantity tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, quantity: 1)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(minimum_quantity: 2)
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates minimum-amount tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code, price_cents: 1_125, displayed_price_cents: 1_125)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 25,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(
+        amount_percentage: 25,
+        minimum_amount_cents: 2_000,
+        ownership_duration_tiers: [
+          { "months" => 0, "amount_percentage" => 25 },
+          { "months" => 12, "amount_percentage" => 50 },
+        ],
+      )
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(750)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates inactive tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "re-evaluates soft-deleted tiered discounts attached to the original purchase" do
+      original_purchase = subscription.original_purchase
+      original_purchase.update!(offer_code: tiered_code)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 200,
+        duration_in_months: nil,
+      )
+      tiered_code.mark_deleted!
+
+      auto = subscription.auto_renewal_offer_code
+      renewal_purchase = subscription.build_purchase
+
+      expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+      expect(subscription.current_subscription_price_cents).to eq(100)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+    end
+
+    it "records the auto-discovered discount on the renewal purchase" do
+      renewal_purchase = subscription.build_purchase
+      expect(renewal_purchase.offer_code).to eq(tiered_code)
+      expect(renewal_purchase.purchase_offer_code_discount).to be_present
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_amount).to eq(50)
+      expect(renewal_purchase.purchase_offer_code_discount.offer_code_is_percent).to eq(true)
+    end
+
+    it "records the auto-discovered discount's pre-discount price per unit" do
+      pre_discount_price = subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount
+      subscription.original_purchase.update!(quantity: 3, price_cents: pre_discount_price * 3)
+
+      renewal_purchase = subscription.build_purchase
+
+      expect(renewal_purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents).to eq(pre_discount_price)
     end
   end
 

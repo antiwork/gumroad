@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_25_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_26_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1313,11 +1313,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_25_000001) do
     t.integer "duration_in_months"
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
+    t.boolean "existing_customers_only", default: false, null: false
+    t.json "ownership_duration_tiers"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
     t.index ["universal"], name: "index_offer_codes_on_universal"
     t.index ["user_id"], name: "index_offer_codes_on_user_id"
+  end
+
+  create_table "offer_codes_ownership_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "offer_code_id", null: false
+    t.bigint "product_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["offer_code_id"], name: "index_offer_codes_ownership_products_on_offer_code_id"
+    t.index ["product_id"], name: "index_offer_codes_ownership_products_on_product_id"
   end
 
   create_table "offer_codes_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

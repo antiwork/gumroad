@@ -34,7 +34,7 @@ class CartPresenter
       rejectPppDiscount: cart.reject_ppp_discount,
       discountCodes: cart.discount_codes.map do |discount_code|
         products = cart_products.each_with_object({}) { |cart_product, hash| hash[cart_product.product.unique_permalink] = { permalink: cart_product.product.unique_permalink, quantity: cart_product.quantity } }
-        result = OfferCodeDiscountComputingService.new(discount_code["code"], products).process
+        result = OfferCodeDiscountComputingService.new(discount_code["code"], products, buyer: logged_in_user).process
 
         {
           code: discount_code["code"],
@@ -56,7 +56,7 @@ class CartPresenter
             **cart_product.accepted_offer_details.symbolize_keys,
           }
 
-          value[:accepted_offer][:discount] = accepted_offer.offer_code.discount if accepted_offer.offer_code.present?
+          value[:accepted_offer][:discount] = accepted_offer.offer_code.discount_for_display(buyer: logged_in_user) if accepted_offer.offer_code.present?
         end
 
         value

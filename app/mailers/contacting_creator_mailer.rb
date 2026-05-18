@@ -33,12 +33,14 @@ class ContactingCreatorMailer < ApplicationMailer
       @variants_count = @purchase.variant_names&.count || 0
       @custom_fields = @purchase.custom_fields
       @offer_code = @purchase.offer_code
+      @display_offer_code = @purchase.original_offer_code(include_deleted: true)
     else
       @product = Link.find(link_id)
       @variants = variants
       @variants_count = variants&.count || 0
       @custom_fields = custom_fields
       @offer_code = offer_code_id.present? ? OfferCode.find(offer_code_id) : nil
+      @display_offer_code = @offer_code
     end
 
     if @product.is_tiered_membership? && @variants_and_quantity == "(Untitled)"
