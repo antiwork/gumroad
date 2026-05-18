@@ -168,6 +168,12 @@ class Settings::PaymentsController < Settings::BaseController
                                              return_url: verify_stripe_remediation_settings_payments_url,
                                              type: "account_update",
                                            }).url, allow_other_host: true
+  rescue Stripe::InvalidRequestError => e
+    if e.message.include?("has been rejected") && current_seller.stripe_account.stripe_disabled_reason.blank?
+      current_seller.stripe_account.update!(stripe_disabled_reason: "rejected.other")
+    end
+    ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+    redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end
 
   def verify_stripe_remediation

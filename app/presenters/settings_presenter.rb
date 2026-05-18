@@ -302,11 +302,20 @@ class SettingsPresenter
       needs_id_upload = seller.user_compliance_info_requests.requested
         .where(field_needed: id_document_fields).exists?
 
+      stripe_account = seller.stripe_account
+      stripe_rejection = if stripe_account&.stripe_rejected?
+        {
+          reason: stripe_rejection_reason_label(stripe_account.stripe_disabled_reason),
+          account_id: stripe_account.charge_processor_merchant_id,
+          dashboard_url: stripe_account.stripe_dashboard_url,
+        }
+      end
+
       compliance_actions = []
-      if pending_compliance && seller.stripe_account.present? && payments_policy.update?
+      if pending_compliance && stripe_account.present? && !stripe_rejection && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
       end
-      if pending_compliance && seller.stripe_account.blank?
+      if pending_compliance && stripe_account.blank?
         user_compliance_info = seller.fetch_or_build_user_compliance_info
         missing_fields = []
         seller.user_compliance_info_requests.requested.each do |request|
@@ -326,7 +335,7 @@ class SettingsPresenter
         "Your account is under review and payouts are on hold until it's resolved."
       end
 
-      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any?
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any? || stripe_rejection.present?
 
       {
         show_section:,
@@ -335,7 +344,18 @@ class SettingsPresenter
         compliance_actions:,
         needs_id_upload:,
         gumroad_status:,
+        stripe_rejection:,
       }
+    end
+
+    def stripe_rejection_reason_label(disabled_reason)
+      case disabled_reason
+      when "rejected.fraud", "rejected.platform_fraud" then "fraud"
+      when "rejected.terms_of_service", "rejected.platform_terms_of_service" then "terms of service violation"
+      when "rejected.listed" then "match on a restricted-entity list"
+      when "rejected.platform_paused" then "paused by Gumroad"
+      else "other"
+      end
     end
 
     def user_details(user_compliance_info)
