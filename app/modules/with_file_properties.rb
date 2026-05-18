@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "open3"
+require "shellwords"
+
 module WithFileProperties
   include InfosHelper
 
@@ -114,9 +117,9 @@ module WithFileProperties
   end
 
   def assign_image_attributes(path)
-    image = ImageSorcery.new(path)
-    self.width = image.dimensions[:x]
-    self.height = image.dimensions[:y]
+    image = MiniMagick::Image.open(path)
+    self.width = image.width
+    self.height = image.height
   end
 
   def assign_epub_document_attributes(path)
@@ -142,9 +145,9 @@ module WithFileProperties
   end
 
   def assign_psd_attributes(path)
-    image = ImageSorcery.new(path)
-    self.width = image.dimensions[:x]
-    self.height = image.dimensions[:y]
+    image = MiniMagick::Image.open(path)
+    self.width = image.width
+    self.height = image.height
   end
 
   def count_pages(path)
@@ -161,7 +164,8 @@ module WithFileProperties
   end
 
   def count_pages_doc(path)
-    self.pagelength = Subexec.run("wvSummary #{path}").output.scan(/Number of Pages = (\d+)/)[0][0]
+    stdout, _stderr, _status = Open3.capture3("wvSummary", path)
+    self.pagelength = stdout.scan(/Number of Pages = (\d+)/)[0][0]
   end
 
   def count_pages_docx(path)
@@ -175,7 +179,8 @@ module WithFileProperties
   end
 
   def count_pages_ppt(path)
-    self.pagelength = Subexec.run("wvSummary #{path} | grep \"Number of Slides\"").output.scan(/Number of Slides = (\d+)/)[0][0]
+    stdout, _stderr, _status = Open3.capture3("bash", "-c", "wvSummary #{Shellwords.escape(path)} | grep \"Number of Slides\"")
+    self.pagelength = stdout.scan(/Number of Slides = (\d+)/)[0][0]
   end
 
   def count_pages_pptx(path)

@@ -580,6 +580,7 @@ describe SettingsPresenter do
           compliance_actions: [],
           needs_id_upload: false,
           gumroad_status: nil,
+          stripe_rejected: false,
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
@@ -803,6 +804,17 @@ describe SettingsPresenter do
                                                                          needs_id_upload: true,
                                                                        ),
                                                                      }))
+      end
+
+      it "flags the Stripe account as rejected and hides the remediation link when Stripe has rejected it" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+        expect(presenter.payments_props[:account_status]).to eq(@base_us_props[:account_status].merge(
+          show_section: true,
+          compliance_actions: [],
+          stripe_rejected: true,
+        ))
       end
 
       it "keeps the under review status alongside Stripe verification requirements" do

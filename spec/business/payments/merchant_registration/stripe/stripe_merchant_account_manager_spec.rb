@@ -9460,7 +9460,8 @@ describe StripeMerchantAccountManager, :vcr do
         MerchantAccount,
         alive?: true,
         charge_processor_alive?: true,
-        user:
+        user:,
+        stripe_disabled_reason: nil
       )
     end
     let(:merchant_account_relation) { double(last: merchant_account) }
@@ -10047,6 +10048,23 @@ describe StripeMerchantAccountManager, :vcr do
               expect do
                 described_class.handle_stripe_event(stripe_event)
               end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_charges_disabled)
+            end
+
+            it "persists the Stripe disabled_reason on the merchant account" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.listed")
+            end
+
+            it "clears the disabled_reason when Stripe stops reporting one" do
+              merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = nil
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(merchant_account.reload.stripe_disabled_reason).to be_nil
             end
           end
 
