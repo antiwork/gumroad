@@ -702,7 +702,7 @@ class Subscription < ApplicationRecord
 
     seconds_since_last_billed = calculate_as_of - last_successful_charge_at
     percent_of_current_period_remaining = [(current_billing_period_seconds - seconds_since_last_billed), 0].max / current_billing_period_seconds
-    (percent_of_current_period_remaining * original_purchase.displayed_price_cents).round
+    (percent_of_current_period_remaining * last_successful_charge.displayed_price_cents).round
   end
 
   def current_billing_period_seconds

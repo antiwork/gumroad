@@ -3260,6 +3260,19 @@ describe Subscription, :vcr do
         end
       end
     end
+
+    context "when a renewal cycle's price diverges from the signup cycle" do
+      it "prorates against the most recent successful charge, not the signup-cycle price" do
+        renewal_price_cents = 150 # signup was 300; this renewal charged half
+        renewal_succeeded_at = @succeeded_at + 1.month
+        create(:purchase, subscription: @subscription, succeeded_at: renewal_succeeded_at, price_cents: renewal_price_cents)
+        calculate_as_of = renewal_succeeded_at + @subscription.current_billing_period_seconds / 2
+
+        expect(
+          @subscription.prorated_discount_price_cents(calculate_as_of:)
+        ).to eq renewal_price_cents / 2
+      end
+    end
   end
 
   describe "#current_billing_period_seconds" do
