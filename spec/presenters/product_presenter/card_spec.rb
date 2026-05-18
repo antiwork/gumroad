@@ -141,6 +141,20 @@ describe ProductPresenter::Card do
         expect(data[:price_cents]).to eq 10_00
         expect(data).not_to have_key(:original_price_cents)
       end
+
+      it "does not apply the discount when the offer code has expired" do
+        offer_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 10_00
+        expect(data).not_to have_key(:original_price_cents)
+      end
+
+      it "does not apply the discount when the offer code is not yet active" do
+        offer_code.update!(valid_at: 1.day.from_now, expires_at: 2.days.from_now)
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 10_00
+        expect(data).not_to have_key(:original_price_cents)
+      end
     end
   end
 
