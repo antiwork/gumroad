@@ -134,12 +134,6 @@ class MerchantAccount < ApplicationRecord
     stripe_disabled_reason.to_s.start_with?("rejected.")
   end
 
-  def stripe_dashboard_url
-    return nil unless stripe_charge_processor? && charge_processor_merchant_id.present?
-
-    "https://dashboard.stripe.com/connect/accounts/#{charge_processor_merchant_id}"
-  end
-
   def paypal_account_details
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header: PaypalPartnerRestCredentials.new.auth_token)
     paypal_response = payment_integration_api.get_merchant_account_by_merchant_id(charge_processor_merchant_id)

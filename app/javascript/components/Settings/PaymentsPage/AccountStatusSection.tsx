@@ -24,12 +24,6 @@ const ComplianceActionItem = ({ action }: { action: ComplianceAction }) =>
     action.message
   );
 
-export type StripeRejection = {
-  reason: string;
-  account_id: string;
-  dashboard_url: string;
-};
-
 export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
@@ -37,7 +31,7 @@ export type AccountStatus = {
   compliance_actions: ComplianceAction[];
   needs_id_upload: boolean;
   gumroad_status: string | null;
-  stripe_rejection: StripeRejection | null;
+  stripe_rejected: boolean;
 };
 
 export default function AccountStatusSection({
@@ -88,7 +82,7 @@ export default function AccountStatusSection({
         </Alert>
       ) : null}
 
-      {!accountStatus.is_suspended && accountStatus.stripe_rejection ? (
+      {!accountStatus.is_suspended && accountStatus.stripe_rejected ? (
         <Alert role="status" variant="danger">
           <p>Stripe rejected your account, so you can no longer accept payments. Gumroad cannot reverse this.</p>
           <p className="mt-2">

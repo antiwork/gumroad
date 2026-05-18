@@ -130,20 +130,6 @@ describe MerchantAccount do
     end
   end
 
-  describe "#stripe_dashboard_url" do
-    it "returns the Stripe dashboard URL for the connected account" do
-      merchant_account = create(:merchant_account,
-                                charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                charge_processor_merchant_id: "acct_abc123")
-      expect(merchant_account.stripe_dashboard_url).to eq("https://dashboard.stripe.com/connect/accounts/acct_abc123")
-    end
-
-    it "returns nil for non-Stripe merchant accounts" do
-      merchant_account = create(:merchant_account, charge_processor_id: PaypalChargeProcessor.charge_processor_id)
-      expect(merchant_account.stripe_dashboard_url).to be_nil
-    end
-  end
-
   describe "#holder_of_funds" do
     it "returns the holder of funds for a known charge processor" do
       merchant_account = create(:merchant_account, charge_processor_id: ChargeProcessor.charge_processor_ids.first)

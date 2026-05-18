@@ -580,7 +580,7 @@ describe SettingsPresenter do
           compliance_actions: [],
           needs_id_upload: false,
           gumroad_status: nil,
-          stripe_rejection: nil,
+          stripe_rejected: false,
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
@@ -806,40 +806,15 @@ describe SettingsPresenter do
                                                                      }))
       end
 
-      it "surfaces the Stripe rejection alert and hides the remediation link when the Stripe account is rejected" do
-        merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_rejected_listed",
-                                                     stripe_disabled_reason: "rejected.listed")
+      it "flags the Stripe account as rejected and hides the remediation link when Stripe has rejected it" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
 
         expect(presenter.payments_props[:account_status]).to eq(@base_us_props[:account_status].merge(
           show_section: true,
           compliance_actions: [],
-          stripe_rejection: {
-            reason: "match on a restricted-entity list",
-            account_id: merchant_account.charge_processor_merchant_id,
-            dashboard_url: "https://dashboard.stripe.com/connect/accounts/#{merchant_account.charge_processor_merchant_id}",
-          }
+          stripe_rejected: true,
         ))
-      end
-
-      it "maps each rejected.* disabled_reason to a human-readable label" do
-        merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_x")
-        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
-
-        labels = {
-          "rejected.fraud" => "fraud",
-          "rejected.platform_fraud" => "fraud",
-          "rejected.terms_of_service" => "terms of service violation",
-          "rejected.platform_terms_of_service" => "terms of service violation",
-          "rejected.listed" => "match on a restricted-entity list",
-          "rejected.platform_paused" => "paused by Gumroad",
-          "rejected.other" => "other",
-        }
-        labels.each do |disabled_reason, expected_label|
-          merchant_account.update!(stripe_disabled_reason: disabled_reason)
-          actual = presenter.payments_props[:account_status][:stripe_rejection][:reason]
-          expect(actual).to eq(expected_label), "expected #{disabled_reason} → #{expected_label}, got #{actual}"
-        end
       end
 
       it "keeps the under review status alongside Stripe verification requirements" do
