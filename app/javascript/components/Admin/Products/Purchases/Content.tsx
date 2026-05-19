@@ -53,7 +53,7 @@ const AdminProductPurchasesContent = ({
       return;
     }
 
-    const csrfToken = typia.assert<string>(document.querySelector('meta[name="csrf-token"]')?.getAttribute("content"));
+    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
 
     setIsMassRefunding(true);
 

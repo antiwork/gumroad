@@ -15,7 +15,7 @@ function logGumroadEvent(eventName: string, payload: Record<string, unknown>) {
 }
 
 function shouldTrack() {
-  return document.querySelector('meta[property="gr:google_analytics:enabled"]')?.getAttribute("content") === "true";
+  return $('meta[property="gr:google_analytics:enabled"]').attr("content") === "true";
 }
 
 export function trackProductEvent(config: AnalyticsConfig, data: ProductAnalyticsEvent) {
@@ -97,7 +97,7 @@ export function startTrackingForGumroad() {
   if (!shouldTrack()) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();
 
-  const isLoggedIn = document.querySelector('meta[property="gr:logged_in_user:id"]')?.getAttribute("content") !== "";
+  const isLoggedIn = $('meta[property="gr:logged_in_user:id"]').attr("content") !== "";
   gtag("js", new Date());
   gtag("config", "G-6LJN6D94N6", {
     groups: "gumroad",
