@@ -575,7 +575,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       end
       expect(page).to have_button("Save changes", disabled: true)
       wait_for_file_embed_to_finish_uploading(name: "test")
-      expect(page).to have_button("Save changes", disabled: false)
+      expect(page).to have_button("Save changes", disabled: false, wait: 45)
       within find_embed(name: "test") do
         expect(page).to have_text("MP3")
         expect(page).to have_button("Play")

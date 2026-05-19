@@ -379,24 +379,22 @@ describe Purchase::Blockable do
           end
 
           context "when the ip_address is already blocked" do
-            before do
-              @expires_in = BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
-
-              BlockedObject.block!(
-                BLOCKED_OBJECT_TYPES[:ip_address],
-                @purchase.ip_address,
-                nil,
-                expires_in: @expires_in
-              )
-            end
-
             it "doesn't overwrite the previous ip_address block" do
-              travel_to(Time.current) do
+              freeze_time do
+                expires_in = BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
+
+                BlockedObject.block!(
+                  BLOCKED_OBJECT_TYPES[:ip_address],
+                  @purchase.ip_address,
+                  nil,
+                  expires_in:
+                )
+
                 expect do
                   @purchase.mark_failed!
                 end.not_to change { BlockedObject.count }
 
-                expect(BlockedObject.ip_address.find_active_object(@purchase.ip_address).expires_at.to_i).to eq @expires_in.from_now.to_i
+                expect(BlockedObject.ip_address.find_active_object(@purchase.ip_address).expires_at.to_i).to eq expires_in.from_now.to_i
               end
             end
           end

@@ -49,7 +49,7 @@ export const AdminActionButton = ({
 
     setState("loading");
 
-    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
+    const csrfToken = typia.assert<string>(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"));
 
     try {
       const response = await request({
@@ -61,9 +61,11 @@ export const AdminActionButton = ({
 
       if (!response.ok) throw new ResponseError("Something went wrong.");
 
-      const { success, message, redirect_to } = typia.assert<{ success?: boolean; message?: string; redirect_to?: string }>(
-        await response.json(),
-      );
+      const { success, message, redirect_to } = typia.assert<{
+        success?: boolean;
+        message?: string;
+        redirect_to?: string;
+      }>(await response.json());
       if (!success) throw new ResponseError(message || "Something went wrong.");
 
       if (message && show_message_in_alert) {

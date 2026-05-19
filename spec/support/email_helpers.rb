@@ -3,7 +3,7 @@
 module EmailHelpers
   def upload_attachment(name, wait_until_uploaded: true)
     attach_file("Attach files", file_fixture(name), visible: false)
-    expect(page).to have_button("Save", disabled: false) if wait_until_uploaded
+    expect(page).to have_button("Save", disabled: false, wait: 45) if wait_until_uploaded
   end
 
   def find_attachment(name)

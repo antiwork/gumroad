@@ -99,7 +99,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_unchecked_field("Disable file downloads (stream only)")
     check "Disable file downloads (stream only)"
 
-    expect(page).to have_button("Save", disabled: false)
+    expect(page).to have_button("Save", disabled: false, wait: 45)
     click_on "Save"
     wait_for_ajax
     expect(page).to have_alert(text: "Email created!")

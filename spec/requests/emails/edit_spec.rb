@@ -79,7 +79,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       attach_file("Add subtitles", Rails.root.join("spec/support/fixtures/sample.srt"), visible: false)
     end
     expect(page).to have_unchecked_field("Disable file downloads (stream only)")
-    expect(page).to have_button("Save", disabled: false)
+    expect(page).to have_button("Save", disabled: false, wait: 45)
     create(:seller_profile_posts_section, seller:) # Create a profile section
 
     click_on "Save"

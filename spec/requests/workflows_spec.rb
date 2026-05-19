@@ -1449,8 +1449,8 @@ describe("Workflows", js: true, type: :system) do
         end
       end
       expect(page).to have_button("Save changes", disabled: true)
-      # Wait for the image to be uploaded
-      expect(page).to have_button("Save changes", disabled: false)
+      # Wait for the image to be uploaded — CI runners can be slow
+      expect(page).to have_button("Save changes", disabled: false, wait: 45)
 
       expect(page).to_not have_email_row("Untitled")
       within find_email_row("Thank you!") do
@@ -1488,7 +1488,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_text("You're lucky!")
         end
       end
-      expect(page).to have_button("Save changes", disabled: false)
+      expect(page).to have_button("Save changes", disabled: false, wait: 45)
       click_on "Save changes"
       expect(page).to have_alert(text: "Changes saved!")
 

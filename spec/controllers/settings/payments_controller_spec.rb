@@ -1943,7 +1943,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
     end
 
-    context "when the Stripe account has been permanently rejected" do
+    context "when Stripe::AccountLink.create raises Stripe::InvalidRequestError" do
       let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_rejected") }
       let!(:compliance_request) { create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID) }
 
@@ -1953,7 +1953,18 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         )
       end
 
+      def stub_stripe_account_retrieve(disabled_reason:)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_rejected").and_return(
+          Stripe::Account.construct_from(
+            id: "acct_rejected",
+            object: "account",
+            requirements: { "disabled_reason" => disabled_reason, "currently_due" => [], "past_due" => [] }
+          )
+        )
+      end
+
       it "redirects back to settings with an alert instead of raising" do
+        stub_stripe_account_retrieve(disabled_reason: "rejected.listed")
         expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
 
         get :remediation
@@ -1962,18 +1973,53 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(flash[:alert]).to eq("We couldn't open the verification page. Please contact support.")
       end
 
-      it "records rejected.other on the merchant account so the rejection alert renders on the next page load" do
-        get :remediation
-
-        expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.other")
-      end
-
-      it "does not overwrite an existing stripe_disabled_reason" do
-        merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+      it "records the disabled_reason returned by Stripe so the rejection alert renders on the next page load" do
+        stub_stripe_account_retrieve(disabled_reason: "rejected.listed")
 
         get :remediation
 
         expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.listed")
+      end
+
+      it "records the disabled_reason even when the Stripe error message does not contain 'has been rejected'" do
+        allow(Stripe::AccountLink).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("This account cannot be onboarded.", nil)
+        )
+        stub_stripe_account_retrieve(disabled_reason: "rejected.fraud")
+
+        get :remediation
+
+        expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.fraud")
+      end
+
+      it "does not overwrite an existing stripe_disabled_reason" do
+        merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+        expect(Stripe::Account).not_to receive(:retrieve)
+
+        get :remediation
+
+        expect(merchant_account.reload.stripe_disabled_reason).to eq("rejected.listed")
+      end
+
+      it "does not write a disabled_reason when Stripe returns none" do
+        stub_stripe_account_retrieve(disabled_reason: nil)
+
+        get :remediation
+
+        expect(merchant_account.reload.stripe_disabled_reason).to be_nil
+      end
+
+      it "still redirects when Stripe::Account.retrieve itself raises" do
+        allow(Stripe::Account).to receive(:retrieve).with("acct_rejected").and_raise(
+          Stripe::APIConnectionError.new("Stripe is down")
+        )
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
+
+        get :remediation
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:alert]).to eq("We couldn't open the verification page. Please contact support.")
+        expect(merchant_account.reload.stripe_disabled_reason).to be_nil
       end
     end
   end

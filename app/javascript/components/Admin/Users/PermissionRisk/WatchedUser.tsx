@@ -126,7 +126,7 @@ const RemoveFromWatchlistButton = ({ user }: { user: User }) => {
     setIsLoading(true);
 
     try {
-      const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
+      const csrfToken = typia.assert<string>(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"));
       const response = await request({
         url: Routes.admin_user_watchlist_path(user.external_id),
         method: "DELETE",
