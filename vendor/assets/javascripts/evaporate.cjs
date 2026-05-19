@@ -578,12 +578,12 @@ var Evaporate = function(config){
       var dateString = new Date().toUTCString();
 
       if (con.fetchCurrentServerTimeUrl) {
-        dateString = $.ajax({
-          type: "GET",
-          url: con.fetchCurrentServerTimeUrl,
-          async: false,
-          cache: false
-        }).responseText;
+        var serverTimeUrl = con.fetchCurrentServerTimeUrl;
+        serverTimeUrl += (serverTimeUrl.indexOf("?") === -1 ? "?" : "&") + "_=" + new Date().getTime();
+        var serverTimeXhr = new XMLHttpRequest();
+        serverTimeXhr.open("GET", serverTimeUrl, false);
+        serverTimeXhr.send();
+        dateString = serverTimeXhr.responseText;
       }
 
       requester.dateString = dateString;
