@@ -3144,7 +3144,10 @@ describe Purchase, :vcr do
 
     it "schedules a sidekiq job to invalidate the product's cache in 1 minute" do
       @purchase.mark_successful!
-      expect(InvalidateProductCacheWorker).to have_enqueued_sidekiq_job(@purchase.link.id).in(1.minute)
+      expect(InvalidateProductCacheWorker.jobs.size).to eq(1)
+      job = InvalidateProductCacheWorker.jobs.last
+      expect(job["args"]).to eq([@purchase.link.id])
+      expect(job["at"]).to be_within(1.second).of(1.minute.from_now.to_f)
     end
   end
 
@@ -3169,7 +3172,10 @@ describe Purchase, :vcr do
       @product.update_column(:max_purchase_count, 10)
 
       @purchase.update_balance_and_mark_successful!
-      expect(InvalidateProductCacheWorker).to have_enqueued_sidekiq_job(@purchase.link.id).in(1.minute)
+      expect(InvalidateProductCacheWorker.jobs.size).to eq(1)
+      job = InvalidateProductCacheWorker.jobs.last
+      expect(job["args"]).to eq([@purchase.link.id])
+      expect(job["at"]).to be_within(1.second).of(1.minute.from_now.to_f)
     end
 
     it "sets updated_at on the sku" do
