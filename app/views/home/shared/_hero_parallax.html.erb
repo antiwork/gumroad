@@ -1,4 +1,4 @@
-<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request) do %>
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
 function initHeroCoinParallax() {
   const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   if (mediaQuery.matches) {
