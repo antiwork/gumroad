@@ -319,7 +319,11 @@ class PurchasesController < ApplicationController
       return unless mobile_export_token_matches?
 
       doorkeeper_authorize! :creator_api
-      sign_in current_api_user if current_api_user.present?
+      return if performed?
+      return if current_api_user.blank?
+
+      sign_in current_api_user
+      @_current_seller = current_api_user
     end
 
     def mobile_export_token_matches?
