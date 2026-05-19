@@ -16,7 +16,6 @@ const baseConfig = {
     globals: {
       ...globals.browser,
       Routes: "readonly",
-      FB: "readonly",
       process: "readonly",
       SSR: "readonly",
     },

@@ -22,7 +22,6 @@
       "grecaptcha",
       "facebook-pixel",
       "google.analytics",
-      "facebook-js-sdk",
       "gtag.js",
       "webpack-env",
       "jwplayer"
