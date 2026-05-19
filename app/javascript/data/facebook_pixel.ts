@@ -16,7 +16,7 @@ const FacebookEvents: Record<Exclude<GumroadEvents, "begin_checkout">, string> =
 const initializedPixels = new Set<string>();
 
 function shouldTrack() {
-  return $('meta[property="gr:fb_pixel:enabled"]').attr("content") === "true";
+  return document.querySelector('meta[property="gr:fb_pixel:enabled"]')?.getAttribute("content") === "true";
 }
 
 export function trackProductEvent(config: AnalyticsConfig, data: FacebookProductAnalyticsEvent) {

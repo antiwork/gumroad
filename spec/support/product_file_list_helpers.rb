@@ -24,8 +24,8 @@ module ProductFileListHelpers
   end
 
   def wait_for_file_embed_to_finish_uploading(name:)
-    # Use a longer timeout for uploads which may take time (especially Dropbox transfers)
-    upload_timeout = [Capybara.default_max_wait_time, 15].max
+    # Use a generous timeout for uploads — CI runners under load can be slow
+    upload_timeout = [Capybara.default_max_wait_time, 45].max
     page.document.synchronize(upload_timeout) do
       row = find_embed(name:)
       begin

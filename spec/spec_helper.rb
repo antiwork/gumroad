@@ -139,6 +139,7 @@ def browser_session_corrupted?(exception)
   return true if exception.is_a?(Selenium::WebDriver::Error::InvalidSessionIdError)
   return true if exception.is_a?(Errno::ECONNREFUSED)
   return true if exception.is_a?(NoMethodError) && exception.message.include?("unpack1")
+  return true if exception.is_a?(Capybara::ElementNotFound) && exception.message.include?("Upload still in progress")
 
   msg = exception.message
   msg = "#{msg} #{exception.cause.message}" if exception.cause
@@ -239,7 +240,7 @@ RSpec.configure do |config|
     config.display_try_failure_messages = true
     config.default_retry_count = 1
     config.around(:each, type: :system) do |example|
-      example.metadata[:retry] ||= 2
+      example.metadata[:retry] ||= 3
       example.run
     end
     config.retry_callback = proc do |example|

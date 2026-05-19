@@ -15,7 +15,7 @@ const baseConfig = {
     sourceType: "module",
     globals: {
       ...globals.browser,
-      ...globals.jquery,
+
       Routes: "readonly",
       process: "readonly",
       SSR: "readonly",

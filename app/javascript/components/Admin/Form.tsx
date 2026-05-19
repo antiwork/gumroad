@@ -33,7 +33,7 @@ export const Form = ({
     const form = event.currentTarget;
     const formData = new FormData(form);
 
-    const csrfToken = typia.assert<string>($("meta[name=csrf-token]").attr("content"));
+    const csrfToken = typia.assert<string>(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"));
     formData.append("authenticity_token", csrfToken);
 
     setIsLoading(true);

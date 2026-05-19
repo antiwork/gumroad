@@ -24,7 +24,7 @@ module Onetime
         return if merchant_account.is_a_stripe_connect_account?
 
         stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-        disabled_reason = stripe_account["requirements"]&.dig("disabled_reason")
+        disabled_reason = stripe_account["requirements"]["disabled_reason"]
         return if merchant_account.stripe_disabled_reason == disabled_reason
 
         merchant_account.update!(stripe_disabled_reason: disabled_reason)
