@@ -44,7 +44,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
   it "removes data URLs from description on content update or save" do
     description = "<p>Text1</p><p>Text2<figure><img class='img-data-uri' src='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD'/></figure></p>"
     visit("/products/#{@product.unique_permalink}/edit")
-    page.execute_script("$(\"[aria-label='Description']\").html(\"#{description}\");")
+    page.execute_script("document.querySelector(\"[aria-label='Description']\").innerHTML = \"#{description}\";")
     sleep 1
     in_preview do
       expect(page).to have_content "Text1"
