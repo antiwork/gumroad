@@ -169,9 +169,7 @@ class Settings::PaymentsController < Settings::BaseController
                                              type: "account_update",
                                            }).url, allow_other_host: true
   rescue Stripe::InvalidRequestError => e
-    if e.message.include?("has been rejected") && current_seller.stripe_account.stripe_disabled_reason.blank?
-      current_seller.stripe_account.update!(stripe_disabled_reason: "rejected.other")
-    end
+    sync_stripe_disabled_reason(current_seller.stripe_account) if current_seller.stripe_account.stripe_disabled_reason.blank?
     ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end
@@ -248,5 +246,12 @@ class Settings::PaymentsController < Settings::BaseController
 
     def current_seller_policy
       [:settings, :payments, current_seller]
+    end
+
+    def sync_stripe_disabled_reason(merchant_account)
+      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+      disabled_reason = stripe_account["requirements"]["disabled_reason"]
+      merchant_account.update!(stripe_disabled_reason: disabled_reason) if disabled_reason.present?
+    rescue Stripe::StripeError, ActiveRecord::ActiveRecordError
     end
 end
