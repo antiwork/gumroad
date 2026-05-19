@@ -863,6 +863,75 @@ describe PurchasesController, :vcr do
       end
     end
 
+    describe "GET export with mobile authentication" do
+      let(:oauth_app) { create(:oauth_application, owner: seller) }
+      let(:access_token) do
+        create("doorkeeper/access_token", application: oauth_app, resource_owner_id: seller.id, scopes: "creator_api")
+      end
+      let(:tempfile) do
+        Tempfile.new(["sales", ".csv"]).tap do |file|
+          file.write("id\n")
+          file.rewind
+        end
+      end
+
+      before do
+        sign_out(user_with_role_for_seller)
+        allow(Exports::PurchaseExportService).to receive(:export).and_return(tempfile)
+      end
+
+      after do
+        tempfile.close!
+      end
+
+      it "uses the mobile token to export sales" do
+        get :export, params: {
+          access_token: access_token.token,
+          mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN
+        }
+
+        expect(response).to be_successful
+        expect(Exports::PurchaseExportService).to have_received(:export).with(hash_including(seller:, recipient: seller))
+      end
+
+      context "when the token does not have the creator_api scope" do
+        let(:access_token) do
+          create("doorkeeper/access_token", application: oauth_app, resource_owner_id: seller.id, scopes: "mobile_api")
+        end
+
+        it "does not sign in the token owner" do
+          expect(controller).not_to receive(:sign_in)
+
+          get :export, params: {
+            access_token: access_token.token,
+            mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN
+          }
+
+          expect(response).to have_http_status(:forbidden)
+          expect(Exports::PurchaseExportService).not_to have_received(:export)
+        end
+      end
+
+      context "when the browser has a stale seller switch cookie" do
+        let(:other_seller) { create(:user) }
+
+        before do
+          create(:team_membership, user: seller, seller: other_seller, role: TeamMembership::ROLE_ADMIN)
+          cookies.encrypted[:current_seller_id] = other_seller.id
+        end
+
+        it "exports the mobile token owner's sales" do
+          get :export, params: {
+            access_token: access_token.token,
+            mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN
+          }
+
+          expect(response).to be_successful
+          expect(Exports::PurchaseExportService).to have_received(:export).with(hash_including(seller:, recipient: seller))
+        end
+      end
+    end
+
     describe "PUT revoke_access" do
       let(:product) { create(:product, user: seller) }
       let(:purchase) { create(:purchase, link: product, seller:) }

@@ -21,6 +21,7 @@ class PurchasesController < ApplicationController
     confirm subscribe unsubscribe receipt resend_receipt
     update_subscription charge_preorder confirm_receipt_email
   ].freeze
+  before_action :authenticate_mobile_export!, only: :export
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
@@ -312,6 +313,27 @@ class PurchasesController < ApplicationController
   end
 
   protected
+    def authenticate_mobile_export!
+      return if user_signed_in?
+      return if params[:access_token].blank?
+      return unless mobile_export_token_matches?
+
+      doorkeeper_authorize! :creator_api
+      return if performed?
+      return if current_api_user.blank?
+
+      sign_in current_api_user
+      @_current_seller = current_api_user
+    end
+
+    def mobile_export_token_matches?
+      mobile_token = params[:mobile_token].to_s
+      expected_token = Api::Mobile::BaseController::MOBILE_TOKEN
+
+      mobile_token.bytesize == expected_token.bytesize &&
+        ActiveSupport::SecurityUtils.secure_compare(mobile_token, expected_token)
+    end
+
     def verify_current_seller_is_seller_for_purchase
       e404_json if @purchase.nil? || @purchase.seller != current_seller
     end

@@ -7,7 +7,7 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
     <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
     <meta name="viewport" content="initial-scale = 1.0, width=device-width">
     <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
-    <%= stylesheet_pack_tag :email %>
+    <%= vite_entrypoint_stylesheet_tag "email" %>
   </head>
   <body>
     <div class="email post">

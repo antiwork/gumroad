@@ -28,6 +28,9 @@
 /node_modules
 /public/packs
 /public/packs-test
+/public/vite
+/public/vite-dev
+/public/vite-test
 /vendor/bundle
 app/javascript/json_schemas
 app/javascript/utils/routes.*

@@ -14,7 +14,14 @@ import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/componen
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
 
-const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
+const rawThumbnails = import.meta.glob("$assets/images/native_types/thumbnails/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+const nativeTypeThumbnails = Object.fromEntries(
+  Object.entries(rawThumbnails).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
+);
 
 export type CardWishlist = {
   id: string;
@@ -86,7 +93,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
         {wishlist.thumbnails.map(({ url, native_type }, index) => (
           <img
             key={index}
-            src={url ?? typia.assert<string>(nativeTypeThumbnails(`./${native_type}.svg`))}
+            src={url ?? nativeTypeThumbnails[`./${native_type}.svg`]}
             role="presentation"
             crossOrigin="anonymous"
             className="rounded border"

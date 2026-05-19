@@ -5,6 +5,8 @@ require "spec_helper"
 describe CareersController do
   render_views
 
+  before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
+
   describe "GET index" do
     context "when career_pages feature is active" do
       before { Feature.activate(:career_pages) }

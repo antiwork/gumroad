@@ -3,7 +3,7 @@ import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
-import { getReviews, Review } from "$app/data/product_reviews";
+import { getReviews, type Review } from "$app/data/product_reviews";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { incrementProductViews } from "$app/data/view_event";
 import { Wishlist } from "$app/data/wishlists";

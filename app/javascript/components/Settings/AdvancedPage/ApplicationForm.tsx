@@ -1,7 +1,7 @@
 import { Trash } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
-import placeholderAppIcon from "images/gumroad_app.png";
+import placeholderAppIcon from "$assets/images/gumroad_app.png";
 import * as React from "react";
 import typia from "typia";
 

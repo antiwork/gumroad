@@ -23,7 +23,7 @@
       "facebook-pixel",
       "google.analytics",
       "gtag.js",
-      "webpack-env",
+      "vite/client",
       "jwplayer"
     ],
     "allowJs": true,

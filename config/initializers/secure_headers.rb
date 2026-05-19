@@ -198,17 +198,18 @@ SecureHeaders::Configuration.default do |config|
 
   if Rails.env.test?
     config.csp[:default_src] = ["'self'"]
-    config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
+    config.csp[:style_src] << "blob:" # Required to serve CSS as blob URLs in tests
     config.csp[:script_src] << "test-custom-domain.gumroad.com:#{URI("#{PROTOCOL}://#{DOMAIN}").port}" # To allow loading widget scripts from the custom domain
     config.csp[:script_src] << ROOT_DOMAIN # Required to load gumroad.js for overlay/embed.
     config.csp[:connect_src] << "ws://#{ANYCABLE_HOST}:8080" # Required by AnyCable
     config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8080" # Required by AnyCable
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
-    config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
-    config.csp[:script_src] << "localhost:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "localhost:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "ws://localhost:3035" # Required by webpack-dev-server
+    %w[localhost app.localhost].each do |host|
+      config.csp[:script_src] << "#{host}:3036" # Vite dev server
+      config.csp[:connect_src] << "#{host}:3036" # Vite dev server
+      config.csp[:connect_src] << "ws://#{host}:3036" # Vite HMR websocket
+    end
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
     cable_port = PROTOCOL == "https" ? 8081 : 8080
     config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable

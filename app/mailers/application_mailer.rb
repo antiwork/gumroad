@@ -3,6 +3,8 @@
 class ApplicationMailer < ActionMailer::Base
   include RescueSmtpErrors, MailerHelper
   helper MailerHelper
+  helper ViteRails::TagHelpers
+  helper ApplicationHelper
 
   # Constants for Gumroad emails
   {

@@ -22,8 +22,9 @@
         <% end %>
       </main>
     </div>
-
-    <%= load_pack("base") unless @hide_layouts %>
+    <% unless @hide_layouts %>
+      <%= vite_typescript_tag "base", skip_style_tags: true %>
+    <% end %>
     <%= yield :script %>
   </body>
 </html>

@@ -1,0 +1,131 @@
+import { createInertiaApp, router } from "@inertiajs/react";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+
+import AppWrapper from "../inertia/app_wrapper.tsx";
+import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+
+// Prevent "Failed to execute 'removeChild' on 'Node'" errors caused by
+// browser translation extensions (e.g. Google Translate) relocating DOM nodes.
+// See https://github.com/facebook/react/issues/11538
+if (typeof Node !== "undefined") {
+  const originalRemoveChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function (child) {
+    if (child.parentNode !== this) {
+      return child;
+    }
+    return originalRemoveChild.apply(this, arguments);
+  };
+
+  const originalInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function (newNode, referenceNode) {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      return newNode;
+    }
+    return originalInsertBefore.apply(this, arguments);
+  };
+}
+
+router.on("start", (event) => {
+  if (event.detail.visit.prefetch) return;
+  window.__activeRequests = (window.__activeRequests || 0) + 1;
+});
+
+router.on("finish", (event) => {
+  if (event.detail.visit.prefetch) return;
+  window.__activeRequests = Math.max((window.__activeRequests || 1) - 1, 0);
+});
+
+// Configure Inertia to send CSRF token with all requests
+router.on("before", (event) => {
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");
+  if (token) {
+    event.detail.visit.headers = {
+      ...event.detail.visit.headers,
+      "X-CSRF-Token": token,
+    };
+  }
+
+  // Track previous route for navigation (only for GET requests)
+  const method = event.detail.visit.method?.toLowerCase() || "get";
+  if (method === "get" && !event.detail.visit.prefetch) {
+    const currentUrl = new URL(window.location.href);
+    const newUrl =
+      typeof event.detail.visit.url === "string"
+        ? new URL(event.detail.visit.url, window.location.origin)
+        : event.detail.visit.url;
+
+    if (currentUrl.href !== newUrl.href) {
+      sessionStorage.setItem("inertia_previous_route", currentUrl.pathname);
+    }
+  }
+});
+
+// Handle non-Inertia responses (e.g., redirects to non-Inertia pages after login)
+// This fires AFTER the server responds, so authentication is already complete
+router.on("invalid", (event) => {
+  event.preventDefault();
+
+  const response = event.detail.response;
+
+  const redirectedUrl = response.request.responseURL;
+  if (redirectedUrl) {
+    window.location.href = redirectedUrl;
+  }
+});
+
+router.on("exception", (event) => {
+  // When logging in for a mobile OAuth flow, the redirect chain ends at a custom scheme
+  // (gumroadmobile://) that XHR can't follow. Fall back to navigating the browser
+  // to the OAuth authorize URL so it can handle the custom scheme redirect natively.
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next?.includes("redirect_uri=gumroadmobile")) {
+    event.preventDefault();
+    window.location.href = next;
+  }
+});
+
+function assignLayout(page) {
+  if (page.publicLayout) {
+    page.layout ||= (page) => createElement(PublicLayout, { children: page });
+  } else if (page.loggedInUserLayout) {
+    page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
+  } else {
+    page.layout ||= (page) => createElement(Layout, { children: page });
+  }
+  return page;
+}
+
+const pages = import.meta.glob('../pages/**/*.tsx');
+const jsxPages = import.meta.glob('../pages/**/*.jsx');
+
+async function resolvePageComponent(name) {
+  const tsxPath = `../pages/${name}.tsx`;
+  const jsxPath = `../pages/${name}.jsx`;
+
+  if (pages[tsxPath]) {
+    const module = await pages[tsxPath]();
+    return assignLayout(module.default);
+  }
+
+  if (jsxPages[jsxPath]) {
+    const module = await jsxPages[jsxPath]();
+    return assignLayout(module.default);
+  }
+
+  throw new Error(`Page component not found: ${name}`);
+}
+
+createInertiaApp({
+  progress: false,
+  resolve: resolvePageComponent,
+  title: (title) => title || "Gumroad",
+  setup({ el, App, props }) {
+    if (!el) return;
+
+    const global = props.initialPage.props;
+
+    const root = createRoot(el);
+    root.render(createElement(AppWrapper, { global }, createElement(App, props)));
+  },
+});

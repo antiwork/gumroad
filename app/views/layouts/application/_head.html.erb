@@ -8,10 +8,10 @@
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
   <% end %>
-  <% packs = ["design"] %>
-  <% packs << @css_pack_name if @css_pack_name %>
   <%= action_cable_meta_tag %>
-  <%= stylesheet_pack_tag *packs, crossorigin: "anonymous" unless @hide_styles %>
+  <%= vite_client_tag %>
+  <%= vite_react_refresh_tag(nonce: SecureHeaders.content_security_policy_script_nonce(request)) %>
+  <%= vite_entrypoint_stylesheet_tag "design", crossorigin: "anonymous" unless @hide_styles %>
   <%= yield :style %>
   <%= yield :smart_app_banner %>
   <%= inertia_rendering? ? inertia_meta_tags : erb_meta_tags %>

@@ -3,6 +3,8 @@
 class UserSignupMailer < Devise::Mailer
   include RescueSmtpErrors
   helper MailerHelper
+  helper ViteRails::TagHelpers
+  helper ApplicationHelper
   layout "layouts/email"
 
   def email_changed(record, opts = {})

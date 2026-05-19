@@ -5,6 +5,8 @@ require "spec_helper"
 describe HomeController do
   render_views
 
+  before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
+
   describe "GET features_md" do
     it "returns markdown with the feature list" do
       get :features_md

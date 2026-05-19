@@ -1,2 +1,2 @@
-webpack: npm run setup && ./bin/shakapacker-dev-server
+vite: npm run setup && npm run build:widget && bin/vite dev
 sidekiq: RAILS_MAX_THREADS=5 USE_DB_WORKER_REPLICAS=true bundle exec sidekiq -q critical -q default -q low -q mongo

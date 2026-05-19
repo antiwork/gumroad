@@ -1,5 +1,5 @@
 import { Link } from "@boxicons/react";
-import hands from "images/illustrations/hands.png";
+import hands from "$assets/images/illustrations/hands.png";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";

@@ -277,6 +277,7 @@ GEM
       dotenv (= 2.8.1)
       railties (>= 3.2)
     drb (2.2.3)
+    dry-cli (1.4.1)
     easypost (6.4.1)
     elasticsearch (7.11.2)
       elasticsearch-api (= 7.11.2)
@@ -652,7 +653,6 @@ GEM
     orm_adapter (0.5.0)
     os (1.1.4)
     ostruct (0.6.1)
-    package_json (0.1.0)
     pagy (9.0.5)
     paper_trail (15.1.0)
       activerecord (>= 6.1)
@@ -946,7 +946,6 @@ GEM
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
-    semantic_range (3.0.0)
     sendgrid-ruby (6.7.0)
       ruby_http_client (~> 3.4)
     sentry-rails (6.5.0)
@@ -956,12 +955,6 @@ GEM
       bigdecimal
       concurrent-ruby (~> 1.0, >= 1.0.2)
       logger
-    shakapacker (8.0.1)
-      activesupport (>= 5.2)
-      package_json
-      rack-proxy (>= 0.6.1)
-      railties (>= 5.2)
-      semantic_range (>= 2.3.0)
     shoulda-matchers (6.3.0)
       activesupport (>= 5.2.0)
     sidekiq (7.3.0)
@@ -1072,6 +1065,15 @@ GEM
       rexml (>= 3.2.7, < 4.0.0)
     vcr (6.2.0)
     version_gem (1.1.4)
+    vite_rails (3.11.0)
+      railties (>= 5.1, < 9)
+      vite_ruby (~> 3.0, >= 3.2.2)
+    vite_ruby (3.10.2)
+      dry-cli (>= 0.7, < 2)
+      logger (~> 1.6)
+      mutex_m
+      rack-proxy (~> 0.6, >= 0.6.1)
+      zeitwerk (~> 2.2)
     warden (1.2.9)
       rack (>= 2.0.9)
     web-push (3.0.1)
@@ -1251,7 +1253,6 @@ DEPENDENCIES
   sendgrid-ruby (~> 6.6)
   sentry-rails
   sentry-ruby
-  shakapacker (~> 8.0)
   shoulda-matchers (~> 6.0)
   sidekiq (~> 7.2)
   sidekiq-cron (~> 1.9)
@@ -1275,6 +1276,7 @@ DEPENDENCIES
   typhoeus (~> 1.4)
   valvat (~> 1.2)
   vcr (~> 6.1)
+  vite_rails (~> 3.0)
   warden (~> 1.2)
   webmock (~> 3.18)
 

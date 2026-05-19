@@ -1,6 +1,5 @@
 import { Pencil } from "@boxicons/react";
 import * as React from "react";
-import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 
@@ -20,7 +19,14 @@ import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
 
-const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
+const rawThumbnails = import.meta.glob("$assets/images/native_types/thumbnails/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+const nativeTypeThumbnails = Object.fromEntries(
+  Object.entries(rawThumbnails).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
+);
 
 type Product = {
   name: string;
@@ -63,7 +69,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       <ProductIconCell
         href={review.product.url}
         thumbnail={review.product.thumbnail_url ?? null}
-        placeholder={<img src={typia.assert<string>(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />}
+        placeholder={<img src={nativeTypeThumbnails[`./${review.product.native_type}.svg`]} />}
       />
       <TableCell className="break-words">
         <div>

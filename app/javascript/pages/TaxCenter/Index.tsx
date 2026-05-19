@@ -1,6 +1,6 @@
 import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
-import taxesPlaceholder from "images/placeholders/taxes.png";
+import taxesPlaceholder from "$assets/images/placeholders/taxes.png";
 import * as React from "react";
 import typia from "typia";
 

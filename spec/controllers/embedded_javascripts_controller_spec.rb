@@ -8,15 +8,23 @@ describe EmbeddedJavascriptsController do
   describe "overlay" do
     it "returns the correct js" do
       get :overlay, format: :js
-      expect(response.body).to match(ActionController::Base.helpers.asset_url(Shakapacker.manifest.lookup!("overlay.js")))
-      expect(response.body).to match(ActionController::Base.helpers.stylesheet_pack_tag("overlay.css", protocol: PROTOCOL, host: DOMAIN))
+
+      manifest = ViteRuby.instance.manifest
+      overlay_stylesheet_path = manifest.resolve_entries("overlay", type: :typescript).fetch(:stylesheets).first
+      design_stylesheet_path = manifest.resolve_entries("design", type: :typescript).fetch(:stylesheets).first
+
+      expect(response.body).to include("/js/gumroad.js")
+      expect(response.body).to include("document.head.insertAdjacentHTML")
+      expect(response.body).to include(overlay_stylesheet_path)
+      expect(response.body).to include(design_stylesheet_path)
     end
   end
 
   describe "embed" do
     it "returns the correct js" do
       get :embed, format: :js
-      expect(response.body).to match(Shakapacker.manifest.lookup!("embed.js"))
+
+      expect(response.body).to include("/js/gumroad-embed-bundle.js")
     end
   end
 end
