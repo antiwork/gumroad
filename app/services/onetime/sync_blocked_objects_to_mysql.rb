@@ -66,9 +66,11 @@ module Onetime
           }
         end
 
+        # `unique_by:` isn't supported by the Makara MySQL adapter, but MySQL's
+        # ON DUPLICATE KEY UPDATE triggers on any unique-index conflict, so the
+        # (object_type, object_value) unique index handles dedup either way.
         BlockedObjectRecord.upsert_all(
           rows,
-          unique_by: :index_blocked_objects_on_type_and_value,
           update_only: %i[blocked_at expires_at blocked_by updated_at]
         )
       end
