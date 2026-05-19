@@ -43,6 +43,7 @@
     "dompurify": "^3.4.0",
     "fast-average-color": "^9.4.0",
     "immer": "^10.0.0",
+    "jquery": "^3.7.1",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.0.0",
     "libphonenumber-js": "^1.12.23",
