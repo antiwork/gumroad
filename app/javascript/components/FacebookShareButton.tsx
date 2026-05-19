@@ -1,4 +1,5 @@
 import { Facebook } from "@boxicons/react";
+import * as React from "react";
 
 import { NavigationButton } from "$app/components/Button";
 
