@@ -12,7 +12,6 @@ module PageMeta::Analytics
       set_meta_tag(property: "gr:tiktok_pixel:enabled", content: analytics_enabled?.to_s)
       set_meta_tag(property: "gr:logged_in_user:id", content: logged_in_user.present? ? logged_in_user.external_id : "")
       set_meta_tag(property: "gr:page:type", content: "")
-      set_meta_tag(property: "gr:facebook_sdk:enabled", content: analytics_enabled?.to_s)
     end
 
     def analytics_enabled?(seller: @user || current_seller)
