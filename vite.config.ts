@@ -65,7 +65,10 @@ export default defineConfig(({ mode }) => ({
     react(),
     UnpluginTypia({ cache: true }),
     AutoImport({
-      imports: [{ "$app/utils/routes": [["*", "Routes"]] }],
+      imports: [
+        { "$app/utils/routes": [["*", "Routes"]] },
+        { jquery: [["default", "$"], ["default", "jQuery"]] },
+      ],
     }),
     stripCjsExportsPlugin(),
     // Bundle visualizer — only emitted during production builds.
