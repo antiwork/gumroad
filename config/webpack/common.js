@@ -175,7 +175,7 @@ const config = {
     UnpluginTypia(),
     webpackAssetsManifestPlugin,
     miniCssExtractPlugin,
-    new webpack.ProvidePlugin({ Routes: "$app/utils/routes" }),
+    new webpack.ProvidePlugin({ Routes: "$app/utils/routes", $: "jquery", jQuery: "jquery" }),
     new ForkTsCheckerWebpackPlugin({
       typescript: {
         configFile: path.join(rootPath, "tsconfig.json"),

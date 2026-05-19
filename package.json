@@ -69,7 +69,6 @@
     "@tailwindcss/postcss": "^4.1.14",
     "@tailwindcss/typography": "^0.5.19",
     "@types/braintree-web": "^3.75.22",
-    "@types/facebook-js-sdk": "^3.3.6",
     "@types/facebook-pixel": "^0.0.31",
     "@types/google.analytics": "^0.0.46",
     "@types/grecaptcha": "^3.0.4",

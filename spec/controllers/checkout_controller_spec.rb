@@ -47,8 +47,7 @@ describe CheckoutController, type: :controller, inertia: true do
         "gr:fb_pixel:enabled" => "true",
         "gr:tiktok_pixel:enabled" => "true",
         "gr:logged_in_user:id" => "",
-        "gr:page:type" => "",
-        "gr:facebook_sdk:enabled" => "true"
+        "gr:page:type" => ""
       )
     end
 

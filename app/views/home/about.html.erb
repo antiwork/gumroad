@@ -318,5 +318,5 @@
 
   <%= render "home/shared/footer" %>
 
-  <%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
+  <%= render "home/shared/hero_parallax" %>
 </div>

@@ -17,7 +17,6 @@ const baseConfig = {
       ...globals.browser,
       ...globals.jquery,
       Routes: "readonly",
-      FB: "readonly",
       process: "readonly",
       SSR: "readonly",
     },
