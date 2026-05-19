@@ -8,7 +8,12 @@ module CapybaraHelpers
   end
 
   def wait_for_visible(selector)
-    wait_for_valid %($('#{selector}:visible').length > 0)
+    wait_for_valid <<~JS
+      (() => {
+        const el = document.querySelector('#{selector}');
+        return el !== null && el.getClientRects().length > 0;
+      })()
+    JS
   end
 
   def wait_for_ajax
@@ -18,9 +23,7 @@ module CapybaraHelpers
   end
 
   def finished_all_ajax_requests?
-    page.evaluate_script(<<~EOS)
-      ((typeof window.jQuery === 'undefined') || jQuery.active === 0) && !window.__activeRequests
-    EOS
+    page.evaluate_script("!window.__activeRequests")
   end
 
   DISABLE_ANIMATIONS_JS = <<~JS
