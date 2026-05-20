@@ -5,6 +5,13 @@ module EmbedHelpers
     Dir.glob(Rails.root.join("public", "embed_spec_page_*.html")).each { |f| File.delete(f) }
   end
 
+  # Wait for the Gumroad embed iframe to be injected by gumroad-embed.js before entering it.
+  # Bare `within_frame` does not retry and fails instantly when the iframe hasn't loaded yet.
+  def within_embed_frame(wait: 15, &block)
+    expect(page).to have_selector("iframe", wait:)
+    within_frame(&block)
+  end
+
   def create_embed_page(product, template_name: "embed_page.html.erb", url: nil, gumroad_params: nil, outbound: true, insert_anchor_tag: true, custom_domain_base_uri: nil, query_params: {})
     template = Rails.root.join("spec", "support", "fixtures", template_name)
     filename = Rails.root.join("public", "embed_spec_page_#{product.unique_permalink}.html")

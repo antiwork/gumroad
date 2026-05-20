@@ -6,5 +6,7 @@
 // biome-ignore lint: disable
 export {}
 declare global {
+  const $: typeof import('jquery')['default']
   const Routes: typeof import('$app/utils/routes')
+  const jQuery: typeof import('jquery')['default']
 }
