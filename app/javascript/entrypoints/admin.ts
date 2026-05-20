@@ -5,14 +5,16 @@ import { createRoot } from "react-dom/client";
 import AdminAppWrapper, { GlobalProps } from "../inertia/admin_app_wrapper";
 import Layout from "../layouts/Admin";
 
+import "./admin.scss";
+
 const AdminLayout = (page: React.ReactNode) => React.createElement(Layout, { children: page });
 
 type PageComponent = React.ComponentType & { layout?: (page: React.ReactNode) => React.ReactElement };
 
 const isPageComponent = (value: unknown): value is PageComponent => typeof value === "function";
 
-const tsxPages = import.meta.glob('../pages/**/*.tsx');
-const jsxPages = import.meta.glob('../pages/**/*.jsx');
+const tsxPages = import.meta.glob("../pages/**/*.tsx");
+const jsxPages = import.meta.glob("../pages/**/*.jsx");
 
 const resolvePageComponent = async (name: string): Promise<PageComponent> => {
   const tsxPath = `../pages/${name}.tsx`;
