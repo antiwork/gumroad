@@ -3,58 +3,53 @@ const REGEX =
 export const isValidEmail = (possiblyEmail: string): boolean =>
   REGEX.test(possiblyEmail) && possiblyEmail.length <= 255;
 
-/** Sift3 string distance — same algorithm mailcheck used internally */
 const sift3Distance = (s1: string, s2: string): number => {
-  if (!s1 || !s2) return s1?.length || s2?.length || 0;
-  const maxOffset = 5;
-  let c1 = 0;
-  let c2 = 0;
-  let lcss = 0;
-  let localCs = 0;
+  if (s1.length === 0) return s2.length;
+  if (s2.length === 0) return s1.length;
 
-  while (c1 < s1.length && c2 < s2.length) {
-    if (s1[c1] === s2[c2]) {
-      localCs++;
+  let cursor = 0;
+  let offset1 = 0;
+  let offset2 = 0;
+  let lcs = 0;
+  const maxOffset = 5;
+
+  while (cursor + offset1 < s1.length && cursor + offset2 < s2.length) {
+    if (s1.charAt(cursor + offset1) === s2.charAt(cursor + offset2)) {
+      lcs++;
     } else {
-      lcss += localCs;
-      localCs = 0;
-      if (c1 !== c2) c1 = c2 = Math.min(c1, c2);
+      offset1 = 0;
+      offset2 = 0;
       for (let i = 0; i < maxOffset; i++) {
-        if (c1 + i >= s1.length && c2 + i >= s2.length) break;
-        if (c1 + i < s1.length && s1[c1 + i] === s2[c2]) {
-          c1 += i;
-          localCs++;
+        if (cursor + i < s1.length && s1.charAt(cursor + i) === s2.charAt(cursor)) {
+          offset1 = i;
           break;
         }
-        if (c2 + i < s2.length && s1[c1] === s2[c2 + i]) {
-          c2 += i;
-          localCs++;
+        if (cursor + i < s2.length && s1.charAt(cursor) === s2.charAt(cursor + i)) {
+          offset2 = i;
           break;
         }
       }
     }
-    c1++;
-    c2++;
+    cursor++;
   }
-  lcss += localCs;
-  return Math.round(Math.max(s1.length, s2.length) - lcss);
+
+  return (s1.length + s2.length) / 2 - lcs;
 };
 
-const findClosestDomain = (domain: string, domains: string[], threshold = 3): string | null => {
-  let bestDistance = Infinity;
-  let bestDomain: string | null = null;
-  const lowerDomain = domain.toLowerCase();
+const findClosestDomain = (domain: string, domains: string[], threshold: number): string | null => {
+  let minDistance = Infinity;
+  let closestDomain: string | null = null;
 
   for (const candidate of domains) {
-    if (lowerDomain === candidate.toLowerCase()) return null; // exact match, no suggestion
-    const distance = sift3Distance(lowerDomain, candidate.toLowerCase());
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestDomain = candidate;
+    if (domain === candidate) return candidate;
+    const distance = sift3Distance(domain, candidate);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestDomain = candidate;
     }
   }
 
-  return bestDistance <= threshold ? bestDomain : null;
+  return minDistance <= threshold ? closestDomain : null;
 };
 
 export interface EmailSuggestion {
@@ -63,33 +58,102 @@ export interface EmailSuggestion {
   full: string;
 }
 
-export const checkEmailForTypos = (email: string, cb: (suggestion: EmailSuggestion) => void): void => {
-  const parts = email.split("@");
-  if (parts.length < 2) return;
+interface EmailParts {
+  address: string;
+  domain: string;
+  secondLevelDomain: string;
+  topLevelDomain: string;
+}
 
-  const address = parts.slice(0, -1).join("@");
-  const domainParts = (parts.at(-1) ?? "").split(".");
-  const tld = domainParts.length > 1 ? domainParts.slice(1).join(".") : "";
+const splitEmail = (email: string): EmailParts | null => {
+  const parts = email.trim().split("@");
+  if (parts.length < 2 || parts.some((part) => part === "")) return null;
+
   const domain = parts.at(-1) ?? "";
+  const domainParts = domain.split(".");
+  const topLevelDomain = domainParts.length === 1 ? (domainParts[0] ?? "") : domainParts.slice(1).join(".");
 
-  // Check full domain first (e.g. "gmial.com" → "gmail.com")
-  const closestDomain = findClosestDomain(domain, POPULAR_EMAIL_HOST_DOMAINS);
-  if (closestDomain) {
-    cb({ address, domain: closestDomain, full: `${address}@${closestDomain}` });
-    return;
-  }
-
-  // Then check TLD (e.g. ".con" → ".com")
-  if (tld) {
-    const closestTld = findClosestDomain(tld, POPULAR_TOP_LEVEL_DOMAINS, 2);
-    if (closestTld) {
-      const closestTldParts = closestTld.split(".").length;
-      const hostParts = domainParts.slice(0, -closestTldParts).join(".");
-      const suggestedDomain = `${hostParts}.${closestTld}`;
-      cb({ address, domain: suggestedDomain, full: `${address}@${suggestedDomain}` });
-    }
-  }
+  return {
+    address: parts.slice(0, -1).join("@"),
+    domain,
+    secondLevelDomain: domainParts.length === 1 ? "" : (domainParts[0] ?? ""),
+    topLevelDomain,
+  };
 };
+
+const encodeEmail = (email: string): string =>
+  encodeURI(email)
+    .replace("%20", " ")
+    .replace("%25", "%")
+    .replace("%5E", "^")
+    .replace("%60", "`")
+    .replace("%7B", "{")
+    .replace("%7C", "|")
+    .replace("%7D", "}");
+
+const suggestEmail = (email: string): EmailSuggestion | null => {
+  const emailParts = splitEmail(encodeEmail(email).toLowerCase());
+  if (!emailParts) return null;
+
+  if (
+    POPULAR_SECOND_LEVEL_DOMAINS.includes(emailParts.secondLevelDomain) &&
+    POPULAR_TOP_LEVEL_DOMAINS.includes(emailParts.topLevelDomain)
+  )
+    return null;
+
+  const closestDomain = findClosestDomain(emailParts.domain, POPULAR_EMAIL_HOST_DOMAINS, DOMAIN_THRESHOLD);
+  if (closestDomain) {
+    if (closestDomain === emailParts.domain) return null;
+    return {
+      address: emailParts.address,
+      domain: closestDomain,
+      full: `${emailParts.address}@${closestDomain}`,
+    };
+  }
+
+  const closestSecondLevelDomain = findClosestDomain(
+    emailParts.secondLevelDomain,
+    POPULAR_SECOND_LEVEL_DOMAINS,
+    SECOND_LEVEL_THRESHOLD,
+  );
+  const closestTopLevelDomain = findClosestDomain(
+    emailParts.topLevelDomain,
+    POPULAR_TOP_LEVEL_DOMAINS,
+    TOP_LEVEL_THRESHOLD,
+  );
+
+  let domain = emailParts.domain;
+  let hasSuggestion = false;
+
+  if (closestSecondLevelDomain && closestSecondLevelDomain !== emailParts.secondLevelDomain) {
+    domain = domain.replace(emailParts.secondLevelDomain, closestSecondLevelDomain);
+    hasSuggestion = true;
+  }
+
+  if (closestTopLevelDomain && closestTopLevelDomain !== emailParts.topLevelDomain) {
+    domain = domain.replace(emailParts.topLevelDomain, closestTopLevelDomain);
+    hasSuggestion = true;
+  }
+
+  return hasSuggestion
+    ? {
+        address: emailParts.address,
+        domain,
+        full: `${emailParts.address}@${domain}`,
+      }
+    : null;
+};
+
+export const checkEmailForTypos = (email: string, cb: (suggestion: EmailSuggestion) => void): void => {
+  const suggestion = suggestEmail(email);
+  if (suggestion) cb(suggestion);
+};
+
+const DOMAIN_THRESHOLD = 2;
+const SECOND_LEVEL_THRESHOLD = 2;
+const TOP_LEVEL_THRESHOLD = 2;
+
+const POPULAR_SECOND_LEVEL_DOMAINS = ["yahoo", "hotmail", "mail", "live", "outlook", "gmx"];
 
 const POPULAR_EMAIL_HOST_DOMAINS = [
   "126.com",

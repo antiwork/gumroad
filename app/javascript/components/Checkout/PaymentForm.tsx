@@ -28,7 +28,7 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
-import { checkEmailForTypos as checkEmailForTyposUtil, type EmailSuggestion } from "$app/utils/email";
+import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";

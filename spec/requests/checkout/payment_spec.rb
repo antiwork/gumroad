@@ -76,6 +76,29 @@ describe "Checkout payment", :js, type: :system do
       expect(page).to have_button "Pay", disabled: false
     end
 
+    it "leaves valid close-looking email domains alone" do
+      visit @product.long_url
+      add_to_cart(@product)
+
+      ["hi@proton.me", "hi@gmx.at"].each do |email|
+        fill_in "Email address", with: email
+        unfocus
+        expect(page).to_not have_text "Did you mean"
+        expect(page).to have_button "Pay", disabled: false
+      end
+    end
+
+    it "preserves the host when suggesting multi-part TLD corrections" do
+      visit @product.long_url
+      add_to_cart(@product)
+
+      fill_in "Email address", with: "hi@example.co.uj"
+      unfocus
+
+      expect(page).to have_text "Did you mean hi@example.co.uk?"
+      expect(page).to have_button "Pay", disabled: true
+    end
+
     context "feature flag is off" do
       before { Feature.deactivate(:require_email_typo_acknowledgment) }
 
