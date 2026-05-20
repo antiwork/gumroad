@@ -18,6 +18,7 @@ export type CurrentSeller = {
   profileBackgroundColor: string;
   profileHighlightColor: string;
   profileFont: string;
+  pagesEnabled: boolean;
 };
 
 const Context = React.createContext<CurrentSeller | null | undefined>(undefined);
@@ -36,6 +37,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     profile_background_color: string;
     profile_highlight_color: string;
     profile_font: string;
+    pages_enabled: boolean;
   } | null>(data);
   if (parsed == null) return null;
   return {
@@ -51,6 +53,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     profileBackgroundColor: parsed.profile_background_color,
     profileHighlightColor: parsed.profile_highlight_color,
     profileFont: parsed.profile_font,
+    pagesEnabled: parsed.pages_enabled,
   };
 };
 

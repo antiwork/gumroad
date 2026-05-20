@@ -137,6 +137,13 @@ export const Nav = (props: Props) => {
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
+        {currentSeller?.pagesEnabled ? (
+          <ClientNavLink
+            text="Pages"
+            icon={<BookmarkHeart pack="filled" className="size-5" />}
+            href={Routes.pages_url(routeParams)}
+          />
+        ) : null}
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink
             text="Collaborators"
