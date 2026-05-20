@@ -86,10 +86,22 @@ class Country
   ].freeze
   private_constant :CROSS_BORDER_PAYOUTS_COUNTRIES
 
+  # Stripe does not accept its own ISO codes for US territories on Connect accounts: a Puerto Rico
+  # seller must be onboarded as `country: "US"`. We keep the seller's true country in their
+  # compliance info; this mapping is only applied for Stripe-API-facing fields.
+  TERRITORY_TO_PARENT_COUNTRY = {
+    Compliance::Countries::PRI.alpha2 => Compliance::Countries::USA.alpha2,
+  }.freeze
+  private_constant :TERRITORY_TO_PARENT_COUNTRY
+
   attr_reader :alpha2_code
 
   def initialize(country_code)
     @alpha2_code = country_code
+  end
+
+  def stripe_country_code
+    TERRITORY_TO_PARENT_COUNTRY[alpha2_code] || alpha2_code
   end
 
   def supports_stripe_cross_border_payouts?
@@ -108,7 +120,8 @@ class Country
 
   def default_currency
     case alpha2_code
-    when Compliance::Countries::USA.alpha2
+    when Compliance::Countries::USA.alpha2,
+        Compliance::Countries::PRI.alpha2
       Currency::USD
     when Compliance::Countries::CAN.alpha2
       Currency::CAD
