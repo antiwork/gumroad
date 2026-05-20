@@ -8684,6 +8684,12 @@ describe StripeMerchantAccountManager, :vcr do
                                                  business_city: "San Juan", business_zip_code: "00921")
         end
 
+        before do
+          # Business sellers also trigger Stripe::Account.create_person for the representative;
+          # stub it so the test doesn't make an unhandled HTTP request.
+          allow(Stripe::Account).to receive(:create_person).and_return(double("Stripe::Person", id: "person_stub"))
+        end
+
         it "remaps company.address.country to US so Stripe accepts the business address" do
           subject.create_account(user, passphrase: "1234")
 
