@@ -1410,7 +1410,7 @@ describe User, :vcr do
     describe "account_created_email_domain_is_not_blocked validation" do
       context "when the email domain is blocked" do
         before do
-          PlatformBlock.create!(object_type: BLOCKED_OBJECT_TYPES[:email_domain], object_value: "example.com", blocked_at: Time.current)
+          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email_domain], object_value: "example.com")
         end
 
         it "fails the validation" do
@@ -1447,8 +1447,7 @@ describe User, :vcr do
     describe "account_created_ip" do
       context "when the IP is blocked" do
         before do
-          now = Time.current
-          PlatformBlock.create!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "127.0.0.1", blocked_at: now, expires_at: now + 1.hour)
+          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "127.0.0.1", expires_in: 1.hour)
         end
 
         it "fails the validation" do

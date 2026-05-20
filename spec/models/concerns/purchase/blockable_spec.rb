@@ -7,13 +7,6 @@ describe Purchase::Blockable do
   let(:buyer) { create(:user) }
   let(:purchase) { create(:purchase, link: product, email: "gumbot@gumroad.com", purchaser: buyer) }
 
-  def block_platform!(type, value, by_user_id = nil, expires_in: nil)
-    now = Time.current
-    PlatformBlock.create_or_find_by!(object_type: type, object_value: value).tap do |record|
-      record.update!(blocked_at: now, blocked_by: by_user_id, expires_at: expires_in.present? ? now + expires_in : nil)
-    end
-  end
-
   describe "#buyer_blocked?" do
     it "returns false when buyer is not blocked" do
       expect(purchase.buyer_blocked?).to eq(false)
@@ -21,7 +14,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's browser is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:browser_guid], purchase.browser_guid, nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:browser_guid], object_value: purchase.browser_guid)
       end
 
       it "returns true" do
@@ -31,7 +24,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's email is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], purchase.email, nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: purchase.email)
       end
 
       it "returns true" do
@@ -43,7 +36,7 @@ describe Purchase::Blockable do
       let(:purchase) { create(:purchase, link: product, email: "gumbot@gumroad.com", purchaser: buyer, charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
 
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], purchase.paypal_email, nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: purchase.paypal_email)
       end
 
       it "returns true" do
@@ -53,7 +46,7 @@ describe Purchase::Blockable do
 
     context "when the buyer's email address is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], buyer.email, nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: buyer.email)
       end
 
       it "returns true" do
@@ -63,7 +56,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's ip address is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:ip_address], purchase.ip_address, nil, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
       end
 
       it "returns true" do
@@ -73,7 +66,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's payment method is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], purchase.stripe_fingerprint, nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: purchase.stripe_fingerprint)
       end
 
       it "returns true" do
@@ -118,7 +111,7 @@ describe Purchase::Blockable do
 
     context "when purchase's ip address is blocked" do
       before do
-        block_platform!(BLOCKED_OBJECT_TYPES[:ip_address], purchase.ip_address, nil, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
       end
 
       it "returns true for blocked check" do
@@ -390,11 +383,10 @@ describe Purchase::Blockable do
               freeze_time do
                 expires_in = PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
 
-                block_platform!(
-                  BLOCKED_OBJECT_TYPES[:ip_address],
-                  @purchase.ip_address,
-                  nil,
-                  expires_in:
+                PlatformBlock.add!(
+                  object_type: BLOCKED_OBJECT_TYPES[:ip_address],
+                  object_value: @purchase.ip_address,
+                  expires_in:,
                 )
 
                 expect do

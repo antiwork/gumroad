@@ -8,15 +8,8 @@ describe AttributeBlockable do
   let(:user_with_blocked_email) { create(:user, email: blocked_email) }
   let(:user_with_unblocked_email) { create(:user, email: unblocked_email) }
 
-  def block_platform!(type, value, by_user_id = nil, expires_in: nil)
-    now = Time.current
-    PlatformBlock.create_or_find_by!(object_type: type, object_value: value).tap do |record|
-      record.update!(blocked_at: now, blocked_by: by_user_id, expires_at: expires_in.present? ? now + expires_in : nil)
-    end
-  end
-
   before do
-    block_platform!(BLOCKED_OBJECT_TYPES[:email], blocked_email, 1)
+    PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: blocked_email, by: 1)
   end
 
   after do
@@ -91,7 +84,7 @@ describe AttributeBlockable do
 
         it "does not consider destroyed records" do
           user = create(:user, email: "test_unblocked_#{SecureRandom.hex(4)}@example.com")
-          blocked_object = block_platform!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+          blocked_object = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: user.email, by: 1)
 
           expect(user.reload.blocked_by_form_email?).to be true
           expect(user.blocked_by_form_email_object).not_to be_nil
@@ -105,14 +98,14 @@ describe AttributeBlockable do
         it "finds active block after destroying and re-blocking" do
           user = create(:user, email: "test_reblock_#{SecureRandom.hex(4)}@example.com")
 
-          first_block = block_platform!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+          first_block = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: user.email, by: 1)
           expect(user.reload.blocked_by_form_email?).to be true
 
           first_block.destroy!
           expect(user.reload.blocked_by_form_email?).to be false
           expect(user.blocked_by_form_email_object).to be_nil
 
-          second_block = block_platform!(BLOCKED_OBJECT_TYPES[:email], user.email, 1)
+          second_block = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: user.email, by: 1)
 
           expect(user.reload.blocked_by_form_email?).to be true
           expect(user.blocked_by_form_email_object.id).to eq(second_block.id)
@@ -554,8 +547,8 @@ describe AttributeBlockable do
         mixed_blocked_email = "mixed_blocked@example.com"
         mixed_emails = [mixed_blocked_email, "unique_unblocked@example.com", "another@example.com"]
 
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], mixed_blocked_email, 1)
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], "another@example.com", 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: mixed_blocked_email, by: 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "another@example.com", by: 1)
 
         mixed_users = mixed_emails.map { |email| create(:user, email:) }
 
@@ -569,7 +562,7 @@ describe AttributeBlockable do
         custom_blocked_email = "custom_blocked@example.com"
         custom_unblocked_email = "custom_unblocked@example.com"
 
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email, 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: custom_blocked_email, by: 1)
 
         test_users = [
           create(:user, email: custom_blocked_email),
@@ -602,9 +595,9 @@ describe AttributeBlockable do
           create(:user, email: custom_blocked_email_2)
         ]
 
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email_1, 1)
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email_2, 1)
-        block_platform!(BLOCKED_OBJECT_TYPES[:email_domain], custom_blocked_email_domain, 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: custom_blocked_email_1, by: 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: custom_blocked_email_2, by: 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email_domain], object_value: custom_blocked_email_domain, by: 1)
 
         allow(PlatformBlock).to receive(:find_active_objects).and_call_original
 
@@ -621,7 +614,7 @@ describe AttributeBlockable do
         5.times do |i|
           email = "blocked_perfuser#{i}@example.com"
           perf_users << create(:user, email:)
-          block_platform!(BLOCKED_OBJECT_TYPES[:email], email, 1)
+          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: email, by: 1)
         end
 
         allow(PlatformBlock).to receive(:find_active_objects).and_call_original
@@ -660,13 +653,13 @@ describe AttributeBlockable do
         user_unblocked = create(:user, email: unblocked_email)
         user_reblocked = create(:user, email: reblocked_email)
 
-        active_record = block_platform!(BLOCKED_OBJECT_TYPES[:email], active_email, 1)
+        active_record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: active_email, by: 1)
 
-        unblocked_record = block_platform!(BLOCKED_OBJECT_TYPES[:email], unblocked_email, 1)
+        unblocked_record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: unblocked_email, by: 1)
         unblocked_record.destroy!
 
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], reblocked_email, 1).destroy!
-        reblocked_record = block_platform!(BLOCKED_OBJECT_TYPES[:email], reblocked_email, 1)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: reblocked_email, by: 1).destroy!
+        reblocked_record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: reblocked_email, by: 1)
 
         # Preload blocked attributes
         users = User.where(id: [user_active.id, user_unblocked.id, user_reblocked.id])
@@ -696,7 +689,7 @@ describe AttributeBlockable do
     let(:unblocked_ip) { "192.168.1.200" }
 
     before do
-      block_platform!(BLOCKED_OBJECT_TYPES[:ip_address], blocked_ip, 1, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: blocked_ip, by: 1, expires_in: 1.hour)
     end
 
     let(:test_model_class) do
@@ -733,13 +726,9 @@ describe AttributeBlockable do
     it "handles expired blocked objects" do
       expired_email = "expired@example.com"
 
-      PlatformBlock.create!(
-        object_type: BLOCKED_OBJECT_TYPES[:email],
-        object_value: expired_email,
-        blocked_at: 1.hour.ago,
-        expires_at: 30.minutes.ago,
-        blocked_by: 1
-      )
+      travel_to(1.hour.ago) do
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: expired_email, by: 1, expires_in: 30.minutes)
+      end
 
       user = create(:user, email: expired_email)
 
@@ -751,13 +740,9 @@ describe AttributeBlockable do
     it "handles blocked objects without expires_at" do
       permanent_blocked_email = "permanent@example.com"
 
-      PlatformBlock.create!(
-        object_type: BLOCKED_OBJECT_TYPES[:email],
-        object_value: permanent_blocked_email,
-        blocked_at: 1.hour.ago,
-        expires_at: nil,
-        blocked_by: 1
-      )
+      travel_to(1.hour.ago) do
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: permanent_blocked_email, by: 1)
+      end
 
       user = create(:user, email: permanent_blocked_email)
       expect(user.blocked_by_email?).to be true
@@ -786,8 +771,8 @@ describe AttributeBlockable do
     let(:user) { create(:user, email: "test@example.com") }
 
     it "returns blocked objects for given values" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "blocked1@example.com", 1)
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "blocked2@example.com", 1)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "blocked1@example.com", by: 1)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "blocked2@example.com", by: 1)
 
       values = ["blocked1@example.com", "blocked2@example.com", "unblocked@example.com"]
       blocked_objects = user.blocked_objects_for_values(:email, values)
@@ -803,7 +788,7 @@ describe AttributeBlockable do
     end
 
     it "works with different object types" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:ip_address], "192.168.1.1", 1, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "192.168.1.1", by: 1, expires_in: 1.hour)
 
       values = ["192.168.1.1", "192.168.1.2"]
       blocked_objects = user.blocked_objects_for_values(:ip_address, values)

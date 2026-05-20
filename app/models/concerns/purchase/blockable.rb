@@ -164,8 +164,7 @@ module Purchase::Blockable
       )
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
-      record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:browser_guid], object_value: browser_guid)
-      record.update!(blocked_at: Time.current, blocked_by: nil, expires_at: nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:browser_guid], object_value: browser_guid)
     end
 
     def ban_buyer_on_fraud_related_error_code!
@@ -252,9 +251,11 @@ module Purchase::Blockable
 
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
-      now = Time.current
-      record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: ip_address)
-      record.update!(blocked_at: now, blocked_by: nil, expires_at: now + CARD_TESTING_IP_ADDRESS_BLOCK_DURATION)
+      PlatformBlock.add!(
+        object_type: BLOCKED_OBJECT_TYPES[:ip_address],
+        object_value: ip_address,
+        expires_in: CARD_TESTING_IP_ADDRESS_BLOCK_DURATION,
+      )
     end
 
     def block_purchases_on_product!
@@ -292,9 +293,11 @@ module Purchase::Blockable
       return if failed_purchase_attempts_count < max_number_of_failed_purchases \
              && recent_purchases_failed_in_a_row < max_number_of_failed_purchases_in_a_row
 
-      now = Time.current
-      record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:product], object_value: link_id)
-      record.update!(blocked_at: now, blocked_by: nil, expires_at: now + card_testing_product_block_hours.hours)
+      PlatformBlock.add!(
+        object_type: BLOCKED_OBJECT_TYPES[:product],
+        object_value: link_id,
+        expires_in: card_testing_product_block_hours.hours,
+      )
     end
 
     def block_fraudulent_free_purchases!
@@ -321,9 +324,11 @@ module Purchase::Blockable
 
       return if recent_free_purchases_of_same_product <= max_allowed_free_purchases_of_same_product
 
-      now = Time.current
-      record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: ip_address)
-      record.update!(blocked_at: now, blocked_by: nil, expires_at: now + fraudulent_free_purchases_block_hours.hours)
+      PlatformBlock.add!(
+        object_type: BLOCKED_OBJECT_TYPES[:ip_address],
+        object_value: ip_address,
+        expires_in: fraudulent_free_purchases_block_hours.hours,
+      )
     end
 
     def delete_failed_purchases_count

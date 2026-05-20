@@ -16,6 +16,17 @@ class PlatformBlock < ApplicationRecord
   scope :active, -> { where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   class << self
+    def add!(object_type:, object_value:, by: nil, expires_in: nil)
+      now = Time.current
+      create_or_find_by!(object_type:, object_value:).tap do |record|
+        record.update!(
+          blocked_at: now,
+          blocked_by: by,
+          expires_at: expires_in.present? ? now + expires_in : nil,
+        )
+      end
+    end
+
     def find_object(object_value)
       find_by(object_value:)
     end

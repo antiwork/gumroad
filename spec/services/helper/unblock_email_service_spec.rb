@@ -43,7 +43,7 @@ describe Helper::UnblockEmailService do
       end
 
       before do
-        PlatformBlock.create!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: email, blocked_at: Time.current)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: email)
       end
 
       context "when recent blocked purchase is present" do
@@ -51,8 +51,7 @@ describe Helper::UnblockEmailService do
         let(:recent_blocked_purchase) { create(:purchase, email:, ip_address: blocked_ip_address) }
 
         before do
-          now = Time.current
-          PlatformBlock.create!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: blocked_ip_address, blocked_at: now, expires_at: now + 1.month)
+          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: blocked_ip_address, expires_in: 1.month)
         end
 
         it "unblocks the buyer" do

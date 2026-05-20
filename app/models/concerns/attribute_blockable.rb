@@ -227,13 +227,7 @@ module AttributeBlockable
 
       define_method("block_by_#{blockable_method}!") do |by_user_id: nil, expires_in: nil|
         return if (value = send(blockable_method)).blank?
-        now = Time.current
-        blocked_object = PlatformBlock.create_or_find_by!(object_type:, object_value: value)
-        blocked_object.update!(
-          blocked_at: now,
-          blocked_by: by_user_id,
-          expires_at: expires_in.present? ? now + expires_in : nil
-        )
+        blocked_object = PlatformBlock.add!(object_type:, object_value: value, by: by_user_id, expires_in:)
         blocked_by_attributes[blockable_method.to_s] = blocked_object
       end
 

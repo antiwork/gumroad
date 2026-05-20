@@ -3,42 +3,59 @@
 require "spec_helper"
 
 describe PlatformBlock do
-  def block(type, value, by: nil, expires_in: nil)
-    now = Time.current
-    record = PlatformBlock.create_or_find_by!(object_type: type, object_value: value)
-    record.update!(blocked_at: now, blocked_by: by, expires_at: expires_in.present? ? now + expires_in : nil)
-    record
+  describe ".add!" do
+    it "creates a new row" do
+      expect do
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "fraud@example.com", by: 1)
+      end.to change { PlatformBlock.count }.by(1)
+
+      record = PlatformBlock.find_by(object_value: "fraud@example.com")
+      expect(record.object_type).to eq(BLOCKED_OBJECT_TYPES[:email])
+      expect(record.blocked_by).to eq(1)
+      expect(record.blocked_at).to be_within(1.minute).of(Time.current)
+      expect(record.expires_at).to be_nil
+    end
+
+    it "sets expires_at from expires_in" do
+      record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "157.45.9.212", expires_in: 1.hour)
+      expect(record.expires_at).to be_within(1.minute).of(1.hour.from_now)
+    end
+
+    it "refreshes an existing row instead of inserting a second one" do
+      first = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "1.2.3.4", expires_in: 1.hour)
+      expect do
+        second = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "1.2.3.4", expires_in: 6.hours)
+        expect(second.id).to eq(first.id)
+      end.not_to change { PlatformBlock.count }
+      expect(first.reload.expires_at).to be_within(1.minute).of(6.hours.from_now)
+    end
+
+    it "returns the hydrated record" do
+      record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "x@example.com")
+      expect(record).to be_a(PlatformBlock)
+      expect(record).to be_blocked
+    end
   end
 
   describe "#destroy!" do
     it "removes the row" do
-      record = block(BLOCKED_OBJECT_TYPES[:ip_address], "157.45.09.212", expires_in: 1.hour)
+      record = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
       expect(record.blocked?).to be(true)
       record.destroy!
       expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be(nil)
     end
   end
 
-  describe "re-blocking after destroy" do
-    it "creates a fresh row" do
-      block(BLOCKED_OBJECT_TYPES[:ip_address], "789.123.456.0", expires_in: 1.hour)
-      PlatformBlock.find_by(object_value: "789.123.456.0").destroy!
-      expect(PlatformBlock.find_by(object_value: "789.123.456.0")).to be(nil)
-      block(BLOCKED_OBJECT_TYPES[:ip_address], "789.123.456.0", expires_in: 1.hour)
-      expect(PlatformBlock.find_by(object_value: "789.123.456.0").blocked?).to be(true)
-    end
-  end
-
   describe "expiration" do
     it "is not active after the expiration date" do
       count = PlatformBlock.active.count
-      block(BLOCKED_OBJECT_TYPES[:ip_address], "789.125.456.0", expires_in: -3.days)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "789.125.456.0", expires_in: -3.days)
       expect(PlatformBlock.active.count).to eq count
     end
 
     it "is active before the expiration date" do
       count = PlatformBlock.active.count
-      block(BLOCKED_OBJECT_TYPES[:ip_address], "789.124.456.0", expires_in: 3.days)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "789.124.456.0", expires_in: 3.days)
       expect(PlatformBlock.active.count).to eq count + 1
     end
   end
@@ -47,8 +64,8 @@ describe PlatformBlock do
     let(:email) { "paypal@example.com" }
 
     before do
-      block(BLOCKED_OBJECT_TYPES[:email], email)
-      block(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], email)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: email)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: email)
     end
 
     it "filters by charge_processor_fingerprint type" do

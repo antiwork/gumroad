@@ -7,13 +7,6 @@ describe Radar::ValueListSyncService do
 
   let(:value_list) { double("ValueList", id: "rsl_123") }
 
-  def block_platform!(type, value, by_user_id = nil, expires_in: nil)
-    now = Time.current
-    PlatformBlock.create_or_find_by!(object_type: type, object_value: value).tap do |record|
-      record.update!(blocked_at: now, blocked_by: by_user_id, expires_at: expires_in.present? ? now + expires_in : nil)
-    end
-  end
-
   describe "#sync_blocked_emails" do
     before do
       allow(Stripe::Radar::ValueList).to receive(:retrieve)
@@ -24,7 +17,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "pushes recently blocked emails to Stripe Radar" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "bad@example.com", nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "bad@example.com")
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
         value_list: "rsl_123",
@@ -36,7 +29,7 @@ describe Radar::ValueListSyncService do
 
     it "skips emails blocked more than 25 hours ago" do
       travel_to 2.days.ago do
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], "old@example.com", nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "old@example.com")
       end
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
@@ -45,7 +38,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "removes expired blocked emails from Stripe Radar" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "expired@example.com", nil, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "expired@example.com", expires_in: 1.hour)
 
       travel 2.hours
 
@@ -74,7 +67,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "ignores duplicate item errors" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "dup@example.com", nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "dup@example.com")
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
@@ -84,11 +77,11 @@ describe Radar::ValueListSyncService do
 
     it "picks up re-blocked emails by filtering on blocked_at" do
       travel_to 1.month.ago do
-        block_platform!(BLOCKED_OBJECT_TYPES[:email], "reblocked@example.com", nil).destroy!
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "reblocked@example.com").destroy!
       end
 
       # Re-block now
-      block_platform!(BLOCKED_OBJECT_TYPES[:email], "reblocked@example.com", nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "reblocked@example.com")
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
         value_list: "rsl_123",
@@ -109,7 +102,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "pushes recently blocked card fingerprints to Stripe Radar" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpabc123", nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "fpabc123")
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
         value_list: "rsl_123",
@@ -121,7 +114,7 @@ describe Radar::ValueListSyncService do
 
     it "skips fingerprints blocked more than 25 hours ago" do
       travel_to 2.days.ago do
-        block_platform!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpold", nil)
+        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "fpold")
       end
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
@@ -130,7 +123,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "ignores duplicate item errors" do
-      block_platform!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpdup", nil)
+      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "fpdup")
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
