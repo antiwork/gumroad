@@ -51,6 +51,23 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </div>
           </section>
+          {currentSeller.pagesEnabled ? (
+            <section className="grid gap-8 border-t border-border p-4 md:p-8">
+              <header>
+                <h2>Landing page</h2>
+              </header>
+              <p>
+                Create an AI-powered landing page to showcase this product with a custom design.
+              </p>
+              <div>
+                <Button asChild>
+                  <a href={`/pages/new?product_id=${product.custom_permalink ?? ""}`}>
+                    Create a page
+                  </a>
+                </Button>
+              </div>
+            </section>
+          ) : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}

@@ -18,7 +18,7 @@ class PagesController < Sellers::BaseController
     product = current_seller.products.alive.find_by(unique_permalink: params[:product_id]) if params[:product_id]
     render inertia: "Pages/New", props: {
       product: product ? product_summary(product) : nil,
-      products: current_seller.products.alive.not_is_bundle.published.order(name: :asc).map { |p| product_summary(p) },
+      products: current_seller.products.alive.published.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
     }
   end
 
@@ -121,7 +121,7 @@ class PagesController < Sellers::BaseController
       permalink: product.unique_permalink,
       price: product.display_price,
       thumbnail_url: product.thumbnail&.alive&.url,
-      short_url: product.short_url,
+      short_url: product.long_url,
     }
   end
 
