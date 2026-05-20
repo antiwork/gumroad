@@ -79,6 +79,8 @@ type GettingStartedItemType = {
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
+  target?: string;
+  rel?: string;
 };
 
 const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
@@ -134,7 +136,11 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Command line",
     getCompleted: (stats) => !!stats.used_cli,
+    // Points to /api#api-cli (the existing API page's CLI section) instead of
+    // a dedicated /cli page to avoid duplicating content.
     link: "/api#api-cli",
+    target: "_blank",
+    rel: "noopener noreferrer",
     IconComponent: CliIcon,
     description: "Use Gumroad via the command line interface.",
   },
@@ -147,6 +153,8 @@ type GettingStartedItemProps = {
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
+  target?: string;
+  rel?: string;
 };
 
 const Greeter = () => (
@@ -169,6 +177,8 @@ const GettingStartedItem = ({
   IconComponent,
   description,
   minimized,
+  target,
+  rel,
 }: GettingStartedItemProps) => {
   const commonClasses = "relative";
 
@@ -206,7 +216,14 @@ const GettingStartedItem = ({
   }
 
   return (
-    <NavigationButton color="filled" href={link} className={commonClasses} data-status="pending">
+    <NavigationButton
+      color="filled"
+      href={link}
+      target={target}
+      rel={rel}
+      className={commonClasses}
+      data-status="pending"
+    >
       {content}
     </NavigationButton>
   );
@@ -408,11 +425,8 @@ export const DashboardPage = ({
                 {GETTING_STARTED_ITEMS.map((item) => (
                   <GettingStartedItem
                     key={item.name}
-                    name={item.name}
+                    {...item}
                     completed={item.getCompleted(getting_started_stats)}
-                    link={item.link}
-                    IconComponent={item.IconComponent}
-                    description={item.description}
                     minimized={gettingStartedMinimized}
                   />
                 ))}
