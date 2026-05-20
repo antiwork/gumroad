@@ -68,10 +68,10 @@ class Helper::UnblockEmailService
       if recent_blocked_purchase.present?
         unblock_buyer!(purchase: recent_blocked_purchase)
       else
-        blocked_email = BlockedObject.email.find_active_object(email)
+        blocked_email = PlatformBlock.email.find_active_object(email)
         return unless blocked_email.present?
 
-        blocked_email.unblock!
+        blocked_email.destroy!
       end
 
       send_reply(REPLIES[:blocked_by_gumroad])

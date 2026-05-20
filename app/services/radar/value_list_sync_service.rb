@@ -13,17 +13,12 @@ class Radar::ValueListSyncService
       item_type: "email"
     )
 
-    blocked_emails = BlockedObject.email.active.where(:blocked_at.gte => SYNC_WINDOW.ago)
+    blocked_emails = PlatformBlock.email.active.where("blocked_at >= ?", SYNC_WINDOW.ago)
     blocked_emails.each do |blocked_object|
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
-    recently_unblocked_emails = BlockedObject.email.where(blocked_at: nil).where(:updated_at.gte => SYNC_WINDOW.ago)
-    recently_unblocked_emails.each do |blocked_object|
-      remove_item_from_list(value_list.id, blocked_object.object_value)
-    end
-
-    expired_emails = BlockedObject.email.where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
+    expired_emails = PlatformBlock.email.where(expires_at: SYNC_WINDOW.ago..Time.current)
     expired_emails.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end
@@ -36,24 +31,16 @@ class Radar::ValueListSyncService
       item_type: "card_fingerprint"
     )
 
-    blocked_cards = BlockedObject.charge_processor_fingerprint.active
-      .where(:blocked_at.gte => SYNC_WINDOW.ago)
-      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
+    blocked_cards = PlatformBlock.charge_processor_fingerprint.active
+      .where("blocked_at >= ?", SYNC_WINDOW.ago)
+      .where("object_value REGEXP ?", STRIPE_FINGERPRINT_PATTERN.source)
     blocked_cards.each do |blocked_object|
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
-    recently_unblocked_cards = BlockedObject.charge_processor_fingerprint
-      .where(blocked_at: nil)
-      .where(:updated_at.gte => SYNC_WINDOW.ago)
-      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
-    recently_unblocked_cards.each do |blocked_object|
-      remove_item_from_list(value_list.id, blocked_object.object_value)
-    end
-
-    expired_cards = BlockedObject.charge_processor_fingerprint
-      .where(:blocked_at.ne => nil, :expires_at.lte => Time.current, :expires_at.gte => SYNC_WINDOW.ago)
-      .where(object_value: STRIPE_FINGERPRINT_PATTERN)
+    expired_cards = PlatformBlock.charge_processor_fingerprint
+      .where(expires_at: SYNC_WINDOW.ago..Time.current)
+      .where("object_value REGEXP ?", STRIPE_FINGERPRINT_PATTERN.source)
     expired_cards.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end

@@ -3711,7 +3711,7 @@ class Purchase < ApplicationRecord
     def product_is_not_blocked
       return if price_cents.zero?
       return if Feature.inactive?(:block_purchases_on_product)
-      return if BlockedObject.product.find_active_object(link_id).blank?
+      return if PlatformBlock.product.find_active_object(link_id).blank?
 
       self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
       errors.add :base, "Your card was not charged."

@@ -95,11 +95,12 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def block_ip_address
-    BlockedObject.block!(
-      BLOCKED_OBJECT_TYPES[:ip_address],
-      params[:ip_address],
-      current_user.id,
-      expires_in: BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
+    now = Time.current
+    record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: params[:ip_address])
+    record.update!(
+      blocked_at: now,
+      blocked_by: current_user.id,
+      expires_at: now + PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
     )
     render json: { success: true }
   end

@@ -36,11 +36,10 @@ describe Admin::UnblockEmailDomainsController, type: :controller, inertia: true 
     end
 
     it "unblocks email domain", :sidekiq_inline do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "example.com", nil)
+      PlatformBlock.create!(object_type: BLOCKED_OBJECT_TYPES[:email_domain], object_value: "example.com", blocked_at: Time.current)
 
       put :update, params: { email_domains: { identifiers: } }
-      expect(BlockedObject.last.object_value).to eq("example.com")
-      expect(BlockedObject.last.blocked_at).to be_nil
+      expect(PlatformBlock.find_by(object_value: "example.com")).to be_nil
     end
   end
 end

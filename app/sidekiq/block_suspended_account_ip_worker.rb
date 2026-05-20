@@ -12,11 +12,12 @@ class BlockSuspendedAccountIpWorker
       { ip: user.last_sign_in_ip, risk_state: "compliant" }
     ).exists?
 
-    BlockedObject.block!(
-      BLOCKED_OBJECT_TYPES[:ip_address],
-      user.last_sign_in_ip,
-      nil,
-      expires_in: BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
+    now = Time.current
+    record = PlatformBlock.create_or_find_by!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: user.last_sign_in_ip)
+    record.update!(
+      blocked_at: now,
+      blocked_by: nil,
+      expires_at: now + PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
     )
   end
 end
