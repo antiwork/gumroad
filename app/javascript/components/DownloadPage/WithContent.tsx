@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
+import { router } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
@@ -155,7 +156,7 @@ export const WithContent = ({
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {
       showAlert(`Your purchase was successful! We sent a receipt to ${props.purchase.email}.`, "success");
       url.searchParams.delete("receipt");
-      window.history.replaceState(window.history.state, "", url.toString());
+      router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
 
       if (product_has_third_party_analytics && props.purchase.product_permalink)
         addThirdPartyAnalytics({
