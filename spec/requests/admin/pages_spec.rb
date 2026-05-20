@@ -116,7 +116,7 @@ describe "Admin Pages Scenario", type: :system, js: true do
       expect(page).to have_no_content "MY_FINGERPRINT"
     end
 
-    it "allows admins to infinitely scroll through purchase search results" do
+    it "allows admins to paginate through purchase search results" do
       email = "searchme@gumroad.com"
 
       30.times do |i|
@@ -130,17 +130,13 @@ describe "Admin Pages Scenario", type: :system, js: true do
       fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
 
       expect(page).to have_text("product #29")
-      expect(page).to have_text("product #28")
-      expect(page).not_to have_text("product #0")
-      # IntersectionObserver needs the sentinel to enter the viewport.
-      # Use window.scrollTo to ensure the full page scrolls, not just an
-      # element's overflow. Repeat — CI runners can be slow to fire the
-      # observer callback and complete the AJAX fetch.
-      5.times do
-        page.execute_script("window.scrollTo(0, document.body.scrollHeight)")
-        break if page.has_text?("product #0", wait: 5)
-      end
-      expect(page).to have_text("product #0", wait: 20)
+      expect(page).to have_text("product #5")
+      expect(page).not_to have_text("product #4")
+
+      click_on "Next"
+      expect(page).to have_text("product #4")
+      expect(page).to have_text("product #0")
+      expect(page).not_to have_text("product #29")
     end
   end
 
