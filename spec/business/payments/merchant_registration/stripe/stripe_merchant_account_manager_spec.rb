@@ -8675,6 +8675,25 @@ describe StripeMerchantAccountManager, :vcr do
           expect(params[:individual]).not_to have_key(:ssn_last_4)
         end
       end
+
+      describe "Puerto Rico business seller" do
+        let(:user_compliance_info) do
+          create(:user_compliance_info_business, user:,
+                                                 country: "Puerto Rico", state: "PR", city: "San Juan", zip_code: "00921",
+                                                 business_country: "Puerto Rico", business_state: "PR",
+                                                 business_city: "San Juan", business_zip_code: "00921")
+        end
+
+        it "remaps company.address.country to US so Stripe accepts the business address" do
+          subject.create_account(user, passphrase: "1234")
+
+          expect(Stripe::Account).to have_received(:create) do |params|
+            # Stripe rejects with "Address for business must match account country" if these differ
+            expect(params[:country]).to eq("US")
+            expect(params[:company][:address][:country]).to eq("US")
+          end
+        end
+      end
     end
   end
 

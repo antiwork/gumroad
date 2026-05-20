@@ -575,6 +575,7 @@ module StripeMerchantAccountManager
     return unless user_compliance_info.present?
 
     business_tax_id = user_compliance_info.business_tax_id.decrypt(passphrase)
+    stripe_country_code = Country.new(user_compliance_info.legal_entity_country_code).stripe_country_code
     hash = {
       company: {
         name: user_compliance_info.business_name.presence,
@@ -584,7 +585,7 @@ module StripeMerchantAccountManager
           city: user_compliance_info.legal_entity_city,
           state: user_compliance_info.legal_entity_state,
           postal_code: user_compliance_info.legal_entity_zip_code,
-          country: user_compliance_info.legal_entity_country_code
+          country: stripe_country_code
         },
         tax_id: business_tax_id.presence,
         phone: user_compliance_info.business_phone,
