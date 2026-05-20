@@ -98,5 +98,9 @@ class User
     def tax_center_enabled?
       Feature.active?(:tax_center, self) && from_us?
     end
+
+    def pages_enabled?
+      Feature.active?(:pages, self)
+    end
   end
 end

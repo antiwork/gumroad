@@ -850,6 +850,19 @@ Rails.application.routes.draw do
     post "/dashboard/dismiss_getting_started_checklist" => "dashboard#dismiss_getting_started_checklist", as: :dashboard_dismiss_getting_started_checklist
 
     get "/products", to: "links#index", as: :products
+
+    # Pages (AI landing pages)
+    resources :pages, param: :id, only: [:index, :new, :create, :destroy] do
+      member do
+        post :publish
+        post :unpublish
+        post :generate
+      end
+    end
+    get "/pages/:id/edit", to: "pages#edit", as: :edit_page
+    get "/pages/:id/edit/*other", to: "pages#edit"
+    put "/pages/:id", to: "pages#update", as: :update_page
+
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code
     get "/cart_items_count", to: "links#cart_items_count"
@@ -1087,6 +1100,7 @@ Rails.application.routes.draw do
     get "/:username", to: "users#show", as: "user"
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
+    get "/:username/pages/:slug", to: "page_views#show", as: :view_page
     get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
     get "/:username/posts", to: redirect("/%{username}")
     get "/:username/subscribe_preview", to: "users#subscribe_preview", as: :user_subscribe_preview
@@ -1157,6 +1171,7 @@ Rails.application.routes.draw do
     end
     post "/posts/:id/increment_post_views", to: "posts#increment_post_views"
     get "/p/:slug", to: "posts#show", as: :custom_domain_view_post
+    get "/pages/:slug", to: "page_views#show", as: :custom_domain_view_page
     get "/:username/posts_paginated", to: "users/posts#paginated"
     get "/posts", to: redirect("/")
     get "/posts/:post_id/comments", to: "comments#index", as: :custom_domain_post_comments
