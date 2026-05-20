@@ -29,6 +29,12 @@ describe User::Compliance do
       end
     end
 
+    it "returns true for Puerto Rico creators (onboarded as US-side Stripe accounts)" do
+      creator = create(:user)
+      create(:user_compliance_info_empty, user: creator, country: "Puerto Rico")
+      expect(creator.native_payouts_supported?).to be true
+    end
+
     it "returns false for other countries" do
       venezuela_user = create(:user)
       create(:user_compliance_info_empty, user: venezuela_user, country: "Venezuela")

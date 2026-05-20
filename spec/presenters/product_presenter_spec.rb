@@ -115,7 +115,7 @@ describe ProductPresenter do
               percentages: [0, 0, 0, 0, 0],
             },
             seller: {
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
               id: product.user.external_id,
               name: product.user.username,
               profile_url: product.user.profile_url(recommended_by: "discover"),
@@ -1025,12 +1025,12 @@ describe ProductPresenter do
       expect(described_class.card_for_email(product:)).to eq(
         {
           name: product.name,
-          thumbnail_url: ActionController::Base.helpers.asset_url("native_types/thumbnails/digital.png"),
+          thumbnail_url: ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png"),
           url: short_link_url(product.general_permalink, host: "http://#{seller.username}.test.gumroad.com:31337"),
           seller: {
             name: seller.name,
             profile_url: seller.profile_url,
-            avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+            avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
           },
         }
       )

@@ -466,7 +466,7 @@ $accent-color: map-get($colors, "pink"); // [1]
       & > .figure {
         // [3]
         display: table-cell;
-        background: url("~images/placeholders/product-cover.png");
+        background: url("/images/placeholders/product-cover.png");
         background-size: cover;
         width: size(8);
         border-right: $border;
@@ -625,7 +625,7 @@ $accent-color: map-get($colors, "pink"); // [1]
   display: grid;
 
   > figure {
-    background: url("~images/placeholders/product-cover.png");
+    background: url("/images/placeholders/product-cover.png");
     background-size: cover;
     border-radius: border-radius(1) border-radius(1) 0 0;
     border-bottom: $border;
@@ -788,7 +788,7 @@ $accent-color: map-get($colors, "pink"); // [1]
   border: $border;
   border-right: none;
   padding: spacer(1) spacer(5) spacer(1) spacer(2);
-  background: $accent-color url("~images/email/price_tag_arrow.png") no-repeat right / contain;
+  background: $accent-color url("/images/email/price_tag_arrow.png") no-repeat right / contain;
 }
 
 .review {

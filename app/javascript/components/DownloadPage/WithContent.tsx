@@ -1,10 +1,13 @@
 import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
+import { router } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
+import { AnalyticsData } from "$app/parsers/product";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import FileUtils from "$app/utils/file";
 import {
   generatePageIcon,
@@ -12,6 +15,7 @@ import {
   PAGE_ICON_LABELS,
   type PageIconType,
 } from "$app/utils/rich_content_page";
+import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -99,15 +103,31 @@ export type ContentProps = {
   community_chat_url: string | null;
 };
 
+export type SellerAnalyticsProps = {
+  seller_id: string;
+  analytics: AnalyticsData;
+  purchase_event: {
+    permalink: string;
+    purchase_external_id: string;
+    product_name: string;
+    value: number;
+    currency: string;
+    quantity: number;
+    tax: string;
+  };
+};
+
 export const WithContent = ({
   content,
   product_has_third_party_analytics,
+  seller_analytics,
   audio_durations,
   latest_media_locations,
   ...props
 }: LayoutProps & {
   content: ContentProps;
   product_has_third_party_analytics: boolean | null;
+  seller_analytics: SellerAnalyticsProps | null;
   audio_durations?: Record<string, FileItem["duration"]> | undefined;
   latest_media_locations?: Record<string, FileItem["latest_media_location"]> | undefined;
 }) => {
@@ -136,7 +156,7 @@ export const WithContent = ({
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {
       showAlert(`Your purchase was successful! We sent a receipt to ${props.purchase.email}.`, "success");
       url.searchParams.delete("receipt");
-      window.history.replaceState(window.history.state, "", url.toString());
+      router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
 
       if (product_has_third_party_analytics && props.purchase.product_permalink)
         addThirdPartyAnalytics({
@@ -144,6 +164,23 @@ export const WithContent = ({
           location: "receipt",
           purchaseId: props.purchase.id,
         });
+
+      if (seller_analytics) {
+        const { seller_id, analytics, purchase_event } = seller_analytics;
+        startTrackingForSeller(seller_id, analytics);
+        trackProductEvent(seller_id, {
+          action: "purchased",
+          seller_id,
+          permalink: purchase_event.permalink,
+          purchase_external_id: purchase_event.purchase_external_id,
+          product_name: purchase_event.product_name,
+          value: purchase_event.value,
+          valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(purchase_event.currency)),
+          currency: purchase_event.currency.toUpperCase(),
+          quantity: purchase_event.quantity,
+          tax: purchase_event.tax,
+        });
+      }
     }
   });
   const isDesktop = useIsAboveBreakpoint("lg");

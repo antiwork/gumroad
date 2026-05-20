@@ -18,7 +18,7 @@ describe LibraryPresenter do
         creator: {
           name: "Testy",
           profile_url: creator.profile_url(recommended_by: "library"),
-          avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+          avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")
         },
         thumbnail_url: nil,
         native_type: "membership",
@@ -74,7 +74,7 @@ describe LibraryPresenter do
         {
           name: creator.username,
           profile_url: creator.profile_url(recommended_by: "library"),
-          avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+          avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")
         }
       )
     end

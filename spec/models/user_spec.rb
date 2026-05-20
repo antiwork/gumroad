@@ -1301,7 +1301,7 @@ describe User, :vcr do
     describe "#resized_avatar_url" do
       context "when user doesn't have an avatar" do
         it "returns URL to default avatar" do
-          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         end
       end
 
@@ -1321,7 +1321,7 @@ describe User, :vcr do
           allow(@user.avatar).to receive(:attached?).and_return(true)
           allow(@user.avatar).to receive(:variant).and_raise(ActiveStorage::FileNotFoundError)
 
-          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         end
       end
 
@@ -1330,7 +1330,7 @@ describe User, :vcr do
           allow(@user.avatar).to receive(:attached?).and_return(true)
           allow(@user.avatar).to receive(:variant).and_raise(Errno::ENOENT, "/tmp/image_processing.png")
 
-          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         end
       end
     end
@@ -1343,7 +1343,7 @@ describe User, :vcr do
 
       context "when user doesn't have an avatar" do
         it "returns URL to default avatar" do
-          expect(@user.avatar_url).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+          expect(@user.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         end
       end
 

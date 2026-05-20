@@ -1,6 +1,6 @@
 <div>
   <div style="text-align: center;">
-    <%= image_tag asset_path("email/gumroad_coins.png"), alt: "Cha-ching!" %>
+    <%= image_tag image_path("email/gumroad_coins.png"), alt: "Cha-ching!" %>
     <h1>
       <% if @purchase.present? %>
         <% commission = @purchase.commission %>

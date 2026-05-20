@@ -8,6 +8,13 @@ class StripePayoutProcessor
   MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 100_00
   MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
 
+  # USD amounts below Stripe's destination-currency minimum get accepted by `Stripe::Transfer.create`
+  # (debiting the platform) but never settle a `balance_transaction` on the destination — funds get
+  # stranded with no error path. Stripe's per-currency minimums top out near $0.55 USD equivalent
+  # for major currencies, so this source-side floor clears them with margin. Source balances under
+  # the floor stay `unpaid` and roll forward to the next cycle.
+  GUMROAD_HELD_USD_MIN_TRANSFER_CENTS = 1_00
+
   # Public: Determines if it's possible for this processor to payout
   # the user by checking that the user has provided us with the
   # information we need to be able to payout with this processor.
@@ -83,6 +90,24 @@ class StripePayoutProcessor
     else
       false
     end
+  end
+
+  # Public: Aggregate-level filter run after `is_balance_payable`. Drops Gumroad-held USD balances
+  # whose summed amount would force a cross-border internal transfer below Stripe's destination
+  # minimum (see `GUMROAD_HELD_USD_MIN_TRANSFER_CENTS`). Skipped balances stay `unpaid` and roll
+  # forward to the next payout. Returns the surviving balances.
+  def self.filter_aggregate_payable_balances(user, balances)
+    return balances if balances.empty?
+
+    merchant_account, balances_held_by_gumroad, _ = get_payout_details(user, balances)
+    return balances if merchant_account.nil?
+    return balances if merchant_account.currency.to_s == Currency::USD
+    return balances if balances_held_by_gumroad.empty?
+
+    total_usd_cents = balances_held_by_gumroad.sum(&:holding_amount_cents)
+    return balances if total_usd_cents >= GUMROAD_HELD_USD_MIN_TRANSFER_CENTS
+
+    balances - balances_held_by_gumroad
   end
 
   # Public: Get the payout destination and categorized balances for a user

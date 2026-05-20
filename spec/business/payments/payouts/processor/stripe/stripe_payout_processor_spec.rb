@@ -425,6 +425,121 @@ describe StripePayoutProcessor, :vcr do
     end
   end
 
+  describe "filter_aggregate_payable_balances" do
+    let(:user) { create(:user) }
+    let(:gbp_merchant_account) do
+      create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                currency: Currency::GBP, country: "GB")
+    end
+    let(:gumroad_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:gbp_stripe_balance) do
+      create(:balance, user:, merchant_account: gbp_merchant_account,
+                       holding_currency: Currency::GBP, holding_amount_cents: 1_212_55)
+    end
+
+    context "when total Gumroad-held USD is below the per-currency floor" do
+      let(:tiny_usd_balance) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         holding_currency: Currency::USD, holding_amount_cents: 2)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([gbp_merchant_account, [tiny_usd_balance], [gbp_stripe_balance]])
+      end
+
+      it "excludes the Gumroad-held USD balances so they roll forward" do
+        result = described_class.filter_aggregate_payable_balances(user, [gbp_stripe_balance, tiny_usd_balance])
+
+        expect(result).to eq([gbp_stripe_balance])
+      end
+    end
+
+    context "when total Gumroad-held USD clears the floor" do
+      let(:usd_balance_one) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         holding_currency: Currency::USD, holding_amount_cents: 60)
+      end
+      let(:usd_balance_two) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         holding_currency: Currency::USD, holding_amount_cents: 50)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([gbp_merchant_account, [usd_balance_one, usd_balance_two], [gbp_stripe_balance]])
+      end
+
+      it "keeps every balance so the internal transfer goes through" do
+        result = described_class.filter_aggregate_payable_balances(user, [gbp_stripe_balance, usd_balance_one, usd_balance_two])
+
+        expect(result).to contain_exactly(gbp_stripe_balance, usd_balance_one, usd_balance_two)
+      end
+    end
+
+    context "when the merchant account currency is USD" do
+      let(:usd_merchant_account) do
+        create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
+      end
+      let(:tiny_usd_balance) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         holding_currency: Currency::USD, holding_amount_cents: 2)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([usd_merchant_account, [tiny_usd_balance], []])
+      end
+
+      it "keeps the balance because no FX conversion is needed" do
+        result = described_class.filter_aggregate_payable_balances(user, [tiny_usd_balance])
+
+        expect(result).to eq([tiny_usd_balance])
+      end
+    end
+
+    context "when no Gumroad-held balances are present" do
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([gbp_merchant_account, [], [gbp_stripe_balance]])
+      end
+
+      it "returns the input unchanged" do
+        result = described_class.filter_aggregate_payable_balances(user, [gbp_stripe_balance])
+
+        expect(result).to eq([gbp_stripe_balance])
+      end
+    end
+
+    context "when merchant_account is nil" do
+      let(:orphan_balance) do
+        create(:balance, user:, merchant_account: gumroad_merchant_account,
+                         holding_currency: Currency::USD, holding_amount_cents: 2)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details).and_return([nil, [orphan_balance], []])
+      end
+
+      it "returns the input unchanged so existing nil-merchant handling runs downstream" do
+        result = described_class.filter_aggregate_payable_balances(user, [orphan_balance])
+
+        expect(result).to eq([orphan_balance])
+      end
+    end
+
+    context "when balances is empty" do
+      it "returns the empty array without calling get_payout_details" do
+        expect(described_class).not_to receive(:get_payout_details)
+
+        expect(described_class.filter_aggregate_payable_balances(user, [])).to eq([])
+      end
+    end
+  end
+
   describe "prepare_payment_and_set_amount for Korean bank account" do
     let(:user) { create(:user) }
     let(:bank_account) { create(:korea_bank_account, user:) }

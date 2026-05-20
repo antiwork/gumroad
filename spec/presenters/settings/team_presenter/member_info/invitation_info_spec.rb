@@ -21,7 +21,7 @@ describe Settings::TeamPresenter::MemberInfo::InvitationInfo do
                                      role: "admin",
                                      name: "",
                                      email:,
-                                     avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                                     avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                                      is_expired: true,
                                      options: [
                                        {
@@ -67,7 +67,7 @@ describe Settings::TeamPresenter::MemberInfo::InvitationInfo do
                                        role: "marketing",
                                        name: "",
                                        email:,
-                                       avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                                       avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                                        is_expired: true,
                                        options: [
                                          {

@@ -7,11 +7,12 @@ import FileUtils from "$app/utils/file";
 
 import { FileItem } from "$app/components/Download/FileList";
 import { LayoutProps } from "$app/components/DownloadPage/Layout";
-import { ContentProps, WithContent } from "$app/components/DownloadPage/WithContent";
+import { ContentProps, SellerAnalyticsProps, WithContent } from "$app/components/DownloadPage/WithContent";
 
 type PageProps = LayoutProps & {
   content: ContentProps;
   product_has_third_party_analytics: boolean | null;
+  seller_analytics: SellerAnalyticsProps | null;
   audio_durations?: Record<string, FileItem["duration"]>;
   latest_media_locations?: Record<string, FileItem["latest_media_location"]>;
   dropbox_api_key: string | null;

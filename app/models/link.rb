@@ -546,7 +546,7 @@ class Link < ApplicationRecord
 
   def for_email_thumbnail_url
     thumbnail_alive&.url ||
-      ActionController::Base.helpers.asset_url("native_types/thumbnails/#{native_type}.png")
+      ActionController::Base.helpers.image_url("native_types/thumbnails/#{native_type}.png")
   end
 
   def plaintext_description

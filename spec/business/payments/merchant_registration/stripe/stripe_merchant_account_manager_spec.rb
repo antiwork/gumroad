@@ -8627,6 +8627,80 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
     end
+
+    describe "Puerto Rico seller onboarded onto a US-side Stripe Connect account" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info, user:,
+                                      country: "Puerto Rico", state: "PR", city: "San Juan", zip_code: "00921")
+      end
+      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:stripe_account_stub) do
+        external_account = double("Stripe::BankAccount", id: "ba_stub", fingerprint: "fp_stub")
+        external_accounts = double("Stripe::ListObject")
+        allow(external_accounts).to receive(:first).and_return(external_account)
+        stripe_account = double("Stripe::Account", id: "acct_pr_stub", external_accounts:)
+        allow(stripe_account).to receive(:[]).with("metadata").and_return({ "user_compliance_info_id" => user_compliance_info.external_id })
+        allow(stripe_account).to receive(:capabilities).and_return(double(keys: []))
+        stripe_account
+      end
+
+      before do
+        user_compliance_info
+        bank_account
+        tos_agreement
+        allow(Stripe::Account).to receive(:create).and_return(stripe_account_stub)
+        allow(CheckPaymentAddressWorker).to receive(:perform_async)
+        allow(DefaultAbandonedCartWorkflowGeneratorService).to receive(:new).and_return(double(generate: nil))
+      end
+
+      it "sends country: 'US' to Stripe and stores the merchant account with country 'US'" do
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:create) do |params|
+          expect(params[:country]).to eq("US")
+          expect(params[:default_currency]).to eq(Currency::USD)
+          expect(params[:individual][:address][:country]).to eq("US")
+        end
+        expect(merchant_account.country).to eq("US")
+        expect(merchant_account.currency).to eq(Currency::USD)
+      end
+
+      it "follows US SSN semantics when submitting the personal tax ID" do
+        subject.create_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:create) do |params|
+          # 9-digit SSN: id_number is sent (US semantics: full SSN under id_number)
+          expect(params[:individual][:id_number]).to eq("000000000")
+          expect(params[:individual]).not_to have_key(:ssn_last_4)
+        end
+      end
+
+      describe "Puerto Rico business seller" do
+        let(:user_compliance_info) do
+          create(:user_compliance_info_business, user:,
+                                                 country: "Puerto Rico", state: "PR", city: "San Juan", zip_code: "00921",
+                                                 business_country: "Puerto Rico", business_state: "PR",
+                                                 business_city: "San Juan", business_zip_code: "00921")
+        end
+
+        before do
+          # Business sellers also trigger Stripe::Account.create_person for the representative;
+          # stub it so the test doesn't make an unhandled HTTP request.
+          allow(Stripe::Account).to receive(:create_person).and_return(double("Stripe::Person", id: "person_stub"))
+        end
+
+        it "remaps company.address.country to US so Stripe accepts the business address" do
+          subject.create_account(user, passphrase: "1234")
+
+          expect(Stripe::Account).to have_received(:create) do |params|
+            # Stripe rejects with "Address for business must match account country" if these differ
+            expect(params[:country]).to eq("US")
+            expect(params[:company][:address][:country]).to eq("US")
+          end
+        end
+      end
+    end
   end
 
   describe "#update_account" do

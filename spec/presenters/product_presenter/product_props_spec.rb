@@ -72,7 +72,7 @@ describe ProductPresenter::ProductProps do
                 percentages: [0, 0, 0, 0, 100],
               },
               seller: {
-                avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                 id: seller.external_id,
                 name: "Testy",
                 profile_url: seller.profile_url(recommended_by: "discover"),
@@ -305,7 +305,7 @@ describe ProductPresenter::ProductProps do
                 percentages: [0, 0, 0, 0, 100],
               },
               seller: {
-                avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                 id: seller.external_id,
                 name: "Testy",
                 profile_url: seller.profile_url(recommended_by: "profile"),
@@ -505,7 +505,7 @@ describe ProductPresenter::ProductProps do
           it "includes the collaborating user" do
             expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:collaborating_user]).to eq(
               {
-                avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                 id: collaborator.affiliate_user.external_id,
                 name: collaborator.affiliate_user.username,
                 profile_url: collaborator.affiliate_user.profile_url,
@@ -531,7 +531,7 @@ describe ProductPresenter::ProductProps do
           it "includes the collaborating user" do
             expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:collaborating_user]).to eq(
               {
-                avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+                avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
                 id: collaborator.affiliate_user.external_id,
                 name: collaborator.affiliate_user.username,
                 profile_url: collaborator.affiliate_user.profile_url,

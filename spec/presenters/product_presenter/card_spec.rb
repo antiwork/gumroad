@@ -23,7 +23,7 @@ describe ProductPresenter::Card do
               id: creator.external_id,
               name: "Testy",
               profile_url: creator.profile_url(recommended_by: "discover"),
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
               is_verified: false,
             },
             description: product.plaintext_description.truncate(100),
@@ -171,12 +171,12 @@ describe ProductPresenter::Card do
       expect(described_class.new(product:).for_email).to eq(
         {
           name: product.name,
-          thumbnail_url: ActionController::Base.helpers.asset_url("native_types/thumbnails/digital.png"),
+          thumbnail_url: ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png"),
           url: short_link_url(product.general_permalink, host: "http://#{creator.username}.test.gumroad.com:31337"),
           seller: {
             name: creator.name,
             profile_url: creator.profile_url,
-            avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+            avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
           },
         }
       )

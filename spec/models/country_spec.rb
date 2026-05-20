@@ -286,9 +286,23 @@ describe Country do
     end
   end
 
+  describe "#stripe_country_code" do
+    it "maps US territory ISO codes to their parent country code expected by Stripe" do
+      expect(Country.new("PR").stripe_country_code).to eq "US"
+    end
+
+    it "passes through every other country code unchanged" do
+      expect(Country.new("US").stripe_country_code).to eq "US"
+      expect(Country.new("GB").stripe_country_code).to eq "GB"
+      expect(Country.new("JP").stripe_country_code).to eq "JP"
+      expect(Country.new("VN").stripe_country_code).to eq "VN"
+    end
+  end
+
   describe "#default_currency" do
     it "returns the currency which is set as default currency for all the accounts from the country" do
       expect(Country.new("US").default_currency).to eq Currency::USD
+      expect(Country.new("PR").default_currency).to eq Currency::USD
       expect(Country.new("GB").default_currency).to eq Currency::GBP
       expect(Country.new("AU").default_currency).to eq Currency::AUD
       expect(Country.new("FR").default_currency).to eq Currency::EUR
@@ -385,6 +399,7 @@ describe Country do
   describe "#payout_currency" do
     it "returns the currency which is used for sending stripe payouts to the country" do
       expect(Country.new("US").payout_currency).to eq Currency::USD
+      expect(Country.new("PR").payout_currency).to eq Currency::USD
       expect(Country.new("GB").payout_currency).to eq Currency::GBP
       expect(Country.new("AU").payout_currency).to eq Currency::AUD
       expect(Country.new("FR").payout_currency).to eq Currency::EUR

@@ -50,6 +50,7 @@ module StripeMerchantAccountManager
       raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a legal entity country") if country_code.blank?
       raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") if NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(country_code)
       country = Country.new(country_code)
+      stripe_country_code = country.stripe_country_code
 
       currency = country.payout_currency
       raise MerchantRegistrationUserNotReadyError.new(user.id, "has no default currency defined for it's legal entity's country") if currency.blank?
@@ -63,7 +64,7 @@ module StripeMerchantAccountManager
       account_params = {
         type: "custom",
         requested_capabilities: capabilities,
-        country: country_code,
+        country: stripe_country_code,
         default_currency: currency
       }
       account_params.deep_merge!(account_hash(user, tos_agreement, user_compliance_info, passphrase:))
@@ -71,7 +72,7 @@ module StripeMerchantAccountManager
 
       merchant_account = MerchantAccount.create!(
         user:,
-        country: country_code,
+        country: stripe_country_code,
         currency:,
         charge_processor_id: StripeChargeProcessor.charge_processor_id
       )
@@ -142,11 +143,12 @@ module StripeMerchantAccountManager
 
     last_attributes = account_hash(user, nil, last_user_compliance_info, passphrase:)
     current_attributes = account_hash(user, tos_agreement, user_compliance_info, passphrase:)
+    stripe_country_code = Country.new(user_compliance_info.legal_entity_country_code).stripe_country_code
     last_attributes[:metadata] = {}
     last_attributes[:business_profile] = {}
     if user_compliance_info.is_business?
       last_attributes.delete(:individual)
-      if last_attributes[:company].present? && user_compliance_info.country_code == Compliance::Countries::USA.alpha2
+      if last_attributes[:company].present? && stripe_country_code == Compliance::Countries::USA.alpha2
         last_attributes[:company][:structure] = nil
       end
       last_attributes.delete(:business_type) if user_compliance_info.country_code == Compliance::Countries::CAN.alpha2
@@ -177,7 +179,7 @@ module StripeMerchantAccountManager
 
     if last_user_compliance_info&.is_business? && user_compliance_info.is_individual?
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
-      if last_user_compliance_info.country_code == Compliance::Countries::USA.alpha2 &&
+      if Country.new(last_user_compliance_info.legal_entity_country_code).stripe_country_code == Compliance::Countries::USA.alpha2 &&
         last_user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
@@ -189,7 +191,7 @@ module StripeMerchantAccountManager
 
     # Only set structure for US accounts
     if user_compliance_info.is_business? &&
-      user_compliance_info.country_code == Compliance::Countries::USA.alpha2 &&
+      stripe_country_code == Compliance::Countries::USA.alpha2 &&
       user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
       diff_attributes[:company] ||= {}
       diff_attributes[:company][:structure] = user_compliance_info.business_type
@@ -497,6 +499,7 @@ module StripeMerchantAccountManager
   def self.person_hash(user_compliance_info, passphrase)
     if user_compliance_info
       personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
+      stripe_country_code = Country.new(user_compliance_info.country_code).stripe_country_code
 
       hash = {
         first_name: user_compliance_info.first_name,
@@ -540,20 +543,20 @@ module StripeMerchantAccountManager
                              city: user_compliance_info.city,
                              state: user_compliance_info.state,
                              postal_code: user_compliance_info.zip_code,
-                             country: user_compliance_info.country_code
+                             country: stripe_country_code
                            },
                          })
       end
 
       # For US accounts, only submit the Personal Tax ID if it's longer than four digits, otherwise the field contains the SSN Last 4.
       # For non-US accounts, always submit the Personal Tax ID.
-      if personal_tax_id && (user_compliance_info.country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
+      if personal_tax_id && (stripe_country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
         hash.deep_merge!(id_number: personal_tax_id)
       end
 
       # For US accounts, only submit the SSN Last 4 if we have enough digits in the Tax ID to get the last 4.
       # For non-US accounts, never submit this field, it is for US accounts only.
-      if user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
+      if stripe_country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
         hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
       end
 
@@ -572,6 +575,7 @@ module StripeMerchantAccountManager
     return unless user_compliance_info.present?
 
     business_tax_id = user_compliance_info.business_tax_id.decrypt(passphrase)
+    stripe_country_code = Country.new(user_compliance_info.legal_entity_country_code).stripe_country_code
     hash = {
       company: {
         name: user_compliance_info.business_name.presence,
@@ -581,7 +585,7 @@ module StripeMerchantAccountManager
           city: user_compliance_info.legal_entity_city,
           state: user_compliance_info.legal_entity_state,
           postal_code: user_compliance_info.legal_entity_zip_code,
-          country: user_compliance_info.legal_entity_country_code
+          country: stripe_country_code
         },
         tax_id: business_tax_id.presence,
         phone: user_compliance_info.business_phone,

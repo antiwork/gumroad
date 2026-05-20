@@ -231,7 +231,7 @@ const b = 2;</code></pre>
 <div class="item">
   <div class="product-checkout-cell">
     <div class="figure">
-        <img alt="The Works of Edgar Gumstein" src="/assets/native_types/thumbnails/digital-d4b2a661e31ec353551a8dae9996b1e75b1e629e363d683aaa5fd2fb1213311c.png">
+        <img alt="The Works of Edgar Gumstein" src="/images/native_types/thumbnails/digital.png">
     </div>
     <div class="section">
       <div class="content">

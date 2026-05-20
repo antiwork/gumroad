@@ -1,7 +1,7 @@
 <div class="product-card">
   <div class="carousel">
     <div class="items">
-      <% thumbnail_url = product[:thumbnail_url] || ActionController::Base.helpers.asset_url("native_types/thumbnails/#{product[:native_type]}.png") %>
+      <% thumbnail_url = product[:thumbnail_url] || ActionController::Base.helpers.image_url("native_types/thumbnails/#{product[:native_type]}.png") %>
       <%= link_to(image_tag(thumbnail_url, alt: product[:name]), product[:url], target: "_blank") %>
     </div>
   </div>

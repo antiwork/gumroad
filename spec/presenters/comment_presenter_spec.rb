@@ -22,7 +22,7 @@ describe CommentPresenter do
             parent_id: nil,
             author_id: commenter.external_id,
             author_name: commenter.display_name,
-            author_avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+            author_avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
             purchase_id: nil,
             content: { original: comment.content, formatted: CGI.escapeHTML(comment.content) },
             created_at: DateTime.current.utc.iso8601,
@@ -120,7 +120,7 @@ describe CommentPresenter do
       end
 
       it "returns the default avatar URL with 'author_avatar_url'" do
-        expect(presenter.comment_component_props[:author_avatar_url]).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        expect(presenter.comment_component_props[:author_avatar_url]).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
       end
     end
 
@@ -137,7 +137,7 @@ describe CommentPresenter do
       let(:pundit_user) { SellerContext.new(user: commenter, seller: commenter) }
 
       it "returns the default avatar URL with 'author_avatar_url'" do
-        expect(presenter.comment_component_props[:author_avatar_url]).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        expect(presenter.comment_component_props[:author_avatar_url]).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
       end
     end
   end
