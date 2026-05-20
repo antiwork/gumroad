@@ -181,7 +181,8 @@ describe "Checkout cart", :js, type: :system do
         expect(user_cart.reload).to be_deleted
         expect(user_cart.email).to eq(buyer.email)
         expect(user_cart.order_id).to eq(Order.last.id)
-        new_buyer_cart = buyer.reload.alive_cart
+        poll_until { buyer.reload.alive_cart.present? }
+        new_buyer_cart = buyer.alive_cart
         expect(new_buyer_cart.browser_guid).to eq(user_cart.browser_guid)
         expect(new_buyer_cart.alive_cart_products.count).to eq(0)
 
