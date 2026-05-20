@@ -18,6 +18,7 @@ class UpdateUserComplianceInfo
   end
 
   MAX_ENCRYPTED_FIELD_LENGTH = 200
+  MASKED_TAX_ID_PATTERN = /[\u2022*]/
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -90,7 +91,7 @@ class UpdateUserComplianceInfo
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
 
       if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
-          compliance_params[:business_tax_id].present? && new_compliance_info.business_tax_id.length != 9
+          submitted_tax_id_for(:business_tax_id).present? && new_compliance_info.business_tax_id.length != 9
         return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
       end
 
@@ -139,11 +140,11 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?
       new_compliance_info.business_type =           compliance_params[:business_type]           if compliance_params[:business_type].present?
       new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
-      new_compliance_info.individual_tax_id =       compliance_params[:ssn_last_four]           if compliance_params[:ssn_last_four].present?
-      new_compliance_info.individual_tax_id =       compliance_params[:individual_tax_id]       if compliance_params[:individual_tax_id].present?
-      if compliance_params[:business_tax_id].present?
+      new_compliance_info.individual_tax_id =       submitted_tax_id_for(:ssn_last_four)        if submitted_tax_id_for(:ssn_last_four).present?
+      new_compliance_info.individual_tax_id =       submitted_tax_id_for(:individual_tax_id)    if submitted_tax_id_for(:individual_tax_id).present?
+      if submitted_tax_id_for(:business_tax_id).present?
         new_compliance_info.business_tax_id = normalize_business_tax_id(
-          compliance_params[:business_tax_id],
+          submitted_tax_id_for(:business_tax_id),
           country_code: new_compliance_info.legal_entity_country_code,
         )
       end
@@ -223,16 +224,23 @@ class UpdateUserComplianceInfo
     end
 
     def encrypted_compliance_info_changed?(old_compliance_info)
-      submitted_individual_tax_id = compliance_params[:individual_tax_id].presence || compliance_params[:ssn_last_four].presence
+      submitted_individual_tax_id = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
       submitted_business_tax_id = normalize_business_tax_id(
-        compliance_params[:business_tax_id],
+        submitted_tax_id_for(:business_tax_id),
         country_code: old_compliance_info.legal_entity_country_code,
       )
       return true if submitted_business_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :business_tax_id) != submitted_business_tax_id
 
       false
+    end
+
+    def submitted_tax_id_for(field)
+      value = compliance_params[field]
+      return nil if value.blank?
+      return nil if value.to_s.match?(MASKED_TAX_ID_PATTERN)
+      value
     end
 
     def normalize_business_tax_id(value, country_code:)
@@ -242,7 +250,7 @@ class UpdateUserComplianceInfo
     end
 
     def encrypted_compliance_info_params_present?
-      compliance_params[:individual_tax_id].present? || compliance_params[:ssn_last_four].present? || compliance_params[:business_tax_id].present?
+      submitted_tax_id_for(:individual_tax_id).present? || submitted_tax_id_for(:ssn_last_four).present? || submitted_tax_id_for(:business_tax_id).present?
     end
 
     def encrypted_compliance_info_value(compliance_info, field)

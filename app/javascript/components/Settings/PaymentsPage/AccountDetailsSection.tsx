@@ -80,6 +80,18 @@ const AccountDetailsSection = ({
     if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
   }, [saveCounter]);
 
+  React.useEffect(() => {
+    if (!isEditingIndividualTaxId && complianceInfo.individual_tax_id) {
+      updateComplianceInfo({ individual_tax_id: null });
+    }
+  }, [isEditingIndividualTaxId]);
+
+  React.useEffect(() => {
+    if (!isEditingBusinessTaxId && complianceInfo.business_tax_id) {
+      updateComplianceInfo({ business_tax_id: null });
+    }
+  }, [isEditingBusinessTaxId]);
+
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null): string => {
     const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
     return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;

@@ -148,6 +148,31 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
       end
+
+      it "ignores a masked business_tax_id resubmission (containing bullet characters)" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address: "456 Updated Street",
+          business_tax_id: "\u2022\u2022-\u2022\u2022\u2022\u20221234",
+        )
+
+        result = described_class.new(compliance_params: params, user: us_business_user).process
+
+        expect(result[:success]).to be true
+        expect(us_business_user.alive_user_compliance_info.business_street_address).to eq("456 Updated Street")
+      end
+
+      it "ignores a masked individual_tax_id resubmission (containing asterisks)" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address: "456 Updated Street",
+          individual_tax_id: "***-**-1234",
+        )
+
+        result = described_class.new(compliance_params: params, user: us_business_user).process
+
+        expect(result[:success]).to be true
+      end
     end
 
     context "with a non-US business" do
