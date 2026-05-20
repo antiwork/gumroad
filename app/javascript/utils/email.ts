@@ -1,5 +1,5 @@
 const REGEX =
-  /^(([^<>()[\]\\.,;:\s@"]+(\.[ ^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/u;
+  /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/u;
 export const isValidEmail = (possiblyEmail: string): boolean =>
   REGEX.test(possiblyEmail) && possiblyEmail.length <= 255;
 
@@ -83,7 +83,9 @@ export const checkEmailForTypos = (email: string, cb: (suggestion: EmailSuggesti
   if (tld) {
     const closestTld = findClosestDomain(tld, POPULAR_TOP_LEVEL_DOMAINS, 2);
     if (closestTld) {
-      const suggestedDomain = `${domainParts[0]}.${closestTld}`;
+      const closestTldParts = closestTld.split(".").length;
+      const hostParts = domainParts.slice(0, -closestTldParts).join(".");
+      const suggestedDomain = `${hostParts}.${closestTld}`;
       cb({ address, domain: suggestedDomain, full: `${address}@${suggestedDomain}` });
     }
   }
