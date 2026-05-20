@@ -56,7 +56,7 @@ class CartPresenter
             **cart_product.accepted_offer_details.symbolize_keys,
           }
 
-          value[:accepted_offer][:discount] = accepted_offer.offer_code.discount_for_display(buyer: logged_in_user) if accepted_offer.offer_code.present?
+          value[:accepted_offer][:discount] = accepted_offer.offer_code.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) if accepted_offer.offer_code.present?
         end
 
         value

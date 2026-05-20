@@ -121,7 +121,7 @@ const buildDiscountPayload = (payload: DiscountPayload) => ({
   minimum_amount_cents: payload.minimumAmount,
   existing_customers_only: payload.existingCustomersOnly,
   ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],
-  ownership_duration_tiers: payload.existingCustomersOnly ? payload.ownershipDurationTiers : null,
+  ownership_duration_tiers: payload.ownershipDurationTiers,
 });
 
 export const createDiscount = async (payload: DiscountPayload) => {

@@ -451,8 +451,8 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
     end
 
-    describe "limit to existing customers with tiered discounts" do
-      it "persists ownership products and tiers and hides the top-level Type input" do
+    describe "ownership-based discounts" do
+      it "persists ownership products and tiers when combining both toggles, hiding the top-level Type input" do
         visit checkout_discounts_path
         click_on "New discount"
 
@@ -463,7 +463,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         check "Limit to existing customers"
         select_combo_box_option "Membership", from: "Must have purchased"
 
-        check "Tiered discounts by ownership duration"
+        check "Tier discount by ownership duration"
         expect(page).to_not have_text("Type", exact: true)
         expect(page).to_not have_select("Discount duration for memberships")
 
@@ -486,6 +486,36 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(offer_code.duration_in_billing_cycles).to be_nil
       end
 
+      it "creates a standalone tiered discount without limiting to existing customers" do
+        visit checkout_discounts_path
+        click_on "New discount"
+
+        fill_in "Name", with: "Renewal-only"
+        find(:label, "Products").click
+        select_combo_box_option "Membership", from: "Products"
+
+        check "Tier discount by ownership duration"
+        expect(page).to_not have_text("Type", exact: true)
+        expect(page).to_not have_select("Discount duration for memberships")
+        expect(page).to_not have_text("Must have purchased")
+
+        fill_in "Tier 1 percentage", with: "0"
+        click_on "Add tier"
+        fill_in "Tier 2 starting month", with: "12"
+        fill_in "Tier 2 percentage", with: "50"
+
+        click_on "Add discount"
+        expect(page).to have_alert(text: "Successfully created discount!")
+
+        offer_code = OfferCode.where(name: "Renewal-only").last
+        expect(offer_code.existing_customers_only?).to eq(false)
+        expect(offer_code.ownership_products).to be_empty
+        expect(offer_code.normalized_ownership_duration_tiers).to eq([
+                                                                       { "months" => 0, "amount_percentage" => 0 },
+                                                                       { "months" => 12, "amount_percentage" => 50 },
+                                                                     ])
+      end
+
       it "caps the tier percentage input at 100" do
         visit checkout_discounts_path
         click_on "New discount"
@@ -494,10 +524,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         find(:label, "Products").click
         select_combo_box_option "Membership", from: "Products"
 
-        check "Limit to existing customers"
-        select_combo_box_option "Membership", from: "Must have purchased"
-
-        check "Tiered discounts by ownership duration"
+        check "Tier discount by ownership duration"
         click_on "Add tier"
         fill_in "Tier 2 percentage", with: "999"
         expect(find_field("Tier 2 percentage").value).to eq("100")
@@ -559,7 +586,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         end
 
         expect(page).to have_checked_field("Limit to existing customers")
-        expect(page).to have_checked_field("Tiered discounts by ownership duration")
+        expect(page).to have_checked_field("Tier discount by ownership duration")
         expect(page).to have_field("Tier 1 percentage", with: "0")
         expect(page).to have_field("Tier 2 percentage", with: "50")
         expect(page).to have_field("Tier 2 starting month", with: "12")

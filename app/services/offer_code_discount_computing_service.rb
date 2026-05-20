@@ -27,7 +27,7 @@ class OfferCodeDiscountComputingService
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
-      resolved_discount = offer_code.evaluate_for_buyer(buyer)
+      resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
       if resolved_discount && eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
@@ -151,7 +151,7 @@ class OfferCodeDiscountComputingService
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
-        resolved_discount = offer_code.evaluate_for_buyer(buyer)
+        resolved_discount = offer_code.evaluate_for_buyer(buyer, product: cross_sell.product)
         next unless resolved_discount
 
         products_data[cross_sell.product.unique_permalink] = { discount: resolved_discount }

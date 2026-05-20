@@ -930,7 +930,7 @@ const Form = ({
 
     let tierErrors: TierRow[] = tiers;
     let isTiersInvalid = false;
-    if (existingCustomersOnly && useTieredDiscounts) {
+    if (useTieredDiscounts) {
       const seenMonths = new Set<number>();
       tierErrors = tiers.map((tier) => {
         const monthsValid =
@@ -989,10 +989,9 @@ const Form = ({
       return;
     }
 
-    const tieredPayload: OwnershipDurationTier[] | null =
-      existingCustomersOnly && useTieredDiscounts
-        ? sortedTiers.map((tier) => ({ months: tier.months ?? 0, amount_percentage: tier.amountPercentage ?? 0 }))
-        : null;
+    const tieredPayload: OwnershipDurationTier[] | null = useTieredDiscounts
+      ? sortedTiers.map((tier) => ({ months: tier.months ?? 0, amount_percentage: tier.amountPercentage ?? 0 }))
+      : null;
 
     save({
       name: name.value,
@@ -1253,10 +1252,7 @@ const Form = ({
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={existingCustomersOnly}
-                  onChange={(evt) => {
-                    setExistingCustomersOnly(evt.target.checked);
-                    if (!evt.target.checked) setUseTieredDiscounts(false);
-                  }}
+                  onChange={(evt) => setExistingCustomersOnly(evt.target.checked)}
                   label="Limit to existing customers"
                 />
               </DetailsToggle>
@@ -1280,93 +1276,92 @@ const Form = ({
                     aria-invalid={ownershipProductIds.error}
                   />
                 </Fieldset>
-                <Label>
-                  <Checkbox
-                    checked={useTieredDiscounts}
-                    onChange={(evt) => setUseTieredDiscounts(evt.target.checked)}
-                  />
-                  Tiered discounts by ownership duration
-                </Label>
-                {useTieredDiscounts ? (
-                  <Fieldset className="gap-3">
-                    <FieldsetTitle>
-                      <Label>Tiers</Label>
-                    </FieldsetTitle>
-                    <FieldsetDescription>Add a tier for each ownership milestone.</FieldsetDescription>
-                    <div className="flex flex-col gap-2">
-                      {tiers.map((tier, index) => (
-                        <div
-                          key={tier.id}
-                          className="rounded border border-border p-3 text-sm sm:flex sm:flex-wrap sm:items-center sm:gap-1"
-                        >
-                          <div className="flex items-start justify-between gap-2 sm:contents">
-                            <span className="sm:text-muted-foreground text-base font-semibold whitespace-nowrap tabular-nums sm:w-[5.5rem] sm:text-sm sm:font-normal">
-                              {rangeLabelFor(tier.id)}
-                            </span>
-                            {index > 0 ? (
-                              <button
-                                type="button"
-                                aria-label={`Remove tier ${index + 1}`}
-                                className="cursor-pointer rounded p-1 all-unset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:order-last sm:ml-auto"
-                                onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
-                              >
-                                <X className="size-5" />
-                              </button>
-                            ) : null}
-                          </div>
-                          <div className="mt-2 grid w-fit grid-cols-[auto_auto] items-center gap-x-2 gap-y-2 sm:mt-0 sm:contents">
-                            <span className="text-muted-foreground sm:hidden">Discount</span>
-                            <TierField
-                              value={tier.amountPercentage}
-                              ariaLabel={`Tier ${index + 1} percentage`}
-                              ariaInvalid={!!tier.percentError}
-                              suffix="%"
-                              onChange={(value) => {
-                                updateTier(tier.id, {
-                                  amountPercentage: value === null ? null : between(value, 0, 100),
-                                  percentError: false,
-                                });
-                              }}
-                            />
-                            <span
-                              className={classNames(
-                                "text-muted-foreground hidden sm:inline",
-                                index > 0 && "sm:after:content-[',']",
-                              )}
+              </Dropdown>
+            </Details>
+            <Details open={useTieredDiscounts}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={useTieredDiscounts}
+                  onChange={(evt) => setUseTieredDiscounts(evt.target.checked)}
+                  label="Tier discount by ownership duration"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <Fieldset className="gap-3">
+                  <FieldsetDescription>Add a tier for each ownership milestone.</FieldsetDescription>
+                  <div className="flex flex-col gap-2">
+                    {tiers.map((tier, index) => (
+                      <div
+                        key={tier.id}
+                        className="rounded border border-border p-3 text-sm sm:flex sm:flex-wrap sm:items-center sm:gap-1"
+                      >
+                        <div className="flex items-start justify-between gap-2 sm:contents">
+                          <span className="sm:text-muted-foreground text-base font-semibold whitespace-nowrap tabular-nums sm:w-[5.5rem] sm:text-sm sm:font-normal">
+                            {rangeLabelFor(tier.id)}
+                          </span>
+                          {index > 0 ? (
+                            <button
+                              type="button"
+                              aria-label={`Remove tier ${index + 1}`}
+                              className="cursor-pointer rounded p-1 all-unset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:order-last sm:ml-auto"
+                              onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
                             >
-                              discount
-                            </span>
-                            {index > 0 ? (
-                              <>
-                                <span className="text-muted-foreground sm:hidden">Starts after</span>
-                                <span className="text-muted-foreground hidden sm:inline">starts after</span>
-                                <TierField
-                                  value={tier.months}
-                                  ariaLabel={`Tier ${index + 1} starting month`}
-                                  ariaInvalid={!!tier.monthsError}
-                                  suffix="months"
-                                  onBlur={sortTiersByMonths}
-                                  onChange={(value) => {
-                                    if (value !== null && value < 0) return;
-                                    updateTier(tier.id, { months: value, monthsError: false });
-                                  }}
-                                />
-                              </>
-                            ) : null}
-                          </div>
+                              <X className="size-5" />
+                            </button>
+                          ) : null}
                         </div>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={() => {
-                        const maxMonths = Math.max(...tiers.map((tier) => tier.months ?? 0), 0);
-                        setTiers((prev) => [...prev, { id: nextTierId(), months: maxMonths + 1, amountPercentage: 0 }]);
-                      }}
-                    >
-                      Add tier
-                    </Button>
-                  </Fieldset>
-                ) : null}
+                        <div className="mt-2 grid w-fit grid-cols-[auto_auto] items-center gap-x-2 gap-y-2 sm:mt-0 sm:contents">
+                          <span className="text-muted-foreground sm:hidden">Discount</span>
+                          <TierField
+                            value={tier.amountPercentage}
+                            ariaLabel={`Tier ${index + 1} percentage`}
+                            ariaInvalid={!!tier.percentError}
+                            suffix="%"
+                            onChange={(value) => {
+                              updateTier(tier.id, {
+                                amountPercentage: value === null ? null : between(value, 0, 100),
+                                percentError: false,
+                              });
+                            }}
+                          />
+                          <span
+                            className={classNames(
+                              "text-muted-foreground hidden sm:inline",
+                              index > 0 && "sm:after:content-[',']",
+                            )}
+                          >
+                            discount
+                          </span>
+                          {index > 0 ? (
+                            <>
+                              <span className="text-muted-foreground sm:hidden">Starts after</span>
+                              <span className="text-muted-foreground hidden sm:inline">starts after</span>
+                              <TierField
+                                value={tier.months}
+                                ariaLabel={`Tier ${index + 1} starting month`}
+                                ariaInvalid={!!tier.monthsError}
+                                suffix="months"
+                                onBlur={sortTiersByMonths}
+                                onChange={(value) => {
+                                  if (value !== null && value < 0) return;
+                                  updateTier(tier.id, { months: value, monthsError: false });
+                                }}
+                              />
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const maxMonths = Math.max(...tiers.map((tier) => tier.months ?? 0), 0);
+                      setTiers((prev) => [...prev, { id: nextTierId(), months: maxMonths + 1, amountPercentage: 0 }]);
+                    }}
+                  >
+                    Add tier
+                  </Button>
+                </Fieldset>
               </Dropdown>
             </Details>
             <Details open={hasMinimumAmount}>

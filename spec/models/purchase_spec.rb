@@ -4807,7 +4807,7 @@ describe Purchase, :vcr do
     let(:buyer) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 1000) }
     let(:offer_code) do
-      create(:tiered_offer_code,
+      create(:tiered_offer_code, :for_existing_customers,
              user: seller,
              products: [product],
              ownership_products: [product],

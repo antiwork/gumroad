@@ -62,6 +62,7 @@ class OfferCode < ApplicationRecord
     reverse ? relation.order(created_at: :desc) : relation.order(created_at: :asc)
   }
   scope :universal, -> { where(universal: true) }
+  scope :renewal_eligible, -> { where("existing_customers_only = ? OR JSON_LENGTH(ownership_duration_tiers) > 0", true) }
 
   def is_valid_for_purchase?(purchase_quantity: 1)
     return true if max_purchase_count.nil?
@@ -209,9 +210,9 @@ class OfferCode < ApplicationRecord
     )
   end
 
-  def discount_for_display(buyer: nil)
+  def discount_for_display(buyer: nil, product: nil, fallback_purchase: nil)
     return nil if existing_customers_only? && buyer.nil?
-    return evaluate_for_buyer(buyer) if buyer.present?
+    return evaluate_for_buyer(buyer, product:, fallback_purchase:) if buyer.present? || (tiered? && fallback_purchase.present?)
 
     configured_discount_for_display
   end
@@ -243,24 +244,24 @@ class OfferCode < ApplicationRecord
     end.sort_by { it["months"] }
   end
 
-  def evaluate_for_buyer(buyer)
-    if existing_customers_only?
-      months = ownership_months_for(buyer)
-      return nil if months.nil?
+  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
+    reference = ownership_reference_products(product)
+    months = ownership_months_for(buyer, reference) if existing_customers_only? || tiered?
+    return nil if existing_customers_only? && months.nil?
 
-      if tiered?
-        tier = matching_tier_for(months)
-        return nil if tier.nil?
-        return discount.merge(type: "percent", percents: tier["amount_percentage"])
-      end
+    if tiered?
+      months ||= months_since(fallback_purchase&.created_at)
+      tier = matching_tier_for(months || 0)
+      return nil if tier.nil?
+      return discount.merge(type: "percent", percents: tier["amount_percentage"])
     end
 
     discount
   end
 
-  def ownership_months_for(buyer)
+  def ownership_months_for(buyer, products)
     return nil if buyer.nil?
-    return nil if ownership_products.empty?
+    return nil if products.blank?
 
     oldest = Purchase
       .all_success_states
@@ -270,14 +271,17 @@ class OfferCode < ApplicationRecord
       .not_fully_refunded
       .not_chargedback_or_chargedback_reversed
       .not_is_access_revoked
-      .where(purchaser_id: buyer.id, link_id: ownership_products.map(&:id))
+      .where(purchaser_id: buyer.id, link_id: products.map(&:id))
       .order(:created_at)
       .pick(:created_at)
-    return nil if oldest.nil?
+    months_since(oldest)
+  end
 
+  def months_since(timestamp)
+    return nil if timestamp.nil?
     now = Time.current
-    months = (now.year * 12 + now.month) - (oldest.year * 12 + oldest.month)
-    months -= 1 if oldest.advance(months:) > now
+    months = (now.year * 12 + now.month) - (timestamp.year * 12 + timestamp.month)
+    months -= 1 if timestamp.advance(months:) > now
     [months, 0].max
   end
 
@@ -302,6 +306,12 @@ class OfferCode < ApplicationRecord
   end
 
   private
+    def ownership_reference_products(product = nil)
+      return ownership_products if ownership_products.present?
+      return [product] if product
+      applicable_products
+    end
+
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
       return if deleted_at.present?
       return unless max_purchase_count_changed?
@@ -425,11 +435,6 @@ class OfferCode < ApplicationRecord
     def validate_ownership_duration_tiers
       return if deleted_at.present?
       return if ownership_duration_tiers.blank?
-
-      unless existing_customers_only?
-        errors.add(:base, "Turn on \"Limit to existing customers\" to use tiered discounts.")
-        return
-      end
 
       if duration_in_billing_cycles.present?
         errors.add(:base, "Remove the membership duration to use tiered discounts.")

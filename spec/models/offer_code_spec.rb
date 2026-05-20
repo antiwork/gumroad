@@ -901,11 +901,10 @@ describe OfferCode do
       expect(offer_code).to be_valid
     end
 
-    it "rejects ownership tiers without existing_customers_only" do
+    it "accepts ownership tiers without existing_customers_only" do
       offer_code = build(:tiered_offer_code, products: [@product], existing_customers_only: false, ownership_products: [])
 
-      expect(offer_code).not_to be_valid
-      expect(offer_code.errors.full_messages).to include("Turn on \"Limit to existing customers\" to use tiered discounts.")
+      expect(offer_code).to be_valid
     end
 
     it "rejects ownership tiers combined with duration_in_billing_cycles" do
@@ -1082,6 +1081,85 @@ describe OfferCode do
         create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 2.months.ago)
         expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
       end
+    end
+
+    context "with tiered discounts and no existing_customers_only flag" do
+      let(:offer_code) do
+        create(:offer_code,
+               user: seller,
+               products: [@product],
+               amount_cents: nil,
+               amount_percentage: 0,
+               currency_type: nil,
+               ownership_duration_tiers: [
+                 { "months" => 0, "amount_percentage" => 0 },
+                 { "months" => 12, "amount_percentage" => 50 },
+               ])
+      end
+
+      it "returns the 0-month tier when the buyer is nil" do
+        expect(offer_code.evaluate_for_buyer(nil)).to include(type: "percent", percents: 0)
+      end
+
+      it "returns the 0-month tier when the buyer has no prior purchase" do
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 0)
+      end
+
+      it "returns the matching tier based on a prior purchase of an applicable product" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 14.months.ago)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
+      end
+
+      it "returns the configured tier range for anonymous display" do
+        expect(offer_code.discount_for_display).to include(
+          type: "percent",
+          tiered: true,
+          min_percents: 0,
+          max_percents: 50,
+        )
+      end
+
+      it "scopes tenure to the product passed via product: when the code applies to several products" do
+        other_product = create(:product, user: seller, price_cents: 10_00)
+        multi_code = create(:offer_code,
+                            user: seller,
+                            products: [@product, other_product],
+                            amount_cents: nil,
+                            amount_percentage: 0,
+                            currency_type: nil,
+                            ownership_duration_tiers: [
+                              { "months" => 0, "amount_percentage" => 0 },
+                              { "months" => 12, "amount_percentage" => 50 },
+                            ])
+        create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: other_product.price_cents, created_at: 14.months.ago)
+
+        expect(multi_code.evaluate_for_buyer(buyer, product: @product)).to include(type: "percent", percents: 0)
+        expect(multi_code.evaluate_for_buyer(buyer, product: other_product)).to include(type: "percent", percents: 50)
+      end
+    end
+  end
+
+  describe ".renewal_eligible" do
+    it "excludes codes with an empty ownership_duration_tiers array" do
+      seller = @product.user
+      blank_tiered = create(:offer_code, user: seller, products: [@product], amount_cents: nil, amount_percentage: 10, currency_type: nil)
+      blank_tiered.update_column(:ownership_duration_tiers, [])
+
+      expect(OfferCode.renewal_eligible).not_to include(blank_tiered)
+    end
+
+    it "includes codes with a populated ownership_duration_tiers array" do
+      seller = @product.user
+      tiered = create(:tiered_offer_code, user: seller, products: [@product])
+
+      expect(OfferCode.renewal_eligible).to include(tiered)
+    end
+
+    it "includes existing-customer-only codes regardless of tiers" do
+      seller = @product.user
+      existing_only = create(:offer_code, :for_existing_customers, user: seller, products: [@product], amount_cents: nil, amount_percentage: 20, currency_type: nil)
+
+      expect(OfferCode.renewal_eligible).to include(existing_only)
     end
   end
 end

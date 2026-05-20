@@ -979,25 +979,23 @@ class Subscription < ApplicationRecord
 
     def compute_auto_renewal_offer_code(offer_code_buyer)
       return nil if is_installment_plan
-      return nil if offer_code_buyer.nil? || link.nil? || original_purchase.nil?
+      return nil if link.nil? || original_purchase.nil?
       return nil if reuse_original_discount_on_next_charge?
 
-      product_codes = link.offer_codes.alive.where(existing_customers_only: true).includes(:ownership_products)
+      product_codes = link.offer_codes.alive.renewal_eligible.includes(:ownership_products)
       universal_codes = link.user.offer_codes.alive
         .universal_with_matching_currency(link.price_currency_type)
-        .where(existing_customers_only: true)
+        .renewal_eligible
         .includes(:ownership_products)
-      original_tiered_existing_customer_code = if original_renewal_offer_code&.existing_customers_only? && original_renewal_offer_code&.tiered?
-        original_renewal_offer_code
-      end
-      candidates = (product_codes.to_a + universal_codes.to_a + [original_tiered_existing_customer_code].compact).uniq
+      original_tiered_offer_code = original_renewal_offer_code if original_renewal_offer_code&.tiered?
+      candidates = (product_codes.to_a + universal_codes.to_a + [original_tiered_offer_code].compact).uniq
       return nil if candidates.empty?
 
       candidates
         .filter_map do |offer_code|
           next unless eligible_auto_renewal_offer_code?(offer_code)
 
-          resolved = offer_code.evaluate_for_buyer(offer_code_buyer)
+          resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
           [auto_discount, auto_renewal_discount_amount_off_cents(auto_discount, renewal_pre_discount_total_cents)]

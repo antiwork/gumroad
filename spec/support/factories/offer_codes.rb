@@ -30,7 +30,7 @@ FactoryBot.define do
       ownership_products { products }
     end
 
-    factory :tiered_offer_code, traits: [:for_existing_customers] do
+    factory :tiered_offer_code do
       products { [FactoryBot.create(:product, user:, price_cents: 2_00)] }
       amount_cents { nil }
       amount_percentage { 0 }
