@@ -240,6 +240,38 @@ describe UsersController do
           expect { get :show }.to raise_error(ActionController::RoutingError)
         end
       end
+
+      describe "facebook-domain-verification meta tag" do
+        before do
+          @user = create(:user, username: "fbverify")
+          create(:product, user: @user)
+          CustomDomain.create(domain: "fb-verify.example.com", user: @user)
+          @request.host = "fb-verify.example.com"
+        end
+
+        it "renders the meta tag with the content extracted from the seller's facebook_meta_tag" do
+          @user.update!(
+            enable_verify_domain_third_party_services: true,
+            facebook_meta_tag: '<meta name="facebook-domain-verification" content="abc123verifycode" />'
+          )
+
+          get :show
+
+          expect(response.body).to include('content="abc123verifycode"')
+          expect(response.body).not_to include('<meta name="facebook-domain-verification" inertia=')
+        end
+
+        it "does not render the meta tag when domain verification is disabled" do
+          @user.update!(
+            enable_verify_domain_third_party_services: false,
+            facebook_meta_tag: '<meta name="facebook-domain-verification" content="abc123verifycode" />'
+          )
+
+          get :show
+
+          expect(response.body).not_to include('name="facebook-domain-verification"')
+        end
+      end
     end
 
     context "with user signed in as admin for seller", inertia: true do

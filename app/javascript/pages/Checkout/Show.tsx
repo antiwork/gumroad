@@ -520,18 +520,20 @@ const CheckoutIndexPage = () => {
 
       for (const { result, item } of results) {
         if (!result.success) continue;
-        trackProductEvent(item.product.creator.id, {
-          action: "purchased",
-          seller_id: result.seller_id,
-          permalink: result.permalink,
-          purchase_external_id: result.id,
-          currency: result.currency_type.toUpperCase(),
-          product_name: result.name,
-          value: result.non_formatted_price,
-          valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
-          quantity: result.quantity,
-          tax: result.non_formatted_seller_tax_amount,
-        });
+        if (redirectTo !== "content-page") {
+          trackProductEvent(item.product.creator.id, {
+            action: "purchased",
+            seller_id: result.seller_id,
+            permalink: result.permalink,
+            purchase_external_id: result.id,
+            currency: result.currency_type.toUpperCase(),
+            product_name: result.name,
+            value: result.non_formatted_price,
+            valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
+            quantity: result.quantity,
+            tax: result.non_formatted_seller_tax_amount,
+          });
+        }
         if (result.has_third_party_analytics && !redirectTo)
           addThirdPartyAnalytics({ permalink: result.permalink, location: "receipt", purchaseId: result.id });
       }

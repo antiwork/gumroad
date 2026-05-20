@@ -17,8 +17,8 @@ module CustomDomainConfig
 
       set_meta_tag(title: @user.try(:name_or_username))
       if @user.enable_verify_domain_third_party_services? && @user.facebook_meta_tag.present?
-        _, content = @user.facebook_meta_tag.match(/content="([^"]+)"/)
-        set_meta_tag(name: "facebook-domain-verification", content:)
+        content = @user.facebook_meta_tag[/content="([^"]+)"/, 1]
+        set_meta_tag(name: "facebook-domain-verification", content:) if content
       end
 
       @body_class = "custom-domain"

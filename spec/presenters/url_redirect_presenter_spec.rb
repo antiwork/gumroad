@@ -150,6 +150,7 @@ describe UrlRedirectPresenter do
           avatar_url: @user.avatar_url,
         },
         product_has_third_party_analytics: false,
+        seller_analytics: nil,
         installment: nil,
         purchase: {
           id: @purchase.external_id,
