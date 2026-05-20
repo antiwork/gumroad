@@ -188,14 +188,19 @@ class Payouts
   end
 
   def self.mark_balances_processing(date, processor_type, user)
-    user.unpaid_balances_up_to_date(date).select do |balance|
-      next if !::PayoutProcessorType.get(processor_type).is_balance_payable(balance)
-
-      balance.with_lock do
-        balance.mark_processing!
-      end
-      true
+    payout_processor = ::PayoutProcessorType.get(processor_type)
+    payable_balances = user.unpaid_balances_up_to_date(date).select do |balance|
+      payout_processor.is_balance_payable(balance)
     end
+
+    if payout_processor.respond_to?(:filter_aggregate_payable_balances)
+      payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
+    end
+
+    payable_balances.each do |balance|
+      balance.with_lock { balance.mark_processing! }
+    end
+    payable_balances
   end
   private_class_method :mark_balances_processing
 end
