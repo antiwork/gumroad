@@ -33,16 +33,17 @@ describe PlatformBlock do
     it "returns the hydrated record" do
       record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "x@example.com")
       expect(record).to be_a(PlatformBlock)
-      expect(record).to be_blocked
+      expect(record).to be_persisted
+      expect(record.object_value).to eq("x@example.com")
     end
   end
 
   describe "#destroy!" do
     it "removes the row" do
-      record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
-      expect(record.blocked?).to be(true)
-      record.destroy!
-      expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be(nil)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+      expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be_present
+      PlatformBlock.find_by(object_value: "157.45.09.212").destroy!
+      expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be_nil
     end
   end
 

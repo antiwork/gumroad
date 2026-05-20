@@ -37,8 +37,4 @@ class PlatformBlock < ApplicationRecord
       )
     end
   end
-
-  def blocked?
-    expires_at.nil? || expires_at > Time.current
-  end
 end

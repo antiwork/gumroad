@@ -127,7 +127,7 @@ describe Purchase::Blockable do
         purchase.block_buyer!
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint].each do |blocked_value|
-          expect(PlatformBlock.active.find_by(object_value: blocked_value).blocked?).to eq(true)
+          expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_present
         end
       end
     end
@@ -140,7 +140,7 @@ describe Purchase::Blockable do
         purchase.block_buyer!
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.card_visual].each do |blocked_value|
-          expect(PlatformBlock.active.find_by(object_value: blocked_value).blocked?).to eq(true)
+          expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_present
         end
       end
     end
@@ -152,10 +152,9 @@ describe Purchase::Blockable do
         purchase.block_buyer!(blocking_user_id: admin_user.id)
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint].each do |blocked_value|
-          PlatformBlock.active.find_by(object_value: blocked_value).tap do |blocked_object|
-            expect(blocked_object.blocked?).to eq(true)
-            expect(blocked_object.blocked_by).to eq(admin_user.id)
-          end
+          blocked_object = PlatformBlock.active.find_by(object_value: blocked_value)
+          expect(blocked_object).to be_present
+          expect(blocked_object.blocked_by).to eq(admin_user.id)
         end
       end
 

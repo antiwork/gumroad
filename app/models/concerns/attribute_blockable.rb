@@ -220,7 +220,7 @@ module AttributeBlockable
     def attr_blockable(blockable_method, object_type: nil)
       object_type ||= blockable_method
 
-      define_method("blocked_by_#{blockable_method}?") { blocked_object_by_method(object_type, blockable_method:)&.blocked? || false }
+      define_method("blocked_by_#{blockable_method}?") { blocked_object_by_method(object_type, blockable_method:).present? }
 
       define_method("blocked_by_#{blockable_method}_object") do
         blocked_object_by_method(object_type, blockable_method:)
