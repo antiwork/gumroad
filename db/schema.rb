@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_27_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_26_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -400,18 +400,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000000) do
     t.index ["buyer_email"], name: "index_blocked_customer_objects_on_buyer_email"
     t.index ["seller_id", "object_type", "object_value"], name: "idx_blocked_customer_objects_on_seller_and_object_type_and_value", unique: true
     t.index ["seller_id"], name: "index_blocked_customer_objects_on_seller_id"
-  end
-
-  create_table "blocked_objects", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "object_type", limit: 50, null: false
-    t.string "object_value", limit: 320, null: false
-    t.datetime "blocked_at"
-    t.datetime "expires_at"
-    t.bigint "blocked_by"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["object_type", "object_value"], name: "index_blocked_objects_on_type_and_value", unique: true
-    t.index ["object_value"], name: "index_blocked_objects_on_value"
   end
 
   create_table "bundle_product_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
