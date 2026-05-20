@@ -9,7 +9,7 @@ import { formatPostDate } from "$app/utils/date";
 import { BlogLayout } from "$app/components/GumroadBlog/Layout";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
-import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
+import placeholderFeatureImage from "$assets/images/blog/post-placeholder.jpg";
 
 type TagProps = {
   name: string;

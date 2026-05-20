@@ -2631,7 +2631,7 @@ describe Link, :vcr do
     context "when the product doesn't have a thumbnail" do
       it "returns product type thumbnail" do
         expect(product.for_email_thumbnail_url).to eq(
-          ActionController::Base.helpers.asset_url("native_types/thumbnails/digital.png")
+          ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png")
         )
       end
     end
@@ -2656,7 +2656,7 @@ describe Link, :vcr do
 
         it "returns product type thumbnail" do
           expect(product.for_email_thumbnail_url).to eq(
-            ActionController::Base.helpers.asset_url("native_types/thumbnails/digital.png")
+            ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png")
           )
         end
       end

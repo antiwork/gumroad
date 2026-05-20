@@ -1776,8 +1776,8 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to have_link(review.link.name, href: review.link.long_url)
       expect(mail.body.encoded).to have_text(review.message)
       expect(mail.body.encoded).to have_selector("[aria-label='1 star']")
-      expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.asset_path("email/solid-star.png")}']", count: 1)
-      expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.asset_path("email/outline-star.png")}']", count: 4)
+      expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/solid-star.png")}']", count: 1)
+      expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/outline-star.png")}']", count: 4)
       expect(mail.body.encoded).to have_link("View all reviews", href: review.link.long_url)
     end
 

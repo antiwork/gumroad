@@ -16,7 +16,7 @@ class Settings::TeamPresenter::MemberInfo::InvitationInfo < Settings::TeamPresen
       role: current_role,
       name: "",
       email: team_invitation.email,
-      avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+      avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
       is_expired: team_invitation.expired?,
       options: build_options(current_role),
       leave_team_option: nil

@@ -22,7 +22,7 @@ class ProductReviewPresenter
           name: purchaser.name.presence || purchase.full_name.presence || "Anonymous",
         } :
         {
-          avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+          avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
           name: purchase.full_name.presence || "Anonymous",
         },
       purchase_id: purchase.external_id,

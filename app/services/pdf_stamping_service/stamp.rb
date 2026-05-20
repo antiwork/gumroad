@@ -83,10 +83,10 @@ module PdfStampingService::Stamp
       # TODO(s3ththompson): Remove subset: false once https://github.com/prawnpdf/prawn/issues/1361 is fixed
       pdf.font_families.update(
         "ABC Favorit" => {
-          normal: { file: Rails.root.join("app", "assets", "fonts", "ABCFavorit", "ttf", "ABCFavorit-Regular.ttf"), subset: false },
-          italic: { file: Rails.root.join("app", "assets", "fonts", "ABCFavorit", "ttf", "ABCFavorit-RegularItalic.ttf"), subset: false },
-          bold: { file: Rails.root.join("app", "assets", "fonts", "ABCFavorit", "ttf", "ABCFavorit-Bold.ttf"), subset: false },
-          bold_italic: { file: Rails.root.join("app", "assets", "fonts", "ABCFavorit", "ttf", "ABCFavorit-BoldItalic.ttf"), subset: false }
+          normal: { file: Rails.root.join("public", "fonts", "ABCFavorit", "ttf", "ABCFavorit-Regular.ttf"), subset: false },
+          italic: { file: Rails.root.join("public", "fonts", "ABCFavorit", "ttf", "ABCFavorit-RegularItalic.ttf"), subset: false },
+          bold: { file: Rails.root.join("public", "fonts", "ABCFavorit", "ttf", "ABCFavorit-Bold.ttf"), subset: false },
+          bold_italic: { file: Rails.root.join("public", "fonts", "ABCFavorit", "ttf", "ABCFavorit-BoldItalic.ttf"), subset: false }
         }
       )
 
@@ -98,7 +98,7 @@ module PdfStampingService::Stamp
       pdf.font("ABC Favorit", style: :normal)
       pdf.text_box(watermark_text, at: [watermark_x, watermark_y - 14], width: 300, align: :right, size: 11, fallback_fonts: %w[Helvetica])
 
-      pdf.image("#{Rails.root}/app/assets/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
+      pdf.image("#{Rails.root}/public/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
 
       pdf.render_file(watermark_pdf_path)
       [watermark_pdf_path, reader.page_count]

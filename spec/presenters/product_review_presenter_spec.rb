@@ -12,7 +12,7 @@ describe ProductReviewPresenter do
           id: product_review.external_id,
           message: product_review.message,
           rater: {
-            avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+            avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
             name: "Anonymous"
           },
           rating: product_review.rating,
@@ -49,7 +49,7 @@ describe ProductReviewPresenter do
       it "uses the purchase's full name" do
         expect(described_class.new(product_review).product_review_props[:rater]).to eq(
           {
-            avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+            avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
             name: "Purchaser",
           }
         )

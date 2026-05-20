@@ -235,7 +235,7 @@ class UrlRedirectPresenter
         download_url: url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil,
         stream_url: file.streamable? ? url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id) : nil,
         kindle_data: file.can_send_to_kindle? ?
-                       { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.asset_path("white-15.png") } :
+                       { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
                        nil,
         latest_media_location: media_locations_by_file[file.id].as_json,
         content_length: file.content_length,

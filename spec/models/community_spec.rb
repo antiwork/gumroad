@@ -29,7 +29,7 @@ RSpec.describe Community do
     it "returns the resource thumbnail url for email" do
       community = build(:community, resource: create(:product))
 
-      expect(community.thumbnail_url).to eq(ActionController::Base.helpers.asset_url("native_types/thumbnails/digital.png"))
+      expect(community.thumbnail_url).to eq(ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png"))
     end
   end
 end

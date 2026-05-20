@@ -26,7 +26,6 @@ class SellerProfile < ApplicationRecord
       SassC::Engine.new(
         sass,
         syntax: :scss,
-        load_paths: Rails.application.config.assets.paths,
         read_cache: false,
         cache: false,
         style: :compressed,

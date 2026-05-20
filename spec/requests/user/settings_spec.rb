@@ -107,7 +107,7 @@ describe "User profile settings page", type: :system, js: true do
         click_on "Update settings"
         expect(page).to have_alert(text: "Changes saved!")
         sleep 0.5 # Since the previous Alerts takes time to disappear, checking avatar_url returns early before the api call is complete
-        expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         refresh
         expect(page).to have_selector("img[alt='Current logo'][src*='gumroad-default-avatar-5']")
         within_section("Preview", section_element: :aside) do

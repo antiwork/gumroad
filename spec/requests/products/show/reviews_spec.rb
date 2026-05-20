@@ -249,7 +249,7 @@ describe("Product page reviews", js: true, type: :system) do
     end
 
     it "displays written reviews and responses" do
-      avatar_url = ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+      avatar_url = ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")
       create :product_review_response,
              product_review: review_3,
              message: "Review response 3",

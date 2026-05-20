@@ -1,7 +1,7 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <div>
-      <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || asset_path("gumroad_app.png"), size: "72" %>
+      <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || image_path("gumroad_app.png"), size: "72" %>
     </div>
     <h2>
       Authorize

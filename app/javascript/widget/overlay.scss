@@ -39,7 +39,7 @@ a.gumroad-button {
     background: currentColor;
     min-height: max(1lh, 1em);
     width: calc(1em / $logo-aspect-ratio);
-    mask-image: url("~images/logo.svg");
+    mask-image: url("/images/logo.svg");
     mask-size: contain;
     mask-position: 50% 50%;
     mask-repeat: no-repeat;

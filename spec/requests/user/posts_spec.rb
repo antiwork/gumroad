@@ -528,7 +528,7 @@ describe("Posts on seller profile", type: :system, js: true) do
             expect(page).to have_css("img[src='#{seller.avatar_url}']")
           end
           within "article:nth-child(2)" do
-            expect(page).to have_css("img[src='#{ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")}']")
+            expect(page).to have_css("img[src='#{ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")}']")
           end
         end
       end

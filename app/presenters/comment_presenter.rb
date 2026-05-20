@@ -19,7 +19,7 @@ class CommentPresenter
       parent_id: comment.parent_id.presence && ObfuscateIds.encrypt(comment.parent_id),
       author_id: author&.external_id,
       author_name: author&.display_name || comment.author_name.presence,
-      author_avatar_url: author&.avatar_url || ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+      author_avatar_url: author&.avatar_url || ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
       purchase_id: comment.purchase&.external_id,
       content: {
         original: comment.content,

@@ -18,7 +18,7 @@ class Admin::ProductPresenter::Card
       currency_code: product.price_currency_type,
       unique_permalink: product.unique_permalink,
       preview_url: product.preview_url,
-      cover_placeholder_url: ActionController::Base.helpers.asset_url("cover_placeholder.png"),
+      cover_placeholder_url: ActionController::Base.helpers.image_url("cover_placeholder.png"),
       price_formatted: product.price_formatted,
       created_at: product.created_at,
       user: {

@@ -86,11 +86,9 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       $app: path.join(rootPath, "app/javascript"),
-      $assets: path.join(rootPath, "app/assets"),
+      $assets: path.join(rootPath, "public"),
       $vendor: path.join(rootPath, "vendor/assets/javascripts"),
       jwplayer: path.join(rootPath, "vendor/assets/components/jwplayer-7.12.13/jwplayer"),
-      "~fonts": path.join(rootPath, "app/assets/fonts"),
-      "~images": path.join(rootPath, "app/assets/images"),
     },
   },
   define: {
@@ -99,13 +97,6 @@ export default defineConfig(({ mode }) => ({
     "process.env.RAILS_ENV": JSON.stringify(process.env.RAILS_ENV || "test"),
     "process.env.PROTOCOL": JSON.stringify(process.env.PROTOCOL || "https"),
     "process.env": "{}",
-  },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        loadPaths: [path.join(rootPath, "app/assets")],
-      },
-    },
   },
   build: {
     // Stable content-hash filenames for long-lived CDN caching.

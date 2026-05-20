@@ -37,7 +37,7 @@ describe UrlRedirectPresenter do
                                                                      subtitle_files: [],
                                                                      download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [folder_file.external_id] }),
                                                                      stream_url: nil,
-                                                                     kindle_data: { email: user.kindle_email, icon_url: ActionController::Base.helpers.asset_path("white-15.png") },
+                                                                     kindle_data: { email: user.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") },
                                                                      read_url: url_redirect_read_for_product_file_path(url_redirect.token, folder_file.external_id),
                                                                      latest_media_location: folder_file_media_location.as_json,
                                                                      content_length: folder_file.content_length,

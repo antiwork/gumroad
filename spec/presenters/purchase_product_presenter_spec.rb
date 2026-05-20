@@ -59,7 +59,7 @@ describe PurchaseProductPresenter, :versioning do
               percentages: [0, 0, 0, 0, 100],
             },
             seller: {
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
               id: seller.external_id,
               name: "Seller",
               profile_url: "http://seller.test.gumroad.com:31337",
@@ -214,7 +214,7 @@ describe PurchaseProductPresenter, :versioning do
               percentages: [0, 0, 0, 0, 100],
             },
             seller: {
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
               id: seller.external_id,
               name: "Seller",
               profile_url: "http://seller.test.gumroad.com:31337",
