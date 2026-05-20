@@ -8636,10 +8636,10 @@ describe StripeMerchantAccountManager, :vcr do
       let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
       let(:stripe_account_stub) do
-        external_account = instance_double("Stripe::BankAccount", id: "ba_stub", fingerprint: "fp_stub")
-        external_accounts = instance_double("Stripe::ListObject")
+        external_account = double("Stripe::BankAccount", id: "ba_stub", fingerprint: "fp_stub")
+        external_accounts = double("Stripe::ListObject")
         allow(external_accounts).to receive(:first).and_return(external_account)
-        stripe_account = instance_double("Stripe::Account", id: "acct_pr_stub", external_accounts:)
+        stripe_account = double("Stripe::Account", id: "acct_pr_stub", external_accounts:)
         allow(stripe_account).to receive(:[]).with("metadata").and_return({ "user_compliance_info_id" => user_compliance_info.external_id })
         allow(stripe_account).to receive(:capabilities).and_return(double(keys: []))
         stripe_account
