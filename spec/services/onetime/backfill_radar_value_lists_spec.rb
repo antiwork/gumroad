@@ -12,8 +12,8 @@ describe Onetime::BackfillRadarValueLists do
   describe "#process" do
     it "pushes all active blocked emails and cards regardless of date" do
       travel_to 1.year.ago do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "old@example.com")
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "fpold")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "old@example.com")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpold")
       end
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
@@ -29,7 +29,7 @@ describe Onetime::BackfillRadarValueLists do
     end
 
     it "does not push entries that are not in the table" do
-      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "to-destroy@example.com").destroy!
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "to-destroy@example.com").destroy!
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
 
@@ -37,14 +37,14 @@ describe Onetime::BackfillRadarValueLists do
     end
 
     it "processes entries in batches" do
-      3.times { |i| PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "buyer-#{i}@example.com") }
+      3.times { |i| PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "buyer-#{i}@example.com") }
       allow(Stripe::Radar::ValueListItem).to receive(:create)
 
       expect { described_class.process(batch_size: 2) }.to output(/Radar email backfill: 2 pushed.*Radar email backfill: 3 pushed/m).to_stdout
     end
 
     it "ignores duplicate item errors" do
-      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "dup@example.com")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "dup@example.com")
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))

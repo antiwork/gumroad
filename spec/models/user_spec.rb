@@ -1410,7 +1410,7 @@ describe User, :vcr do
     describe "account_created_email_domain_is_not_blocked validation" do
       context "when the email domain is blocked" do
         before do
-          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email_domain], object_value: "example.com")
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
         end
 
         it "fails the validation" do
@@ -1422,13 +1422,13 @@ describe User, :vcr do
         end
 
         after do
-          PlatformBlock.find_active_object("example.com").destroy!
+          PlatformBlock.active.find_by(object_value: "example.com").destroy!
         end
       end
 
       context "when the email domain is not blocked" do
         it "validates the user successfully" do
-          expect(PlatformBlock.find_active_object("example.com")).to be_nil
+          expect(PlatformBlock.active.find_by(object_value: "example.com")).to be_nil
           @user.account_created_ip = "example.com"
 
           expect(@user).to be_valid
@@ -1447,7 +1447,7 @@ describe User, :vcr do
     describe "account_created_ip" do
       context "when the IP is blocked" do
         before do
-          PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: "127.0.0.1", expires_in: 1.hour)
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "127.0.0.1", expires_in: 1.hour)
         end
 
         it "fails the validation" do
@@ -1459,7 +1459,7 @@ describe User, :vcr do
         end
 
         after do
-          PlatformBlock.find_active_object("127.0.0.1").destroy!
+          PlatformBlock.active.find_by(object_value: "127.0.0.1").destroy!
         end
       end
 

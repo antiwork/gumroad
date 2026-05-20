@@ -4,7 +4,7 @@ describe CheckPaymentAddressWorker do
   describe "payment address checks" do
     before do
       @previously_banned_user = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "tuhins@gmail.com")
-      @blocked_email_object = PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: "fraudulent_email@zombo.com")
+      @blocked_email_object = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "fraudulent_email@zombo.com")
     end
 
     it "does not flag the user for fraud if there are no other banned users with the same payment address" do
@@ -72,7 +72,7 @@ describe CheckPaymentAddressWorker do
     it "flags the user for fraud if a blocked fingerprint object exists" do
       user = create(:user)
       create(:ach_account, user:, stripe_fingerprint: "blocked_fingerprint")
-      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "blocked_fingerprint")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "blocked_fingerprint")
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
@@ -131,7 +131,7 @@ describe CheckPaymentAddressWorker do
       user = create(:user)
       create(:ach_account, user:, stripe_fingerprint: "clean_fingerprint")
       create(:ach_account, user:, stripe_fingerprint: "blocked_fingerprint_xyz")
-      PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: "blocked_fingerprint_xyz")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "blocked_fingerprint_xyz")
 
       CheckPaymentAddressWorker.new.perform(user.id)
 

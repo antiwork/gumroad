@@ -177,8 +177,9 @@ module AttributeBlockable
           blockable_config = model_class.blockable_attributes.find { |attr| attr[:blockable_method] == method_name.to_sym }
           attribute_type = blockable_config ? blockable_config[:object_type] : method_name.to_sym
 
-          scope = BLOCKED_OBJECT_TYPES.fetch(attribute_type, :all)
-          blocked_objects_by_value = PlatformBlock.send(scope).find_active_objects(values).index_by(&:object_value)
+          relation = PlatformBlock.active.where(object_value: values)
+          relation = relation.where(object_type: PlatformBlock::TYPES[attribute_type]) if PlatformBlock::TYPES.key?(attribute_type)
+          blocked_objects_by_value = relation.index_by(&:object_value)
 
           @records.each do |record|
             value = record.send(method_name)
@@ -233,11 +234,8 @@ module AttributeBlockable
 
       define_method("unblock_by_#{blockable_method}!") do
         return if (value = send(blockable_method)).blank?
-        scope = BLOCKED_OBJECT_TYPES.fetch(object_type.to_sym, :all)
-        PlatformBlock.send(scope).find_objects([value]).each do |blocked_object|
-          blocked_object.destroy!
-          blocked_by_attributes.delete(blockable_method.to_s)
-        end
+        PlatformBlock.where(object_type:, object_value: value).destroy_all
+        blocked_by_attributes.delete(blockable_method.to_s)
       end
 
       # Register this blockable attribute for introspection
@@ -295,27 +293,29 @@ module AttributeBlockable
     blocked_object
   end
 
-  # Retrieves PlatformBlock records for the given values and attribute type.
+  # Retrieves active PlatformBlock records for the given values and attribute type.
   #
-  # @param method_name [Symbol, String] The PlatformBlock type
+  # @param object_type [Symbol, String] The PlatformBlock type
   # @param values [Array<String>] Values to look up
-  # @return [Array<PlatformBlock>] Array of PlatformBlock records
+  # @return [ActiveRecord::Relation] PlatformBlock records
   #
   # @example
   #   user.blocked_objects_for_values(:email, ['email1@example.com', 'email2@example.com'])
-  def blocked_objects_for_values(method_name, values)
-    scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-    PlatformBlock.send(scope).find_active_objects(values)
+  def blocked_objects_for_values(object_type, values)
+    relation = PlatformBlock.active.where(object_value: values)
+    relation = relation.where(object_type: PlatformBlock::TYPES[object_type.to_sym]) if PlatformBlock::TYPES.key?(object_type.to_sym)
+    relation
   end
 
   private
-    # Retrieves a single PlatformBlock for the given value.
+    # Retrieves a single active PlatformBlock for the given value.
     #
-    # @param method_name [Symbol, String] The PlatformBlock type
+    # @param object_type [Symbol, String] The PlatformBlock type
     # @param value [String] Value to look up
     # @return [PlatformBlock, nil] The PlatformBlock or nil if not found
-    def blocked_object_for_value(method_name, value)
-      scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-      PlatformBlock.send(scope).find_active_object(value)
+    def blocked_object_for_value(object_type, value)
+      relation = PlatformBlock.active.where(object_value: value)
+      relation = relation.where(object_type: PlatformBlock::TYPES[object_type.to_sym]) if PlatformBlock::TYPES.key?(object_type.to_sym)
+      relation.first
     end
 end

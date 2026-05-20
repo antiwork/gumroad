@@ -14,7 +14,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's browser is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:browser_guid], object_value: purchase.browser_guid)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: purchase.browser_guid)
       end
 
       it "returns true" do
@@ -24,7 +24,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's email is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: purchase.email)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: purchase.email)
       end
 
       it "returns true" do
@@ -36,7 +36,7 @@ describe Purchase::Blockable do
       let(:purchase) { create(:purchase, link: product, email: "gumbot@gumroad.com", purchaser: buyer, charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
 
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: purchase.paypal_email)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: purchase.paypal_email)
       end
 
       it "returns true" do
@@ -46,7 +46,7 @@ describe Purchase::Blockable do
 
     context "when the buyer's email address is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:email], object_value: buyer.email)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: buyer.email)
       end
 
       it "returns true" do
@@ -56,7 +56,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's ip address is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
       end
 
       it "returns true" do
@@ -66,7 +66,7 @@ describe Purchase::Blockable do
 
     context "when the purchase's payment method is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], object_value: purchase.stripe_fingerprint)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: purchase.stripe_fingerprint)
       end
 
       it "returns true" do
@@ -111,7 +111,7 @@ describe Purchase::Blockable do
 
     context "when purchase's ip address is blocked" do
       before do
-        PlatformBlock.add!(object_type: BLOCKED_OBJECT_TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.hour)
       end
 
       it "returns true for blocked check" do
@@ -127,7 +127,7 @@ describe Purchase::Blockable do
         purchase.block_buyer!
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint].each do |blocked_value|
-          expect(PlatformBlock.find_active_object(blocked_value).blocked?).to eq(true)
+          expect(PlatformBlock.active.find_by(object_value: blocked_value).blocked?).to eq(true)
         end
       end
     end
@@ -140,7 +140,7 @@ describe Purchase::Blockable do
         purchase.block_buyer!
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.card_visual].each do |blocked_value|
-          expect(PlatformBlock.find_active_object(blocked_value).blocked?).to eq(true)
+          expect(PlatformBlock.active.find_by(object_value: blocked_value).blocked?).to eq(true)
         end
       end
     end
@@ -152,7 +152,7 @@ describe Purchase::Blockable do
         purchase.block_buyer!(blocking_user_id: admin_user.id)
 
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint].each do |blocked_value|
-          PlatformBlock.find_active_object(blocked_value).tap do |blocked_object|
+          PlatformBlock.active.find_by(object_value: blocked_value).tap do |blocked_object|
             expect(blocked_object.blocked?).to eq(true)
             expect(blocked_object.blocked_by).to eq(admin_user.id)
           end
@@ -373,7 +373,7 @@ describe Purchase::Blockable do
                 end.to change { PlatformBlock.count }.from(0).to(1)
 
                 expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["ip_address", @purchase.ip_address]]
-                expect(PlatformBlock.ip_address.find_active_object(@purchase.ip_address).expires_at.to_i).to eq 7.days.from_now.to_i
+                expect(PlatformBlock.ip_address.active.find_by(object_value: @purchase.ip_address).expires_at.to_i).to eq 7.days.from_now.to_i
               end
             end
           end
@@ -384,7 +384,7 @@ describe Purchase::Blockable do
                 expires_in = PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months
 
                 PlatformBlock.add!(
-                  object_type: BLOCKED_OBJECT_TYPES[:ip_address],
+                  object_type: PlatformBlock::TYPES[:ip_address],
                   object_value: @purchase.ip_address,
                   expires_in:,
                 )
@@ -393,7 +393,7 @@ describe Purchase::Blockable do
                   @purchase.mark_failed!
                 end.not_to change { PlatformBlock.count }
 
-                expect(PlatformBlock.ip_address.find_active_object(@purchase.ip_address).expires_at.to_i).to eq expires_in.from_now.to_i
+                expect(PlatformBlock.ip_address.active.find_by(object_value: @purchase.ip_address).expires_at.to_i).to eq expires_in.from_now.to_i
               end
             end
           end
@@ -441,7 +441,7 @@ describe Purchase::Blockable do
               end.to change { PlatformBlock.count }.from(0).to(1)
 
               expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product", @product.id.to_s]]
-              expect(PlatformBlock.product.find_active_object(@product.id).expires_at.to_i).to eq 1.hour.from_now.to_i
+              expect(PlatformBlock.product.active.find_by(object_value: @product.id).expires_at.to_i).to eq 1.hour.from_now.to_i
             end
           end
         end
@@ -512,7 +512,7 @@ describe Purchase::Blockable do
               end.to change { PlatformBlock.count }.from(0).to(1)
 
               expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product", @product.id.to_s]]
-              expect(PlatformBlock.product.find_active_object(@product.id).expires_at.to_i).to eq 1.hour.from_now.to_i
+              expect(PlatformBlock.product.active.find_by(object_value: @product.id).expires_at.to_i).to eq 1.hour.from_now.to_i
             end
           end
         end
@@ -773,7 +773,7 @@ describe Purchase::Blockable do
             end.to change { PlatformBlock.count }.from(0).to(1)
 
             expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["ip_address", "127.0.0.1"]]
-            expect(PlatformBlock.ip_address.find_active_object("127.0.0.1").expires_at.to_i).to eq 24.hours.from_now.to_i
+            expect(PlatformBlock.ip_address.active.find_by(object_value: "127.0.0.1").expires_at.to_i).to eq 24.hours.from_now.to_i
           end
         end
       end

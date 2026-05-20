@@ -13,7 +13,7 @@ class BlockSuspendedAccountIpWorker
     ).exists?
 
     PlatformBlock.add!(
-      object_type: BLOCKED_OBJECT_TYPES[:ip_address],
+      object_type: PlatformBlock::TYPES[:ip_address],
       object_value: user.last_sign_in_ip,
       expires_in: PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months,
     )

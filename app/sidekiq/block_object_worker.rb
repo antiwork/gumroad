@@ -6,7 +6,7 @@ class BlockObjectWorker
 
   def perform(object_type, identifier, author_id, expires_in = nil)
     PlatformBlock.add!(
-      object_type: BLOCKED_OBJECT_TYPES[object_type.to_sym],
+      object_type: PlatformBlock::TYPES[object_type.to_sym],
       object_value: identifier,
       by: author_id,
       expires_in:,

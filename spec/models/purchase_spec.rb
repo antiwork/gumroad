@@ -560,7 +560,7 @@ describe Purchase, :vcr do
       @product = create(:product)
 
       PlatformBlock.add!(
-        object_type: BLOCKED_OBJECT_TYPES[:product],
+        object_type: PlatformBlock::TYPES[:product],
         object_value: @product.id,
         expires_in: 6.hours,
       )
