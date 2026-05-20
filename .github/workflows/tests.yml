@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}
@@ -376,14 +375,6 @@ jobs:
           CI: true
           IN_DOCKER: true
           WEB_REPO: gumroadteam/web
-      - name: Cancel workflow on failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            console.log(`Cancelling workflow run ${context.runId} to stop all test containers...`);
-            await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: context.runId });
       - name: Archive flaky specs log
         if: always()
         uses: actions/upload-artifact@v4
