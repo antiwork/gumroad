@@ -4839,6 +4839,17 @@ describe Purchase, :vcr do
       expect(purchase.purchase_offer_code_discount).to be_nil
     end
 
+    it "rejects a tiered discount when no tier matches the purchase" do
+      offer_code.update!(existing_customers_only: false, ownership_products: [])
+      offer_code.update_column(:ownership_duration_tiers, [{ "months" => 12, "amount_percentage" => 50 }])
+      purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
+
+      purchase.set_price_and_rate
+
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
+
     it "keeps the existing-customer discount error when the purchase is saved" do
       purchase = build(:purchase, purchaser: buyer, link: product, seller:, offer_code:)
 

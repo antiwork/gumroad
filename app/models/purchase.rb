@@ -2878,6 +2878,7 @@ class Purchase < ApplicationRecord
       if offer_code.existing_customers_only? || offer_code.tiered?
         evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer, product: link)
         return nil if offer_code.existing_customers_only? && evaluated_discount.blank?
+        return nil if offer_code.tiered? && evaluated_discount.nil?
         return evaluated_discount if offer_code.tiered? && evaluated_discount.present?
       end
 
