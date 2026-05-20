@@ -41,6 +41,7 @@ export const CreditCardInput = ({
         <Label>Card information</Label>
         {savedCreditCard ? (
           <button
+            type="button"
             className="cursor-pointer font-normal underline all-unset"
             disabled={disabled}
             onClick={() => setUseSavedCard(!useSavedCard)}
