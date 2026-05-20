@@ -262,8 +262,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [20]
-        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        ci_node_total: [18]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -390,7 +390,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [48]
+        ci_node_total: [50]
         ci_node_index:
           [
             0,
@@ -441,6 +441,8 @@ jobs:
             45,
             46,
             47,
+            48,
+            49,
           ]
     steps:
       - uses: actions/checkout@v4
