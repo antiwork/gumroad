@@ -7,7 +7,7 @@ module Ai
         id: "minimal-product",
         name: "Minimal product",
         description: "Clean white, single product showcase, pricing card",
-        icon: "📦",
+        icon: "digital",
         prompt: <<~PROMPT.strip,
           Design a minimal product showcase page in a clean editorial style.
 
@@ -30,7 +30,7 @@ module Ai
         id: "sleek-dark",
         name: "Sleek dark",
         description: "Black background, neon accents, minimal copy",
-        icon: "🌙",
+        icon: "ebook",
         prompt: <<~PROMPT.strip,
           Design a sleek, modern landing page with a dark theme.
 
@@ -52,7 +52,7 @@ module Ai
         id: "long-form-sales",
         name: "Long-form sales letter",
         description: "Narrative-driven, conversion-optimized, scrolls forever",
-        icon: "📝",
+        icon: "newsletter",
         prompt: <<~PROMPT.strip,
           Design a long-form sales-letter style landing page focused on conversion.
 
@@ -81,7 +81,7 @@ module Ai
         id: "personal-brand",
         name: "Personal brand",
         description: "Warm, approachable, story-first creator landing",
-        icon: "👋",
+        icon: "coffee",
         prompt: <<~PROMPT.strip,
           Design a personal-brand landing page that feels warm and human.
 
@@ -103,7 +103,7 @@ module Ai
         id: "neobrutalist",
         name: "Neobrutalist Gumroad",
         description: "Block colors, thick borders, raw type, high contrast",
-        icon: "🏗️",
+        icon: "physical",
         prompt: <<~PROMPT.strip,
           Design a neobrutalist landing page with strong Gumroad energy.
 
@@ -128,7 +128,7 @@ module Ai
         id: "design-agency",
         name: "Minimalist agency",
         description: "All black and white, generous whitespace, NY design studio",
-        icon: "🌓",
+        icon: "course",
         prompt: <<~PROMPT.strip,
           Design a landing page that feels like a minimalist New York design agency.
 
@@ -156,7 +156,7 @@ module Ai
         id: "art-gallery",
         name: "Art gallery",
         description: "Image-led hero, museum framing, sparse text",
-        icon: "🎨",
+        icon: "bundle",
         prompt: <<~PROMPT.strip,
           Design an art-gallery style landing page where the imagery does the talking.
 
@@ -182,7 +182,7 @@ module Ai
         id: "retro-90s",
         name: "Retro 90s",
         description: "Pixel fonts, gradients, sparkles, GeoCities vibe",
-        icon: "🕹️",
+        icon: "audiobook",
         prompt: <<~PROMPT.strip,
           Design a retro 90s landing page that channels GeoCities, early web, and Lisa Frank energy.
 
@@ -209,7 +209,7 @@ module Ai
         id: "limited-offer",
         name: "Limited-time offer",
         description: "Urgency banner, countdown timer, scarcity copy",
-        icon: "⏱️",
+        icon: "commission",
         prompt: <<~PROMPT.strip,
           Design a limited-time offer landing page with explicit urgency and a countdown.
 
@@ -236,7 +236,7 @@ module Ai
         id: "valentines",
         name: "Valentine's day",
         description: "Pink, red, hearts, romantic copy",
-        icon: "❤️",
+        icon: "call",
         prompt: <<~PROMPT.strip,
           Design a Valentine's day themed landing page that feels like a love letter.
 
@@ -261,7 +261,7 @@ module Ai
         id: "membership-tiers",
         name: "Membership tiers",
         description: "Tiered pricing cards, perks comparison, recurring framing",
-        icon: "💳",
+        icon: "membership",
         prompt: <<~PROMPT.strip,
           Design a membership landing page anchored on tiered pricing cards.
 

@@ -12,6 +12,15 @@ import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
+const rawIcons = import.meta.glob("$assets/images/native_types/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+const stickerIcons = Object.fromEntries(
+  Object.entries(rawIcons).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
+);
+
 type ProductOption = {
   id: string;
   name: string;
@@ -125,6 +134,7 @@ export default function PagesNew() {
                 >
                   {templates.map((template) => {
                     const isSelected = template.id === form.data.page.template_id;
+                    const iconSrc = stickerIcons[`./${template.icon}.png`];
                     return (
                       <Tab key={template.id} isSelected={isSelected} asChild>
                         <Button
@@ -134,9 +144,9 @@ export default function PagesNew() {
                           data-template={template.id}
                           onClick={() => form.setData("page.template_id", template.id)}
                         >
-                          <span className="text-4xl leading-none" aria-hidden="true">
-                            {template.icon}
-                          </span>
+                          {iconSrc ? (
+                            <img src={iconSrc} alt={template.name} className="shrink-0" width="40" height="40" />
+                          ) : null}
                           <div>
                             <h4 className="font-bold">{template.name}</h4>
                             {template.description}

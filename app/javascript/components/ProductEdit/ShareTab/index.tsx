@@ -163,6 +163,15 @@ type Template = {
   icon: string;
 };
 
+const rawSplashIcons = import.meta.glob("$assets/images/native_types/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+const splashIcons = Object.fromEntries(
+  Object.entries(rawSplashIcons).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
+);
+
 const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) => {
   const [templates, setTemplates] = React.useState<Template[]>([]);
 
@@ -199,19 +208,20 @@ const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) =
       </header>
       {templates.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {templates.map((template) => (
-            <a
-              key={template.id}
-              href={newPageHref(template.id)}
-              className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
-            >
-              <span className="text-3xl leading-none" aria-hidden="true">
-                {template.icon}
-              </span>
-              <h4 className="font-bold">{template.name}</h4>
-              <p className="text-sm text-muted">{template.description}</p>
-            </a>
-          ))}
+          {templates.map((template) => {
+            const iconSrc = splashIcons[`./${template.icon}.png`];
+            return (
+              <a
+                key={template.id}
+                href={newPageHref(template.id)}
+                className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
+              >
+                {iconSrc ? <img src={iconSrc} alt={template.name} width="40" height="40" /> : null}
+                <h4 className="font-bold">{template.name}</h4>
+                <p className="text-sm text-muted">{template.description}</p>
+              </a>
+            );
+          })}
         </div>
       ) : null}
       <div>
