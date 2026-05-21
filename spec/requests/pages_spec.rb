@@ -31,6 +31,10 @@ describe PagesController, type: :request do
     end
   end
 
+  def drain_page_jobs
+    Pages::GeneratePageVersionJob.drain
+  end
+
   describe "GET /pages" do
     it "renders the Pages/Index inertia page" do
       get pages_path, headers: { "X-Inertia" => "true" }
@@ -70,15 +74,16 @@ describe PagesController, type: :request do
 
     before { stub_ai_generator }
 
-    it "creates a page version and saves the html" do
+    it "enqueues a generation job and applies the version when drained" do
       expect do
         post generate_page_path(page.slug), params: { prompt: "A bold page" }, headers: { "Accept" => "application/json" }
-      end.to change(page.page_versions, :count).by(1)
+      end.to change(Pages::GeneratePageVersionJob.jobs, :size).by(1)
 
       expect(response).to have_http_status(:ok)
       json = JSON.parse(response.body)
-      expect(json["success"]).to be(true)
-      expect(json["html"]).to include("Stubbed")
+      expect(json["queued"]).to be(true)
+
+      expect { drain_page_jobs }.to change(page.page_versions, :count).by(1)
       expect(page.reload.html_content).to include("Stubbed")
     end
 
@@ -89,12 +94,25 @@ describe PagesController, type: :request do
   end
 
   describe "POST /pages/:id/publish" do
-    it "publishes the page" do
+    it "publishes the latest version by default" do
       page = create(:page, user: seller, html_content: "<div>hi</div>")
+      version = create(:page_version, page: page, html: "<section>v1</section>", prompt: "x")
       post publish_page_path(page.slug), headers: { "Accept" => "application/json" }
       expect(response).to have_http_status(:ok)
-      expect(page.reload.published).to be(true)
-      expect(page.published_at).to be_present
+      page.reload
+      expect(page.published).to be(true)
+      expect(page.published_version_id).to eq(version.id)
+      expect(page.html_content).to include("v1")
+    end
+
+    it "publishes a specific version when version_id given" do
+      page = create(:page, user: seller, html_content: "<div>current</div>")
+      v1 = create(:page_version, page: page, html: "<section>old</section>", prompt: "x")
+      _v2 = create(:page_version, page: page, html: "<section>new</section>", prompt: "y")
+      post publish_page_path(page.slug), params: { version_id: v1.id }, headers: { "Accept" => "application/json" }
+      page.reload
+      expect(page.published_version_id).to eq(v1.id)
+      expect(page.html_content).to include("old")
     end
   end
 
@@ -114,30 +132,29 @@ describe PagesController, type: :request do
   describe "auto-fill prompt (Item 1)" do
     before { stub_ai_generator }
 
-    it "creates a first version from the product context when product_permalink is supplied" do
+    it "enqueues a first generation seeded from product context when product_permalink is supplied" do
       product = create(:product, user: seller, name: "My Course")
       expect do
         post pages_path, params: { page: { title: "Course landing", product_permalink: product.unique_permalink } }
-      end.to change(Page, :count).by(1).and change(PageVersion, :count).by(1)
+      end.to change(Page, :count).by(1).and change(Pages::GeneratePageVersionJob.jobs, :size).by(1)
 
-      version = PageVersion.last
-      expect(version.prompt).to include("My Course")
+      job_prompt = Pages::GeneratePageVersionJob.jobs.last["args"][1]
+      expect(job_prompt).to include("My Course")
     end
 
     it "uses an explicit initial_prompt when supplied" do
       post pages_path, params: { page: { title: "Hand-rolled", initial_prompt: "An emerald hero section with a single CTA" } }
-      expect(PageVersion.last.prompt).to include("emerald hero")
+      expect(Pages::GeneratePageVersionJob.jobs.last["args"][1]).to include("emerald hero")
     end
   end
 
   describe "template grid (Item 2)" do
     before { stub_ai_generator }
 
-    it "seeds the first version with the chosen template's prompt" do
+    it "seeds the queued generation with the chosen template's prompt" do
       template = Ai::PageTemplates::TEMPLATES.first
       post pages_path, params: { page: { title: "From template", template_id: template[:id] } }
-      version = PageVersion.last
-      expect(version.prompt).to eq(template[:prompt])
+      expect(Pages::GeneratePageVersionJob.jobs.last["args"][1]).to eq(template[:prompt])
     end
 
     it "exposes the template list as an inertia prop on /pages/new" do
@@ -171,7 +188,9 @@ describe PagesController, type: :request do
       allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
         ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["hate speech"])
       )
-      post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
+      expect do
+        post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
+      end.not_to change(Pages::GeneratePageVersionJob.jobs, :size)
       expect(response).to have_http_status(:unprocessable_entity)
       expect(JSON.parse(response.body)["error"]).to include("moderation")
       expect(page.reload.html_content).to be_blank
@@ -183,6 +202,49 @@ describe PagesController, type: :request do
       )
       post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
       expect(response).to have_http_status(:ok)
+      expect(Pages::GeneratePageVersionJob.jobs.size).to eq(1)
+    end
+  end
+
+  describe "GET /pages/:id/latest_version" do
+    let(:page) { create(:page, user: seller) }
+
+    it "reports generating=true when no version exists yet" do
+      get latest_version_page_path(page.slug), headers: { "Accept" => "application/json" }
+      expect(JSON.parse(response.body)).to include("generating" => true, "html_content" => nil)
+    end
+
+    it "reports the latest version once one exists" do
+      version = create(:page_version, page: page, html: "<section>hello</section>", prompt: "go")
+      page.update!(html_content: version.html, published_version: version, auto_publish: true)
+      get latest_version_page_path(page.slug), headers: { "Accept" => "application/json" }
+      body = JSON.parse(response.body)
+      expect(body["html_content"]).to include("hello")
+      expect(body["latest_version_id"]).to eq(version.id)
+      expect(body["generating"]).to be(false)
+    end
+  end
+
+  describe "Pages::GeneratePageVersionJob" do
+    let(:page) { create(:page, user: seller) }
+
+    before { stub_ai_generator }
+
+    it "creates a version and auto-publishes when auto_publish is on" do
+      Pages::GeneratePageVersionJob.new.perform(page.id, "make it cool", nil)
+      page.reload
+      expect(page.page_versions.count).to eq(1)
+      expect(page.published_version_id).to eq(page.page_versions.first.id)
+      expect(page.published).to be(true)
+    end
+
+    it "does not auto-publish when auto_publish is off" do
+      page.update!(auto_publish: false)
+      Pages::GeneratePageVersionJob.new.perform(page.id, "make it cool", nil)
+      page.reload
+      expect(page.page_versions.count).to eq(1)
+      expect(page.published).to be(false)
+      expect(page.published_version_id).to be_nil
     end
   end
 end

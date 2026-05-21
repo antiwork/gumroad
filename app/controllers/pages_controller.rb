@@ -2,7 +2,7 @@
 
 class PagesController < Sellers::BaseController
   before_action :require_pages_enabled
-  before_action :set_page, only: [:edit, :update, :destroy, :publish, :unpublish, :generate]
+  before_action :set_page, only: [:edit, :update, :destroy, :publish, :unpublish, :generate, :latest_version]
 
   def index
     authorize Page
@@ -39,7 +39,7 @@ class PagesController < Sellers::BaseController
     initial_prompt = resolve_initial_prompt(page)
 
     if page.save
-      generate_initial_version(page, initial_prompt) if initial_prompt.present?
+      Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, nil) if initial_prompt.present?
       redirect_to edit_page_path(page.slug)
     else
       redirect_to new_page_path, alert: page.errors.full_messages.join(", ")
@@ -68,12 +68,15 @@ class PagesController < Sellers::BaseController
 
   def publish
     authorize @page, :update?
-    @page.publish!
-    render json: { success: true }
+    version = params[:version_id].present? ? @page.page_versions.find_by(id: params[:version_id]) : nil
+    @page.update!(auto_publish: true) if ActiveModel::Type::Boolean.new.cast(params[:auto_publish])
+    @page.publish!(version: version)
+    render json: { success: true, published_version_id: @page.published_version_id }
   end
 
   def unpublish
     authorize @page, :update?
+    @page.update!(auto_publish: false) if ActiveModel::Type::Boolean.new.cast(params[:disable_auto_publish])
     @page.unpublish!
     render json: { success: true }
   end
@@ -86,19 +89,21 @@ class PagesController < Sellers::BaseController
     moderation = moderate_prompt(@page, prompt)
     return render json: { success: false, error: "Content moderation blocked this prompt." }, status: :unprocessable_entity unless moderation.passed
 
-    result = Ai::PageGeneratorService.new(
-      page: @page,
-      seller: current_seller,
-      prompt: prompt,
-      parent_version: @page.latest_version,
-    ).call
+    Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
+    render json: { success: true, queued: true }
+  end
 
-    if result.success?
-      @page.update!(html_content: result.html)
-      render json: { success: true, html: result.html, version_id: result.version.id }
-    else
-      render json: { success: false, error: result.error }, status: :unprocessable_entity
-    end
+  def latest_version
+    authorize @page, :edit?
+    version = @page.latest_version
+    render json: {
+      html_content: @page.html_content,
+      latest_version_id: version&.id,
+      published_version_id: @page.published_version_id,
+      published: @page.published,
+      auto_publish: @page.auto_publish,
+      generating: version.nil? && @page.html_content.blank?,
+    }
   end
 
   private
@@ -111,7 +116,7 @@ class PagesController < Sellers::BaseController
     end
 
     def page_update_params
-      params.require(:page).permit(:title, :slug, :html_content, :is_profile)
+      params.require(:page).permit(:title, :slug, :html_content, :is_profile, :auto_publish)
     end
 
     def resolve_initial_prompt(page)
@@ -122,19 +127,6 @@ class PagesController < Sellers::BaseController
       elsif page.link.present?
         "Create a landing page for #{page.link.name}. Highlight the product, include a buy button, and showcase what makes it valuable."
       end
-    end
-
-    def generate_initial_version(page, prompt)
-      moderation = moderate_prompt(page, prompt)
-      return unless moderation.passed
-
-      result = Ai::PageGeneratorService.new(
-        page: page,
-        seller: current_seller,
-        prompt: prompt,
-        parent_version: nil,
-      ).call
-      page.update!(html_content: result.html) if result.success?
     end
 
     def moderate_prompt(page, prompt)
@@ -175,6 +167,8 @@ class PagesController < Sellers::BaseController
           html_content: @page.html_content,
           published: @page.published,
           published_at: @page.published_at&.iso8601,
+          published_version_id: @page.published_version_id,
+          auto_publish: @page.auto_publish,
           is_profile: @page.is_profile,
           product: @page.link ? product_summary(@page.link) : nil,
         },

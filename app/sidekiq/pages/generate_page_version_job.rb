@@ -21,6 +21,6 @@ class Pages::GeneratePageVersionJob
       parent_version: parent_version,
     ).call
 
-    page.update!(html_content: result.html) if result.success?
+    page.apply_new_version!(result.version) if result.success?
   end
 end

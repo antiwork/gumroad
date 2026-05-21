@@ -7,6 +7,7 @@ class Page < ApplicationRecord
 
   belongs_to :user
   belongs_to :link, optional: true
+  belongs_to :published_version, class_name: "PageVersion", optional: true
   has_many :page_versions, dependent: :destroy
 
   validates :title, presence: true, length: { maximum: 255 }
@@ -21,8 +22,14 @@ class Page < ApplicationRecord
   scope :published, -> { where(published: true) }
   scope :draft, -> { where(published: false) }
 
-  def publish!
-    update!(published: true, published_at: Time.current)
+  def publish!(version: nil)
+    target = version || latest_version
+    update!(
+      published: true,
+      published_at: Time.current,
+      published_version: target,
+      html_content: target&.html || html_content,
+    )
   end
 
   def unpublish!
@@ -31,6 +38,15 @@ class Page < ApplicationRecord
 
   def latest_version
     page_versions.order(created_at: :desc).first
+  end
+
+  def apply_new_version!(version)
+    update!(
+      html_content: version.html,
+      published_version: (auto_publish ? version : published_version),
+      published: (auto_publish ? true : published),
+      published_at: (auto_publish ? Time.current : published_at),
+    )
   end
 
   def page_url(host: nil)

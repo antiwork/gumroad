@@ -861,6 +861,7 @@ Rails.application.routes.draw do
         post :publish
         post :unpublish
         post :generate
+        get :latest_version, defaults: { format: :json }
       end
     end
     get "/pages/:id/edit", to: "pages#edit", as: :edit_page

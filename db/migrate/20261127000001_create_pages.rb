@@ -11,6 +11,8 @@ class CreatePages < ActiveRecord::Migration[7.1]
       t.json :json_data
       t.boolean :published, default: false, null: false
       t.boolean :is_profile, default: false, null: false
+      t.boolean :auto_publish, default: true, null: false
+      t.bigint :published_version_id
       t.datetime :published_at
       t.datetime :deleted_at
 
@@ -19,6 +21,7 @@ class CreatePages < ActiveRecord::Migration[7.1]
       t.index [:user_id, :slug], unique: true, name: "index_pages_on_user_id_and_slug"
       t.index [:user_id, :is_profile]
       t.index [:user_id, :published]
+      t.index :published_version_id
       t.index :deleted_at
     end
 

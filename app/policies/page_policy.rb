@@ -21,6 +21,10 @@ class PagePolicy < ApplicationPolicy
     update?
   end
 
+  def latest_version?
+    edit?
+  end
+
   def update?
     user.role_admin_for?(seller) || user.role_marketing_for?(seller)
   end
