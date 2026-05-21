@@ -5,6 +5,6 @@ class UnblockObjectWorker
   sidekiq_options retry: 5, queue: :default
 
   def perform(object_value)
-    PlatformBlock.where(object_value:).destroy_all
+    PlatformBlock.find_by(object_value:)&.unblock!
   end
 end

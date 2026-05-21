@@ -18,7 +18,12 @@ class Radar::ValueListSyncService
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
-    expired_emails = PlatformBlock.email.where(expires_at: SYNC_WINDOW.ago..Time.current)
+    recently_unblocked_emails = PlatformBlock.email.where(blocked_at: nil).where("updated_at >= ?", SYNC_WINDOW.ago)
+    recently_unblocked_emails.each do |blocked_object|
+      remove_item_from_list(value_list.id, blocked_object.object_value)
+    end
+
+    expired_emails = PlatformBlock.email.where.not(blocked_at: nil).where(expires_at: SYNC_WINDOW.ago..Time.current)
     expired_emails.each do |blocked_object|
       remove_item_from_list(value_list.id, blocked_object.object_value)
     end
@@ -38,7 +43,16 @@ class Radar::ValueListSyncService
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
+    recently_unblocked_cards = PlatformBlock.charge_processor_fingerprint
+      .where(blocked_at: nil)
+      .where("updated_at >= ?", SYNC_WINDOW.ago)
+      .where("object_value REGEXP ?", STRIPE_FINGERPRINT_PATTERN.source)
+    recently_unblocked_cards.each do |blocked_object|
+      remove_item_from_list(value_list.id, blocked_object.object_value)
+    end
+
     expired_cards = PlatformBlock.charge_processor_fingerprint
+      .where.not(blocked_at: nil)
       .where(expires_at: SYNC_WINDOW.ago..Time.current)
       .where("object_value REGEXP ?", STRIPE_FINGERPRINT_PATTERN.source)
     expired_cards.each do |blocked_object|
@@ -67,13 +81,12 @@ class Radar::ValueListSyncService
   end
 
   private
-
-  def remove_item_from_list(value_list_id, value)
-    items = Stripe::Radar::ValueListItem.list(value_list: value_list_id, value: value)
-    items.data.each do |item|
-      Stripe::Radar::ValueListItem.delete(item.id)
+    def remove_item_from_list(value_list_id, value)
+      items = Stripe::Radar::ValueListItem.list(value_list: value_list_id, value: value)
+      items.data.each do |item|
+        Stripe::Radar::ValueListItem.delete(item.id)
+      end
+    rescue Stripe::InvalidRequestError => e
+      raise unless e.code == "resource_missing"
     end
-  rescue Stripe::InvalidRequestError => e
-    raise unless e.code == "resource_missing"
-  end
 end

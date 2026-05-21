@@ -220,8 +220,8 @@ describe Purchase::Blockable do
 
   describe "#unblock_buyer!" do
     context "when buyer is not blocked" do
-      it "does not call #destroy! on any blocked objects" do
-        expect_any_instance_of(PlatformBlock).to_not receive(:destroy!)
+      it "does not call #unblock! on any blocked objects" do
+        expect_any_instance_of(PlatformBlock).to_not receive(:unblock!)
         purchase.unblock_buyer!
       end
     end
@@ -233,7 +233,7 @@ describe Purchase::Blockable do
 
         purchase.unblock_buyer!
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint].each do |blocked_value|
-          expect(PlatformBlock.find_by(object_value: blocked_value)).to be_nil
+          expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_nil
         end
       end
     end
@@ -248,7 +248,7 @@ describe Purchase::Blockable do
 
         expect do
           purchase.unblock_buyer!
-        end.to change { PlatformBlock.find_by(object_value: recent_purchase.stripe_fingerprint) }.from(be_present).to(be_nil)
+        end.to change { PlatformBlock.active.find_by(object_value: recent_purchase.stripe_fingerprint) }.from(be_present).to(be_nil)
       end
     end
 
@@ -262,7 +262,7 @@ describe Purchase::Blockable do
 
         purchase.unblock_buyer!
         [buyer.email, purchase.email, purchase.browser_guid, purchase.ip_address, purchase.card_visual].each do |blocked_value|
-          expect(PlatformBlock.find_by(object_value: blocked_value)).to be_nil
+          expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_nil
         end
       end
     end

@@ -37,6 +37,20 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_emails
     end
 
+    it "removes recently unblocked emails from Stripe Radar" do
+      blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "unblocked@example.com")
+      blocked.unblock!
+
+      item = double("ValueListItem", id: "rsli_456")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "unblocked@example.com")
+        .and_return(double(data: [item]))
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_456")
+
+      service.sync_blocked_emails
+    end
+
     it "removes expired blocked emails from Stripe Radar" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "expired@example.com", expires_in: 1.hour)
 
@@ -77,7 +91,8 @@ describe Radar::ValueListSyncService do
 
     it "picks up re-blocked emails by filtering on blocked_at" do
       travel_to 1.month.ago do
-        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblocked@example.com").destroy!
+        blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblocked@example.com")
+        blocked.unblock!
       end
 
       # Re-block now
@@ -130,6 +145,34 @@ describe Radar::ValueListSyncService do
 
       expect { service.sync_blocked_cards }.not_to raise_error
     end
-  end
 
+    it "removes recently unblocked card fingerprints from Stripe Radar" do
+      blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpunblock1")
+      blocked.unblock!
+
+      item = double("ValueListItem", id: "rsli_card_1")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "fpunblock1")
+        .and_return(double(data: [item]))
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_card_1")
+
+      service.sync_blocked_cards
+    end
+
+    it "removes expired blocked card fingerprints from Stripe Radar" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpexpire1", expires_in: 1.hour)
+
+      travel 2.hours
+
+      item = double("ValueListItem", id: "rsli_card_2")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "fpexpire1")
+        .and_return(double(data: [item]))
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_card_2")
+
+      service.sync_blocked_cards
+    end
+  end
 end

@@ -71,7 +71,7 @@ class Helper::UnblockEmailService
         blocked_email = PlatformBlock.email.active.find_by(object_value: email)
         return unless blocked_email.present?
 
-        blocked_email.destroy!
+        blocked_email.unblock!
       end
 
       send_reply(REPLIES[:blocked_by_gumroad])

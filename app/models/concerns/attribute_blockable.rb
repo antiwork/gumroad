@@ -234,7 +234,7 @@ module AttributeBlockable
 
       define_method("unblock_by_#{blockable_method}!") do
         return if (value = send(blockable_method)).blank?
-        PlatformBlock.where(object_type:, object_value: value).destroy_all
+        PlatformBlock.where(object_type:, object_value: value).find_each(&:unblock!)
         blocked_by_attributes.delete(blockable_method.to_s)
       end
 

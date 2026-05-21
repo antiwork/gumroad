@@ -28,8 +28,9 @@ describe Onetime::BackfillRadarValueLists do
       described_class.process
     end
 
-    it "does not push entries that are not in the table" do
-      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "to-destroy@example.com").destroy!
+    it "skips unblocked entries" do
+      blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "unblocked@example.com")
+      blocked.unblock!
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
 

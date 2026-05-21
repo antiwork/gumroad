@@ -82,33 +82,34 @@ describe AttributeBlockable do
           expect(user_with_unblocked_email.blocked_by_form_email?).to be false
         end
 
-        it "does not consider destroyed records" do
+        it "does not consider unblocked records" do
           user = create(:user, email: "test_unblocked_#{SecureRandom.hex(4)}@example.com")
           blocked_object = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: user.email, by: 1)
 
           expect(user.reload.blocked_by_form_email?).to be true
           expect(user.blocked_by_form_email_object).not_to be_nil
 
-          blocked_object.destroy!
+          blocked_object.unblock!
 
           expect(user.reload.blocked_by_form_email?).to be false
           expect(user.blocked_by_form_email_object).to be_nil
         end
 
-        it "finds active block after destroying and re-blocking" do
+        it "finds active block after unblocking and reblocking" do
           user = create(:user, email: "test_reblock_#{SecureRandom.hex(4)}@example.com")
 
           first_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: user.email, by: 1)
           expect(user.reload.blocked_by_form_email?).to be true
 
-          first_block.destroy!
+          first_block.unblock!
           expect(user.reload.blocked_by_form_email?).to be false
           expect(user.blocked_by_form_email_object).to be_nil
 
           second_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: user.email, by: 1)
 
+          expect(first_block.id).to eq(second_block.id)
           expect(user.reload.blocked_by_form_email?).to be true
-          expect(user.blocked_by_form_email_object.id).to eq(second_block.id)
+          expect(user.blocked_by_form_email_object.id).to eq(first_block.id)
           expect(user.blocked_by_form_email_object.blocked_at).not_to be_nil
         end
       end
@@ -653,7 +654,7 @@ describe AttributeBlockable do
         expect(result.blocked_by_email_object).to be_nil
       end
 
-      it "only preloads active blocks, ignoring destroyed records" do
+      it "only preloads active blocks, ignoring unblocked records" do
         active_email = "preload_active_#{SecureRandom.hex(4)}@example.com"
         unblocked_email = "preload_unblocked_#{SecureRandom.hex(4)}@example.com"
         reblocked_email = "preload_reblocked_#{SecureRandom.hex(4)}@example.com"
@@ -665,9 +666,9 @@ describe AttributeBlockable do
         active_record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: active_email, by: 1)
 
         unblocked_record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: unblocked_email, by: 1)
-        unblocked_record.destroy!
+        unblocked_record.unblock!
 
-        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: reblocked_email, by: 1).destroy!
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: reblocked_email, by: 1).unblock!
         reblocked_record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: reblocked_email, by: 1)
 
         # Preload blocked attributes

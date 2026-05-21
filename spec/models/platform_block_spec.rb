@@ -38,12 +38,27 @@ describe PlatformBlock do
     end
   end
 
-  describe "#destroy!" do
-    it "removes the row" do
+  describe "#unblock!" do
+    it "nulls blocked_at and expires_at without removing the row" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+      record = PlatformBlock.find_by(object_value: "157.45.09.212")
+      expect(record.blocked_at).to be_present
+
+      record.unblock!
+
       expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be_present
-      PlatformBlock.find_by(object_value: "157.45.09.212").destroy!
-      expect(PlatformBlock.find_by(object_value: "157.45.09.212")).to be_nil
+      expect(record.reload.blocked_at).to be_nil
+      expect(record.expires_at).to be_nil
+      expect(PlatformBlock.active.where(object_value: "157.45.09.212")).to be_empty
+    end
+
+    it "lets a subsequent add! reuse the existing row" do
+      first = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblock@example.com")
+      first.unblock!
+
+      second = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblock@example.com")
+      expect(second.id).to eq(first.id)
+      expect(second.blocked_at).to be_present
     end
   end
 

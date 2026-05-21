@@ -1422,7 +1422,7 @@ describe User, :vcr do
         end
 
         after do
-          PlatformBlock.active.find_by(object_value: "example.com").destroy!
+          PlatformBlock.active.find_by(object_value: "example.com").unblock!
         end
       end
 
@@ -1459,7 +1459,7 @@ describe User, :vcr do
         end
 
         after do
-          PlatformBlock.active.find_by(object_value: "127.0.0.1").destroy!
+          PlatformBlock.active.find_by(object_value: "127.0.0.1").unblock!
         end
       end
 
