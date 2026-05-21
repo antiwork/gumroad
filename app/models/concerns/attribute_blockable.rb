@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # AttributeBlockable provides a flexible system for checking if model attributes
-# are blocked via the BlockedObject system, with support for efficient N+1 query
+# are blocked via the PlatformBlock system, with support for efficient N+1 query
 # prevention through eager loading.
 #
 # == Basic Usage
@@ -17,7 +17,7 @@
 #
 # This generates several instance methods:
 # - +blocked_by_email?+ - Returns true if the email is blocked
-# - +blocked_by_email_object+ - Returns the BlockedObject record
+# - +blocked_by_email_object+ - Returns the PlatformBlock record
 # - +block_by_email!+ - Blocks the email value
 # - +unblock_by_email!+ - Unblocks the email value
 #
@@ -25,7 +25,7 @@
 #
 # When loading multiple records that need blocked attribute checks, use
 # +with_blocked_attributes_for+ to preload blocked status for all records
-# in a single MongoDB query:
+# in a single query:
 #
 #   # Without preloading (N+1 queries)
 #   users = User.where(verified: true)
@@ -93,7 +93,7 @@ module AttributeBlockable
   # Provides the +with_blocked_attributes_for+ scope method for ActiveRecord relations.
   module RelationMethods
     # Eagerly loads blocked attribute status for the specified methods.
-    # This prevents N+1 queries by fetching all BlockedObjects in a single query.
+    # This prevents N+1 queries by fetching all PlatformBlocks in a single query.
     #
     # @param method_names [Array<Symbol, String>] Names of blockable attributes to preload
     # @return [ActiveRecord::Relation] Chainable relation with preloading configured
@@ -164,7 +164,7 @@ module AttributeBlockable
         end
 
         # Preloads blocked status for a single attribute across all records
-        # in the relation using a single MongoDB query.
+        # in the relation using a single query.
         #
         # @param method_name [String] The attribute method name
         relation.define_singleton_method(:preload_blocked_attribute_for_method) do |method_name|
@@ -177,8 +177,9 @@ module AttributeBlockable
           blockable_config = model_class.blockable_attributes.find { |attr| attr[:blockable_method] == method_name.to_sym }
           attribute_type = blockable_config ? blockable_config[:object_type] : method_name.to_sym
 
-          scope = BLOCKED_OBJECT_TYPES.fetch(attribute_type, :all)
-          blocked_objects_by_value = BlockedObject.send(scope).find_active_objects(values).index_by(&:object_value)
+          relation = PlatformBlock.active.where(object_value: values)
+          relation = relation.where(object_type: PlatformBlock::TYPES[attribute_type]) if PlatformBlock::TYPES.key?(attribute_type)
+          blocked_objects_by_value = relation.index_by(&:object_value)
 
           @records.each do |record|
             value = record.send(method_name)
@@ -194,12 +195,12 @@ module AttributeBlockable
     #
     # Generates the following instance methods:
     # - +blocked_by_{method}?+ - Returns true if the value is currently blocked
-    # - +blocked_by_{method}_object+ - Returns the BlockedObject record
+    # - +blocked_by_{method}_object+ - Returns the PlatformBlock record
     # - +block_by_{method}!+ - Blocks the attribute value
     # - +unblock_by_{method}!+ - Unblocks the attribute value
     #
     # @param blockable_method [Symbol, String] The method name to make blockable
-    # @param object_type [Symbol, String, nil] The BlockedObject type to use (defaults to blockable_method)
+    # @param object_type [Symbol, String, nil] The PlatformBlock type to use (defaults to blockable_method)
     #
     # @example Basic usage
     #   attr_blockable :email
@@ -209,7 +210,7 @@ module AttributeBlockable
     #
     # @example With custom attribute mapping
     #   attr_blockable :form_email, object_type: :email
-    #   # Uses 'email' BlockedObject type but creates form_email methods
+    #   # Uses 'email' PlatformBlock type but creates form_email methods
     #
     # @example Blocking with expiration
     #   user.block_by_email!(
@@ -219,7 +220,7 @@ module AttributeBlockable
     def attr_blockable(blockable_method, object_type: nil)
       object_type ||= blockable_method
 
-      define_method("blocked_by_#{blockable_method}?") { blocked_object_by_method(object_type, blockable_method:)&.blocked? || false }
+      define_method("blocked_by_#{blockable_method}?") { blocked_object_by_method(object_type, blockable_method:).present? }
 
       define_method("blocked_by_#{blockable_method}_object") do
         blocked_object_by_method(object_type, blockable_method:)
@@ -227,17 +228,14 @@ module AttributeBlockable
 
       define_method("block_by_#{blockable_method}!") do |by_user_id: nil, expires_in: nil|
         return if (value = send(blockable_method)).blank?
-        blocked_object = BlockedObject.block!(object_type, value, by_user_id, expires_in:)
+        blocked_object = PlatformBlock.add!(object_type:, object_value: value, by: by_user_id, expires_in:)
         blocked_by_attributes[blockable_method.to_s] = blocked_object
       end
 
       define_method("unblock_by_#{blockable_method}!") do
         return if (value = send(blockable_method)).blank?
-        scope = BLOCKED_OBJECT_TYPES.fetch(object_type.to_sym, :all)
-        BlockedObject.send(scope).find_objects([value]).each do |blocked_object|
-          blocked_object.unblock!
-          blocked_by_attributes.delete(blockable_method.to_s)
-        end
+        PlatformBlock.where(object_type:, object_value: value).find_each(&:unblock!)
+        blocked_by_attributes.delete(blockable_method.to_s)
       end
 
       # Register this blockable attribute for introspection
@@ -295,27 +293,29 @@ module AttributeBlockable
     blocked_object
   end
 
-  # Retrieves BlockedObject records for the given values and attribute type.
+  # Retrieves active PlatformBlock records for the given values and attribute type.
   #
-  # @param method_name [Symbol, String] The BlockedObject type
+  # @param object_type [Symbol, String] The PlatformBlock type
   # @param values [Array<String>] Values to look up
-  # @return [Array<BlockedObject>] Array of BlockedObject records
+  # @return [ActiveRecord::Relation] PlatformBlock records
   #
   # @example
   #   user.blocked_objects_for_values(:email, ['email1@example.com', 'email2@example.com'])
-  def blocked_objects_for_values(method_name, values)
-    scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-    BlockedObject.send(scope).find_active_objects(values)
+  def blocked_objects_for_values(object_type, values)
+    relation = PlatformBlock.active.where(object_value: values)
+    relation = relation.where(object_type: PlatformBlock::TYPES[object_type.to_sym]) if PlatformBlock::TYPES.key?(object_type.to_sym)
+    relation
   end
 
   private
-    # Retrieves a single BlockedObject for the given value.
+    # Retrieves a single active PlatformBlock for the given value.
     #
-    # @param method_name [Symbol, String] The BlockedObject type
+    # @param object_type [Symbol, String] The PlatformBlock type
     # @param value [String] Value to look up
-    # @return [BlockedObject, nil] The BlockedObject or nil if not found
-    def blocked_object_for_value(method_name, value)
-      scope = BLOCKED_OBJECT_TYPES.fetch(method_name.to_sym, :all)
-      BlockedObject.send(scope).find_active_object(value)
+    # @return [PlatformBlock, nil] The PlatformBlock or nil if not found
+    def blocked_object_for_value(object_type, value)
+      relation = PlatformBlock.active.where(object_value: value)
+      relation = relation.where(object_type: PlatformBlock::TYPES[object_type.to_sym]) if PlatformBlock::TYPES.key?(object_type.to_sym)
+      relation.first
     end
 end

@@ -68,7 +68,7 @@ class Helper::UnblockEmailService
       if recent_blocked_purchase.present?
         unblock_buyer!(purchase: recent_blocked_purchase)
       else
-        blocked_email = BlockedObject.email.find_active_object(email)
+        blocked_email = PlatformBlock.email.active.find_by(object_value: email)
         return unless blocked_email.present?
 
         blocked_email.unblock!

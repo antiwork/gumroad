@@ -30,7 +30,7 @@ export type UserMembership = {
   created_at: string;
 };
 
-type BlockedObject = {
+type PlatformBlock = {
   blocked_at: string | null;
   created_at: string;
 };
@@ -72,9 +72,9 @@ export type User = {
   username: string;
   profile_url: string;
   form_email: string;
-  blocked_by_form_email_object: BlockedObject | null;
+  blocked_by_form_email_object: PlatformBlock | null;
   form_email_domain: string;
-  blocked_by_form_email_domain_object: BlockedObject | null;
+  blocked_by_form_email_domain_object: PlatformBlock | null;
   subdomain_with_protocol: string;
   custom_fee_per_thousand: number | null;
   impersonatable: boolean;

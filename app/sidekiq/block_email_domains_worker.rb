@@ -6,7 +6,7 @@ class BlockEmailDomainsWorker
 
   def perform(author_id, email_domains)
     email_domains.each do |email_domain|
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], email_domain, author_id)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: email_domain, by: author_id)
     end
   end
 end
