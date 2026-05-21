@@ -346,7 +346,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     N=$(echo "$NAMES" | wc -l | tr -d ' ')
     echo "   ${CONF}%  ←  $(pluralize $N test)"
     echo "$NAMES" | while IFS= read -r name; do
-      echo "          $(basename "$name")"
+      echo "          ${name#spec/}"
     done
   fi
 done
@@ -425,7 +425,7 @@ for (( m=0; m<MILESTONES; m++ )); do
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  🔍 verifying %s on merge-base..." \
-          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$(basename "$spec")"
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "${spec#spec/}"
 
         set +e
         verify_preexisting_on_merge_base "$output"
@@ -472,7 +472,7 @@ for (( m=0; m<MILESTONES; m++ )); do
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  ⚠ %s: %s\n" \
-          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$verdict" "$(basename "$spec")"
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$verdict" "${spec#spec/}"
       fi
     fi
   done <<< "$MILESTONE_TESTS"
