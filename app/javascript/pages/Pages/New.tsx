@@ -60,11 +60,19 @@ export default function PagesNew() {
   const formUID = React.useId();
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Honor ?template=<id> when the user arrived from the product Share-tab splash.
+  const initialTemplateId = React.useMemo(() => {
+    if (typeof window === "undefined") return templates[0]?.id || "";
+    const requested = new URLSearchParams(window.location.search).get("template");
+    if (requested && templates.some((t) => t.id === requested)) return requested;
+    return templates[0]?.id || "";
+  }, [templates]);
+
   const form = useForm<FormData>("CreatePage", {
     page: {
       title: "",
       product_permalink: product?.permalink || "",
-      template_id: templates[0]?.id || "",
+      template_id: initialTemplateId,
     },
   });
 

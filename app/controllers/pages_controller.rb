@@ -9,7 +9,6 @@ class PagesController < Sellers::BaseController
     pages = current_seller.pages.alive.order(updated_at: :desc)
     render inertia: "Pages/Index", props: {
       pages: pages.map { |p| page_json(p) },
-      can_create_page: true,
     }
   end
 
@@ -72,6 +71,8 @@ class PagesController < Sellers::BaseController
     @page.update!(auto_publish: true) if ActiveModel::Type::Boolean.new.cast(params[:auto_publish])
     @page.publish!(version: version)
     render json: { success: true, published_version_id: @page.published_version_id }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
   end
 
   def unpublish
@@ -98,7 +99,7 @@ class PagesController < Sellers::BaseController
     version = @page.latest_version
     render json: {
       html_content: @page.html_content,
-      latest_version_id: version&.id,
+      latest_version: version ? { id: version.id, prompt: version.prompt, created_at: version.created_at.iso8601 } : nil,
       published_version_id: @page.published_version_id,
       published: @page.published,
       auto_publish: @page.auto_publish,
@@ -116,7 +117,10 @@ class PagesController < Sellers::BaseController
     end
 
     def page_update_params
-      params.require(:page).permit(:title, :slug, :html_content, :is_profile, :auto_publish)
+      # html_content is only written by Pages::GeneratePageVersionJob via apply_new_version!
+      # (and by publish! when a prior version is promoted). Letting clients PUT it directly
+      # would bypass Ai::PageSanitizer.
+      params.require(:page).permit(:title, :slug, :is_profile, :auto_publish)
     end
 
     def resolve_initial_prompt(page)
@@ -129,9 +133,13 @@ class PagesController < Sellers::BaseController
       end
     end
 
+    # Build a transient Page stand-in whose `html_content` carries the prompt
+    # so ContentExtractor#extract_from_page picks it up without mutating the
+    # persisted page (which would clobber a real version with the user's
+    # natural-language string).
     def moderate_prompt(page, prompt)
-      page.assign_attributes(html_content: prompt) if page.respond_to?(:html_content=)
-      ContentModeration::ModerateRecordService.check(page, :page)
+      proxy = Page.new(user: page.user, title: page.title, html_content: prompt)
+      ContentModeration::ModerateRecordService.check(proxy, :page)
     end
 
     def page_json(page)

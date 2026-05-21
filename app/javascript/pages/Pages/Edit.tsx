@@ -156,7 +156,7 @@ export default function PageEdit() {
         if (!resp.ok) return;
         const body = typia.assert<{
           html_content: string | null;
-          latest_version_id: number | null;
+          latest_version: VersionInfo | null;
           published_version_id: number | null;
           published: boolean;
           auto_publish: boolean;
@@ -172,6 +172,12 @@ export default function PageEdit() {
             published: body.published,
             auto_publish: body.auto_publish,
           }));
+          if (body.latest_version) {
+            const real = body.latest_version;
+            // Drop optimistic placeholders (negative ids) and any stale entry with
+            // the same real id, then insert the real version at the top.
+            setVersions((prev) => [real, ...prev.filter((v) => v.id > 0 && v.id !== real.id)]);
+          }
           setWaitingForFirst(false);
           setGenerating(false);
         }

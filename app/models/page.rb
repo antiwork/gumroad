@@ -24,11 +24,17 @@ class Page < ApplicationRecord
 
   def publish!(version: nil)
     target = version || latest_version
+    resolved_html = target&.html || html_content
+    if resolved_html.blank?
+      errors.add(:base, "Cannot publish a page that has no generated content yet")
+      raise ActiveRecord::RecordInvalid, self
+    end
+
     update!(
       published: true,
       published_at: Time.current,
       published_version: target,
-      html_content: target&.html || html_content,
+      html_content: resolved_html,
     )
   end
 

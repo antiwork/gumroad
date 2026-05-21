@@ -2,12 +2,7 @@
 
 class PageViewsController < ApplicationController
   def show
-    user = if params[:username]
-      User.find_by!(username: params[:username])
-    else
-      @custom_domain_seller
-    end
-
+    user = resolve_seller
     return head :not_found unless user
 
     page = user.pages.alive.published.find_by!(slug: params[:slug])
@@ -27,4 +22,12 @@ class PageViewsController < ApplicationController
   rescue ActiveRecord::RecordNotFound
     head :not_found
   end
+
+  private
+    def resolve_seller
+      return User.alive.find_by(username: params[:username]) if params[:username].present?
+
+      Subdomain.find_seller_by_request(request) ||
+        CustomDomain.find_by_host(request.host)&.user
+    end
 end
