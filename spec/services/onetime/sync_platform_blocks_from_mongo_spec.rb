@@ -44,7 +44,7 @@ describe Onetime::SyncPlatformBlocksFromMongo do
       expect(row.updated_at).to be_within(1.second).of(mongo_record.updated_at)
     end
 
-    it "skips records whose expires_at is in the past" do
+    it "imports records whose expires_at is in the past (history)" do
       BlockedObject.create!(
         object_type: BLOCKED_OBJECT_TYPES[:email],
         object_value: "expired@example.com",
@@ -62,7 +62,7 @@ describe Onetime::SyncPlatformBlocksFromMongo do
 
       silence_stdout { described_class.process }
 
-      expect(PlatformBlock.pluck(:object_value)).to contain_exactly("active@example.com")
+      expect(PlatformBlock.pluck(:object_value)).to contain_exactly("expired@example.com", "active@example.com")
     end
 
     it "imports records with no expires_at (permanent blocks)" do
