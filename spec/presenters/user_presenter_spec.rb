@@ -73,7 +73,8 @@ describe UserPresenter do
         is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
         profile_background_color: seller.seller_profile.background_color,
         profile_highlight_color: seller.seller_profile.highlight_color,
-        profile_font: seller.seller_profile.font
+        profile_font: seller.seller_profile.font,
+        pages_enabled: seller.pages_enabled?,
       )
     end
   end
