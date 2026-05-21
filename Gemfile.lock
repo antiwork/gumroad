@@ -120,8 +120,8 @@ GEM
       mutex_m
       securerandom (>= 0.3)
       tzinfo (~> 2.0)
-    addressable (2.8.7)
-      public_suffix (>= 2.0.2, < 7.0)
+    addressable (2.9.0)
+      public_suffix (>= 2.0.2, < 8.0)
     aes_key_wrap (1.1.0)
     afm (0.2.2)
     after_commit_everywhere (1.4.0)
@@ -232,7 +232,7 @@ GEM
       bigdecimal
       rexml
     crass (1.0.6)
-    css_parser (1.17.1)
+    css_parser (1.22.0)
       addressable
     csv (3.3.0)
     dalli (3.2.8)
