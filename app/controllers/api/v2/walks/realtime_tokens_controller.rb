@@ -38,6 +38,9 @@ class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
       Rails.logger.warn("OpenAI client_secrets failed: #{upstream.status} #{upstream.body}")
       render json: { error: "Could not create realtime session." }, status: :bad_gateway
     end
+  rescue HTTP::Error => e
+    Rails.logger.warn("OpenAI realtime token network error: #{e.class} #{e.message}")
+    render json: { error: "Could not reach realtime service." }, status: :bad_gateway
   end
 
   private

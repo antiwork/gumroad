@@ -49,15 +49,19 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
 
     if upstream.status.success?
       draft = extract_json_from_anthropic_response(upstream.parse)
-      if draft.nil?
-        render json: { error: "Could not parse synthesis result." }, status: :bad_gateway
-      else
+      if draft.is_a?(Hash)
         render json: draft.merge(model: ANTHROPIC_MODEL)
+      else
+        Rails.logger.warn("Anthropic synthesis returned unexpected structure: #{draft.class}")
+        render json: { error: "Could not parse synthesis result." }, status: :bad_gateway
       end
     else
       Rails.logger.warn("Anthropic synthesis failed: #{upstream.status} #{upstream.body}")
       render json: { error: "Could not synthesize product draft." }, status: :bad_gateway
     end
+  rescue HTTP::Error => e
+    Rails.logger.warn("Anthropic synthesis network error: #{e.class} #{e.message}")
+    render json: { error: "Could not reach synthesis service." }, status: :bad_gateway
   end
 
   private

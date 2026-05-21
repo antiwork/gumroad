@@ -56,6 +56,16 @@ describe Api::V2::Walks::RealtimeTokensController do
       expect(response).to have_http_status(:bad_gateway)
     end
 
+    it "returns 502 when OpenAI times out" do
+      stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
+        .to_raise(HTTP::TimeoutError.new("execution expired"))
+
+      post :create, params: { access_token: @token.token, topic: "x" }
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(response.parsed_body["error"]).to match(/reach/i)
+    end
+
     it "returns 401 without an access token" do
       post :create, params: { topic: "x" }
       expect(response).to have_http_status(:unauthorized)
