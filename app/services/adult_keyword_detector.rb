@@ -11,7 +11,7 @@ class AdultKeywordDetector
        "pinup", "impregnation", "gagged", "hentai", "squirt", "orgasm", "virginkiller", "abdl", "crotch",
        "breast inflation", "ahri", "granblue", "lingerie",
        "boudoir", "kink", "shibari", "gutpunch", "gutpunching", "abs punch", "necro",
-       "vibrator", "fetish", "nsfw", "saucy", "footjob", "joi"].join("|") +
+       "vibrator", "fetish", "nsfw", "footjob", "joi"].join("|") +
     ")\\b"
   ).freeze
 

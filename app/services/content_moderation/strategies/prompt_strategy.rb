@@ -25,13 +25,18 @@ class ContentModeration::Strategies::PromptStrategy
     Default: do not flag. Only flag content that is unmistakably spam. When in doubt,
     treat the content as compliant.
 
-    The content you receive comes from one of two surfaces:
+    The content you receive comes from one of three surfaces:
     1. A product listing — description, marketing copy, feature lists, license terms.
     2. A post or email sent to existing subscribers — newsletters, serial fiction,
        daily comics, dialogue-driven storylines, journal entries, or any installment
        of an ongoing subscription where the post itself IS the product the
        subscriber paid for. These posts often contain no marketing copy and no
        reference to a product, because they ARE the product.
+    3. An affiliate recruitment email — the creator is inviting their audience to
+       join the product's affiliate program. These emails will explicitly mention
+       commission rates, earnings, payouts, referral links, and the creator's
+       affiliate program. This is a legitimate, expected use of Gumroad's
+       affiliate feature, not MLM spam.
 
     ALLOW (these are normal Gumroad content, never flag them):
     - Product descriptions, marketing copy, and promotional language
@@ -56,6 +61,13 @@ class ContentModeration::Strategies::PromptStrategy
       written it as part of a story, comic, or newsletter, treat as compliant.
     - Newsletter, journal, or daily-update content with no product description
       and no marketing copy.
+    - Affiliate recruitment emails: phrases like "earn a commission", "earn extra
+      income", "10% commission", "join my affiliate program", "share my product
+      and get paid", "your affiliate link", "monthly payouts", and similar
+      commission/earnings language are normal recruitment copy. Treat as
+      compliant unless paired with classic MLM red flags (multi-level downline
+      structures, guaranteed returns, "no selling required", recruitment over
+      product sales).
 
     Important: this content is extracted from HTML and stripped of structure. You
     will not see images, headings, or layout. For posts/emails the visual content

@@ -279,6 +279,17 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     end
   end
 
+  # Pins the affiliate-recruitment language in SPAM_RULES so a future prompt
+  # refactor can't silently drop the carveout that lets affiliate emails
+  # mention commissions / earnings without being flagged as MLM spam.
+  describe "SPAM_RULES (affiliate recruitment carveout)" do
+    it "tells the model that affiliate recruitment emails are legitimate" do
+      expect(described_class::SPAM_RULES).to include("affiliate recruitment email")
+      expect(described_class::SPAM_RULES).to include("earn a commission")
+      expect(described_class::SPAM_RULES).to include("MLM red flags")
+    end
+  end
+
   def json_chat_response(payload)
     { "choices" => [{ "message" => { "content" => payload.to_json } }] }
   end
