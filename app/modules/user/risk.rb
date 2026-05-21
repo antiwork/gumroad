@@ -121,7 +121,7 @@ module User::Risk
 
   def unblock_seller_ip!
     return if last_sign_in_ip.blank?
-    PlatformBlock.find_by(object_value: last_sign_in_ip)&.unblock!
+    PlatformBlock.ip_address.where(object_value: last_sign_in_ip).find_each(&:unblock!)
   end
 
   def delete_custom_domain!
