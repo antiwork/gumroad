@@ -349,6 +349,118 @@ describe Api::V2::SalesController do
     end
   end
 
+  describe "POST 'export'" do
+    before do
+      @params = {}
+      allow(Exports::PurchaseExportService).to receive(:export).and_return(false)
+    end
+
+    describe "when logged in with sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "queues a sales export for the current seller" do
+        post :export, params: @params.merge(from: "2026-01-01", to: "2026-05-21", product_id: @product.external_id)
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          status: "queued",
+          recipient_email: @seller.email
+        }.as_json)
+        expect(Exports::PurchaseExportService).to have_received(:export).with(
+          seller: @seller,
+          recipient: @seller,
+          filters: {
+            start_time: "2026-01-01",
+            end_time: "2026-05-21",
+            product_ids: [@product.external_id]
+          },
+          force_async: true
+        )
+      end
+
+      it "queues a sales export without optional filters" do
+        post :export, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          status: "queued",
+          recipient_email: @seller.email
+        }.as_json)
+        expect(Exports::PurchaseExportService).to have_received(:export).with(
+          seller: @seller,
+          recipient: @seller,
+          filters: {},
+          force_async: true
+        )
+      end
+
+      it "returns a 400 error if from date format is incorrect" do
+        post :export, params: @params.merge(from: "394293")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid date format provided in field 'from'. Dates must be in the format YYYY-MM-DD."
+        }.as_json)
+        expect(Exports::PurchaseExportService).not_to have_received(:export)
+      end
+
+      it "returns a 400 error when both dates are incorrectly formatted" do
+        post :export, params: @params.merge(from: "394293", to: "invalid-date")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid date format provided in field 'from'. Dates must be in the format YYYY-MM-DD."
+        }.as_json)
+        expect(Exports::PurchaseExportService).not_to have_received(:export)
+      end
+
+      it "returns a 400 error if to date format is incorrect" do
+        post :export, params: @params.merge(to: "invalid-date")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid date format provided in field 'to'. Dates must be in the format YYYY-MM-DD."
+        }.as_json)
+        expect(Exports::PurchaseExportService).not_to have_received(:export)
+      end
+
+      it "returns a 400 error if product ID is invalid" do
+        post :export, params: @params.merge(product_id: "invalid base64")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid product ID."
+        }.as_json)
+        expect(Exports::PurchaseExportService).not_to have_received(:export)
+      end
+    end
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        post :export, params: @params
+        expect(response.code).to eq "403"
+      end
+    end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      post :export, params: { access_token: token.token, format: :json }
+      expect(response).to be_successful
+    end
+  end
+
   describe "PUT 'mark_as_shipped'" do
     before do
       @product = create(:product, user: @seller)
