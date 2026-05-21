@@ -260,9 +260,10 @@ class StripePayoutProcessor
   end
 
   # Aborts the payout cycle when Gumroad's recorded view of `balances_held_by_stripe` exceeds the
-  # actual `available` balance at the destination Stripe account. Catches FX drift before any internal
-  # transfer fires, preventing the transfer/payout-fail/reverse/FX-residual-Credit loop that
-  # otherwise compounds the gap each cycle.
+  # actual `available + pending` balance at the destination Stripe account. Catches FX drift before
+  # any internal transfer fires, preventing the transfer/payout-fail/reverse/FX-residual-Credit loop
+  # that otherwise compounds the gap each cycle. Pending is included so settling funds (the typical
+  # 2-7 day post-charge window) are not flagged as drift — only truly missing funds are.
   def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
     return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
     return nil if balances_held_by_stripe.empty?
@@ -276,14 +277,16 @@ class StripePayoutProcessor
 
     stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: merchant_account.charge_processor_merchant_id })
     destination_currency = merchant_account.currency.to_s
-    available_cents = stripe_balance.available.find { |b| b.currency == destination_currency }&.amount || 0
+    available_cents = stripe_balance.available&.find { |b| b.currency == destination_currency }&.amount || 0
+    pending_cents = stripe_balance.pending&.find { |b| b.currency == destination_currency }&.amount || 0
+    reachable_cents = available_cents + pending_cents
 
-    return nil if available_cents >= expected_destination_cents
+    return nil if reachable_cents >= expected_destination_cents
 
-    gap_cents = expected_destination_cents - available_cents
+    gap_cents = expected_destination_cents - reachable_cents
     "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
       "expected #{expected_destination_cents} #{destination_currency} cents, " \
-      "Stripe has #{available_cents} cents available (gap: #{gap_cents} cents). " \
+      "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
       "Reconcile destination balance before retry."
   end
   private_class_method :destination_balance_drift_error

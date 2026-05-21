@@ -287,10 +287,12 @@ describe StripePayoutProcessor, :vcr do
         .and_return([eur_merchant_account, [], [eur_balance]])
     end
 
-    context "when Stripe's available balance is less than Gumroad's recorded held-at-Stripe balance" do
+    context "when Stripe's available + pending balance is less than Gumroad's recorded held-at-Stripe balance" do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
-          Stripe::Balance.construct_from(object: "balance", available: [{ amount: 1_096_45, currency: "eur" }])
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_096_45, currency: "eur" }],
+                                          pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -313,10 +315,29 @@ describe StripePayoutProcessor, :vcr do
       end
     end
 
+    context "when Stripe's pending balance covers the gap (funds settling, no true drift)" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_096_45, currency: "eur" }],
+                                          pending: [{ amount: 26_000, currency: "eur" }])
+        )
+      end
+
+      it "does not flag drift because settling pending funds will land before next cycle" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq([])
+        expect(payment.state).not_to eq("failed")
+      end
+    end
+
     context "when Stripe's available balance matches or exceeds Gumroad's recorded held-at-Stripe balance" do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
-          Stripe::Balance.construct_from(object: "balance", available: [{ amount: 1_400_00, currency: "eur" }])
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_400_00, currency: "eur" }],
+                                          pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -332,11 +353,13 @@ describe StripePayoutProcessor, :vcr do
     context "when Stripe has no balance entry in the destination currency" do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
-          Stripe::Balance.construct_from(object: "balance", available: [{ amount: 1_400_00, currency: "usd" }])
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_400_00, currency: "usd" }],
+                                          pending: [{ amount: 50_000, currency: "usd" }])
         )
       end
 
-      it "treats it as zero and fails with the full gap" do
+      it "treats both available and pending as zero for the missing currency and fails with the full gap" do
         errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
 
         expect(errors.first).to include("Destination Stripe balance mismatch")
