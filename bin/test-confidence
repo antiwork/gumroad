@@ -143,7 +143,6 @@ Think about:
 - What could break that isn't obvious?
 - What are the transitive dependencies?
 - How risky is this change?
-- spec/requests/ are END-TO-END browser tests (Capybara + Cuprite). For high/critical risk changes, front-load relevant e2e specs into the 80% and 95% milestones — they catch integration bugs that unit tests miss. A checkout flow change should have spec/requests/checkout/ tests in the 80% tier, not buried at 99%.
 
 ## Directories touched by the diff:
 ${TOUCHED_DIRS}
@@ -275,18 +274,24 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
-# Verify whether failures are pre-existing by re-running the failing examples
-# on merge-base in a temporary worktree. This is the ground truth — if the same
-# examples fail on merge-base, they're pre-existing regardless of whether the
-# source file is in the diff.
+# Verify a heuristic "pre-existing" verdict by re-running the failing examples
+# on merge-base in a temporary worktree.
 #
 # Returns: 0 = confirmed pre-existing (failed on merge-base too)
-#          1 = real regression (passed on merge-base, fails on HEAD)
-#          2 = couldn't verify (no merge-base, worktree failed, parse failure)
+#          1 = real cross-file regression (passed on merge-base, fails on HEAD)
+#          2 = couldn't verify (no merge-base, schema/dep drift, parse failure)
 verify_preexisting_on_merge_base() {
   local rspec_output=$1
 
   [[ -z "$MERGE_BASE" ]] && return 2
+
+  # Skip when DB schema or bundler state likely diverges from merge-base
+  if echo "$CHANGED_ALL" | grep -qE '^db/migrate/.*\.rb$'; then
+    return 2
+  fi
+  if echo "$CHANGED_ALL" | grep -qxF 'Gemfile.lock'; then
+    return 2
+  fi
 
   local failing_ids
   failing_ids=$(echo "$rspec_output" | grep -E '^rspec \./spec/' | awk '{print $2}' | head -50)
@@ -402,9 +407,7 @@ for (( m=0; m<MILESTONES; m++ )); do
       printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
     else
       verdict="regression"
-      if [[ "$STRICT" != true ]]; then
-        # Always try merge-base verification first — it's the ground truth.
-        # The heuristic is only a fallback when merge-base can't run.
+      if [[ "$STRICT" != true ]] && is_likely_preexisting "$spec"; then
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  🔍 verifying %s on merge-base..." \
@@ -418,12 +421,7 @@ for (( m=0; m<MILESTONES; m++ )); do
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
           1) verdict="cross-file regression" ;;
-          2)
-            # Merge-base verification couldn't run — fall back to heuristic
-            if is_likely_preexisting "$spec"; then
-              verdict="likely pre-existing (unverified)"
-            fi
-            ;;
+          2) verdict="likely pre-existing (unverified)" ;;
         esac
       fi
 
