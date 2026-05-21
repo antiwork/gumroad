@@ -25,6 +25,15 @@ class HealthcheckController < ApplicationController
     render plain: "PayPal balance: #{message}", status:
   end
 
+  def purchases
+    threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
+    count = Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count
+    healthy = threshold.present? && count >= threshold.to_i
+    status = healthy ? :ok : :service_unavailable
+
+    render plain: "Purchases: #{status}", status:
+  end
+
   SIDEKIQ_QUEUE_LIMITS = { critical: 12_000, default: 300_000 }
   SIDEKIQ_RETRIES_LIMIT = 20_000
   private_constant :SIDEKIQ_QUEUE_LIMITS, :SIDEKIQ_RETRIES_LIMIT

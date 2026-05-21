@@ -6,6 +6,7 @@
     <li><a href="#Discounts-for-memberships-_Pxb_" target="_self">Discounts for memberships</a></li>
     <li><a href="#Discount-code-customization-nlf76" target="_self">Discount code customization</a></li>
     <li><a href="#limit-to-existing-customers" target="_self">Limit to existing customers</a></li>
+    <li><a href="#tier-discount-by-ownership-duration" target="_self">Tier discount by ownership duration</a></li>
     <li><a href="#edit-discount-codes" target="_self">Edit discount codes</a></li>
     <li><a href="#FAQs-pJIfb" target="_self">FAQs</a></li>
   </ul>
@@ -28,7 +29,7 @@
     <li><b>Once (first billing period only)</b> — applies only to the first charge. Renewals charge full price.</li>
   </ul>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64a11a8674f970393a8b0b36/file-GRMdcSBATo.png" %></figure>
-  <p>Want the opposite — full price up front, discount on renewals? Set that up under <a href="#limit-to-existing-customers">Limit to existing customers</a>.</p>
+  <p>Want the opposite — full price up front, discount on renewals? Set that up under <a href="#tier-discount-by-ownership-duration">Tier discount by ownership duration</a>.</p>
   <h3 id="Discount-code-customization-nlf76">Discount code customization</h3>
   <p>You can customize a discount code by setting these parameters:</p>
   <br>
@@ -61,12 +62,11 @@
   <figure><%= image_tag "help_center/discount-existing-customers.png", alt: "Limit to existing customers toggle with the Must have purchased product picker" %></figure>
   <p>A few common setups:</p>
   <ul>
-    <li><b>Discount renewals, not the first charge.</b> On a membership, pick the same membership product under <b>Must have purchased</b>. The first charge isn't discounted — the buyer doesn't own the product yet — but every renewal is. This is the simplest way to give subscribers introductory pricing.</li>
     <li><b>Reward repeat buyers.</b> Pick Product A under <b>Must have purchased</b>, then set the discount to apply to Product B. Buyers who already own A get the discount on B.</li>
-    <li><b>Scale the discount with tenure.</b> See <b>Tiered discounts by ownership duration</b> below.</li>
+    <li><b>Gate a renewal discount on a specific product.</b> Combine this with <a href="#tier-discount-by-ownership-duration">Tier discount by ownership duration</a> if you also want to require the buyer to own a particular product before any tier applies.</li>
   </ul>
-  <h4 id="tiered-discounts-by-ownership-duration">Tiered discounts by ownership duration</h4>
-  <p>Check <b>Tiered discounts by ownership duration</b> to vary the percentage by how long the buyer has owned the product. Each tier covers a range of months, and the percentage kicks in once the buyer crosses into that range.</p>
+  <h3 id="tier-discount-by-ownership-duration">Tier discount by ownership duration</h3>
+  <p>Vary a membership discount by how long the buyer has been subscribed. Turn on <b>Tier discount by ownership duration</b> and add a tier for each milestone. The percentage kicks in once the buyer crosses into that range.</p>
   <figure><%= image_tag "help_center/discount-tiered-ownership.png", alt: "Two-tier discount: 0 to 12 months at 0%, 12+ months at 50%" %></figure>
   <p>Example — introductory pricing on a $50/year membership:</p>
   <ul>
@@ -77,8 +77,9 @@
   <p>A few things to know:</p>
   <ul>
     <li>The first tier must start at 0 months.</li>
-    <li>Tiered discounts require the <b>Percentage</b> discount type — fixed amounts aren't supported.</li>
-    <li>You can't combine tiers with <b>Discount duration for memberships</b>. When tiers are on, that option is hidden — the tiers control the schedule.</li>
+    <li>Tier discounts require the <b>Percentage</b> discount type — fixed amounts aren't supported.</li>
+    <li>Tiers replace <b>Discount duration for memberships</b>. When tiers are on, that option is hidden — the tiers control the schedule.</li>
+    <li>Combine with <a href="#limit-to-existing-customers">Limit to existing customers</a> if you want to require the buyer to own a specific product before any tier applies.</li>
   </ul>
   <h3 id="edit-discount-codes">Edit discount codes</h3>
   <p>Click any discount you want to edit, and a side panel will open. </p>

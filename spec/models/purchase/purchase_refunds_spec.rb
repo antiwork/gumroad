@@ -1189,6 +1189,33 @@ describe "PurchaseRefunds", :vcr do
       end
     end
 
+    context "when called directly via external webhook on a chargedback purchase" do
+      it "creates the Refund record but does not decrement seller balance again" do
+        @purchase.update!(chargeback_date: Time.current)
+        expect(@purchase.chargedback_not_reversed?).to be(true)
+
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)
+        expect(@purchase).to_not receive(:decrement_balance_for_refund_or_chargeback!)
+
+        @purchase.refund_purchase!(flow_of_funds, @refunding_user.id)
+
+        expect(@purchase.reload.refunds).to_not be_empty
+        expect(@purchase.stripe_refunded).to be(true)
+      end
+    end
+
+    context "when called on a chargeback-reversed purchase (seller won dispute)" do
+      it "decrements seller balance normally because the dispute reversal already credited them back" do
+        @purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        expect(@purchase.chargedback_not_reversed?).to be(false)
+
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)
+        expect(@purchase).to receive(:decrement_balance_for_refund_or_chargeback!).and_call_original
+
+        @purchase.refund_purchase!(flow_of_funds, @refunding_user.id)
+      end
+    end
+
     describe "Low balance related sidekiq jobs" do
       before do
         @flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)

@@ -110,7 +110,7 @@ class Purchase::CreateService < Purchase::BaseService
           # discount. The client can't automatically set the upsell discount
           # because it doesn't have a "code". Thus, upsell discount should only
           # be applied when the purchase does not already have a discount code.
-          if !params[:is_purchasing_power_parity_discounted] && purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer).present?
+          if !params[:is_purchasing_power_parity_discounted] && purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present?
             purchase.offer_code = upsell.offer_code
           end
         end

@@ -126,7 +126,7 @@ class CheckoutPresenter
       affiliate_id: params[:affiliate_id],
       recommended_by: params[:recommended_by],
       recommender_model_name: params[:recommender_model_name],
-      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user) } : nil,
+      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) } : nil,
     }
     if include_cross_sells
       value[:product][:cross_sells] = product.available_cross_sells.filter_map do |cross_sell|
@@ -151,7 +151,7 @@ class CheckoutPresenter
           text: cross_sell.text,
           description: Rinku.auto_link(sanitize(cross_sell.description), :all, 'target="_blank" rel="noopener"'),
           offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false),
-          discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user),
+          discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user, product: cross_sell.product),
           ratings: offered_product.display_product_reviews? ? {
             count: offered_product.reviews_count,
             average: offered_product.average_rating,
@@ -368,8 +368,8 @@ class CheckoutPresenter
 
       original_purchase = subscription.original_purchase
       original_offer_code = original_purchase&.purchase_offer_code_discount&.offer_code || original_purchase&.offer_code
-      return nil if original_offer_code&.existing_customers_only? && original_offer_code&.tiered?
+      return nil if original_offer_code&.tiered?
 
-      subscription.original_offer_code&.discount_for_display(buyer:)
+      subscription.original_offer_code&.discount_for_display(buyer:, product: subscription.link, fallback_purchase: original_purchase)
     end
 end

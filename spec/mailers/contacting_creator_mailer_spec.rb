@@ -364,7 +364,7 @@ describe ContactingCreatorMailer do
 
     it "displays the resolved tiered offer code discount" do
       product = create(:product, user: seller, price_cents: 2_00)
-      offer_code = create(:tiered_offer_code, name: "Renewal discount", products: [product], ownership_products: [product], user: seller)
+      offer_code = create(:tiered_offer_code, :for_existing_customers, name: "Renewal discount", products: [product], ownership_products: [product], user: seller)
       purchase = create(:purchase, link: product, seller: product.user, purchaser: buyer, email: buyer.email, offer_code:, displayed_price_cents: 1_00, price_cents: 1_00)
       purchase.create_purchase_offer_code_discount!(
         offer_code:,

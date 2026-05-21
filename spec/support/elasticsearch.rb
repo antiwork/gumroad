@@ -38,6 +38,10 @@ module ElasticsearchHelpers
 
   def index_model_records(model)
     model.import(refresh: true, force: true)
+  rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
+    raise unless e.message.include?("resource_already_exists_exception")
+
+    model.import(refresh: true)
   end
 end
 

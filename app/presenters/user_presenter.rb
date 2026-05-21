@@ -20,7 +20,7 @@ class UserPresenter
   end
 
   def products_for_filter_box
-    user.links.visible.includes(:alive_variants).reject do |product|
+    user.links.visible.includes(:alive_variants, :skus_alive_not_default, variant_categories_alive: :alive_variants).reject do |product|
       product.archived? && !product.has_successful_sales?
     end
   end
