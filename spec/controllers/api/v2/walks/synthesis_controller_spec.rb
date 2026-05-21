@@ -4,12 +4,8 @@ require "spec_helper"
 
 describe Api::V2::Walks::SynthesisController do
   before do
-    @user = create(:user)
-    @app = create(:oauth_application, owner: create(:user))
-    @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
-    allow_any_instance_of(User).to receive(:gumroad_walks_subscribed?).and_return(true)
   end
 
   let(:exchanges) do
@@ -17,7 +13,7 @@ describe Api::V2::Walks::SynthesisController do
   end
 
   describe "POST create" do
-    it "proxies to Anthropic and returns the parsed JSON draft" do
+    it "proxies to Anthropic and returns the parsed JSON draft (anonymous, no JWS)" do
       draft = {
         title: "Pricing Without Spreadsheets",
         description: "Three short paragraphs.",
@@ -25,14 +21,12 @@ describe Api::V2::Walks::SynthesisController do
         chapters: [{ title: "Chapter 1", summary: "Cover topic A" }],
         bullets: ["Insight one"],
       }
-      anthropic_body = {
-        "content" => [{ "type" => "text", "text" => draft.to_json }],
-      }
+      anthropic_body = { "content" => [{ "type" => "text", "text" => draft.to_json }] }
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .with(headers: { "x-api-key" => "sk-ant-test", "anthropic-version" => "2023-06-01" })
         .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
 
-      post :create, params: { access_token: @token.token, topic: "pricing", exchanges: exchanges }
+      post :create, params: { topic: "pricing", exchanges: exchanges }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["title"]).to eq("Pricing Without Spreadsheets")
@@ -47,7 +41,7 @@ describe Api::V2::Walks::SynthesisController do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
+      post :create, params: { topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["title"]).to eq("X")
@@ -56,7 +50,7 @@ describe Api::V2::Walks::SynthesisController do
     it "returns 422 when there aren't enough exchanges" do
       thin = (1..3).map { |i| { question: "Q#{i}", answer: "A#{i}" } }
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: thin }
+      post :create, params: { topic: "x", exchanges: thin }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error"]).to match(/at least.*exchanges|exchanges don't have enough/i)
@@ -65,20 +59,18 @@ describe Api::V2::Walks::SynthesisController do
     it "returns 422 when there are too many exchanges" do
       huge = (1..101).map { |i| { question: "Q#{i}", answer: "A#{i}" } }
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: huge }
+      post :create, params: { topic: "x", exchanges: huge }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error"]).to match(/too long/i)
     end
 
     it "returns 502 when Claude returns unparseable JSON" do
-      anthropic_body = {
-        "content" => [{ "type" => "text", "text" => "Sure! Here is your product:" }],
-      }
+      anthropic_body = { "content" => [{ "type" => "text", "text" => "Sure! Here is your product:" }] }
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
+      post :create, params: { topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:bad_gateway)
       expect(response.parsed_body["error"]).to match(/parse/i)
@@ -88,7 +80,7 @@ describe Api::V2::Walks::SynthesisController do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 529, body: '{"error":"overloaded"}', headers: { "Content-Type" => "application/json" })
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
+      post :create, params: { topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:bad_gateway)
     end
@@ -97,21 +89,20 @@ describe Api::V2::Walks::SynthesisController do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_raise(HTTP::TimeoutError.new("execution expired"))
 
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
+      post :create, params: { topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:bad_gateway)
       expect(response.parsed_body["error"]).to match(/reach/i)
     end
 
-    it "returns 401 without an access token" do
+    it "returns 402 when an X-Apple-Transaction-JWS header is present but invalid" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+      allow(AppStoreWalksJwsVerifier).to receive(:verify)
+        .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: false, error: "chain"))
+
+      request.headers["X-Apple-Transaction-JWS"] = "header.payload.sig"
       post :create, params: { topic: "x", exchanges: exchanges }
-      expect(response).to have_http_status(:unauthorized)
-    end
-
-    it "returns 402 when the user has no active Gumroad Walks subscription" do
-      allow_any_instance_of(User).to receive(:gumroad_walks_subscribed?).and_return(false)
-
-      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:payment_required)
     end

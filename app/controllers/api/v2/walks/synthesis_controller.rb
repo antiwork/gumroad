@@ -5,8 +5,9 @@
 # description, chapters, price, bullets). The iOS app calls this once
 # per walk; the Anthropic key stays server-side.
 class Api::V2::Walks::SynthesisController < Api::V2::BaseController
-  before_action :doorkeeper_authorize!
-  before_action :require_walks_subscription
+  # See RealtimeTokensController for the entitlement rationale.
+  skip_before_action :verify_authenticity_token, only: [:create]
+  before_action :require_walks_entitlement
 
   MIN_EXCHANGES = 5
   MAX_EXCHANGES = 100
@@ -86,9 +87,10 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       nil
     end
 
-    def require_walks_subscription
-      jws = request.headers["X-Apple-Transaction-JWS"].to_s
-      return if current_resource_owner&.gumroad_walks_subscribed?(transaction_jws: jws)
+    def require_walks_entitlement
+      jws = request.headers["X-Apple-Transaction-JWS"].to_s.presence
+      return if jws.nil?
+      return if AppStoreWalksJwsVerifier.verify(jws).valid?
       render json: { error: "Active Gumroad Walks subscription required." }, status: :payment_required
     end
 end
