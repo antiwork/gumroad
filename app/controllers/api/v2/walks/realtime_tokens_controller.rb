@@ -25,17 +25,17 @@ class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
   def create
     topic = params[:topic].to_s
 
-    response = HTTP.timeout(30)
+    upstream = HTTP.timeout(30)
       .auth("Bearer #{GlobalConfig.get('OPENAI_API_KEY')}")
       .post(
         "https://api.openai.com/v1/realtime/client_secrets",
         json: { session: session_config(topic) }
       )
 
-    if response.status.success?
-      render json: response.parse
+    if upstream.status.success?
+      render json: upstream.parse
     else
-      Rails.logger.warn("OpenAI client_secrets failed: #{response.status} #{response.body}")
+      Rails.logger.warn("OpenAI client_secrets failed: #{upstream.status} #{upstream.body}")
       render json: { error: "Could not create realtime session." }, status: :bad_gateway
     end
   end

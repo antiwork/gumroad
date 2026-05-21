@@ -62,6 +62,28 @@ describe Api::V2::Walks::SynthesisController do
       expect(response.parsed_body["error"]).to match(/at least.*exchanges|exchanges don't have enough/i)
     end
 
+    it "returns 422 when there are too many exchanges" do
+      huge = (1..101).map { |i| { question: "Q#{i}", answer: "A#{i}" } }
+
+      post :create, params: { access_token: @token.token, topic: "x", exchanges: huge }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to match(/too long/i)
+    end
+
+    it "returns 502 when Claude returns unparseable JSON" do
+      anthropic_body = {
+        "content" => [{ "type" => "text", "text" => "Sure! Here is your product:" }],
+      }
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { access_token: @token.token, topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(response.parsed_body["error"]).to match(/parse/i)
+    end
+
     it "returns 502 when Anthropic rejects" do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 529, body: '{"error":"overloaded"}', headers: { "Content-Type" => "application/json" })

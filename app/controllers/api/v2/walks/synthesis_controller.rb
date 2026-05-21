@@ -9,6 +9,7 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
   before_action :require_walks_subscription
 
   MIN_EXCHANGES = 5
+  MAX_EXCHANGES = 100
   ANTHROPIC_MODEL = "claude-opus-4-7"
   MAX_TOKENS = 4096
 
@@ -22,10 +23,16 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       }, status: :unprocessable_entity
     end
 
+    if exchanges.length > MAX_EXCHANGES
+      return render json: {
+        error: "Transcript too long — please keep walks under #{MAX_EXCHANGES} exchanges.",
+      }, status: :unprocessable_entity
+    end
+
     transcript = format_transcript(exchanges)
     user_prompt = GumroadWalksPrompts.synthesizer_user(topic:, transcript:)
 
-    response = HTTP.timeout(120)
+    upstream = HTTP.timeout(120)
       .headers(
         "x-api-key" => GlobalConfig.get("ANTHROPIC_API_KEY"),
         "anthropic-version" => "2023-06-01",
@@ -40,11 +47,15 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
         }
       )
 
-    if response.status.success?
-      draft = extract_json_from_anthropic_response(response.parse)
-      render json: draft.merge(model: ANTHROPIC_MODEL)
+    if upstream.status.success?
+      draft = extract_json_from_anthropic_response(upstream.parse)
+      if draft.nil?
+        render json: { error: "Could not parse synthesis result." }, status: :bad_gateway
+      else
+        render json: draft.merge(model: ANTHROPIC_MODEL)
+      end
     else
-      Rails.logger.warn("Anthropic synthesis failed: #{response.status} #{response.body}")
+      Rails.logger.warn("Anthropic synthesis failed: #{upstream.status} #{upstream.body}")
       render json: { error: "Could not synthesize product draft." }, status: :bad_gateway
     end
   end
@@ -66,6 +77,9 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       text = blocks.select { |b| b["type"] == "text" }.map { |b| b["text"].to_s }.join
       cleaned = text.strip.delete_prefix("```json").delete_prefix("```").delete_suffix("```").strip
       JSON.parse(cleaned)
+    rescue JSON::ParserError => e
+      Rails.logger.warn("Anthropic synthesis returned non-JSON: #{e.message} — raw: #{cleaned.truncate(500)}")
+      nil
     end
 
     def require_walks_subscription
