@@ -88,6 +88,8 @@ describe AppStoreWalksJwsVerifier do
       it "returns valid?: true for a current ProSub subscription" do
         result = described_class.verify(make_jws({
           productId: "ProSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Sandbox",
           expiresDate: (Time.current.to_i + 86_400) * 1000,
           originalTransactionId: "1000000123",
         }))
@@ -99,6 +101,8 @@ describe AppStoreWalksJwsVerifier do
       it "rejects an expired subscription" do
         result = described_class.verify(make_jws({
           productId: "ProSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Sandbox",
           expiresDate: (Time.current.to_i - 86_400) * 1000,
         }))
         expect(result.valid?).to be(false)
@@ -108,6 +112,8 @@ describe AppStoreWalksJwsVerifier do
       it "rejects a revoked subscription" do
         result = described_class.verify(make_jws({
           productId: "ProSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Sandbox",
           expiresDate: (Time.current.to_i + 86_400) * 1000,
           revocationDate: (Time.current.to_i - 60) * 1000,
         }))
@@ -117,6 +123,28 @@ describe AppStoreWalksJwsVerifier do
       it "rejects a subscription for a different product id" do
         result = described_class.verify(make_jws({
           productId: "OtherSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Sandbox",
+          expiresDate: (Time.current.to_i + 86_400) * 1000,
+        }))
+        expect(result.valid?).to be(false)
+      end
+
+      it "rejects a subscription from the wrong bundle" do
+        result = described_class.verify(make_jws({
+          productId: "ProSub",
+          bundleId: "com.other.app",
+          environment: "Sandbox",
+          expiresDate: (Time.current.to_i + 86_400) * 1000,
+        }))
+        expect(result.valid?).to be(false)
+      end
+
+      it "rejects a subscription from the wrong environment" do
+        result = described_class.verify(make_jws({
+          productId: "ProSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Production",
           expiresDate: (Time.current.to_i + 86_400) * 1000,
         }))
         expect(result.valid?).to be(false)

@@ -1,24 +1,11 @@
 # frozen_string_literal: true
 
-# Verifies an Apple-signed StoreKit 2 transaction JWS for the Gumroad Walks
-# `ProSub` subscription. iOS clients pass `Transaction.jsonRepresentation`
-# (the raw JWS string) as an `X-Apple-Transaction-JWS` header on calls to
-# the Walks API. We:
-#   1. Decode the JWS header to get the x5c certificate chain.
-#   2. Verify the chain terminates at Apple Root CA G3 (bundled).
-#   3. Verify the JWS signature with the leaf cert's public key.
-#   4. Confirm the payload's `productId` is ProSub, `expiresDate` is in the
-#      future, and `revocationDate` is nil.
-#
-# Returns an immutable Result. Never raises on bad input — just returns
-# `valid? == false` with an `error` string useful for logging.
-#
-# Why not call Apple's App Store Server API on every request? Because
-# verifying a JWS the client already holds is sub-millisecond and offline,
-# while the Server API costs us 50-300ms + a JWT round-trip. We use the
-# Server API only when we need authoritative state (e.g. webhook handling).
+# Verifies Apple-signed StoreKit 2 transaction JWS for the Gumroad Walks
+# ProSub subscription. Returns an immutable Result; never raises on bad input.
 class AppStoreWalksJwsVerifier
   PRODUCT_ID = "ProSub"
+  BUNDLE_ID = "com.gumroad.walks"
+  ENVIRONMENT = Rails.env.production? ? "Production" : "Sandbox"
   APPLE_ROOT_CA_PATH = Rails.root.join("config", "certs", "AppleRootCA-G3.pem")
 
   Result = Struct.new(:valid?, :expires_at, :product_id, :original_transaction_id, :error, keyword_init: true)
@@ -42,8 +29,14 @@ class AppStoreWalksJwsVerifier
       expires_at = ms_to_time(payload["expiresDate"])
       revoked = payload["revocationDate"].present?
       product_id = payload["productId"]
+      bundle_id = payload["bundleId"]
+      environment = payload["environment"]
 
-      ok = !revoked && expires_at && expires_at > Time.current && product_id == PRODUCT_ID
+      ok = !revoked &&
+        expires_at && expires_at > Time.current &&
+        product_id == PRODUCT_ID &&
+        bundle_id == BUNDLE_ID &&
+        environment == ENVIRONMENT
 
       Result.new(
         valid?: ok,
@@ -60,13 +53,7 @@ class AppStoreWalksJwsVerifier
       def chain_valid?(leaf, intermediates)
         store = OpenSSL::X509::Store.new
         store.add_cert(apple_root_ca)
-        intermediates.each do |cert|
-          store.add_cert(cert)
-        rescue OpenSSL::X509::StoreError
-          # Apple's chain may repeat their root; the store rejects duplicates.
-          next
-        end
-        store.verify(leaf)
+        store.verify(leaf, intermediates)
       end
 
       def apple_root_ca
