@@ -215,7 +215,7 @@ class Purchase
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
-      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:)
+      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed

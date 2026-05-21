@@ -466,6 +466,19 @@ describe PaypalChargeProcessor, :vcr do
         expect(@purchase.refunds.count).to eq(1)
       end
 
+      it "records the refund but does not debit the seller's balance again when the purchase is already chargedback" do
+        @purchase.update!(stripe_transaction_id: "0JF852973C016714D", chargeback_date: 1.day.ago)
+        expect(@purchase.chargedback_not_reversed?).to be(true)
+
+        event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "total_refunded_amount" => { "currency_code" => "USD", "value" => "0.99" } }, "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" } }
+
+        expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds.where(processor_refund_id: "1Y107995YT783435V").count).to eq(1)
+      end
+
       it "refunds remaining amount if purchase is partially refunded" do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
         create(:refund, purchase: @purchase, amount_cents: @purchase.price_cents / 2)
