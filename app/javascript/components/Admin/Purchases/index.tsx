@@ -650,6 +650,16 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         success_message="Undeleted!"
       />
     ) : null}
+    {!purchase.email?.includes("@deleted.gumroad.com") ? (
+      <AdminActionButton
+        label="GDPR Erase Buyer"
+        url={Routes.gdpr_erase_buyer_admin_purchase_path(purchase.external_id)}
+        loading="Erasing buyer PII..."
+        done="Buyer PII erased!"
+        confirm_message="⚠️ GDPR ERASURE — This will permanently anonymize ALL PII for this buyer's email across ALL purchases and related tables. This cannot be undone. Proceed?"
+        success_message="Buyer PII erased across all tables!"
+      />
+    ) : null}
     {purchase.successful ? (
       <Button asChild size="sm">
         <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">

@@ -133,6 +133,7 @@ namespace :admin do
       post :block_buyer
       post :unblock_buyer
       post :undelete
+      post :gdpr_erase_buyer
     end
   end
 

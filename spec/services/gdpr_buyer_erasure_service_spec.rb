@@ -1,0 +1,109 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe GdprBuyerErasureService do
+  let(:admin) { create(:user, is_team_member: true) }
+  let(:buyer_email) { "guest-buyer@example.com" }
+
+  describe "#perform!" do
+    it "raises when email is blank" do
+      expect { described_class.new("", performed_by: admin).perform! }.to raise_error(ArgumentError, /Email is required/)
+    end
+
+    it "raises when email belongs to a registered user" do
+      create(:user, email: "registered@example.com")
+      expect { described_class.new("registered@example.com", performed_by: admin).perform! }.to raise_error(ArgumentError, /Use GdprDataErasureService/)
+    end
+
+    context "with guest buyer data" do
+      let!(:purchase1) do
+        create(:free_purchase, email: buyer_email, purchaser: nil).tap do |p|
+          p.update_columns(
+            full_name: "Jane Doe",
+            ip_address: "1.2.3.4",
+            street_address: "123 Main St",
+            city: "NYC",
+            state: "NY",
+            zip_code: "10001",
+            country: "US",
+            stripe_fingerprint: "fp_123",
+            card_visual: "**** 4242",
+            card_bin: "424242",
+            custom_fields: '{"phone": "555-1234"}',
+          )
+        end
+      end
+      let!(:purchase2) do
+        create(:free_purchase, email: buyer_email, purchaser: nil).tap do |p|
+          p.update_columns(full_name: "Jane Doe", ip_address: "1.2.3.5")
+        end
+      end
+      let!(:unrelated_purchase) { create(:free_purchase, email: "other@example.com", purchaser: nil) }
+
+      it "anonymizes all purchases matching the email" do
+        result = described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(result[:counts][:purchases]).to eq(2)
+
+        purchase1.reload
+        expect(purchase1.email).to end_with("@deleted.gumroad.com")
+        expect(purchase1.full_name).to eq("[deleted]")
+        expect(purchase1.ip_address).to be_nil
+        expect(purchase1.street_address).to be_nil
+        expect(purchase1.city).to be_nil
+        expect(purchase1.stripe_fingerprint).to be_nil
+        expect(purchase1.card_visual).to be_nil
+        expect(purchase1.card_bin).to be_nil
+        expect(purchase1.custom_fields).to be_blank
+
+        unrelated_purchase.reload
+        expect(unrelated_purchase.email).to eq("other@example.com")
+      end
+
+      it "anonymizes followers by email" do
+        follower = Follower.create!(email: buyer_email, user: purchase1.seller)
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        follower.reload
+        expect(follower.email).to end_with("@deleted.gumroad.com")
+      end
+
+      it "anonymizes carts by email" do
+        cart = Cart.create!(email: buyer_email, ip_address: "5.6.7.8", browser_guid: "abc123", user: purchase1.seller)
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        cart.reload
+        expect(cart.email).to end_with("@deleted.gumroad.com")
+        expect(cart.ip_address).to be_nil
+        expect(cart.browser_guid).to be_nil
+      end
+
+      it "logs erasure on affected sellers" do
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        seller = purchase1.seller.reload
+        comment = seller.comments.last
+        expect(comment.content).to include("GDPR buyer erasure")
+        expect(comment.author_id).to eq(admin.id)
+      end
+
+      it "generates a deterministic anonymized email" do
+        result = described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(result[:anonymized_to]).to start_with("buyer-")
+        expect(result[:anonymized_to]).to end_with("@deleted.gumroad.com")
+      end
+
+      it "does not touch purchases with different emails" do
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        unrelated_purchase.reload
+        expect(unrelated_purchase.full_name).not_to eq("[deleted]")
+      end
+    end
+  end
+end
