@@ -69,15 +69,19 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   return (
     <TableRow>
       <ProductIconCell
-        href={review.product.url}
+        href={review.product.available ? review.product.url : undefined}
         thumbnail={review.product.thumbnail_url ?? null}
         placeholder={<img src={nativeTypeThumbnails[`./${review.product.native_type}.svg`]} />}
       />
       <TableCell className="break-words">
         <div>
-          <a href={review.product.url} target="_blank" rel="noreferrer">
+          {review.product.available ? (
+            <a href={review.product.url} target="_blank" rel="noreferrer">
+              <h4>{review.product.name}</h4>
+            </a>
+          ) : (
             <h4>{review.product.name}</h4>
-          </a>
+          )}
           By{" "}
           <a href={review.product.seller.url} target="_blank" rel="noreferrer">
             {review.product.seller.name}
