@@ -157,7 +157,7 @@ module Charge::Disputable
     FightDisputeJob.perform_async(dispute_evidence.dispute.id) if dispute_evidence.present?
   end
 
-  def resolve_unsubmitted_dispute_evidence!(error_message)
+  def resolve_pending_dispute_evidence_if_any!(error_message)
     evidence = dispute.dispute_evidence
     return if evidence.nil? || evidence.resolved?
 
@@ -212,14 +212,14 @@ module Charge::Disputable
 
     ContactingCreatorMailer.chargeback_won(dispute.id).deliver_later unless disputed_purchases.all?(&:refunded?)
 
-    resolve_unsubmitted_dispute_evidence!("Dispute closed (won) before evidence was submitted.")
+    resolve_pending_dispute_evidence_if_any!("Dispute closed (won) before evidence was submitted.")
   end
 
   def handle_event_dispute_lost!(event)
     dispute = find_or_build_dispute(event)
     dispute.mark_lost!
 
-    resolve_unsubmitted_dispute_evidence!("Dispute closed (lost) before evidence was submitted.")
+    resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
 
     return unless first_product_without_refund_policy.present?
 
