@@ -19,7 +19,9 @@ describe AdultKeywordDetector do
      "small fuéta",
      "Yuri Gagarin was a great astronaut",
      "Tentacle Monster Hat",
-     "ns fw"].each do |text|
+     "ns fw",
+     "Signature Seerie Episode 12 - Saucy",
+     "a saucy magic trick"].each do |text|
       expect(described_class.adult?(text)).to eq(false)
     end
   end

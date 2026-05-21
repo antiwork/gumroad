@@ -1446,7 +1446,7 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).not_to have_key("status")
     end
 
-    it "re-establishes the block when the admin flag is stale and BlockedObject was cleared elsewhere" do
+    it "re-establishes the block when the admin flag is stale and PlatformBlock was cleared elsewhere" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       purchase.unblock_buyer!
       purchase.update!(is_buyer_blocked_by_admin: true)
@@ -1520,7 +1520,7 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
-    it "clears the stale admin flag when BlockedObject was cleared elsewhere" do
+    it "clears the stale admin flag when PlatformBlock was cleared elsewhere" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       purchase.unblock_buyer!
       purchase.update!(is_buyer_blocked_by_admin: true)

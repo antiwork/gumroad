@@ -12,7 +12,10 @@ module Charge::Disputable
     end
 
     def charge_processor_transaction_id
-      is_a?(Charge) ? processor_transaction_id : stripe_transaction_id
+      return stripe_transaction_id unless is_a?(Charge)
+      return processor_transaction_id if processor_transaction_id.present?
+
+      disputed_purchases.one? ? disputed_purchases.first.stripe_transaction_id : nil
     end
 
     def purchase_for_dispute_evidence
@@ -154,6 +157,16 @@ module Charge::Disputable
     FightDisputeJob.perform_async(dispute_evidence.dispute.id) if dispute_evidence.present?
   end
 
+  def resolve_pending_dispute_evidence_if_any!(error_message)
+    evidence = dispute.dispute_evidence
+    return if evidence.nil? || evidence.resolved?
+
+    evidence.update_as_resolved!(
+      resolution: DisputeEvidence::RESOLUTION_REJECTED,
+      error_message:
+    )
+  end
+
   def handle_event_dispute_won!(event)
     unless disputed_purchases.any?(&:successful?)
       ErrorNotifier.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
@@ -198,11 +211,16 @@ module Charge::Disputable
     end
 
     ContactingCreatorMailer.chargeback_won(dispute.id).deliver_later unless disputed_purchases.all?(&:refunded?)
+
+    resolve_pending_dispute_evidence_if_any!("Dispute closed (won) before evidence was submitted.")
   end
 
   def handle_event_dispute_lost!(event)
     dispute = find_or_build_dispute(event)
     dispute.mark_lost!
+
+    resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
+
     return unless first_product_without_refund_policy.present?
 
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id).deliver_later

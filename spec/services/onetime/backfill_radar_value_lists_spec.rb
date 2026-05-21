@@ -12,8 +12,8 @@ describe Onetime::BackfillRadarValueLists do
   describe "#process" do
     it "pushes all active blocked emails and cards regardless of date" do
       travel_to 1.year.ago do
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "old@example.com", nil)
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:charge_processor_fingerprint], "fpold", nil)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "old@example.com")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpold")
       end
 
       expect(Stripe::Radar::ValueListItem).to receive(:create).with(
@@ -29,7 +29,7 @@ describe Onetime::BackfillRadarValueLists do
     end
 
     it "skips unblocked entries" do
-      blocked = BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "unblocked@example.com", nil)
+      blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "unblocked@example.com")
       blocked.unblock!
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
@@ -38,14 +38,14 @@ describe Onetime::BackfillRadarValueLists do
     end
 
     it "processes entries in batches" do
-      3.times { |i| BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "buyer-#{i}@example.com", nil) }
+      3.times { |i| PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "buyer-#{i}@example.com") }
       allow(Stripe::Radar::ValueListItem).to receive(:create)
 
       expect { described_class.process(batch_size: 2) }.to output(/Radar email backfill: 2 pushed.*Radar email backfill: 3 pushed/m).to_stdout
     end
 
     it "ignores duplicate item errors" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "dup@example.com", nil)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "dup@example.com")
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))

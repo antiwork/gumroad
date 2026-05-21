@@ -16,6 +16,7 @@ import { Card } from "$app/components/ui/Card";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
 
@@ -34,6 +35,7 @@ type Product = {
   permalink: string;
   thumbnail_url: string | null;
   native_type: ProductNativeType;
+  available: boolean;
   seller: {
     name: string;
     url: string;
@@ -67,15 +69,19 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   return (
     <TableRow>
       <ProductIconCell
-        href={review.product.url}
+        href={review.product.available ? review.product.url : undefined}
         thumbnail={review.product.thumbnail_url ?? null}
         placeholder={<img src={nativeTypeThumbnails[`./${review.product.native_type}.svg`]} />}
       />
       <TableCell className="break-words">
         <div>
-          <a href={review.product.url} target="_blank" rel="noreferrer">
+          {review.product.available ? (
+            <a href={review.product.url} target="_blank" rel="noreferrer">
+              <h4>{review.product.name}</h4>
+            </a>
+          ) : (
             <h4>{review.product.name}</h4>
-          </a>
+          )}
           By{" "}
           <a href={review.product.seller.url} target="_blank" rel="noreferrer">
             {review.product.seller.name}
@@ -91,27 +97,35 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       <TableCell className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
       <TableCell>
         <div className="flex flex-wrap gap-3 lg:justify-end">
-          <Popover open={isEditing} onOpenChange={setIsEditing}>
-            <PopoverAnchor>
-              <PopoverTrigger aria-label="Edit" asChild>
-                <Button size="icon">
-                  <Pencil className="size-5" />
-                </Button>
-              </PopoverTrigger>
-            </PopoverAnchor>
-            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none" usePortal>
-              <Card>
-                <ReviewForm
-                  permalink={review.product.permalink}
-                  purchaseId={review.purchase_id}
-                  purchaseEmailDigest={review.purchase_email_digest}
-                  review={review}
-                  onChange={(newReview) => onChange({ ...review, ...newReview })}
-                  className="flex flex-wrap items-center justify-between gap-4 p-4"
-                />
-              </Card>
-            </PopoverContent>
-          </Popover>
+          {review.product.available ? (
+            <Popover open={isEditing} onOpenChange={setIsEditing}>
+              <PopoverAnchor>
+                <PopoverTrigger aria-label="Edit" asChild>
+                  <Button size="icon">
+                    <Pencil className="size-5" />
+                  </Button>
+                </PopoverTrigger>
+              </PopoverAnchor>
+              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none" usePortal>
+                <Card>
+                  <ReviewForm
+                    permalink={review.product.permalink}
+                    purchaseId={review.purchase_id}
+                    purchaseEmailDigest={review.purchase_email_digest}
+                    review={review}
+                    onChange={(newReview) => onChange({ ...review, ...newReview })}
+                    className="flex flex-wrap items-center justify-between gap-4 p-4"
+                  />
+                </Card>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <WithTooltip tip="Removed by the seller" position="left">
+              <Button size="icon" aria-label="Edit" disabled>
+                <Pencil className="size-5" />
+              </Button>
+            </WithTooltip>
+          )}
         </div>
       </TableCell>
     </TableRow>

@@ -158,7 +158,7 @@ describe Purchase::Risk do
     before do
       @user = create(:user, account_created_ip: "123.121.11.1")
       @product = create(:product, user: @user)
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:ip_address], "192.378.12.1", nil, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "192.378.12.1", expires_in: 1.hour)
     end
 
     it "handles timeout and returns nil" do
@@ -184,7 +184,7 @@ describe Purchase::Risk do
 
     it "returns errors if the buyer browser_guid has been blocked" do
       browser_guid = "abc123"
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:browser_guid], browser_guid, nil, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid, expires_in: 1.hour)
 
       bad_purchase = build(:purchase, link: @product, browser_guid:)
       bad_purchase.send(:check_for_fraud)
@@ -193,7 +193,7 @@ describe Purchase::Risk do
     end
 
     it "returns errors if the seller ip_address has been blocked" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:ip_address], "123.121.11.1", nil, expires_in: 1.hour)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
       bad_purchase = build(:purchase, link: @product, seller: @user)
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
@@ -203,7 +203,7 @@ describe Purchase::Risk do
       let(:blocked_ip_address) { "192.1.2.3" }
 
       before do
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:ip_address], blocked_ip_address, nil, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: blocked_ip_address, expires_in: 1.hour)
       end
 
       it "returns error if the purchaser's ip_address has been blocked" do
@@ -257,7 +257,7 @@ describe Purchase::Risk do
 
       before do
         seller.update!(account_created_ip: "123.121.11.1", user_risk_state: "compliant")
-        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:ip_address], "123.121.11.1", nil, expires_in: 1.hour)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
       end
 
       it "doesn't return errors" do
@@ -275,7 +275,7 @@ describe Purchase::Risk do
         vague_purchase_error_notice = "Your card was not charged."
 
         it "returns error if the specified email domain has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "example.com", nil)
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
 
           expect do
             purchase.check_for_fraud
@@ -284,7 +284,7 @@ describe Purchase::Risk do
         end
 
         it "returns error if the purchaser's email domain has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], Mail::Address.new(purchaser.email).domain, nil)
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: Mail::Address.new(purchaser.email).domain)
 
           expect do
             purchase.check_for_fraud
@@ -317,7 +317,7 @@ describe Purchase::Risk do
           end
 
           it "returns error if the gift recipient's email domain has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "giftee.com", nil)
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "giftee.com")
 
             expect(giftee_purchase.price_cents).to eq 0
             expect(gifter_purchase.price_cents).to eq 100
@@ -329,7 +329,7 @@ describe Purchase::Risk do
           end
 
           it "returns error if the gift sender's email domain has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "gifter.com", nil)
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "gifter.com")
 
             expect do
               gifter_purchase.check_for_fraud
@@ -340,7 +340,7 @@ describe Purchase::Risk do
           it "returns error without raising when gifter_purchase is not yet persisted on the gift" do
             gift.update_column(:gifter_purchase_id, nil)
             gift.reload
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "giftee.com", nil)
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "giftee.com")
 
             expect do
               giftee_purchase.check_for_fraud
@@ -356,7 +356,7 @@ describe Purchase::Risk do
         vague_purchase_error_notice_for_free_products = "The transaction could not complete."
 
         it "returns error if the specified email domain has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "example.com", nil)
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
 
           expect do
             free_purchase.check_for_fraud
@@ -365,7 +365,7 @@ describe Purchase::Risk do
         end
 
         it "returns error if the purchaser's email domain has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], Mail::Address.new(purchaser.email).domain, nil)
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: Mail::Address.new(purchaser.email).domain)
 
           expect do
             free_purchase.check_for_fraud
@@ -398,7 +398,7 @@ describe Purchase::Risk do
           end
 
           it "returns error if the gift recipient's email domain has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "giftee.com", nil)
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "giftee.com")
 
             expect(giftee_purchase.price_cents).to eq 0
             expect(gifter_purchase.price_cents).to eq 0
@@ -410,7 +410,7 @@ describe Purchase::Risk do
           end
 
           it "returns error if the gift sender's email domain has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "gifter.com", nil)
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "gifter.com")
 
             expect do
               gifter_purchase.check_for_fraud

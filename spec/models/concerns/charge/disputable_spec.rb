@@ -74,6 +74,25 @@ describe Charge::Disputable, :vcr do
       expect(paypal_charge.charge_processor_transaction_id).to eq("pp_12345")
       expect(braintree_charge.charge_processor_transaction_id).to eq("bt_12345")
     end
+
+    context "when the Charge has no processor_transaction_id" do
+      let(:charge_without_processor_txn) do
+        create(:charge,
+               processor: StripeChargeProcessor.charge_processor_id,
+               processor_transaction_id: nil)
+      end
+
+      it "falls back to the single underlying purchase's stripe_transaction_id" do
+        charge_without_processor_txn.purchases << stripe_purchase
+        expect(charge_without_processor_txn.charge_processor_transaction_id).to eq("ch_12345")
+      end
+
+      it "returns nil when multiple underlying purchases are present" do
+        charge_without_processor_txn.purchases << stripe_purchase
+        charge_without_processor_txn.purchases << create(:purchase, stripe_transaction_id: "ch_67890")
+        expect(charge_without_processor_txn.charge_processor_transaction_id).to be_nil
+      end
+    end
   end
 
   describe "#purchase_for_dispute_evidence" do
@@ -998,6 +1017,18 @@ describe Charge::Disputable, :vcr do
             allow(mail_double).to receive(:deliver_later)
             expect(ContactingCreatorMailer).to_not receive(:chargeback_lost_no_refund_policy)
             Purchase.handle_charge_event(event)
+          end
+        end
+
+        context "with an unsubmitted dispute evidence on the purchase" do
+          let!(:dispute) { create(:dispute_formalized, purchase:) }
+          let!(:dispute_evidence) { create(:dispute_evidence, dispute:) }
+
+          it "resolves the dispute evidence as rejected" do
+            Purchase.handle_charge_event(event)
+            expect(dispute_evidence.reload.resolved?).to eq(true)
+            expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)
+            expect(dispute_evidence.error_message).to include("Dispute closed (lost)")
           end
         end
 

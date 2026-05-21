@@ -646,12 +646,29 @@ describe Exports::PurchaseExportService do
     end
   end
 
+  describe ".export" do
+    it "queues the export when async delivery is forced" do
+      seller = create(:user)
+      recipient = create(:user)
+      allow(EsClient).to receive(:count).and_return({ "count" => 1 })
+
+      expect do
+        @result = described_class.export(seller:, recipient:, force_async: true)
+      end.to change(SalesExport, :count).by(1)
+
+      export = SalesExport.last!
+      expect(@result).to eq(false)
+      expect(export.recipient).to eq(recipient)
+      expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
+    end
+  end
+
   def csv_safe(value)
     return value if value.nil?
     str = value.to_s
     return value if str.empty?
     first = str[0]
-    if first == '+' || first == '-'
+    if first == "+" || first == "-"
       return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
     end
     %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value

@@ -60,6 +60,7 @@ export type LayoutProps = {
     product_long_url: string | null;
     created_at: string;
     allows_review: boolean;
+    product_available: boolean;
     disable_reviews_after_year: boolean;
     review: Review | null;
     membership: {
@@ -112,11 +113,15 @@ export const Layout = ({
   const receiptPurchaseId = purchase?.bundle_purchase_id ?? purchase?.id;
 
   const disabledStatus =
-    purchase && differenceInYears(new Date(), parseISO(purchase.created_at)) >= 1 && purchase.disable_reviews_after_year
-      ? "Reviews may not be created or modified for this product 1 year after purchase."
-      : purchase?.membership?.in_free_trial
-        ? "Reviews are not allowed during the free trial period."
-        : null;
+    purchase && !purchase.product_available
+      ? "Removed by the seller"
+      : purchase &&
+          differenceInYears(new Date(), parseISO(purchase.created_at)) >= 1 &&
+          purchase.disable_reviews_after_year
+        ? "Reviews may not be created or modified for this product 1 year after purchase."
+        : purchase?.membership?.in_free_trial
+          ? "Reviews are not allowed during the free trial period."
+          : null;
 
   const settings = is_mobile_app_web_view ? null : (
     <>

@@ -73,6 +73,7 @@ Rails.application.routes.draw do
           put "enable"
         end
       end
+      post "sales/exports", to: "sales#export"
       resources :sales, only: [:index, :show] do
         member do
           put :mark_as_shipped

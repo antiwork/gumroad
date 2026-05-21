@@ -1011,6 +1011,9 @@ class StripeChargeProcessor
         file.write(blob.download)
         file.rewind
         Stripe::File.create(file:, purpose: STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE).id
+      rescue ActiveStorage::FileNotFoundError => e
+        ErrorNotifier.notify("Dispute evidence file missing from storage (blob_id=#{blob.id}): #{e.message}")
+        nil
       ensure
         file.close!
       end

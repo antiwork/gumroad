@@ -50,6 +50,22 @@ describe FightDisputeJob do
       it_behaves_like "does nothing"
     end
 
+    context "when the disputable has a blank charge_processor_transaction_id" do
+      before do
+        dispute_evidence.update_as_not_seller_contacted!
+        allow_any_instance_of(Purchase).to receive(:charge_processor_transaction_id).and_return(nil)
+      end
+
+      it "notifies and marks the dispute evidence as rejected without calling Stripe" do
+        expect_any_instance_of(Purchase).not_to receive(:fight_chargeback)
+        expect(ErrorNotifier).to receive(:notify).with(/Missing charge processor transaction ID/)
+        described_class.new.perform(dispute.id)
+        expect(dispute_evidence.reload.resolved?).to eq(true)
+        expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)
+        expect(dispute_evidence.error_message).to include("Missing charge processor transaction ID")
+      end
+    end
+
     context "when the dispute evidence has not been submitted" do
       context "when the seller hasn't been contacted" do
         before do

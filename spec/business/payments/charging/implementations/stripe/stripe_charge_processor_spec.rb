@@ -479,6 +479,29 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe "#create_dispute_evidence_stripe_file" do
+    let(:dispute_evidence) { create(:dispute_evidence) }
+    let(:attached) { dispute_evidence.receipt_image }
+    let(:unattached) { create(:dispute_evidence).customer_communication_file }
+
+    it "returns the Stripe::File id when the attachment downloads successfully" do
+      expect(Stripe::File).to receive(:create).and_return(double(id: "file_abc"))
+      expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to eq("file_abc")
+    end
+
+    it "returns nil when no file is attached" do
+      expect(Stripe::File).not_to receive(:create)
+      expect(subject.send(:create_dispute_evidence_stripe_file, unattached)).to be_nil
+    end
+
+    it "returns nil and notifies when the underlying file is missing from storage" do
+      allow(attached.blob).to receive(:download).and_raise(ActiveStorage::FileNotFoundError)
+      expect(ErrorNotifier).to receive(:notify).with(/Dispute evidence file missing from storage/)
+      expect(Stripe::File).not_to receive(:create)
+      expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to be_nil
+    end
+  end
+
   describe "#setup_future_charges!" do
     let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: described_class.charge_processor_id, charge_processor_merchant_id: nil) }
     let(:stripe_card) { StripePaymentMethodHelper.success }

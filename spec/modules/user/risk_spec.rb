@@ -93,4 +93,25 @@ describe User::Risk do
     end
 
   end
+
+  describe "#unblock_seller_ip!" do
+    let(:ip) { "203.0.113.42" }
+    let(:user) { create(:user, last_sign_in_ip: ip) }
+
+    it "does nothing when last_sign_in_ip is blank" do
+      user.update_column(:last_sign_in_ip, nil)
+      expect { user.unblock_seller_ip! }.not_to raise_error
+    end
+
+    it "only unblocks rows scoped to the ip_address type" do
+      email_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: ip)
+      ip_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: ip, expires_in: 1.hour)
+
+      user.unblock_seller_ip!
+
+      expect(ip_block.reload.blocked_at).to be_nil
+      expect(email_block.reload.blocked_at).to be_present
+    end
+
+  end
 end

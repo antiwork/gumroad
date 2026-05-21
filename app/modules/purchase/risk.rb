@@ -85,14 +85,14 @@ module Purchase::Risk
 
       buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
       ip_addresses_to_check = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip, ip_address].compact.concat(buyer_ip_addresses)
-      return if BlockedObject.find_active_objects(ip_addresses_to_check).count == 0
-      return if BlockedObject.find_active_objects(ip_addresses_to_check[0..2]).present? && seller.compliant?
+      return if PlatformBlock.active.where(object_value: ip_addresses_to_check).count == 0
+      return if PlatformBlock.active.where(object_value: ip_addresses_to_check[0..2]).present? && seller.compliant?
 
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
       errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
     end
 
     def past_blocked_object(object)
-      object.present? && BlockedObject.find_active_object(object).present?
+      object.present? && PlatformBlock.active.find_by(object_value: object).present?
     end
 end
