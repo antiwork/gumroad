@@ -220,7 +220,7 @@ class Purchase
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
