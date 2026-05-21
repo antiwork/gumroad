@@ -5,6 +5,10 @@ class PagePolicy < ApplicationPolicy
     user.role_admin_for?(seller) || user.role_marketing_for?(seller)
   end
 
+  def templates?
+    index?
+  end
+
   def new?
     index?
   end

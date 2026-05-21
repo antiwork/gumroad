@@ -60,6 +60,7 @@ class ContentModeration::ModerateRecordService
       case entity_type
       when :product then extractor.extract_from_product(record)
       when :post then extractor.extract_from_post(record)
+      when :page then extractor.extract_from_page(record)
       end
     end
 
@@ -86,6 +87,7 @@ class ContentModeration::ModerateRecordService
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
                      when :post then "Post ##{record.id} (#{record.name})"
+                     when :page then "Page ##{record.id} (#{record.title})"
       end
 
       content = "Content moderation blocked publish of #{record_label}: #{reasons.join("; ")}"
@@ -108,6 +110,7 @@ class ContentModeration::ModerateRecordService
       @user ||= case entity_type
                 when :product then record.user
                 when :post then record.user
+                when :page then record.user
       end
     end
 end

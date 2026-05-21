@@ -1389,14 +1389,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000001) do
     t.text "html_content"
     t.json "json_data"
     t.boolean "published", default: false, null: false
+    t.boolean "is_profile", default: false, null: false
     t.datetime "published_at"
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["deleted_at"], name: "index_pages_on_deleted_at"
     t.index ["link_id"], name: "index_pages_on_link_id"
+    t.index ["user_id", "is_profile"], name: "index_pages_on_user_id_and_is_profile"
     t.index ["user_id", "published"], name: "index_pages_on_user_id_and_published"
-    t.index ["user_id", "slug"], name: "index_pages_on_user_id_and_slug_alive", unique: true
+    t.index ["user_id", "slug"], name: "index_pages_on_user_id_and_slug", unique: true
     t.index ["user_id"], name: "index_pages_on_user_id"
   end
 

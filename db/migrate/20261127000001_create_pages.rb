@@ -10,12 +10,14 @@ class CreatePages < ActiveRecord::Migration[7.1]
       t.text :html_content
       t.json :json_data
       t.boolean :published, default: false, null: false
+      t.boolean :is_profile, default: false, null: false
       t.datetime :published_at
       t.datetime :deleted_at
 
       t.timestamps
 
-      t.index [:user_id, :slug], unique: true, where: "deleted_at IS NULL", name: "index_pages_on_user_id_and_slug_alive"
+      t.index [:user_id, :slug], unique: true, name: "index_pages_on_user_id_and_slug"
+      t.index [:user_id, :is_profile]
       t.index [:user_id, :published]
       t.index :deleted_at
     end

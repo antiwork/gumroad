@@ -18,18 +18,28 @@ class PagesController < Sellers::BaseController
     product = current_seller.products.alive.find_by(unique_permalink: params[:product_id]) if params[:product_id]
     render inertia: "Pages/New", props: {
       product: product ? product_summary(product) : nil,
-      products: current_seller.products.alive.published.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
+      products: current_seller.products.alive.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
+      templates: Ai::PageTemplates.public_list,
     }
+  end
+
+  def templates
+    authorize Page
+    render json: { templates: Ai::PageTemplates.public_list }
   end
 
   def create
     authorize Page
     page = current_seller.pages.build(
       title: params.dig(:page, :title),
+      is_profile: ActiveModel::Type::Boolean.new.cast(params.dig(:page, :is_profile)) || false,
     )
     page.link = current_seller.products.alive.find_by(unique_permalink: params.dig(:page, :product_permalink)) if params.dig(:page, :product_permalink).present?
 
+    initial_prompt = resolve_initial_prompt(page)
+
     if page.save
+      generate_initial_version(page, initial_prompt) if initial_prompt.present?
       redirect_to edit_page_path(page.slug)
     else
       redirect_to new_page_path, alert: page.errors.full_messages.join(", ")
@@ -73,6 +83,9 @@ class PagesController < Sellers::BaseController
     prompt = params[:prompt].to_s.strip
     return render json: { error: "Prompt cannot be blank" }, status: :unprocessable_entity if prompt.blank?
 
+    moderation = moderate_prompt(@page, prompt)
+    return render json: { success: false, error: "Content moderation blocked this prompt." }, status: :unprocessable_entity unless moderation.passed
+
     result = Ai::PageGeneratorService.new(
       page: @page,
       seller: current_seller,
@@ -89,57 +102,87 @@ class PagesController < Sellers::BaseController
   end
 
   private
+    def require_pages_enabled
+      head :not_found unless current_seller.pages_enabled?
+    end
 
-  def require_pages_enabled
-    head :not_found unless current_seller.pages_enabled?
-  end
+    def set_page
+      @page = current_seller.pages.alive.find_by!(slug: params[:id])
+    end
 
-  def set_page
-    @page = current_seller.pages.alive.find_by!(slug: params[:id])
-  end
+    def page_update_params
+      params.require(:page).permit(:title, :slug, :html_content, :is_profile)
+    end
 
-  def page_update_params
-    params.require(:page).permit(:title, :slug, :html_content)
-  end
+    def resolve_initial_prompt(page)
+      if params.dig(:page, :template_id).present?
+        Ai::PageTemplates.prompt_for(params.dig(:page, :template_id))
+      elsif params.dig(:page, :initial_prompt).present?
+        params.dig(:page, :initial_prompt).to_s.strip.presence
+      elsif page.link.present?
+        "Create a landing page for #{page.link.name}. Highlight the product, include a buy button, and showcase what makes it valuable."
+      end
+    end
 
-  def page_json(page)
-    {
-      id: page.external_id,
-      title: page.title,
-      slug: page.slug,
-      published: page.published,
-      published_at: page.published_at&.iso8601,
-      updated_at: page.updated_at.iso8601,
-      product_name: page.link&.name,
-    }
-  end
+    def generate_initial_version(page, prompt)
+      moderation = moderate_prompt(page, prompt)
+      return unless moderation.passed
 
-  def product_summary(product)
-    {
-      id: product.external_id,
-      name: product.name,
-      permalink: product.unique_permalink,
-      price: product.display_price,
-      thumbnail_url: product.thumbnail&.alive&.url,
-      short_url: product.long_url,
-    }
-  end
+      result = Ai::PageGeneratorService.new(
+        page: page,
+        seller: current_seller,
+        prompt: prompt,
+        parent_version: nil,
+      ).call
+      page.update!(html_content: result.html) if result.success?
+    end
 
-  def edit_props
-    {
-      page: {
-        id: @page.external_id,
-        title: @page.title,
-        slug: @page.slug,
-        html_content: @page.html_content,
-        published: @page.published,
-        published_at: @page.published_at&.iso8601,
-        product: @page.link ? product_summary(@page.link) : nil,
-      },
-      products: current_seller.products.alive.not_is_bundle.published.order(name: :asc).map { |p| product_summary(p) },
-      versions: @page.page_versions.order(created_at: :desc).limit(20).map { |v|
-        { id: v.id, prompt: v.prompt, created_at: v.created_at.iso8601 }
-      },
-    }
-  end
+    def moderate_prompt(page, prompt)
+      page.assign_attributes(html_content: prompt) if page.respond_to?(:html_content=)
+      ContentModeration::ModerateRecordService.check(page, :page)
+    end
+
+    def page_json(page)
+      {
+        id: page.external_id,
+        title: page.title,
+        slug: page.slug,
+        published: page.published,
+        published_at: page.published_at&.iso8601,
+        updated_at: page.updated_at.iso8601,
+        is_profile: page.is_profile,
+        product_name: page.link&.name,
+      }
+    end
+
+    def product_summary(product)
+      {
+        id: product.external_id,
+        name: product.name,
+        permalink: product.unique_permalink,
+        price: product.display_price,
+        thumbnail_url: product.thumbnail&.alive&.url,
+        short_url: product.long_url,
+      }
+    end
+
+    def edit_props
+      {
+        page: {
+          id: @page.external_id,
+          title: @page.title,
+          slug: @page.slug,
+          html_content: @page.html_content,
+          published: @page.published,
+          published_at: @page.published_at&.iso8601,
+          is_profile: @page.is_profile,
+          product: @page.link ? product_summary(@page.link) : nil,
+        },
+        products: current_seller.products.alive.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
+        templates: Ai::PageTemplates.public_list,
+        versions: @page.page_versions.order(created_at: :desc).limit(20).map do |v|
+          { id: v.id, prompt: v.prompt, created_at: v.created_at.iso8601 }
+        end,
+      }
+    end
 end

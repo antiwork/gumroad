@@ -854,6 +854,9 @@ Rails.application.routes.draw do
 
     # Pages (AI landing pages)
     resources :pages, param: :id, only: [:index, :new, :create, :destroy] do
+      collection do
+        get :templates, defaults: { format: :json }
+      end
       member do
         post :publish
         post :unpublish

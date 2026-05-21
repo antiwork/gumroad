@@ -1,5 +1,4 @@
-import { Link } from "@boxicons/react";
-import hands from "$assets/images/illustrations/hands.png";
+import { Book, Box, Link, Moon, TrendingUp, User, UserCheck, type BoxIconProps } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -18,6 +17,8 @@ import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
+
+import hands from "$assets/images/illustrations/hands.png";
 
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
@@ -52,21 +53,7 @@ export const ShareTab = () => {
             </div>
           </section>
           {currentSeller.pagesEnabled ? (
-            <section className="grid gap-8 border-t border-border p-4 md:p-8">
-              <header>
-                <h2>Landing page</h2>
-              </header>
-              <p>
-                Create an AI-powered landing page to showcase this product with a custom design.
-              </p>
-              <div>
-                <Button asChild>
-                  <a href={`/pages/new?product_id=${product.custom_permalink ?? ""}`}>
-                    Create a page
-                  </a>
-                </Button>
-              </div>
-            </section>
+            <LandingPageSplash productPermalink={product.custom_permalink ?? product.unique_permalink ?? ""} />
           ) : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
@@ -166,5 +153,84 @@ const DiscoverEligibilityPromo = () => {
         </div>
       </div>
     </Alert>
+  );
+};
+
+type Template = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+};
+
+const SPLASH_ICONS: Record<string, React.ComponentType<BoxIconProps>> = {
+  moon: Moon,
+  box: Box,
+  "trending-up": TrendingUp,
+  user: User,
+  "book-open": Book,
+  users: UserCheck,
+};
+
+const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) => {
+  const [templates, setTemplates] = React.useState<Template[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/pages/templates", { headers: { Accept: "application/json" }, credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Templates fetch failed: ${r.status}`))))
+      .then((data: { templates: Template[] }) => {
+        if (!cancelled) setTemplates(data.templates);
+      })
+      .catch(() => {
+        /* silent — section still works as a plain CTA */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const newPageHref = (templateId?: string) => {
+    const params = new URLSearchParams();
+    if (productPermalink) params.set("product_id", productPermalink);
+    if (templateId) params.set("template", templateId);
+    return `/pages/new?${params.toString()}`;
+  };
+
+  return (
+    <section className="grid gap-6 border-t border-border p-4 md:p-8">
+      <header>
+        <h2>Landing page</h2>
+        <p className="text-sm text-muted">
+          Use the basic Gumroad product page, or pick a template and let AI build a custom landing page for this
+          product.
+        </p>
+      </header>
+      {templates.length > 0 ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          {templates.map((template) => {
+            const Icon = SPLASH_ICONS[template.icon] ?? Box;
+            return (
+              <a
+                key={template.id}
+                href={newPageHref(template.id)}
+                className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
+              >
+                <span className="flex size-10 items-center justify-center rounded-md bg-active-bg">
+                  <Icon className="size-5" />
+                </span>
+                <h4 className="font-bold">{template.name}</h4>
+                <p className="text-sm text-muted">{template.description}</p>
+              </a>
+            );
+          })}
+        </div>
+      ) : null}
+      <div>
+        <Button asChild>
+          <a href={newPageHref()}>Start from scratch</a>
+        </Button>
+      </div>
+    </section>
   );
 };

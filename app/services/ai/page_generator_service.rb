@@ -76,7 +76,7 @@ class Ai::PageGeneratorService
   private
 
   def build_messages
-    products_context = @seller.products.alive.published.limit(50).map do |p|
+    products_context = @seller.products.alive.limit(50).map do |p|
       "- #{p.name} (#{p.display_price}) [permalink: #{p.unique_permalink}, url: #{p.long_url}]"
     end.join("\n")
 
