@@ -189,6 +189,41 @@ describe ProductReviewsController do
         expect(review.reload.rating).to eq(2)
       end
     end
+
+    context "when the product has been deleted" do
+      before { product.update!(deleted_at: 1.day.ago) }
+
+      it "rejects updating an existing review with a JSON error" do
+        review = create(:product_review, purchase: purchase, rating: 2)
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Sorry, this product was removed by the seller.")
+        expect(review.reload.rating).to eq(2)
+      end
+
+      it "rejects creating a new review with a JSON error" do
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Sorry, this product was removed by the seller.")
+        expect(purchase.reload.product_review).to be_nil
+      end
+    end
+
+    %i[banned_at purchase_disabled_at].each do |attribute|
+      context "when the product has #{attribute} set but is not deleted" do
+        before { product.update!(attribute => 1.day.ago) }
+
+        it "still allows updating an existing review — only deleted products are blocked" do
+          review = create(:product_review, purchase: purchase, rating: 2)
+          put :set, params: valid_params.merge(rating: 5)
+
+          expect(response.parsed_body["success"]).to eq(true)
+          expect(review.reload.rating).to eq(5)
+        end
+      end
+    end
   end
 
   describe "#index" do

@@ -40,6 +40,7 @@ describe ReviewsPresenter do
                 permalink: reviews.first.link.unique_permalink,
                 thumbnail_url: thumbnail.url,
                 native_type: "digital",
+                available: true,
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
@@ -56,6 +57,7 @@ describe ReviewsPresenter do
                 permalink: reviews.second.link.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                available: true,
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
@@ -72,6 +74,7 @@ describe ReviewsPresenter do
                 permalink: reviews.third.link.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                available: true,
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
@@ -89,6 +92,7 @@ describe ReviewsPresenter do
                 permalink: product2.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                available: true,
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
@@ -104,6 +108,7 @@ describe ReviewsPresenter do
                 permalink: product1.unique_permalink,
                 thumbnail_url: thumbnail1.url,
                 native_type: "digital",
+                available: true,
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
@@ -113,6 +118,52 @@ describe ReviewsPresenter do
           ],
         }
       )
+    end
+
+    context "when the reviewed product has been deleted" do
+      let!(:deleted_product) { create(:product, deleted_at: 1.day.ago) }
+      let!(:review_on_deleted_product) do
+        purchase = create(:purchase, purchaser: user, link: deleted_product)
+        create(:product_review, purchase: purchase, link: deleted_product)
+      end
+
+      it "marks the product unavailable so the edit UI can be hidden" do
+        review_props = presenter.reviews_props[:reviews].find { |r| r[:id] == review_on_deleted_product.external_id }
+        expect(review_props[:product][:available]).to be(false)
+      end
+    end
+
+    context "when a purchase awaiting review is for a deleted product" do
+      let!(:deleted_product) { create(:product, deleted_at: 1.day.ago) }
+      let!(:purchase_on_deleted_product) { create(:purchase, purchaser: user, link: deleted_product) }
+
+      it "omits it from the purchases-awaiting-review list" do
+        expect(presenter.reviews_props[:purchases].map { |p| p[:id] }).not_to include(purchase_on_deleted_product.external_id)
+      end
+    end
+
+    %i[banned_at purchase_disabled_at].each do |attribute|
+      context "when the reviewed product has #{attribute} set but is not deleted" do
+        let!(:product_with_attr) { create(:product, attribute => 1.day.ago) }
+        let!(:review_on_product) do
+          purchase = create(:purchase, purchaser: user, link: product_with_attr)
+          create(:product_review, purchase: purchase, link: product_with_attr)
+        end
+
+        it "still marks the product available — only deleted_at blocks the edit UI" do
+          review_props = presenter.reviews_props[:reviews].find { |r| r[:id] == review_on_product.external_id }
+          expect(review_props[:product][:available]).to be(true)
+        end
+      end
+
+      context "when a purchase awaiting review has #{attribute} set on its product but is not deleted" do
+        let!(:product_with_attr) { create(:product, attribute => 1.day.ago) }
+        let!(:purchase_on_product) { create(:purchase, purchaser: user, link: product_with_attr) }
+
+        it "keeps it in the purchases-awaiting-review list" do
+          expect(presenter.reviews_props[:purchases].map { |p| p[:id] }).to include(purchase_on_product.external_id)
+        end
+      end
     end
   end
 end

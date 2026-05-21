@@ -9,7 +9,7 @@ class ReviewsPresenter
 
   def reviews_props
     {
-      reviews: user.product_reviews.includes(:editable_video).map do |review|
+      reviews: user.product_reviews.includes(:editable_video, :purchase, link: [:user, :thumbnail_alive]).map do |review|
         product = review.link
         ProductReviewPresenter.new(review).review_form_props.merge(
           id: review.external_id,
@@ -18,7 +18,7 @@ class ReviewsPresenter
           product: product_props(product),
         )
       end,
-      purchases: user.purchases.allowing_reviews_to_be_counted.where.missing(:product_review).order(created_at: :desc).filter_map do |purchase|
+      purchases: user.purchases.allowing_reviews_to_be_counted.where.missing(:product_review).joins(:link).merge(Link.visible).preload(:seller, link: [:user, :thumbnail_alive]).order(created_at: :desc).filter_map do |purchase|
         if !purchase.seller.disable_reviews_after_year? || purchase.created_at > 1.year.ago
           product = purchase.link
           {
@@ -40,6 +40,7 @@ class ReviewsPresenter
         permalink: product.unique_permalink,
         thumbnail_url: product.thumbnail_alive&.url,
         native_type: product.native_type,
+        available: !product.deleted?,
         seller: {
           name: seller.display_name,
           url: seller.profile_url,
