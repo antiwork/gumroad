@@ -185,6 +185,7 @@ class StripePayoutProcessor
     if (drift_error = destination_balance_drift_error(merchant_account, balances_held_by_stripe))
       payment.error_message = drift_error.truncate(1000)
       payment.mark_failed!(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      payment.errors.add(:base, drift_error)
       return [drift_error]
     end
 

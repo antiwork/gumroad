@@ -304,6 +304,13 @@ describe StripePayoutProcessor, :vcr do
         expect(payment.reload.state).to eq("failed")
         expect(payment.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
       end
+
+      it "surfaces the drift message through payment.errors so admin endpoints get an informative response body" do
+        described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(payment.errors.full_messages.first).to include("Destination Stripe balance mismatch")
+        expect(payment.errors.full_messages.first).to include("gap: 25969 cents")
+      end
     end
 
     context "when Stripe's available balance matches or exceeds Gumroad's recorded held-at-Stripe balance" do
