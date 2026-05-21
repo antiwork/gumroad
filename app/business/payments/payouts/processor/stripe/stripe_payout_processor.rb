@@ -278,7 +278,10 @@ class StripePayoutProcessor
     stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: merchant_account.charge_processor_merchant_id })
     destination_currency = merchant_account.currency.to_s
     available_cents = stripe_balance.available&.find { |b| b.currency == destination_currency }&.amount || 0
-    pending_cents = stripe_balance.pending&.find { |b| b.currency == destination_currency }&.amount || 0
+    # Clamp at zero: Connect balances can report negative `pending` when reversals/refunds/disputes
+    # exceed inbound settling funds. Subtracting that from `available_cents` would block payouts that
+    # `available_cents` alone covers. We only credit incoming settlement, never debit it.
+    pending_cents = [stripe_balance.pending&.find { |b| b.currency == destination_currency }&.amount || 0, 0].max
     reachable_cents = available_cents + pending_cents
 
     return nil if reachable_cents >= expected_destination_cents

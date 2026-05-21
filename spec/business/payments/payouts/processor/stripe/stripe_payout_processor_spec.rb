@@ -334,6 +334,23 @@ describe StripePayoutProcessor, :vcr do
       end
     end
 
+    context "when Stripe reports negative pending (reversals/disputes/refunds in flight) but available covers the payout" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_500_00, currency: "eur" }],
+                                          pending: [{ amount: -50_000, currency: "eur" }])
+        )
+      end
+
+      it "does not flag drift because negative pending is clamped at zero" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq([])
+        expect(payment.state).not_to eq("failed")
+      end
+    end
+
     context "when Stripe's available balance matches or exceeds Gumroad's recorded held-at-Stripe balance" do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
