@@ -124,7 +124,7 @@ gem "money", "~> 6.16"
 gem "mongoid", "~> 9.0", ">= 9.0.3"
 gem "mongo", "~> 2.20.0" # cap to 2.20.x to keep wire version 7 (MongoDB 4.2) compatibility
 gem "mysql2", ">= 0.5.6"
-gem "nokogiri", "~> 1.13"
+gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"
 gem "omniauth-rails_csrf_protection", "~> 1.0"
