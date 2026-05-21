@@ -56,8 +56,9 @@ describe FightDisputeJob do
         allow_any_instance_of(Purchase).to receive(:charge_processor_transaction_id).and_return(nil)
       end
 
-      it "marks the dispute evidence as rejected without calling Stripe" do
+      it "notifies and marks the dispute evidence as rejected without calling Stripe" do
         expect_any_instance_of(Purchase).not_to receive(:fight_chargeback)
+        expect(ErrorNotifier).to receive(:notify).with(/Missing charge processor transaction ID/)
         described_class.new.perform(dispute.id)
         expect(dispute_evidence.reload.resolved?).to eq(true)
         expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_REJECTED)

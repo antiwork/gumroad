@@ -12,9 +12,11 @@ class FightDisputeJob
 
     disputable = dispute.disputable
     if disputable.charge_processor_transaction_id.blank?
+      error_message = "Missing charge processor transaction ID on #{disputable.class.name}##{disputable.id}."
+      ErrorNotifier.notify("FightDisputeJob: #{error_message} (dispute_id=#{dispute.id})")
       dispute_evidence.update_as_resolved!(
         resolution: DisputeEvidence::RESOLUTION_REJECTED,
-        error_message: "Missing charge processor transaction ID on #{disputable.class.name}##{disputable.id}."
+        error_message:
       )
       return
     end
