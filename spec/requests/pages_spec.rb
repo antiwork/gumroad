@@ -220,7 +220,7 @@ describe PagesController, type: :request do
       get latest_version_page_path(page.slug), headers: { "Accept" => "application/json" }
       body = JSON.parse(response.body)
       expect(body["html_content"]).to include("hello")
-      expect(body["latest_version_id"]).to eq(version.id)
+      expect(body["latest_version"]["id"]).to eq(version.id)
       expect(body["generating"]).to be(false)
     end
   end

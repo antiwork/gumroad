@@ -51,9 +51,15 @@ describe Page do
   describe "#publish! / #unpublish!" do
     it "sets published and published_at" do
       page = create(:page, user: user)
+      create(:page_version, page: page)
       page.publish!
       expect(page.published).to be(true)
       expect(page.published_at).to be_present
+    end
+
+    it "raises when there is no generated content" do
+      page = create(:page, user: user)
+      expect { page.publish! }.to raise_error(ActiveRecord::RecordInvalid, /no generated content/)
     end
   end
 end
