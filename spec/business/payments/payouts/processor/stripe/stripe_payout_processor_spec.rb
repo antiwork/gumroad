@@ -256,7 +256,9 @@ describe StripePayoutProcessor, :vcr do
       allow(described_class).to receive(:get_payout_details)
         .and_return([cad_merchant_account, [], [balance_1, balance_2]])
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [{ amount: 300_00, currency: "cad" }])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 300_00, currency: "cad" }],
+                                       pending: [{ amount: 0, currency: "cad" }])
       )
       described_class.prepare_payment_and_set_amount(payment, [balance_1, balance_2])
     end
@@ -836,7 +838,9 @@ describe StripePayoutProcessor, :vcr do
       payment_intent.confirm
       Stripe::Charge.retrieve(id: payment_intent.latest_charge)
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [{ amount: 600_00, currency: "usd" }])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 600_00, currency: "usd" }],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
@@ -1260,7 +1264,9 @@ describe StripePayoutProcessor, :vcr do
       payment_intent.confirm
       Stripe::Charge.retrieve(id: payment_intent.latest_charge)
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [{ amount: 600_00, currency: "usd" }])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 600_00, currency: "usd" }],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
@@ -1683,13 +1689,15 @@ describe StripePayoutProcessor, :vcr do
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [
-          { amount: 1_000_000_00, currency: "cad" },
-          { amount: 1_000_000_00, currency: "eur" },
-          { amount: 1_000_000_00, currency: "sgd" },
-          { amount: 1_000_000_00, currency: "krw" },
-          { amount: 1_000_000_00, currency: "usd" }
-        ])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
@@ -2052,13 +2060,15 @@ describe StripePayoutProcessor, :vcr do
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [
-          { amount: 1_000_000_00, currency: "cad" },
-          { amount: 1_000_000_00, currency: "eur" },
-          { amount: 1_000_000_00, currency: "sgd" },
-          { amount: 1_000_000_00, currency: "krw" },
-          { amount: 1_000_000_00, currency: "usd" }
-        ])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
@@ -2414,13 +2424,15 @@ describe StripePayoutProcessor, :vcr do
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [
-          { amount: 1_000_000_00, currency: "cad" },
-          { amount: 1_000_000_00, currency: "eur" },
-          { amount: 1_000_000_00, currency: "sgd" },
-          { amount: 1_000_000_00, currency: "krw" },
-          { amount: 1_000_000_00, currency: "usd" }
-        ])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
@@ -2776,13 +2788,15 @@ describe StripePayoutProcessor, :vcr do
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
       allow(Stripe::Balance).to receive(:retrieve).and_return(
-        Stripe::Balance.construct_from(object: "balance", available: [
-          { amount: 1_000_000_00, currency: "cad" },
-          { amount: 1_000_000_00, currency: "eur" },
-          { amount: 1_000_000_00, currency: "sgd" },
-          { amount: 1_000_000_00, currency: "krw" },
-          { amount: 1_000_000_00, currency: "usd" }
-        ])
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
       )
     end
 
