@@ -65,7 +65,7 @@ module Purchase::Blockable
     block_by_paypal_email!(by_user_id: blocking_user_id)
     block_by_gifter_email!(by_user_id: blocking_user_id)
     block_by_purchaser_email!(by_user_id: blocking_user_id)
-    block_by_ip_address!(by_user_id: blocking_user_id, expires_in: BlockedObject::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
+    block_by_ip_address!(by_user_id: blocking_user_id, expires_in: PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
     block_by_charge_processor_fingerprint!(by_user_id: blocking_user_id)
     block_by_recent_stripe_fingerprint!(by_user_id: blocking_user_id)
 
@@ -164,7 +164,7 @@ module Purchase::Blockable
       )
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:browser_guid], browser_guid, nil)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
     end
 
     def ban_buyer_on_fraud_related_error_code!
@@ -242,7 +242,7 @@ module Purchase::Blockable
     end
 
     def block_ip_address_based_on_recent_failures!
-      return if BlockedObject.ip_address.find_active_object(ip_address).present?
+      return if PlatformBlock.ip_address.active.find_by(object_value: ip_address).present?
 
       unique_failed_fingerprints = Purchase.failed.stripe.with_stripe_fingerprint
                                            .select("distinct stripe_fingerprint")
@@ -251,11 +251,10 @@ module Purchase::Blockable
 
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
-      BlockedObject.block!(
-        BLOCKED_OBJECT_TYPES[:ip_address],
-        ip_address,
-        nil,
-        expires_in: CARD_TESTING_IP_ADDRESS_BLOCK_DURATION
+      PlatformBlock.add!(
+        object_type: PlatformBlock::TYPES[:ip_address],
+        object_value: ip_address,
+        expires_in: CARD_TESTING_IP_ADDRESS_BLOCK_DURATION,
       )
     end
 
@@ -294,11 +293,10 @@ module Purchase::Blockable
       return if failed_purchase_attempts_count < max_number_of_failed_purchases \
              && recent_purchases_failed_in_a_row < max_number_of_failed_purchases_in_a_row
 
-      BlockedObject.block!(
-        BLOCKED_OBJECT_TYPES[:product],
-        link_id,
-        nil,
-        expires_in: card_testing_product_block_hours.hours
+      PlatformBlock.add!(
+        object_type: PlatformBlock::TYPES[:product],
+        object_value: link_id,
+        expires_in: card_testing_product_block_hours.hours,
       )
     end
 
@@ -326,11 +324,10 @@ module Purchase::Blockable
 
       return if recent_free_purchases_of_same_product <= max_allowed_free_purchases_of_same_product
 
-      BlockedObject.block!(
-        BLOCKED_OBJECT_TYPES[:ip_address],
-        ip_address,
-        nil,
-        expires_in: fraudulent_free_purchases_block_hours.hours
+      PlatformBlock.add!(
+        object_type: PlatformBlock::TYPES[:ip_address],
+        object_value: ip_address,
+        expires_in: fraudulent_free_purchases_block_hours.hours,
       )
     end
 

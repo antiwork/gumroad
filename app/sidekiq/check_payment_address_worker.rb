@@ -23,7 +23,7 @@ class CheckPaymentAddressWorker
         user_risk_state: User::Risk::SUSPENDED_STATES
       )
 
-      blocked_email = BlockedObject.find_active_object(user.payment_address)
+      blocked_email = PlatformBlock.active.find_by(object_value: user.payment_address)
 
       banned_accounts_with_same_payment_address.exists? || blocked_email.present?
     end
@@ -40,6 +40,6 @@ class CheckPaymentAddressWorker
 
       return true if suspended_accounts_with_same_fingerprint.exists?
 
-      BlockedObject.find_active_objects(fingerprints).present?
+      PlatformBlock.active.where(object_value: fingerprints).present?
     end
 end

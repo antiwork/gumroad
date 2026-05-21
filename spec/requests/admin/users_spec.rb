@@ -223,8 +223,8 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
   end
 
   describe "blocked user indicator" do
-    before { BlockedObject.delete_all }
-    after { BlockedObject.delete_all }
+    before { PlatformBlock.delete_all }
+    after { PlatformBlock.delete_all }
 
     it "shows blocked user indicator with appropriate tooltips for email and domain blocks" do
       # Initially no block should exist
@@ -232,7 +232,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).not_to have_css("[aria-label='Blocked User']")
 
       # Block by email
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: user.form_email, by: admin.id)
       page.refresh
 
       # Verify icon appears and tooltip shows email block
@@ -243,7 +243,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).to have_text("block created")
 
       # Add domain block
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], user.form_email_domain, admin.id)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: user.form_email_domain, by: admin.id)
       page.refresh
 
       # Verify icon still appears and tooltip shows both blocks

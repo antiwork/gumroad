@@ -559,11 +559,10 @@ describe Purchase, :vcr do
 
       @product = create(:product)
 
-      BlockedObject.block!(
-        BLOCKED_OBJECT_TYPES[:product],
-        @product.id,
-        nil,
-        expires_in: 6.hours
+      PlatformBlock.add!(
+        object_type: PlatformBlock::TYPES[:product],
+        object_value: @product.id,
+        expires_in: 6.hours,
       )
     end
 
