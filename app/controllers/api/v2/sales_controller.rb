@@ -167,9 +167,14 @@ class Api::V2::SalesController < Api::V2::BaseController
 
     def export_filters
       filters = {}
-      filters[:start_time] = parse_export_date_param(:from) if params[:from].present?
-      filters[:end_time] = parse_export_date_param(:to) if params[:to].present?
-      return filters if performed?
+      if params[:from].present?
+        filters[:start_time] = parse_export_date_param(:from)
+        return filters if performed?
+      end
+      if params[:to].present?
+        filters[:end_time] = parse_export_date_param(:to)
+        return filters if performed?
+      end
 
       if params[:product_id].present?
         product = current_resource_owner.links.find_by_external_id(params[:product_id])

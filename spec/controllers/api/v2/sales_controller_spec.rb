@@ -408,6 +408,17 @@ describe Api::V2::SalesController do
         expect(Exports::PurchaseExportService).not_to have_received(:export)
       end
 
+      it "returns a 400 error when both dates are incorrectly formatted" do
+        post :export, params: @params.merge(from: "394293", to: "invalid-date")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid date format provided in field 'from'. Dates must be in the format YYYY-MM-DD."
+        }.as_json)
+        expect(Exports::PurchaseExportService).not_to have_received(:export)
+      end
+
       it "returns a 400 error if to date format is incorrect" do
         post :export, params: @params.merge(to: "invalid-date")
 
@@ -445,7 +456,7 @@ describe Api::V2::SalesController do
 
     it "grants access with the account scope" do
       token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
-      post :export, params: { access_token: token.token }
+      post :export, params: { access_token: token.token, format: :json }
       expect(response).to be_successful
     end
   end
