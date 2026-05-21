@@ -9,6 +9,7 @@ class PagesController < Sellers::BaseController
     pages = current_seller.pages.alive.order(updated_at: :desc)
     render inertia: "Pages/Index", props: {
       pages: pages.map { |p| page_json(p) },
+      can_create_page: true,
     }
   end
 
@@ -103,7 +104,8 @@ class PagesController < Sellers::BaseController
       published_version_id: @page.published_version_id,
       published: @page.published,
       auto_publish: @page.auto_publish,
-      generating: version.nil? && @page.html_content.blank?,
+      generating: version.nil? && @page.html_content.blank? && @page.generation_error.blank?,
+      generation_error: @page.generation_error,
     }
   end
 

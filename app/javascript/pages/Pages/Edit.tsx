@@ -161,6 +161,7 @@ export default function PageEdit() {
           published: boolean;
           auto_publish: boolean;
           generating: boolean;
+          generation_error: string | null;
         }>(await resp.json());
         if (cancelled) return;
 
@@ -178,8 +179,16 @@ export default function PageEdit() {
             // the same real id, then insert the real version at the top.
             setVersions((prev) => [real, ...prev.filter((v) => v.id > 0 && v.id !== real.id)]);
           }
-          setWaitingForFirst(false);
           setGenerating(false);
+          setWaitingForFirst(false);
+        } else if (!body.generating) {
+          // Generation job finished without producing content (AI error or
+          // moderation rejection). Stop polling and let the user retry.
+          setGenerating(false);
+          setWaitingForFirst(false);
+          if (body.generation_error) {
+            showAlert(body.generation_error, "error");
+          }
         }
       } catch {
         // network blip — keep polling
@@ -283,7 +292,7 @@ export default function PageEdit() {
     }
   };
 
-  const pageUrl = currentSeller ? `${window.location.origin}/${currentSeller.subdomain}/pages/${page.slug}` : "";
+  const pageUrl = currentSeller?.subdomain ? `${window.location.origin}/${currentSeller.subdomain}/pages/${page.slug}` : "";
 
   return (
     <>
