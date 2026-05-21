@@ -10,7 +10,16 @@ class FightDisputeJob
     return if dispute_evidence.resolved?
     return if dispute_evidence.not_seller_submitted? && dispute_evidence.hours_left_to_submit_evidence.positive?
 
-    dispute.disputable.fight_chargeback
+    disputable = dispute.disputable
+    if disputable.charge_processor_transaction_id.blank?
+      dispute_evidence.update_as_resolved!(
+        resolution: DisputeEvidence::RESOLUTION_REJECTED,
+        error_message: "Missing charge processor transaction ID on #{disputable.class.name}##{disputable.id}."
+      )
+      return
+    end
+
+    disputable.fight_chargeback
     dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
   rescue ChargeProcessorInvalidRequestError => e
     if rejected?(e.message)
