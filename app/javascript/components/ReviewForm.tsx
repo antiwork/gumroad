@@ -321,7 +321,7 @@ export const ReviewForm = React.forwardRef<
     );
 
     const reviewButton = viewing ? (
-      <Button onClick={() => setFormState("editing")} key="edit" type="button">
+      <Button onClick={() => setFormState("editing")} disabled={disabled} key="edit" type="button">
         Edit
       </Button>
     ) : (
