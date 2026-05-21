@@ -265,6 +265,10 @@ class StripePayoutProcessor
   def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
     return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
     return nil if balances_held_by_stripe.empty?
+    # KRW: Gumroad stores 100 subunits while Stripe reports single-unit, so the raw cents comparison
+    # is off by 100x and would always flag drift for healthy accounts. Skipping is safer than
+    # encoding the divergence here; revisit if KRW sellers report stuck payouts.
+    return nil if merchant_account.currency.to_s == Currency::KRW
 
     expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
     return nil if expected_destination_cents <= 0
@@ -281,6 +285,7 @@ class StripePayoutProcessor
       "Stripe has #{available_cents} cents available (gap: #{gap_cents} cents). " \
       "Reconcile destination balance before retry."
   end
+  private_class_method :destination_balance_drift_error
 
   def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|

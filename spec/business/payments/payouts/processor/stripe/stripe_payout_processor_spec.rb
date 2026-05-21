@@ -366,6 +366,44 @@ describe StripePayoutProcessor, :vcr do
         described_class.prepare_payment_and_set_amount(payment, [])
       end
     end
+
+    context "when the destination merchant account is KRW" do
+      let(:krw_merchant_account) do
+        create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                  currency: Currency::KRW, country: "KR")
+      end
+      let(:krw_balance) do
+        create(:balance, user:, merchant_account: krw_merchant_account,
+                         holding_currency: Currency::KRW, holding_amount_cents: 100_00)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([krw_merchant_account, [], [krw_balance]])
+      end
+
+      it "skips the drift check because KRW subunit conventions differ between Gumroad and Stripe" do
+        expect(Stripe::Balance).not_to receive(:retrieve)
+
+        described_class.prepare_payment_and_set_amount(payment, [krw_balance])
+      end
+    end
+
+    context "when Stripe::Balance.retrieve raises a Stripe error" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve)
+          .and_raise(Stripe::APIConnectionError.new("connection failed"))
+      end
+
+      it "lets the error propagate to the existing rescue blocks and marks the payment failed" do
+        expect do
+          described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+        end.to raise_error(Stripe::APIConnectionError, /connection failed/)
+
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.error_message).to include("Stripe::APIConnectionError")
+      end
+    end
   end
 
   describe "prepare_payment_and_set_amount when merchant_account is nil" do
@@ -1597,6 +1635,15 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance", available: [
+          { amount: 1_000_000_00, currency: "cad" },
+          { amount: 1_000_000_00, currency: "eur" },
+          { amount: 1_000_000_00, currency: "sgd" },
+          { amount: 1_000_000_00, currency: "krw" },
+          { amount: 1_000_000_00, currency: "usd" }
+        ])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -1957,6 +2004,15 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance", available: [
+          { amount: 1_000_000_00, currency: "cad" },
+          { amount: 1_000_000_00, currency: "eur" },
+          { amount: 1_000_000_00, currency: "sgd" },
+          { amount: 1_000_000_00, currency: "krw" },
+          { amount: 1_000_000_00, currency: "usd" }
+        ])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -2310,6 +2366,15 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance", available: [
+          { amount: 1_000_000_00, currency: "cad" },
+          { amount: 1_000_000_00, currency: "eur" },
+          { amount: 1_000_000_00, currency: "sgd" },
+          { amount: 1_000_000_00, currency: "krw" },
+          { amount: 1_000_000_00, currency: "usd" }
+        ])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -2663,6 +2728,15 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance", available: [
+          { amount: 1_000_000_00, currency: "cad" },
+          { amount: 1_000_000_00, currency: "eur" },
+          { amount: 1_000_000_00, currency: "sgd" },
+          { amount: 1_000_000_00, currency: "krw" },
+          { amount: 1_000_000_00, currency: "usd" }
+        ])
+      )
     end
 
     it "creates a transfer at stripe" do
