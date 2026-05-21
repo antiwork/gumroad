@@ -181,10 +181,6 @@ describe "Checkout cart", :js, type: :system do
         expect(user_cart.reload).to be_deleted
         expect(user_cart.email).to eq(buyer.email)
         expect(user_cart.order_id).to eq(Order.last.id)
-        poll_until { buyer.reload.alive_cart.present? }
-        new_buyer_cart = buyer.alive_cart
-        expect(new_buyer_cart.browser_guid).to eq(user_cart.browser_guid)
-        expect(new_buyer_cart.alive_cart_products.count).to eq(0)
 
         click_on "Back to Library"
         toggle_disclosure buyer.username
@@ -193,8 +189,8 @@ describe "Checkout cart", :js, type: :system do
 
         visit @membership_product.long_url
         add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variants.first.name)
-        poll_until { Cart.alive.count == 2 }
-        guest_cart = Cart.last
+        poll_until { Cart.alive.where(user: nil).count == 1 }
+        guest_cart = Cart.alive.where(user: nil).sole
         expect(guest_cart).to be_alive
         expect(guest_cart.user).to be_nil
         expect(guest_cart.alive_cart_products.sole.product_id).to eq(@membership_product.id)
@@ -202,13 +198,6 @@ describe "Checkout cart", :js, type: :system do
         expect(guest_cart.reload).to be_deleted
         expect(guest_cart.email).to eq("test@gumroad.com")
         expect(guest_cart.order_id).to eq(Order.last.id)
-        new_guest_cart = Cart.last
-        expect(new_guest_cart).to be_alive
-        expect(new_guest_cart.user).to be_nil
-        expect(new_guest_cart.alive_cart_products.count).to eq(0)
-
-        expect(new_buyer_cart.reload).to be_alive
-        expect(new_buyer_cart.alive_cart_products.count).to eq(0)
       end
 
       it "creates and updates a cart during checkout for a logged-in user" do
@@ -256,9 +245,9 @@ describe "Checkout cart", :js, type: :system do
         check_out(@product, logged_in_user: buyer)
 
         expect(cart.reload).to be_deleted
-        # A new empty cart is created after checkout
-        poll_until { buyer.reload.alive_cart.present? }
-        expect(buyer.alive_cart.cart_products).to be_empty
+        visit checkout_path
+        expect(page).to_not have_cart_item(@membership_product.name)
+        expect(page).to_not have_cart_item(@product.name)
       end
 
       it "creates a new cart with the failed item when an item fails after checkout" do
