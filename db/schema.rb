@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_27_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_27_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1394,6 +1394,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000001) do
     t.bigint "published_version_id"
     t.datetime "published_at"
     t.datetime "deleted_at"
+    t.string "generation_error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["deleted_at"], name: "index_pages_on_deleted_at"
