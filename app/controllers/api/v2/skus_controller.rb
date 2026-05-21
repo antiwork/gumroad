@@ -8,7 +8,7 @@ class Api::V2::SkusController < Api::V2::BaseController
     skus = if @product.skus_enabled?
       @product.skus.alive.not_is_default_sku.exists? ? @product.skus.alive.not_is_default_sku : @product.skus.alive.is_default_sku
     elsif @product.is_physical?
-      @product.alive_variants
+      @product.alive_variants.includes(:alive_prices, variant_category: :link)
     else
       []
     end
