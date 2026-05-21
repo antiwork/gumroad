@@ -24,7 +24,7 @@ class PlatformBlock < ApplicationRecord
   scope :active, -> { where.not(blocked_at: nil).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   def self.add!(object_type:, object_value:, by: nil, expires_in: nil)
-    if object_type == TYPES[:ip_address] && expires_in.blank?
+    if object_type.to_s == TYPES[:ip_address] && expires_in.blank?
       raise ArgumentError, "expires_in is required when blocking an ip_address"
     end
 
