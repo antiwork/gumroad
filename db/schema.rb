@@ -1450,6 +1450,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000001) do
     t.index ["payment_id"], name: "index_payments_balances_on_payment_id"
   end
 
+  create_table "platform_blocks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "object_type", limit: 50, null: false
+    t.string "object_value", limit: 320, null: false
+    t.datetime "blocked_at"
+    t.datetime "expires_at"
+    t.bigint "blocked_by"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["object_type", "object_value"], name: "index_platform_blocks_on_type_and_value", unique: true
+    t.index ["object_value"], name: "index_platform_blocks_on_value"
+  end
+
   create_table "post_email_blasts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "post_id", null: false
     t.bigint "seller_id", null: false
