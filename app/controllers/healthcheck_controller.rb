@@ -27,7 +27,9 @@ class HealthcheckController < ApplicationController
 
   def purchases
     threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
-    count = Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count
+    count = Rails.cache.fetch("healthcheck:purchases:successful_last_10_minutes", expires_in: 30.seconds) do
+      Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count
+    end
     healthy = threshold.present? && count >= threshold.to_i
     status = healthy ? :ok : :service_unavailable
 
