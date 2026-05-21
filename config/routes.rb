@@ -97,6 +97,15 @@ Rails.application.routes.draw do
       get "/tax_forms", to: "tax_forms#index"
       get "/tax_forms/:year/:tax_form_type/download", to: "tax_forms#download"
       get "/earnings", to: "earnings#show"
+
+      # Gumroad Walks iOS app. Two endpoints keep our OpenAI + Anthropic
+      # keys server-side: realtime_tokens issues a short-lived ek_... for
+      # the client to connect to OpenAI's WS directly, and synthesis is a
+      # one-shot proxy to Claude for post-walk product drafting.
+      namespace :walks do
+        resources :realtime_tokens, only: [:create]
+        resources :synthesis, only: [:create]
+      end
     end
   end
 
