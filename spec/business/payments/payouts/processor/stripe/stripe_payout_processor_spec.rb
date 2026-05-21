@@ -255,6 +255,11 @@ describe StripePayoutProcessor, :vcr do
     before do
       allow(described_class).to receive(:get_payout_details)
         .and_return([cad_merchant_account, [], [balance_1, balance_2]])
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 300_00, currency: "cad" }],
+                                       pending: [{ amount: 0, currency: "cad" }])
+      )
       described_class.prepare_payment_and_set_amount(payment, [balance_1, balance_2])
     end
 
@@ -264,6 +269,206 @@ describe StripePayoutProcessor, :vcr do
 
     it "sets the amount as the sum of the balances" do
       expect(payment.amount_cents).to eq(300_00)
+    end
+  end
+
+  describe "destination_balance_drift_error" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }
+    let(:eur_merchant_account) do
+      create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                currency: Currency::EUR, country: "ES")
+    end
+    let(:eur_balance) do
+      create(:balance, user:, merchant_account: eur_merchant_account,
+                       holding_currency: Currency::EUR, holding_amount_cents: 1_356_14)
+    end
+
+    before do
+      allow(described_class).to receive(:get_payout_details)
+        .and_return([eur_merchant_account, [], [eur_balance]])
+    end
+
+    context "when Stripe's available + pending balance is less than Gumroad's recorded held-at-Stripe balance" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_096_45, currency: "eur" }],
+                                          pending: [{ amount: 0, currency: "eur" }])
+        )
+      end
+
+      it "marks the payment as failed with INSUFFICIENT_FUNDS before any internal transfer" do
+        expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors.first).to include("Destination Stripe balance mismatch")
+        expect(errors.first).to include("gap: 25969 cents")
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      end
+
+      it "surfaces the drift message through payment.errors so admin endpoints get an informative response body" do
+        described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(payment.errors.full_messages.first).to include("Destination Stripe balance mismatch")
+        expect(payment.errors.full_messages.first).to include("gap: 25969 cents")
+      end
+    end
+
+    context "when Stripe's pending balance covers the gap (funds settling, no true drift)" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_096_45, currency: "eur" }],
+                                          pending: [{ amount: 26_000, currency: "eur" }])
+        )
+      end
+
+      it "does not flag drift because settling pending funds will land before next cycle" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq([])
+        expect(payment.state).not_to eq("failed")
+      end
+    end
+
+    context "when Stripe reports negative pending (reversals/disputes/refunds in flight) but available covers the payout" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_500_00, currency: "eur" }],
+                                          pending: [{ amount: -50_000, currency: "eur" }])
+        )
+      end
+
+      it "does not flag drift because negative pending is clamped at zero" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq([])
+        expect(payment.state).not_to eq("failed")
+      end
+    end
+
+    context "when Stripe's available balance matches or exceeds Gumroad's recorded held-at-Stripe balance" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_400_00, currency: "eur" }],
+                                          pending: [{ amount: 0, currency: "eur" }])
+        )
+      end
+
+      it "proceeds with the payout preparation" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq([])
+        expect(payment.state).not_to eq("failed")
+        expect(payment.amount_cents).to eq(1_356_14)
+      end
+    end
+
+    context "when Stripe has no balance entry in the destination currency" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                          available: [{ amount: 1_400_00, currency: "usd" }],
+                                          pending: [{ amount: 50_000, currency: "usd" }])
+        )
+      end
+
+      it "treats both available and pending as zero for the missing currency and fails with the full gap" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors.first).to include("Destination Stripe balance mismatch")
+        expect(errors.first).to include("gap: 135614 cents")
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      end
+    end
+
+    context "when the destination is a user-connected Stripe Standard account" do
+      let(:stripe_connect_account) { create(:merchant_account_stripe_connect, user:, currency: Currency::EUR) }
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([stripe_connect_account, [], [eur_balance]])
+      end
+
+      it "skips the drift check because Gumroad does not manage the destination balance" do
+        expect(Stripe::Balance).not_to receive(:retrieve)
+
+        described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+      end
+    end
+
+    context "when there are no balances held at Stripe" do
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([eur_merchant_account, [], []])
+      end
+
+      it "skips the drift check" do
+        expect(Stripe::Balance).not_to receive(:retrieve)
+
+        described_class.prepare_payment_and_set_amount(payment, [])
+      end
+    end
+
+    context "when the destination merchant account is KRW" do
+      let(:krw_merchant_account) do
+        create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                  currency: Currency::KRW, country: "KR")
+      end
+      let(:krw_balance) do
+        create(:balance, user:, merchant_account: krw_merchant_account,
+                         holding_currency: Currency::KRW, holding_amount_cents: 100_00)
+      end
+
+      before do
+        allow(described_class).to receive(:get_payout_details)
+          .and_return([krw_merchant_account, [], [krw_balance]])
+      end
+
+      it "skips the drift check because KRW subunit conventions differ between Gumroad and Stripe" do
+        expect(Stripe::Balance).not_to receive(:retrieve)
+
+        described_class.prepare_payment_and_set_amount(payment, [krw_balance])
+      end
+    end
+
+    context "when Stripe::Balance.retrieve raises Stripe::APIConnectionError" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve)
+          .and_raise(Stripe::APIConnectionError.new("connection failed"))
+      end
+
+      it "lets the error propagate to the existing rescue and marks the payment failed" do
+        expect do
+          described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+        end.to raise_error(Stripe::APIConnectionError, /connection failed/)
+
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.error_message).to include("Stripe::APIConnectionError")
+      end
+    end
+
+    context "when Stripe::Balance.retrieve raises Stripe::InvalidRequestError (e.g. account_invalid)" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve)
+          .and_raise(Stripe::InvalidRequestError.new("No such account", "stripe_account"))
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "lets the error propagate to the existing rescue, returns the error message, and marks the payment failed" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq(["No such account"])
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.error_message).to include("No such account")
+        expect(ErrorNotifier).to have_received(:notify)
+      end
     end
   end
 
@@ -649,6 +854,11 @@ describe StripePayoutProcessor, :vcr do
                                                     transfer_data: { destination: merchant_account.charge_processor_merchant_id })
       payment_intent.confirm
       Stripe::Charge.retrieve(id: payment_intent.latest_charge)
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 600_00, currency: "usd" }],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -1070,6 +1280,11 @@ describe StripePayoutProcessor, :vcr do
                                                     transfer_data: { destination: merchant_account.charge_processor_merchant_id })
       payment_intent.confirm
       Stripe::Charge.retrieve(id: payment_intent.latest_charge)
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [{ amount: 600_00, currency: "usd" }],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -1490,6 +1705,17 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -1850,6 +2076,17 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -2203,6 +2440,17 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do
@@ -2556,6 +2804,17 @@ describe StripePayoutProcessor, :vcr do
     end
     before do
       allow(Stripe::Payout).to receive(:create).and_return(double("id" => "tr_1234", "arrival_date" => 1732752000))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(object: "balance",
+                                       available: [
+                                         { amount: 1_000_000_00, currency: "cad" },
+                                         { amount: 1_000_000_00, currency: "eur" },
+                                         { amount: 1_000_000_00, currency: "sgd" },
+                                         { amount: 1_000_000_00, currency: "krw" },
+                                         { amount: 1_000_000_00, currency: "usd" }
+                                       ],
+                                       pending: [{ amount: 0, currency: "usd" }])
+      )
     end
 
     it "creates a transfer at stripe" do

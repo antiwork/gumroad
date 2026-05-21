@@ -13,7 +13,12 @@
     "publicOutputDir": "vite-test",
     "port": 3037
   },
+  "staging": {
+    "assetHost": "https://staging-assets.gumroad.com",
+    "publicOutputDir": "vite"
+  },
   "production": {
+    "assetHost": "https://assets.gumroad.com",
     "publicOutputDir": "vite"
   }
 }

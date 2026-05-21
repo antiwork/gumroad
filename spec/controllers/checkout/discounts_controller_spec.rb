@@ -347,22 +347,32 @@ describe Checkout::DiscountsController do
                                                                      ])
       end
 
-      it "rejects ownership tiers without an existing-customers flag" do
+      it "creates a tiered offer code without an existing-customers flag" do
         expect do
           post :create, params: {
-            name: "Bad",
-            code: "bad",
+            name: "Tenure tiered",
+            code: "tenure",
             amount_percentage: 0,
             currency_type: nil,
             universal: false,
             selected_product_ids: [subject_product.external_id],
             existing_customers_only: false,
             ownership_product_ids: [],
-            ownership_duration_tiers: [{ months: 0, amount_percentage: 50 }],
+            ownership_duration_tiers: [
+              { months: 0, amount_percentage: 0 },
+              { months: 12, amount_percentage: 50 },
+            ],
           }, as: :json
-        end.to change { seller.offer_codes.count }.by(0)
+        end.to change { seller.offer_codes.count }.by(1)
 
-        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["success"]).to eq(true)
+        offer_code = seller.offer_codes.last
+        expect(offer_code.existing_customers_only?).to eq(false)
+        expect(offer_code.ownership_products).to be_empty
+        expect(offer_code.normalized_ownership_duration_tiers).to eq([
+                                                                       { "months" => 0, "amount_percentage" => 0 },
+                                                                       { "months" => 12, "amount_percentage" => 50 },
+                                                                     ])
       end
     end
   end

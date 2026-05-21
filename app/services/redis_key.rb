@@ -49,6 +49,7 @@ class RedisKey
     def unreviewed_users_data = "admin:unreviewed_users_data"
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
+    def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"
     def mobile_minimum_version = "mobile:minimum_version"
     def mobile_minimum_update_created_at = "mobile:minimum_update_created_at"

@@ -2040,7 +2040,7 @@ describe Subscription, :vcr do
     it "caches the buyer-specific amount when applying a tiered existing-customer discount",
        vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
-      offer_code = create(:tiered_offer_code, products: [@product], ownership_products: [@product])
+      offer_code = create(:tiered_offer_code, :for_existing_customers, products: [@product], ownership_products: [@product])
 
       new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code:)
 
@@ -2052,7 +2052,7 @@ describe Subscription, :vcr do
     it "does not use the subscription owner to auto-discover discounts for unauthenticated updates",
        vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
-      create(:tiered_offer_code, code: "autovictim", products: [@product], ownership_products: [@product], user: @product.user)
+      create(:tiered_offer_code, :for_existing_customers, code: "autovictim", products: [@product], ownership_products: [@product], user: @product.user)
 
       new_purchase = @subscription.update_current_plan!(
         new_variants: [@new_tier],
@@ -2085,7 +2085,7 @@ describe Subscription, :vcr do
         pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
         duration_in_months: 1,
       )
-      tiered_offer_code = create(:tiered_offer_code, code: "zeroseedplan", products: [@product], ownership_products: [@product], user: @product.user)
+      tiered_offer_code = create(:tiered_offer_code, :for_existing_customers, code: "zeroseedplan", products: [@product], ownership_products: [@product], user: @product.user)
 
       new_purchase = @subscription.update_current_plan!(
         new_variants: [@new_tier],
@@ -2105,7 +2105,7 @@ describe Subscription, :vcr do
     it "keeps a re-resolved tiered discount when clear_discount is true",
        vcr: { cassette_name: "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity" } do
       setup_subscription
-      offer_code = create(:tiered_offer_code, code: "tieredrestart", products: [@product], ownership_products: [@product], user: @product.user)
+      offer_code = create(:tiered_offer_code, :for_existing_customers, code: "tieredrestart", products: [@product], ownership_products: [@product], user: @product.user)
       @original_purchase.update!(offer_code:)
       @original_purchase.create_purchase_offer_code_discount!(
         offer_code:,
@@ -2536,7 +2536,7 @@ describe Subscription, :vcr do
 
       it "keeps a deleted tiered offer code discount when clear_deleted_discount is true",
          vcr: { cassette_name: "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true" } do
-        tiered_code = create(:tiered_offer_code, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
+        tiered_code = create(:tiered_offer_code, :for_existing_customers, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
         @original_purchase.update!(offer_code: tiered_code)
         @original_purchase.create_purchase_offer_code_discount!(
           offer_code: tiered_code,
@@ -4047,6 +4047,45 @@ describe Subscription, :vcr do
     it "discovers the best tiered renewal discount for the subscriber" do
       auto = subscription.auto_renewal_offer_code
       expect(auto.offer_code).to eq(tiered_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "discovers a standalone tiered renewal discount without existing_customers_only" do
+      tiered_code.mark_deleted!
+      standalone_code = create(:offer_code,
+                               user: seller,
+                               products: [product],
+                               amount_cents: nil,
+                               amount_percentage: 0,
+                               currency_type: nil,
+                               ownership_duration_tiers: [
+                                 { "months" => 0, "amount_percentage" => 0 },
+                                 { "months" => 12, "amount_percentage" => 50 },
+                               ])
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(standalone_code)
+      expect(auto.resolved_percent).to eq(50)
+    end
+
+    it "applies a standalone tiered renewal discount to a guest subscription with no user" do
+      tiered_code.mark_deleted!
+      standalone_code = create(:offer_code,
+                               user: seller,
+                               products: [product],
+                               amount_cents: nil,
+                               amount_percentage: 0,
+                               currency_type: nil,
+                               ownership_duration_tiers: [
+                                 { "months" => 0, "amount_percentage" => 0 },
+                                 { "months" => 12, "amount_percentage" => 50 },
+                               ])
+      subscription.update!(user: nil)
+
+      auto = subscription.auto_renewal_offer_code
+
+      expect(auto.offer_code).to eq(standalone_code)
       expect(auto.resolved_percent).to eq(50)
     end
 

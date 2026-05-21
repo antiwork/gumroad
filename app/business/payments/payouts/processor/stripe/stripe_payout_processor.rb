@@ -182,6 +182,13 @@ class StripePayoutProcessor
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
 
+    if (drift_error = destination_balance_drift_error(merchant_account, balances_held_by_stripe))
+      payment.error_message = drift_error.truncate(1000)
+      payment.mark_failed!(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      payment.errors.add(:base, drift_error)
+      return [drift_error]
+    end
+
     payment.amount_cents += balances_held_by_stripe.sum(&:holding_amount_cents)
 
     # If the user is being paid out funds held by Gumroad, transfer those funds to the creators Stripe account.
@@ -251,6 +258,41 @@ class StripePayoutProcessor
   ensure
     payment.mark_failed! if failed
   end
+
+  # Aborts the payout cycle when Gumroad's recorded view of `balances_held_by_stripe` exceeds the
+  # actual `available + pending` balance at the destination Stripe account. Catches FX drift before
+  # any internal transfer fires, preventing the transfer/payout-fail/reverse/FX-residual-Credit loop
+  # that otherwise compounds the gap each cycle. Pending is included so settling funds (the typical
+  # 2-7 day post-charge window) are not flagged as drift — only truly missing funds are.
+  def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
+    return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
+    return nil if balances_held_by_stripe.empty?
+    # KRW: Gumroad stores 100 subunits while Stripe reports single-unit, so the raw cents comparison
+    # is off by 100x and would always flag drift for healthy accounts. Skipping is safer than
+    # encoding the divergence here; revisit if KRW sellers report stuck payouts.
+    return nil if merchant_account.currency.to_s == Currency::KRW
+
+    expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
+    return nil if expected_destination_cents <= 0
+
+    stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: merchant_account.charge_processor_merchant_id })
+    destination_currency = merchant_account.currency.to_s
+    available_cents = stripe_balance.available&.find { |b| b.currency == destination_currency }&.amount || 0
+    # Clamp at zero: Connect balances can report negative `pending` when reversals/refunds/disputes
+    # exceed inbound settling funds. Subtracting that from `available_cents` would block payouts that
+    # `available_cents` alone covers. We only credit incoming settlement, never debit it.
+    pending_cents = [stripe_balance.pending&.find { |b| b.currency == destination_currency }&.amount || 0, 0].max
+    reachable_cents = available_cents + pending_cents
+
+    return nil if reachable_cents >= expected_destination_cents
+
+    gap_cents = expected_destination_cents - reachable_cents
+    "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
+      "expected #{expected_destination_cents} #{destination_currency} cents, " \
+      "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
+      "Reconcile destination balance before retry."
+  end
+  private_class_method :destination_balance_drift_error
 
   def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|

@@ -108,4 +108,63 @@ describe HealthcheckController do
       end
     end
   end
+
+  describe "GET 'purchases'" do
+    let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
+
+    after { $redis.del(redis_key) }
+
+    context "when the successful purchases count meets the threshold" do
+      before do
+        $redis.set(redis_key, 2)
+        create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+      end
+
+      it "returns HTTP success" do
+        get :purchases
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Purchases: ok")
+      end
+    end
+
+    context "when the successful purchases count is below the threshold" do
+      before do
+        $redis.set(redis_key, 5)
+        create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :purchases
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Purchases: service_unavailable")
+      end
+    end
+
+    context "when successful purchases are older than 10 minutes" do
+      before do
+        $redis.set(redis_key, 1)
+        create(:purchase, purchase_state: "successful", created_at: 15.minutes.ago)
+      end
+
+      it "ignores them and returns HTTP service_unavailable" do
+        get :purchases
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Purchases: service_unavailable")
+      end
+    end
+
+    context "when the Redis threshold is not set" do
+      before { $redis.del(redis_key) }
+
+      it "returns HTTP service_unavailable" do
+        get :purchases
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Purchases: service_unavailable")
+      end
+    end
+  end
 end

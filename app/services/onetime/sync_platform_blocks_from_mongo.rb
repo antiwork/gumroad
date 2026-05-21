@@ -6,7 +6,8 @@
 # `updated_at` watermark from the previous run to pick up changes; the upsert
 # is idempotent on the (object_type, object_value) unique index.
 #
-# Expired records (expires_at <= now) are skipped.
+# Every record is copied — including expired ones — so the MySQL table is a
+# full historical mirror of the Mongo collection.
 #
 #   Onetime::SyncPlatformBlocksFromMongo.process
 #   Onetime::SyncPlatformBlocksFromMongo.process(since: Time.parse("2026-05-19 12:00:00 UTC"))
@@ -25,7 +26,6 @@ module Onetime
 
     def process
       scope = BlockedObject
-        .any_of({ expires_at: nil }, { :expires_at.gt => Time.current })
         .order_by(updated_at: :asc, _id: :asc)
         .no_timeout
       # `>=` (not `>`) so that if a previous run crashed mid-batch, records

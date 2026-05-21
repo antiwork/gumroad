@@ -32,7 +32,7 @@ class Variant < BaseVariant
   end
 
   def has_prices?
-    prices.alive.exists? || link.is_tiered_membership
+    alive_prices.any? || link.is_tiered_membership
   end
 
   def as_json(options = {})
@@ -48,7 +48,7 @@ class Variant < BaseVariant
     recurrence_price_values = {}
     BasePrice::Recurrence.all.each do |recurrence|
       use_subscription_price = subscription_attrs.present? && subscription_attrs[:variants].include?(self) && recurrence == subscription_attrs[:recurrence]
-      price = (alive? && link.recurrence_price_enabled?(recurrence)) ? alive_prices.is_buy.find_by(recurrence:) : nil
+      price = (alive? && link.recurrence_price_enabled?(recurrence)) ? alive_prices.select(&:is_buy?).find { |p| p.recurrence == recurrence } : nil
       # if rendering price info for a subscription, include the subscription's
       # recurrence price even if it is deleted
       if !price.present? && use_subscription_price

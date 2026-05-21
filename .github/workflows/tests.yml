@@ -399,7 +399,7 @@ jobs:
     runs-on: ubicloud-standard-4
     needs: build
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         ci_node_total: [50]
         ci_node_index:
@@ -519,7 +519,6 @@ jobs:
           chmod 777 ./capybara-artifacts
           mkdir -p ./test-logs
           chmod 777 ./test-logs
-          set +e
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
@@ -540,16 +539,6 @@ jobs:
             -e IN_DOCKER \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
-          TEST_EXIT=$?
-          if [ $TEST_EXIT -ne 0 ]; then
-            echo ""
-            echo "============================================"
-            echo "TESTS FAILED (exit code $TEST_EXIT)"
-            echo "Waiting 60s for other containers to report failures..."
-            echo "============================================"
-            sleep 60
-            exit $TEST_EXIT
-          fi
         env:
           RUBY_YJIT_ENABLE: 1
           KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
@@ -567,14 +556,6 @@ jobs:
           CI: true
           IN_DOCKER: true
           WEB_REPO: gumroadteam/web
-      - name: Cancel workflow on failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            console.log(`Cancelling workflow run ${context.runId} to stop all test containers...`);
-            await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: context.runId });
       - name: Archive capybara artifacts
         if: failure()
         uses: actions/upload-artifact@v4
