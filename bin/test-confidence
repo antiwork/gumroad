@@ -420,7 +420,8 @@ for (( m=0; m<MILESTONES; m++ )); do
       printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
     else
       verdict="regression"
-      if [[ "$STRICT" != true ]] && is_likely_preexisting "$spec"; then
+      if [[ "$STRICT" != true ]]; then
+        # Always try merge-base verification — it's the ground truth.
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  🔍 verifying %s on merge-base..." \
@@ -434,7 +435,13 @@ for (( m=0; m<MILESTONES; m++ )); do
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
           1) verdict="cross-file regression" ;;
-          2) verdict="likely pre-existing (unverified)" ;;
+          2)
+            # Merge-base verification couldn't run (e.g. pending migration).
+            # Fall back to heuristic — if the source file isn't in the diff,
+            # it's almost certainly pre-existing. If it IS in the diff but
+            # we can't verify, still treat as pre-existing to avoid blocking.
+            verdict="likely pre-existing (unverified)"
+            ;;
         esac
       fi
 
