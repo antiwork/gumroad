@@ -166,6 +166,7 @@ describe UrlRedirectPresenter do
           variant_name: nil,
           product_permalink: @product.unique_permalink,
           allows_review: true,
+          product_available: true,
           disable_reviews_after_year: false,
           review: nil,
           membership: nil,
@@ -603,6 +604,7 @@ describe UrlRedirectPresenter do
           product_permalink: @product.unique_permalink,
           product_long_url: @product.long_url,
           allows_review: true,
+          product_available: true,
           disable_reviews_after_year: true,
           review: nil,
           membership: {

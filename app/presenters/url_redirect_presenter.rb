@@ -129,6 +129,7 @@ class UrlRedirectPresenter
           variant_name: purchase.variant_names&.join(", "),
           product_long_url: purchase.link&.long_url,
           allows_review: purchase.allows_review?,
+          product_available: !purchase.link&.deleted?,
           disable_reviews_after_year: purchase.seller.disable_reviews_after_year?,
           review: review.present? ? ProductReviewPresenter.new(review).review_form_props : nil,
           membership: purchase.subscription.present? ? {
