@@ -389,19 +389,36 @@ describe StripePayoutProcessor, :vcr do
       end
     end
 
-    context "when Stripe::Balance.retrieve raises a Stripe error" do
+    context "when Stripe::Balance.retrieve raises Stripe::APIConnectionError" do
       before do
         allow(Stripe::Balance).to receive(:retrieve)
           .and_raise(Stripe::APIConnectionError.new("connection failed"))
       end
 
-      it "lets the error propagate to the existing rescue blocks and marks the payment failed" do
+      it "lets the error propagate to the existing rescue and marks the payment failed" do
         expect do
           described_class.prepare_payment_and_set_amount(payment, [eur_balance])
         end.to raise_error(Stripe::APIConnectionError, /connection failed/)
 
         expect(payment.reload.state).to eq("failed")
         expect(payment.error_message).to include("Stripe::APIConnectionError")
+      end
+    end
+
+    context "when Stripe::Balance.retrieve raises Stripe::InvalidRequestError (e.g. account_invalid)" do
+      before do
+        allow(Stripe::Balance).to receive(:retrieve)
+          .and_raise(Stripe::InvalidRequestError.new("No such account", "stripe_account"))
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "lets the error propagate to the existing rescue, returns the error message, and marks the payment failed" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+        expect(errors).to eq(["No such account"])
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.error_message).to include("No such account")
+        expect(ErrorNotifier).to have_received(:notify)
       end
     end
   end
