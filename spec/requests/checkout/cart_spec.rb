@@ -245,6 +245,9 @@ describe "Checkout cart", :js, type: :system do
         check_out(@product, logged_in_user: buyer)
 
         expect(cart.reload).to be_deleted
+        visit checkout_path
+        expect(page).to_not have_cart_item(@membership_product.name)
+        expect(page).to_not have_cart_item(@product.name)
       end
 
       it "creates a new cart with the failed item when an item fails after checkout" do
