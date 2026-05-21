@@ -20,6 +20,13 @@ describe InstantPayoutsService, :vcr do
 
         @stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
         @stripe_account.refresh until @stripe_account.payouts_enabled?
+
+        allow(Stripe::Balance).to receive(:retrieve).and_call_original
+        allow(Stripe::Balance).to receive(:retrieve).with({}, anything).and_return(
+          Stripe::Balance.construct_from(object: "balance",
+                                         available: [{ amount: 1_000_000_00, currency: "usd" }],
+                                         pending: [{ amount: 0, currency: "usd" }])
+        )
       end
 
       context "when seller has a balance within the instant payout range" do

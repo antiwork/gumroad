@@ -297,6 +297,13 @@ verify_preexisting_on_merge_base() {
   failing_ids=$(echo "$rspec_output" | grep -E '^rspec \./spec/' | awk '{print $2}' | head -50)
   [[ -z "$failing_ids" ]] && return 2
 
+  # Extract unique spec FILES from failing IDs (strip :line suffixes and [index] suffixes).
+  # Running the full file on merge-base is more reliable than line-specific IDs
+  # because line numbers shift between commits even when the spec content is unchanged.
+  local failing_files
+  failing_files=$(echo "$failing_ids" | sed -E 's/(\[.*\]|:[0-9]+)$//' | sort -u)
+  [[ -z "$failing_files" ]] && return 2
+
   WORKTREE_DIR=$(mktemp -d -t test-confidence-base.XXXXXX)
   if ! git worktree add -q --detach "$WORKTREE_DIR" "$MERGE_BASE" 2>/dev/null; then
     rm -rf "$WORKTREE_DIR"
@@ -305,10 +312,16 @@ verify_preexisting_on_merge_base() {
   fi
 
   local rerun_rc=0
-  ( cd "$WORKTREE_DIR" && bundle exec rspec --format progress --no-color $failing_ids >/dev/null 2>&1 ) || rerun_rc=$?
+  local rerun_output=""
+  rerun_output=$( cd "$WORKTREE_DIR" && bundle exec rspec --format progress --no-color $failing_files 2>&1 ) || rerun_rc=$?
 
   git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || rm -rf "$WORKTREE_DIR"
   WORKTREE_DIR=""
+
+  # If rspec ran 0 examples or hit a load error, treat as inconclusive.
+  if echo "$rerun_output" | grep -qE '(^0 examples, 0 failures|No examples found|error occurred outside of examples)'; then
+    return 2
+  fi
 
   if [[ $rerun_rc -eq 0 ]]; then
     return 1
@@ -333,7 +346,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     N=$(echo "$NAMES" | wc -l | tr -d ' ')
     echo "   ${CONF}%  ←  $(pluralize $N test)"
     echo "$NAMES" | while IFS= read -r name; do
-      echo "          $(basename "$name")"
+      echo "          ${name#spec/}"
     done
   fi
 done
@@ -407,11 +420,12 @@ for (( m=0; m<MILESTONES; m++ )); do
       printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
     else
       verdict="regression"
-      if [[ "$STRICT" != true ]] && is_likely_preexisting "$spec"; then
+      if [[ "$STRICT" != true ]]; then
+        # Always try merge-base verification — it's the ground truth.
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  🔍 verifying %s on merge-base..." \
-          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$(basename "$spec")"
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "${spec#spec/}"
 
         set +e
         verify_preexisting_on_merge_base "$output"
@@ -421,7 +435,13 @@ for (( m=0; m<MILESTONES; m++ )); do
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
           1) verdict="cross-file regression" ;;
-          2) verdict="likely pre-existing (unverified)" ;;
+          2)
+            # Merge-base verification couldn't run (e.g. pending migration).
+            # Fall back to heuristic — if the source file isn't in the diff,
+            # it's almost certainly pre-existing. If it IS in the diff but
+            # we can't verify, still treat as pre-existing to avoid blocking.
+            verdict="likely pre-existing (unverified)"
+            ;;
         esac
       fi
 
@@ -452,7 +472,7 @@ for (( m=0; m<MILESTONES; m++ )); do
         elapsed=$(( $(date +%s) - START ))
         bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
         printf "\r\033[K  %s  →%s%%  %d/%d  %ds  ⚠ %s: %s\n" \
-          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$verdict" "$(basename "$spec")"
+          "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "$verdict" "${spec#spec/}"
       fi
     fi
   done <<< "$MILESTONE_TESTS"

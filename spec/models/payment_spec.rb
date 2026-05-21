@@ -55,6 +55,26 @@ describe Payment do
         expect(payment.reload.state).to eq "cancelled"
         expect(balance.reload.state).to eq "unpaid"
       end
+
+      it "marks balances as unpaid when a processing payment transitions directly to reversed" do
+        creator = create(:user)
+        merchant_account = create(:merchant_account_paypal, user: creator)
+        balance = create(:balance, user: creator, state: "processing", merchant_account:)
+        payment = create(:payment, state: "processing", balances: [balance], processor: PayoutProcessorType::PAYPAL)
+        payment.mark!("reversed")
+        expect(payment.reload.state).to eq "reversed"
+        expect(balance.reload.state).to eq "unpaid"
+      end
+
+      it "marks balances as unpaid when a processing payment transitions directly to returned" do
+        creator = create(:user)
+        merchant_account = create(:merchant_account_paypal, user: creator)
+        balance = create(:balance, user: creator, state: "processing", merchant_account:)
+        payment = create(:payment, state: "processing", balances: [balance], processor: PayoutProcessorType::PAYPAL)
+        payment.mark!("returned")
+        expect(payment.reload.state).to eq "returned"
+        expect(balance.reload.state).to eq "unpaid"
+      end
     end
 
     context "when the processor is STRIPE" do
