@@ -410,8 +410,8 @@ export default function PageEdit() {
                 disabled={generating}
                 autoFocus
               />
-              <Button type="submit" color="primary" disabled={!prompt.trim() || generating}>
-                {generating ? "..." : "Send"}
+              <Button type="submit" color="primary" disabled={!prompt.trim() || generating || waitingForFirst}>
+                {generating || waitingForFirst ? "..." : "Send"}
               </Button>
             </div>
           </form>

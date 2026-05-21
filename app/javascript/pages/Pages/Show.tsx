@@ -17,20 +17,41 @@ type PageProps = {
 
 export default function PageShow() {
   const { page } = typia.assert<PageProps>(usePage().props);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
-    // Load Tailwind CDN for rendering
-    const script = document.createElement("script");
-    script.src = "https://cdn.tailwindcss.com";
-    document.head.appendChild(script);
-    return () => {
-      document.head.removeChild(script);
-    };
-  }, []);
+    const iframe = iframeRef.current;
+    if (!iframe || !page.html_content) return;
+
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <script src="https://cdn.tailwindcss.com"><\/script>
+          <style>
+            html, body { margin: 0; padding: 0; min-height: 100vh; }
+          </style>
+        </head>
+        <body>${page.html_content}</body>
+      </html>
+    `);
+    doc.close();
+  }, [page.html_content]);
 
   return (
     <div className="min-h-screen">
-      <div dangerouslySetInnerHTML={{ __html: page.html_content }} />
+      <iframe
+        ref={iframeRef}
+        className="h-screen w-full border-0"
+        title={page.title}
+        sandbox="allow-scripts"
+      />
     </div>
   );
 }

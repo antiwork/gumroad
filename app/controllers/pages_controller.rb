@@ -92,6 +92,7 @@ class PagesController < Sellers::BaseController
     return render json: { success: false, error: "Content moderation blocked this prompt." }, status: :unprocessable_entity unless moderation.passed
 
     Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
+    @page.update_column(:generating_since, Time.current)
     render json: { success: true, queued: true }
   end
 
@@ -104,7 +105,7 @@ class PagesController < Sellers::BaseController
       published_version_id: @page.published_version_id,
       published: @page.published,
       auto_publish: @page.auto_publish,
-      generating: version.nil? && @page.html_content.blank? && @page.generation_error.blank?,
+      generating: @page.generating_since.present?,
       generation_error: @page.generation_error,
     }
   end

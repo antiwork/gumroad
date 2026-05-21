@@ -210,6 +210,7 @@ describe PagesController, type: :request do
     let(:page) { create(:page, user: seller) }
 
     it "reports generating=true when no version exists yet" do
+      page.update_column(:generating_since, Time.current)
       get latest_version_page_path(page.slug), headers: { "Accept" => "application/json" }
       expect(JSON.parse(response.body)).to include("generating" => true, "html_content" => nil)
     end

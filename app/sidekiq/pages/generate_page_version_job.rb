@@ -9,12 +9,12 @@ class Pages::GeneratePageVersionJob
     parent_version = parent_version_id ? PageVersion.find_by(id: parent_version_id) : nil
 
     # Clear any previous error so the polling endpoint sees generating=true.
-    page.update_column(:generation_error, nil)
+    page.update_columns(generation_error: nil, generating_since: Time.current)
 
     moderation = ContentModeration::ModerateRecordService.check(page, :page)
     unless moderation.passed
       Rails.logger.warn("Pages::GeneratePageVersionJob skipped page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
-      page.update_column(:generation_error, "Content moderation failed — try a different prompt.")
+      page.update_columns(generation_error: "Content moderation failed — try a different prompt.", generating_since: nil)
       return
     end
 
@@ -26,9 +26,10 @@ class Pages::GeneratePageVersionJob
     ).call
 
     if result.success?
+      page.update_column(:generating_since, nil)
       page.apply_new_version!(result.version)
     else
-      page.update_column(:generation_error, "Generation failed — please try again.")
+      page.update_columns(generation_error: "Generation failed — please try again.", generating_since: nil)
     end
   end
 end

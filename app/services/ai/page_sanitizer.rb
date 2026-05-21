@@ -12,7 +12,7 @@ class Ai::PageSanitizer
   ].freeze
 
   ALLOWED_ATTRIBUTES = %w[
-    class id style
+    class id
     src href alt title target rel
     width height loading
     data-gumroad-ref data-gumroad-field data-gumroad-action
