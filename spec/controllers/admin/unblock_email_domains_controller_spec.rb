@@ -39,7 +39,9 @@ describe Admin::UnblockEmailDomainsController, type: :controller, inertia: true 
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
 
       put :update, params: { email_domains: { identifiers: } }
-      expect(PlatformBlock.find_by(object_value: "example.com")).to be_nil
+      record = PlatformBlock.find_by(object_value: "example.com")
+      expect(record).to be_present
+      expect(record.blocked_at).to be_nil
     end
   end
 end

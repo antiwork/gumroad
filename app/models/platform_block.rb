@@ -21,7 +21,7 @@ class PlatformBlock < ApplicationRecord
 
   validates :object_type, inclusion: { in: TYPES.values }
 
-  scope :active, -> { where("expires_at IS NULL OR expires_at > ?", Time.current) }
+  scope :active, -> { where.not(blocked_at: nil).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   def self.add!(object_type:, object_value:, by: nil, expires_in: nil)
     if object_type == TYPES[:ip_address] && expires_in.blank?
@@ -36,5 +36,9 @@ class PlatformBlock < ApplicationRecord
         expires_at: expires_in.present? ? now + expires_in : nil,
       )
     end
+  end
+
+  def unblock!
+    update!(blocked_at: nil, expires_at: nil)
   end
 end
