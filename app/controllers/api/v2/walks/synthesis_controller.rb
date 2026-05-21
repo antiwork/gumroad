@@ -69,7 +69,8 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
     end
 
     def require_walks_subscription
-      return if current_resource_owner&.gumroad_walks_subscribed?
+      jws = request.headers["X-Apple-Transaction-JWS"].to_s
+      return if current_resource_owner&.gumroad_walks_subscribed?(transaction_jws: jws)
       render json: { error: "Active Gumroad Walks subscription required." }, status: :payment_required
     end
 end

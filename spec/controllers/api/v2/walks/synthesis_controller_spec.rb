@@ -9,6 +9,7 @@ describe Api::V2::Walks::SynthesisController do
     @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
+    allow_any_instance_of(User).to receive(:gumroad_walks_subscribed?).and_return(true)
   end
 
   let(:exchanges) do
