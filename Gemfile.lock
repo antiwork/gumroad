@@ -313,7 +313,7 @@ GEM
       rchardet (>= 1.6.1)
       rexml
     equalizer (0.0.11)
-    erb (6.0.1)
+    erb (6.0.1.1)
     erubi (1.13.1)
     et-orbi (1.2.11)
       tzinfo
