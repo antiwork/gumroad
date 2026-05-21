@@ -91,7 +91,7 @@ class Exports::PurchaseExportService
     tempfile
   end
 
-  def self.export(seller:, recipient:, filters: {})
+  def self.export(seller:, recipient:, filters: {}, force_async: false)
     product_ids = Link.by_external_ids(filters[:product_ids]).ids if filters[:product_ids].present?
     variant_ids = BaseVariant.by_external_ids(filters[:variant_ids]).ids if filters[:variant_ids].present?
     start_time = Date.parse(filters[:start_time]).in_time_zone("UTC").beginning_of_day if filters[:start_time].present?
@@ -109,7 +109,7 @@ class Exports::PurchaseExportService
     )
     count = EsClient.count(index: Purchase.index_name, body: { query: search_service.query })["count"]
 
-    if count <= SYNCHRONOUS_EXPORT_THRESHOLD
+    if count <= SYNCHRONOUS_EXPORT_THRESHOLD && !force_async
       records = Purchase.where(id: search_service.process.results.map(&:id))
       Exports::PurchaseExportService.new(records).perform
     else
