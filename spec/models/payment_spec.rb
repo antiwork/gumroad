@@ -61,7 +61,7 @@ describe Payment do
         merchant_account = create(:merchant_account_paypal, user: creator)
         balance = create(:balance, user: creator, state: "processing", merchant_account:)
         payment = create(:payment, state: "processing", balances: [balance], processor: PayoutProcessorType::PAYPAL)
-        payment.mark("reversed")
+        payment.mark!("reversed")
         expect(payment.reload.state).to eq "reversed"
         expect(balance.reload.state).to eq "unpaid"
       end
@@ -71,7 +71,7 @@ describe Payment do
         merchant_account = create(:merchant_account_paypal, user: creator)
         balance = create(:balance, user: creator, state: "processing", merchant_account:)
         payment = create(:payment, state: "processing", balances: [balance], processor: PayoutProcessorType::PAYPAL)
-        payment.mark("returned")
+        payment.mark!("returned")
         expect(payment.reload.state).to eq "returned"
         expect(balance.reload.state).to eq "unpaid"
       end
