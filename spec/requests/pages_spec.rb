@@ -143,7 +143,7 @@ describe PagesController, type: :request do
     it "exposes the template list as an inertia prop on /pages/new" do
       get new_page_path, headers: { "X-Inertia" => "true" }
       props = JSON.parse(response.body)["props"]
-      expect(props["templates"].map { |t| t["id"] }).to include("sleek-dark", "course-launch")
+      expect(props["templates"].map { |t| t["id"] }).to include("minimal-product", "sleek-dark", "neobrutalist")
     end
   end
 

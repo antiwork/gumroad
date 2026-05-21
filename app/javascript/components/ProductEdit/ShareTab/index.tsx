@@ -1,4 +1,4 @@
-import { Book, Box, Link, Moon, TrendingUp, User, UserCheck, type BoxIconProps } from "@boxicons/react";
+import { Link } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -163,15 +163,6 @@ type Template = {
   icon: string;
 };
 
-const SPLASH_ICONS: Record<string, React.ComponentType<BoxIconProps>> = {
-  moon: Moon,
-  box: Box,
-  "trending-up": TrendingUp,
-  user: User,
-  "book-open": Book,
-  users: UserCheck,
-};
-
 const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) => {
   const [templates, setTemplates] = React.useState<Template[]>([]);
 
@@ -207,23 +198,20 @@ const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) =
         </p>
       </header>
       {templates.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {templates.map((template) => {
-            const Icon = SPLASH_ICONS[template.icon] ?? Box;
-            return (
-              <a
-                key={template.id}
-                href={newPageHref(template.id)}
-                className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
-              >
-                <span className="flex size-10 items-center justify-center rounded-md bg-active-bg">
-                  <Icon className="size-5" />
-                </span>
-                <h4 className="font-bold">{template.name}</h4>
-                <p className="text-sm text-muted">{template.description}</p>
-              </a>
-            );
-          })}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {templates.map((template) => (
+            <a
+              key={template.id}
+              href={newPageHref(template.id)}
+              className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
+            >
+              <span className="text-3xl leading-none" aria-hidden="true">
+                {template.icon}
+              </span>
+              <h4 className="font-bold">{template.name}</h4>
+              <p className="text-sm text-muted">{template.description}</p>
+            </a>
+          ))}
         </div>
       ) : null}
       <div>

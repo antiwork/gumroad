@@ -1,15 +1,16 @@
-import { Book, Box, Moon, TrendingUp, User, UserCheck, type BoxIconProps } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
 import { Button } from "$app/components/Button";
+import Errors from "$app/components/Form/Errors";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 type ProductOption = {
   id: string;
@@ -38,139 +39,137 @@ type FormData = {
     title: string;
     product_permalink: string;
     template_id: string;
-    is_profile: boolean;
   };
 };
 
-const ICONS: Record<string, React.ComponentType<BoxIconProps>> = {
-  moon: Moon,
-  box: Box,
-  "trending-up": TrendingUp,
-  user: User,
-  "book-open": Book,
-  users: UserCheck,
+type FormErrors = {
+  "page.title"?: string | undefined;
 };
 
 export default function PagesNew() {
   const { product, products, templates } = typia.assert<PageProps>(usePage().props);
   const formUID = React.useId();
+  const nameInputRef = React.useRef<HTMLInputElement>(null);
 
   const form = useForm<FormData>("CreatePage", {
     page: {
       title: "",
       product_permalink: product?.permalink || "",
       template_id: templates[0]?.id || "",
-      is_profile: false,
     },
   });
 
-  const savePage = (e: React.FormEvent) => {
+  const errors = typia.assert<FormErrors>(form.errors);
+
+  const savePage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (form.data.page.title.trim() === "") {
       form.setError("page.title", "is required");
+      nameInputRef.current?.focus();
       return;
     }
+    form.clearErrors("page.title");
     form.post(Routes.pages_path());
   };
-
-  const updatePage = <K extends keyof FormData["page"]>(key: K, value: FormData["page"][K]) =>
-    form.setData("page", { ...form.data.page, [key]: value });
 
   return (
     <>
       <PageHeader
         className="sticky-top"
-        title="New page"
+        title="What kind of page are you creating?"
         actions={
           <>
             <Button asChild>
-              <Link href={Routes.pages_path()}>Cancel</Link>
+              <Link href={Routes.pages_path()}>
+                <span>Cancel</span>
+              </Link>
             </Button>
             <Button color="accent" type="submit" form={`new-page-form-${formUID}`} disabled={form.processing}>
-              {form.processing ? "Creating..." : "Create page"}
+              {form.processing ? "Creating..." : "Next: Customize"}
             </Button>
           </>
         }
       />
       <div>
-        <form id={`new-page-form-${formUID}`} className="row" onSubmit={savePage}>
-          <FormSection
-            title="Start with a template"
-            description="Pick a starting point. You can iterate with chat once the page is created."
-          >
-            <Fieldset>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {templates.map((template) => {
-                  const Icon = ICONS[template.icon] ?? Box;
-                  const selected = form.data.page.template_id === template.id;
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => updatePage("template_id", template.id)}
-                      className={`flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors ${
-                        selected ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"
-                      }`}
-                    >
-                      <span className="flex size-10 items-center justify-center rounded-md bg-active-bg">
-                        <Icon className="size-5" />
-                      </span>
-                      <h4 className="font-bold">{template.name}</h4>
-                      <p className="text-sm text-muted">{template.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </Fieldset>
-          </FormSection>
-
-          <FormSection title="Details">
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`title-${formUID}`}>Page title</Label>
-              </FieldsetTitle>
-              <Input
-                id={`title-${formUID}`}
-                type="text"
-                value={form.data.page.title}
-                onChange={(e) => updatePage("title", e.target.value)}
-                placeholder="My awesome landing page"
-              />
-              {form.errors["page.title"] ? <small className="text-danger">{form.errors["page.title"]}</small> : null}
-            </Fieldset>
-
-            {products.length > 0 ? (
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label>Featured product (optional)</Label>
-                </FieldsetTitle>
-                <p className="text-sm text-muted">
-                  Link this page to a specific product for AI context and the buy button.
+        <div>
+          <form id={`new-page-form-${formUID}`} className="row" onSubmit={savePage}>
+            <FormSection
+              header={
+                <p>
+                  Pick a theme and we'll draft a custom landing page for you using AI. You can iterate with chat and
+                  publish whenever you're ready.
                 </p>
-                <TypeSafeOptionSelect
-                  value={form.data.page.product_permalink}
-                  onChange={(val) => updatePage("product_permalink", val)}
-                  options={[
-                    { id: "", label: "None" },
-                    ...products.map((p) => ({ id: p.permalink, label: `${p.name} (${p.price})` })),
-                  ]}
+              }
+            >
+              <Fieldset state={errors["page.title"] ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`title-${formUID}`}>Title</Label>
+                </FieldsetTitle>
+                <Input
+                  id={`title-${formUID}`}
+                  type="text"
+                  value={form.data.page.title}
+                  onChange={(e) => form.setData("page.title", e.target.value)}
+                  aria-invalid={!!errors["page.title"]}
+                  ref={nameInputRef}
                 />
+                <Errors errors={errors["page.title"]} label="Title" />
               </Fieldset>
-            ) : null}
 
-            <Fieldset>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.data.page.is_profile}
-                  onChange={(e) => updatePage("is_profile", e.target.checked)}
-                />
-                <span>Use as my profile page (only one per account)</span>
-              </label>
-            </Fieldset>
-          </FormSection>
-        </form>
+              <Fieldset>
+                <FieldsetTitle>Theme</FieldsetTitle>
+                <Tabs
+                  variant="buttons"
+                  className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-4"
+                  role="radiogroup"
+                >
+                  {templates.map((template) => {
+                    const isSelected = template.id === form.data.page.template_id;
+                    return (
+                      <Tab key={template.id} isSelected={isSelected} asChild>
+                        <Button
+                          className="flex-col"
+                          role="radio"
+                          aria-checked={isSelected}
+                          data-template={template.id}
+                          onClick={() => form.setData("page.template_id", template.id)}
+                        >
+                          <span className="text-4xl leading-none" aria-hidden="true">
+                            {template.icon}
+                          </span>
+                          <div>
+                            <h4 className="font-bold">{template.name}</h4>
+                            {template.description}
+                          </div>
+                        </Button>
+                      </Tab>
+                    );
+                  })}
+                </Tabs>
+              </Fieldset>
+
+              {products.length > 0 ? (
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`product-${formUID}`}>Featured product (optional)</Label>
+                  </FieldsetTitle>
+                  <TypeSafeOptionSelect
+                    id={`product-${formUID}`}
+                    value={form.data.page.product_permalink}
+                    onChange={(val) => form.setData("page.product_permalink", val)}
+                    options={[
+                      { id: "", label: "None" },
+                      ...products.map((p) => ({ id: p.permalink, label: `${p.name} (${p.price})` })),
+                    ]}
+                  />
+                  <small className="text-muted">
+                    Link this page to a specific product for AI context and the buy button.
+                  </small>
+                </Fieldset>
+              ) : null}
+            </FormSection>
+          </form>
+        </div>
       </div>
     </>
   );
