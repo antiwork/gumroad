@@ -25,7 +25,7 @@ jobs:
 
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    runs-on: ${{ fromJSON(vars.CI_BUILD_RUNNER || '["ubicloud-standard-8"]') }}
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     env:
@@ -95,7 +95,9 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Computed test image tag: $TAG"
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: useblacksmith/setup-docker-builder@v1
+        with:
+          max-cache-size-mb: "204800"
       - name: Restore asset precompile cache
         id: asset_cache
         uses: actions/cache@v4
@@ -146,9 +148,10 @@ jobs:
               logger "$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA already exists"
             fi
 
-            # Build test image using GHA cache instead of pulling test-cache
-            # from Docker Hub (~3 min saved by avoiding the registry round-trip).
-            logger "building $WEB_REPO:$TEST_IMAGE_TAG (with GHA cache)"
+            # Build test image. Blacksmith's setup-docker-builder provides a
+            # sticky-disk-backed BuildKit builder that persists the layer cache
+            # across runs automatically — no explicit --cache-from/--cache-to needed.
+            logger "building $WEB_REPO:$TEST_IMAGE_TAG"
             WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
             # Pull the FROM images that the multi-stage Dockerfile needs.
             docker pull --quiet $WEB_BASE_REPO:$WEB_BASE_SHA &
@@ -158,8 +161,6 @@ jobs:
               WEB_BASE_TEST_DOCKERFILE_FROM=$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA \
             docker buildx build \
               --load \
-              --cache-from type=gha,scope=test-image \
-              --cache-to type=gha,mode=max,scope=test-image \
               --build-arg WEB_DOCKERFILE_FROM \
               --build-arg WEB_BASE_TEST_DOCKERFILE_FROM \
               --build-arg BUILDKIT_INLINE_CACHE=1 \
