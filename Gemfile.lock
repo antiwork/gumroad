@@ -575,7 +575,7 @@ GEM
       connection_pool (~> 2.2)
     net-http2 (0.18.5)
       http-2 (~> 0.11)
-    net-imap (0.5.12)
+    net-imap (0.5.14)
       date
       net-protocol
     net-pop (0.1.2)
@@ -1011,7 +1011,7 @@ GEM
       model_attribute (~> 3.2)
     thor (1.4.0)
     thread_safe (0.3.6)
-    timeout (0.4.4)
+    timeout (0.6.1)
     trailblazer-option (0.1.2)
     tsort (0.2.0)
     ttfunk (1.8.0)
