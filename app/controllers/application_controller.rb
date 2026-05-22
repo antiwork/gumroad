@@ -32,7 +32,7 @@ class ApplicationController < ActionController::Base
   before_action :redirect_to_custom_subdomain
 
   before_action :set_signup_referrer, if: -> { logged_in_user.nil? }
-  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !request.get? && !request.head? }
+  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !impersonating? && !request.get? && !request.head? }
 
   before_action :set_gumroad_guid
 
