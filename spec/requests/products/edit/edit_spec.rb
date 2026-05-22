@@ -693,14 +693,16 @@ describe("Product Edit Scenario", type: :system, js: true) do
       login_as(recommendable_seller)
 
       expect(recommendable_product.recommendable?).to be(true)
+      index_model_records(Link)
       visit edit_link_path(recommendable_product.unique_permalink) + "/share"
       expect(page).to have_status(text: "#{recommendable_product.name} is listed on Gumroad Discover.")
 
       within(:status, text: "#{recommendable_product.name} is listed on Gumroad Discover.") do
         click_on "View"
       end
-      expect(current_url).to include(UrlService.discover_domain_with_protocol)
-      expect_product_cards_with_names("product 1")
+      expect(page).to have_current_path(/#{Regexp.escape(UrlService.discover_domain_with_protocol)}/, url: true)
+      wait_for_ajax
+      expect(page).to have_link(recommendable_product.name, href: %r{/l/#{recommendable_product.unique_permalink}})
     end
   end
 

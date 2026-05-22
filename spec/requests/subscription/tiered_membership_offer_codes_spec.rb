@@ -36,7 +36,9 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
 
       choose @lower_tier.name
 
+      wait_for_checkout_surcharges_loaded
       expect(page).not_to have_text "You'll be charged"
+      expect(page).to have_button("Update membership", disabled: false)
 
       expect do
         click_on "Update membership"
@@ -62,6 +64,10 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       fill_in "Seats", with: 2
+      wait_for_checkout_surcharges_loaded
+      expect(page).to have_text "You'll be charged US$5.35"
+      expect(page).to have_button("Update membership", disabled: false)
+
       click_on "Update membership"
       wait_for_ajax
       expect(page).to have_alert(text: "Your membership has been updated.")
@@ -75,6 +81,10 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       fill_in "Seats", with: 1
+      wait_for_checkout_surcharges_loaded
+      expect(page).not_to have_text "You'll be charged"
+      expect(page).to have_button("Update membership", disabled: false)
+
       click_on "Update membership"
       wait_for_ajax
       expect(page).to have_alert(text: "Your membership will be updated at the end of your current billing cycle.")
@@ -180,6 +190,10 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         fill_in "Seats", with: 2
+        wait_for_checkout_surcharges_loaded
+        expect(page).to have_text "You'll be charged US$10.05"
+        expect(page).to have_button("Update membership", disabled: false)
+
         click_on "Update membership"
         wait_for_ajax
         expect(page).to have_alert(text: "Your membership has been updated.")
@@ -193,6 +207,10 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
         fill_in "Seats", with: 1
+        wait_for_checkout_surcharges_loaded
+        expect(page).not_to have_text "You'll be charged"
+        expect(page).to have_button("Update membership", disabled: false)
+
         click_on "Update membership"
         wait_for_ajax
         expect(page).to have_alert(text: "Your membership will be updated at the end of your current billing cycle.")
