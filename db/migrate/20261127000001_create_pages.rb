@@ -8,12 +8,13 @@ class CreatePages < ActiveRecord::Migration[7.1]
       t.string :title, null: false
       t.string :slug, null: false
       t.text :html_content, size: :medium
-      t.json :json_data
       t.boolean :published, default: false, null: false
       t.boolean :is_profile, default: false, null: false
       t.boolean :auto_publish, default: true, null: false
       t.bigint :published_version_id
       t.datetime :published_at
+      t.string :generation_error
+      t.datetime :generating_since
       t.datetime :deleted_at
 
       t.timestamps
