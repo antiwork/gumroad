@@ -461,6 +461,132 @@ describe Api::V2::SalesController do
     end
   end
 
+  describe "GET 'summary'" do
+    before do
+      @params = {}
+      @summary = {
+        gross_cents: 0,
+        net_cents: 0,
+        units: 0,
+        refunded_cents: 0,
+        refunded_units: 0,
+        currency: "usd",
+        from: "2026-04-22",
+        to: "2026-05-21"
+      }
+      allow(Api::V2::SalesSummary).to receive(:new).and_return(@summary)
+    end
+
+    describe "when logged in with sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "returns a sales summary for the requested date range and grouping" do
+        get :summary, params: @params.merge(from: "2026-01-01", to: "2026-05-21", group_by: "month")
+
+        expect(response.parsed_body).to eq({ success: true }.merge(@summary).as_json)
+        expect(Api::V2::SalesSummary).to have_received(:new).with(
+          seller: @seller,
+          from: Date.new(2026, 1, 1),
+          to: Date.new(2026, 5, 21),
+          group_by: "month"
+        )
+      end
+
+      it "defaults to the last 30 days in the seller's timezone" do
+        @seller.update!(timezone: "Tokyo")
+
+        travel_to(Time.utc(2026, 5, 21, 18)) do
+          get :summary, params: @params
+        end
+
+        expect(Api::V2::SalesSummary).to have_received(:new).with(
+          seller: @seller,
+          from: Date.new(2026, 4, 23),
+          to: Date.new(2026, 5, 22),
+          group_by: nil
+        )
+      end
+
+      it "defaults the end date to today in the seller's timezone when only from is provided" do
+        travel_to(Time.utc(2026, 5, 21, 12)) do
+          get :summary, params: @params.merge(from: "2026-05-01")
+        end
+
+        expect(Api::V2::SalesSummary).to have_received(:new).with(
+          seller: @seller,
+          from: Date.new(2026, 5, 1),
+          to: Date.new(2026, 5, 21),
+          group_by: nil
+        )
+      end
+
+      it "returns a 400 error if from date format is incorrect" do
+        get :summary, params: @params.merge(from: "394293")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid date format provided in field 'from'. Dates must be in the format YYYY-MM-DD."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+
+      it "returns a 400 error if from is after to" do
+        get :summary, params: @params.merge(from: "2026-05-22", to: "2026-05-21")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "'from' must be on or before 'to'."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+
+      it "returns a 400 error if date range is too wide" do
+        get :summary, params: @params.merge(from: "2025-01-01", to: "2026-05-21")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Date range cannot exceed 366 days."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+
+      it "returns a 400 error if group_by is invalid" do
+        get :summary, params: @params.merge(group_by: "email")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid group_by. Valid values are: product, day, week, month."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+    end
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        get :summary, params: @params
+        expect(response.code).to eq "403"
+      end
+    end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get :summary, params: { access_token: token.token, format: :json }
+      expect(response).to be_successful
+    end
+  end
+
   describe "PUT 'mark_as_shipped'" do
     before do
       @product = create(:product, user: @seller)
