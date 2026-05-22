@@ -31,6 +31,21 @@ describe Ai::PageSanitizer do
       expect(out).not_to include("steal()")
     end
 
+    # Regression: the dangerous-pattern prepass is anchored to an attribute
+    # boundary so `on\w+=` doesn't match the trailing characters of
+    # `data-onload=`. The Rails sanitizer ultimately drops attributes that
+    # aren't allow-listed, but the prepass must not slice an attribute name
+    # in half and leave a stray quoted value that survives later passes.
+    it "does not match on* anchored inside data-on* attribute names" do
+      handler = Ai::PageSanitizer::DANGEROUS_PATTERNS.find { |p| p.source.include?("on\\w+") }
+      expect(handler).not_to be_nil
+      expect(%( data-onload=)).not_to match(handler)
+      expect(%(data-onload=)).not_to match(handler)
+      expect(%(-onload=)).not_to match(handler)
+      expect(%( onload=)).to match(handler)
+      expect(%(<div onclick=)).to match(handler)
+    end
+
     it "strips javascript: URLs" do
       html = %(<a href="javascript:alert(1)">x</a>)
       out = described_class.sanitize(html)

@@ -28,9 +28,15 @@ class Ai::PageSanitizer
 
   ALLOWED_ATTRIBUTES = (HTML_ATTRIBUTES + SVG_ATTRIBUTES).freeze
 
+  # `on\w+=` is anchored to an attribute boundary (start-of-string or whitespace)
+  # so legitimate `data-on*` attributes like `data-onload` survive the regex
+  # sweep. The pattern still nukes inline event handlers (`onclick=`, `onload=`)
+  # that the Rails sanitizer would otherwise have to remove on its own, and
+  # gives us belt-and-suspenders against any handler shape the safelist hasn't
+  # been audited for.
   DANGEROUS_PATTERNS = [
     /javascript:/i,
-    /on\w+\s*=/i,        # onclick, onload, etc.
+    /(?<![\w-])on\w+\s*=/i, # onclick, onload, etc. but not data-onload
     /<script/i,
     /<\/script/i,
     /expression\s*\(/i,  # CSS expression()
