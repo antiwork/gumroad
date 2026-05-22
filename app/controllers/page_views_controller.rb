@@ -4,6 +4,7 @@ class PageViewsController < ApplicationController
   def show
     user = resolve_seller
     return head :not_found unless user
+    return head :not_found if user.suspended?
 
     page = user.pages.alive.published.find_by!(slug: params[:slug])
 
