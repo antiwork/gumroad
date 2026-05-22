@@ -564,16 +564,22 @@ describe "PurchaseInstallments", :vcr do
       it "matches the single-purchase path for subscription renewals (email_info keyed on original_purchase.id)" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_archived_original_subscription_purchase: true)
-        renewal = create(:membership_purchase, link: product, subscription:, email: original.email, purchase_state: "not_charged")
+        # Live original (not archived) — this is what `subscription.original_purchase` resolves to,
+        # so the renewal lookup actually exercises the `original_purchase&.id` key in the batch path.
+        original = create(:membership_purchase, link: product, subscription:)
+        renewal = create(:recurring_membership_purchase, link: product, subscription:, email: original.email)
         subscription.reload
 
         post = create(:installment, link: product, published_at: 1.day.ago)
         create(:product_file, installment: post, link: product)
-        # EmailInfo is keyed on the original purchase, not the renewal — exercising the
-        # original_purchase.id lookup key. The parity assertion below is what catches
-        # a regression where the batch path keyed on purchase.id instead.
+        # EmailInfo is keyed on the original purchase, not the renewal — the batch path must
+        # find it via original_purchase.id. A regression that keys on the renewal's own id
+        # would return no email_info for the renewal and diverge from the single-purchase path.
         create(:creator_contacting_customers_email_info_sent, purchase: original, installment: post, sent_at: 1.hour.ago)
+
+        # Sanity-check the setup: the live-original lookup path is actually exercised.
+        expect(Purchase.find(renewal.id).subscription.original_purchase).to eq(original)
+        expect(Purchase.find(renewal.id).subscription.original_purchase.id).not_to eq(renewal.id)
 
         single = Purchase.find(renewal.id).update_json_data_for_mobile
 
@@ -582,6 +588,8 @@ describe "PurchaseInstallments", :vcr do
         batch = batch_target.update_json_data_for_mobile
 
         expect(batch).to eq(single)
+        # The renewal must surface the post via the original's email_info — not an empty result.
+        expect(batch.map { |p| p[:external_id] }).to include(post.external_id)
       end
 
       it "picks the lowest-id UrlRedirect when duplicates exist for the same (purchase, installment)" do
