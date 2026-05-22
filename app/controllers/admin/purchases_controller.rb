@@ -161,12 +161,14 @@ class Admin::PurchasesController < Admin::BaseController
       return render json: { success: false, message: "This purchase has already been anonymized." }
     end
 
-    result = GdprBuyerErasureService.new(email, performed_by: current_user).perform!
-    render json: { success: true, counts: result[:counts], anonymized_to: result[:anonymized_to] }
-  rescue ArgumentError => e
-    render json: { success: false, message: e.message }
-  rescue => e
-    render json: { success: false, message: "Erasure failed: #{e.message}" }
+    begin
+      result = GdprBuyerErasureService.new(email, performed_by: current_user).perform!
+      render json: { success: true, counts: result[:counts], anonymized_to: result[:anonymized_to] }
+    rescue ArgumentError => e
+      render json: { success: false, message: e.message }
+    rescue => e
+      render json: { success: false, message: "Erasure failed: #{e.message}" }
+    end
   end
 
   private

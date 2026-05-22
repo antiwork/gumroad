@@ -1,11 +1,5 @@
 # frozen_string_literal: true
 
-# Anonymizes all buyer PII for a given email address across all tables.
-# Designed for guest buyers who have no User record — triggered from the
-# admin purchase page. Also callable from Rails console:
-#
-#   GdprBuyerErasureService.new("buyer@example.com", performed_by: User.find(ADMIN_ID)).perform!
-#
 class GdprBuyerErasureService
   ANONYMIZED_EMAIL_DOMAIN = GdprDataErasureService::ANONYMIZED_EMAIL_DOMAIN
   ANONYMIZED_NAME = GdprDataErasureService::ANONYMIZED_NAME
@@ -22,33 +16,39 @@ class GdprBuyerErasureService
   def perform!
     raise ArgumentError, "Email is required" if email.blank?
 
-    # If this email belongs to a registered user, use the full account erasure instead.
-    if (user = User.alive.find_by(email: email))
-      raise ArgumentError, "This email belongs to user ##{user.id} (#{user.username}). Use GdprDataErasureService for account holders."
+    if (user = User.find_by(email: email))
+      raise ArgumentError, "This email belongs to user ##{user.id}. Use GdprDataErasureService for account holders."
     end
 
-    anonymized_email = generate_anonymized_email
+    @anonymized_email = generate_anonymized_email
+    purchases = Purchase.where(email: email)
+    @purchase_ids = purchases.pluck(:id)
+    @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
+    @browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+    @seller_ids = purchases.distinct.pluck(:seller_id)
 
     ActiveRecord::Base.transaction do
-      anonymize_purchases!(anonymized_email)
+      anonymize_purchases!
       anonymize_events!
-      anonymize_audience_members!(anonymized_email)
-      anonymize_followers!(anonymized_email)
-      anonymize_carts!(anonymized_email)
-      anonymize_gifts!(anonymized_email)
-      anonymize_imported_customers!(anonymized_email)
-      anonymize_sent_post_emails!(anonymized_email)
-      anonymize_blocked_customer_objects!(anonymized_email)
+      anonymize_audience_members!
+      anonymize_followers!
+      anonymize_carts!
+      anonymize_gifts!
+      anonymize_imported_customers!
+      anonymize_sent_post_emails!
+      anonymize_blocked_customer_objects!
       anonymize_signup_events!
-      anonymize_service_charges!
       anonymize_charges!
       anonymize_dispute_evidences!
       anonymize_purchase_custom_fields!
       anonymize_credit_cards!
-      log_erasure!
+      anonymize_discover_searches!
+      anonymize_utm_link_visits!
     end
 
-    { success: true, email: email, anonymized_to: anonymized_email, counts: counts }
+    log_erasure!
+
+    { success: true, email: email, anonymized_to: @anonymized_email, counts: counts }
   rescue => e
     Rails.logger.error("GDPR buyer erasure failed for #{email}: #{e.message}")
     raise
@@ -60,13 +60,9 @@ class GdprBuyerErasureService
       "buyer-#{digest}@#{ANONYMIZED_EMAIL_DOMAIN}"
     end
 
-    def anonymize_purchases!(anonymized_email)
-      # Collect credit card IDs before anonymizing
-      purchase_credit_card_ids = Purchase.where(email: email).where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
-      @credit_card_ids_from_purchases = purchase_credit_card_ids
-
-      counts[:purchases] = Purchase.where(email: email).update_all(
-        email: anonymized_email,
+    def anonymize_purchases!
+      counts[:purchases] = Purchase.where(id: @purchase_ids).update_all(
+        email: @anonymized_email,
         full_name: ANONYMIZED_NAME,
         street_address: nil,
         city: nil,
@@ -103,47 +99,47 @@ class GdprBuyerErasureService
       )
     end
 
-    def anonymize_audience_members!(anonymized_email)
+    def anonymize_audience_members!
       counts[:audience_members] = AudienceMember.where(email: email).update_all(
-        email: anonymized_email,
+        email: @anonymized_email,
         details: nil,
       )
     end
 
-    def anonymize_followers!(anonymized_email)
+    def anonymize_followers!
       counts[:followers] = Follower.where(email: email).update_all(
-        email: anonymized_email,
+        email: @anonymized_email,
       )
     end
 
-    def anonymize_carts!(anonymized_email)
+    def anonymize_carts!
       counts[:carts] = Cart.where(email: email).update_all(
-        email: anonymized_email,
+        email: @anonymized_email,
         ip_address: nil,
         browser_guid: nil,
       )
     end
 
-    def anonymize_gifts!(anonymized_email)
-      counts[:gifts_as_giftee] = Gift.where(giftee_email: email).update_all(giftee_email: anonymized_email)
-      counts[:gifts_as_gifter] = Gift.where(gifter_email: email).update_all(gifter_email: anonymized_email)
+    def anonymize_gifts!
+      counts[:gifts_as_giftee] = Gift.where(giftee_email: email).update_all(giftee_email: @anonymized_email)
+      counts[:gifts_as_gifter] = Gift.where(gifter_email: email).update_all(gifter_email: @anonymized_email)
     end
 
-    def anonymize_imported_customers!(anonymized_email)
+    def anonymize_imported_customers!
       counts[:imported_customers] = ImportedCustomer.where(email: email).update_all(
-        email: anonymized_email,
+        email: @anonymized_email,
       )
     end
 
-    def anonymize_sent_post_emails!(anonymized_email)
+    def anonymize_sent_post_emails!
       counts[:sent_post_emails] = SentPostEmail.where(email: email).update_all(
-        email: anonymized_email,
+        email: @anonymized_email,
       )
     end
 
-    def anonymize_blocked_customer_objects!(anonymized_email)
+    def anonymize_blocked_customer_objects!
       counts[:blocked_customer_objects] = BlockedCustomerObject.where(buyer_email: email).update_all(
-        buyer_email: anonymized_email,
+        buyer_email: @anonymized_email,
       )
     end
 
@@ -163,19 +159,21 @@ class GdprBuyerErasureService
       )
     end
 
-    def anonymize_service_charges!
-      # ServiceCharge is linked to User, not email. Guest buyers have no
-      # User record, so there are no service charges to anonymize.
-    end
-
     def anonymize_charges!
-      purchase_ids = Purchase.where(email: generate_anonymized_email).pluck(:id)
-      return if purchase_ids.empty?
+      return if @purchase_ids.empty?
 
-      charge_ids = ChargePurchase.where(purchase_id: purchase_ids).distinct.pluck(:charge_id)
+      charge_ids = ChargePurchase.where(purchase_id: @purchase_ids).distinct.pluck(:charge_id)
       return if charge_ids.empty?
 
-      counts[:charges] = Charge.where(id: charge_ids).update_all(
+      shared_charge_ids = ChargePurchase
+        .where(charge_id: charge_ids)
+        .where.not(purchase_id: @purchase_ids)
+        .distinct
+        .pluck(:charge_id)
+      exclusive_charge_ids = charge_ids - shared_charge_ids
+      return if exclusive_charge_ids.empty?
+
+      counts[:charges] = Charge.where(id: exclusive_charge_ids).update_all(
         payment_method_fingerprint: nil,
       )
     end
@@ -191,21 +189,18 @@ class GdprBuyerErasureService
     end
 
     def anonymize_purchase_custom_fields!
-      purchase_ids = Purchase.where(email: generate_anonymized_email).pluck(:id)
-      return if purchase_ids.empty?
+      return if @purchase_ids.empty?
 
-      counts[:purchase_custom_fields] = PurchaseCustomField.where(purchase_id: purchase_ids).update_all(
+      counts[:purchase_custom_fields] = PurchaseCustomField.where(purchase_id: @purchase_ids).update_all(
         value: ANONYMIZED_VALUE,
       )
     end
 
     def anonymize_credit_cards!
-      credit_card_ids = @credit_card_ids_from_purchases || []
-      return if credit_card_ids.empty?
+      return if @credit_card_ids.empty?
 
-      # Only anonymize credit cards not owned by any user (guest cards)
-      user_owned_ids = User.where(credit_card_id: credit_card_ids).pluck(:credit_card_id)
-      guest_card_ids = credit_card_ids - user_owned_ids
+      user_owned_ids = User.where(credit_card_id: @credit_card_ids).pluck(:credit_card_id)
+      guest_card_ids = @credit_card_ids - user_owned_ids
       return if guest_card_ids.empty?
 
       counts[:credit_cards] = CreditCard.where(id: guest_card_ids).update_all(
@@ -226,11 +221,31 @@ class GdprBuyerErasureService
       )
     end
 
+    def anonymize_discover_searches!
+      return if @browser_guids.empty?
+
+      counts[:discover_searches] = DiscoverSearch.where(browser_guid: @browser_guids).update_all(
+        ip_address: nil,
+        browser_guid: nil,
+      )
+    end
+
+    def anonymize_utm_link_visits!
+      return if @browser_guids.empty?
+
+      counts[:utm_link_visits] = UtmLinkVisit.where(browser_guid: @browser_guids).update_all(
+        ip_address: ANONYMIZED_VALUE,
+        browser_guid: ANONYMIZED_VALUE,
+        user_agent: nil,
+      )
+    end
+
     def log_erasure!
-      # Log on each seller whose purchases were affected
-      seller_ids = Purchase.where(email: generate_anonymized_email).distinct.pluck(:seller_id)
-      seller_ids.each do |seller_id|
-        User.find_by(id: seller_id)&.comments&.create!(
+      @seller_ids.each do |seller_id|
+        seller = User.find_by(id: seller_id)
+        next unless seller
+
+        seller.comments.create!(
           author_id: performed_by.id,
           author_name: performed_by.name || performed_by.email,
           comment_type: Comment::COMMENT_TYPE_NOTE,
@@ -239,5 +254,7 @@ class GdprBuyerErasureService
                    "Performed by #{performed_by.email}."
         )
       end
+    rescue => e
+      Rails.logger.error("GDPR buyer erasure log failed for #{email}: #{e.message}")
     end
 end

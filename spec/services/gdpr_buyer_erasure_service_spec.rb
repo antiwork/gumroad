@@ -11,9 +11,14 @@ describe GdprBuyerErasureService do
       expect { described_class.new("", performed_by: admin).perform! }.to raise_error(ArgumentError, /Email is required/)
     end
 
-    it "raises when email belongs to a registered user" do
+    it "raises when email belongs to an active registered user" do
       create(:user, email: "registered@example.com")
       expect { described_class.new("registered@example.com", performed_by: admin).perform! }.to raise_error(ArgumentError, /Use GdprDataErasureService/)
+    end
+
+    it "raises when email belongs to a soft-deleted registered user" do
+      create(:user, email: "deleted-user@example.com", deleted_at: Time.current)
+      expect { described_class.new("deleted-user@example.com", performed_by: admin).perform! }.to raise_error(ArgumentError, /Use GdprDataErasureService/)
     end
 
     context "with guest buyer data" do
@@ -30,13 +35,14 @@ describe GdprBuyerErasureService do
             stripe_fingerprint: "fp_123",
             card_visual: "**** 4242",
             card_bin: "424242",
+            browser_guid: "guid-1",
             custom_fields: '{"phone": "555-1234"}',
           )
         end
       end
       let!(:purchase2) do
         create(:free_purchase, email: buyer_email, purchaser: nil).tap do |p|
-          p.update_columns(full_name: "Jane Doe", ip_address: "1.2.3.5")
+          p.update_columns(full_name: "Jane Doe", ip_address: "1.2.3.5", browser_guid: "guid-2")
         end
       end
       let!(:unrelated_purchase) { create(:free_purchase, email: "other@example.com", purchaser: nil) }
@@ -103,6 +109,59 @@ describe GdprBuyerErasureService do
 
         unrelated_purchase.reload
         expect(unrelated_purchase.full_name).not_to eq("[deleted]")
+      end
+
+      it "completes the erasure even if logging fails" do
+        allow(User).to receive(:find_by).and_call_original
+        allow(User).to receive(:find_by).with(id: purchase1.seller_id).and_raise(StandardError, "log failure")
+
+        expect { described_class.new(buyer_email, performed_by: admin).perform! }.not_to raise_error
+
+        purchase1.reload
+        expect(purchase1.email).to end_with("@deleted.gumroad.com")
+        expect(purchase1.full_name).to eq("[deleted]")
+      end
+
+      describe "charges with shared purchases across buyers" do
+        let!(:other_buyer_purchase) { create(:free_purchase, email: "other@example.com", purchaser: nil) }
+
+        it "nullifies fingerprint on charges whose purchases are all owned by the erased buyer" do
+          charge = create(:charge, payment_method_fingerprint: "fp_exclusive")
+          ChargePurchase.create!(charge: charge, purchase: purchase1)
+          ChargePurchase.create!(charge: charge, purchase: purchase2)
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(charge.reload.payment_method_fingerprint).to be_nil
+        end
+
+        it "leaves fingerprint untouched on charges shared with another buyer's purchase" do
+          shared_charge = create(:charge, payment_method_fingerprint: "fp_shared")
+          ChargePurchase.create!(charge: shared_charge, purchase: purchase1)
+          ChargePurchase.create!(charge: shared_charge, purchase: other_buyer_purchase)
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(shared_charge.reload.payment_method_fingerprint).to eq("fp_shared")
+        end
+      end
+
+      describe "credit cards" do
+        it "anonymizes guest credit cards but leaves user-owned cards untouched" do
+          guest_card = CreditCard.new(visual: "**** 1111", card_type: "visa", stripe_fingerprint: "fp_guest")
+          guest_card.save!(validate: false)
+          owned_card = CreditCard.new(visual: "**** 2222", card_type: "visa", stripe_fingerprint: "fp_owned")
+          owned_card.save!(validate: false)
+          User.find(create(:user).id).update_columns(credit_card_id: owned_card.id)
+
+          purchase1.update_columns(credit_card_id: guest_card.id)
+          purchase2.update_columns(credit_card_id: owned_card.id)
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(guest_card.reload.visual).to eq("[redacted]")
+          expect(owned_card.reload.visual).to eq("**** 2222")
+        end
       end
     end
   end
