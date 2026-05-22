@@ -48,12 +48,40 @@ describe Api::V2::DirectUploadsController do
         expect(body["direct_upload"]["url"]).to be_present
         expect(body["direct_upload"]["headers"]).to be_present
       end
+
+      it "returns a structured error for invalid blob parameters" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { checksum: nil })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("Checksum can't be blank")
+      end
+
+      it "rejects unsupported content types before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { content_type: "application/pdf" })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
+
+      it "rejects WebP images before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { content_type: "image/webp" })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
     end
 
     it "grants access with the account scope" do
       token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
       post @action, params: @params.merge(access_token: token.token)
       expect(response).to be_successful
+      expect(response.parsed_body["signed_id"]).to eq(ActiveStorage::Blob.last.signed_id)
     end
   end
 end
