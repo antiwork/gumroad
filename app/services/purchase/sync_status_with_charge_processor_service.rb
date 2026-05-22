@@ -23,7 +23,8 @@ class Purchase::SyncStatusWithChargeProcessorService
 
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
-      if charge && success_statuses.include?(charge.status) && !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
+      if charge && success_statuses.include?(charge.status) && !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed) &&
+         !(purchase.is_part_of_combined_charge? && charge.flow_of_funds.nil?)
         purchase.flow_of_funds = if purchase.is_part_of_combined_charge?
           purchase.build_flow_of_funds_from_combined_charge(charge.flow_of_funds)
         else
