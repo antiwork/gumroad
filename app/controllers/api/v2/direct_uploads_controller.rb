@@ -3,7 +3,7 @@
 class Api::V2::DirectUploadsController < Api::V2::BaseController
   include ActiveStorage::SetCurrent
 
-  ALLOWED_CONTENT_TYPES = /\A(image\/(jpeg|jpg|png|gif)|video\/)/i
+  ALLOWED_CONTENT_TYPES = /\A(?:image\/(?:jpeg|jpg|png|gif)|video\/[a-z0-9.+-]+)\z/i
 
   before_action { doorkeeper_authorize! :edit_products }
 
@@ -26,7 +26,7 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     end
 
     def allowed_content_type?(content_type)
-      content_type.present? && content_type.match?(ALLOWED_CONTENT_TYPES)
+      content_type.is_a?(String) && content_type.match?(ALLOWED_CONTENT_TYPES)
     end
 
     def direct_upload_json(blob)

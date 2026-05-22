@@ -67,6 +67,33 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
       end
 
+      it "rejects content types with extra trailing characters before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { content_type: "image/gifscript" })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
+
+      it "rejects empty video subtypes before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { content_type: "video/" })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
+
+      it "rejects non-string content types before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { content_type: 123 })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
+
       it "rejects WebP images before creating a blob" do
         expect do
           post @action, params: @params.deep_merge(blob: { content_type: "image/webp" })
