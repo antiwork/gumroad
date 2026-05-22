@@ -125,6 +125,8 @@ export type Purchase = PurchaseStatesInfo & {
   is_free_trial_purchase: boolean;
   buyer_blocked: boolean;
   is_deleted_by_buyer: boolean;
+  is_guest_buyer: boolean;
+  is_buyer_email_anonymized: boolean;
   comments_count: number;
 };
 
@@ -648,6 +650,16 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         done="Undeleted!"
         confirm_message="Are you sure you want to undelete this purchase?"
         success_message="Undeleted!"
+      />
+    ) : null}
+    {purchase.is_guest_buyer && !purchase.is_buyer_email_anonymized ? (
+      <AdminActionButton
+        label="GDPR Erase Buyer"
+        url={Routes.gdpr_erase_buyer_admin_purchase_path(purchase.external_id)}
+        loading="Erasing buyer PII..."
+        done="Buyer PII erased!"
+        confirm_message="GDPR ERASURE: This permanently anonymizes ALL PII for this buyer's email across ALL purchases and related tables. This cannot be undone. Proceed?"
+        success_message="Buyer PII erased across all tables!"
       />
     ) : null}
     {purchase.successful ? (

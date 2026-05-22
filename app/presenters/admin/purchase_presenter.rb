@@ -136,6 +136,8 @@ class Admin::PurchasePresenter
                        is_free_trial_purchase: purchase.is_free_trial_purchase?,
                        buyer_blocked: purchase.buyer_blocked?,
                        is_deleted_by_buyer: purchase.is_deleted_by_buyer?,
+                       is_guest_buyer: purchase.purchaser_id.nil?,
+                       is_buyer_email_anonymized: purchase.email.to_s.ends_with?("@#{GdprDataErasureService::ANONYMIZED_EMAIL_DOMAIN}"),
                        comments_count: purchase.comments.count,
                      })
   end

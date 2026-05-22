@@ -2,7 +2,7 @@
 
 class Admin::PurchasesController < Admin::BaseController
   before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud refund_taxes_only resend_receipt
-                                          show sync_status_with_charge_processor block_buyer unblock_buyer undelete update_giftee_email]
+                                          show sync_status_with_charge_processor block_buyer unblock_buyer undelete update_giftee_email gdpr_erase_buyer]
 
   def cancel_subscription
     if @purchase.subscription
@@ -150,6 +150,24 @@ class Admin::PurchasesController < Admin::BaseController
           message: "This gift is missing a giftee purchase. Please ask an engineer to generate one with script here: https://github.com/gumroad/web/issues/17248#issuecomment-784478299",
         }
       end
+    end
+  end
+
+  def gdpr_erase_buyer
+    e404 if @purchase.nil?
+
+    email = @purchase.email
+    if email.blank? || email.ends_with?("@#{GdprDataErasureService::ANONYMIZED_EMAIL_DOMAIN}")
+      return render json: { success: false, message: "This purchase has already been anonymized." }
+    end
+
+    begin
+      result = GdprBuyerErasureService.new(email, performed_by: current_user).perform!
+      render json: { success: true, counts: result[:counts], anonymized_to: result[:anonymized_to] }
+    rescue ArgumentError => e
+      render json: { success: false, message: e.message }
+    rescue => e
+      render json: { success: false, message: "Erasure failed: #{e.message}" }
     end
   end
 
