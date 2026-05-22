@@ -21,6 +21,37 @@ describe Page do
       page = create(:page, user: user, title: "!!!")
       expect(page.slug).to eq("page")
     end
+
+    it "retries with a fresh counter when DB raises RecordNotUnique" do
+      # Simulate the TOCTOU window: generate_slug picked "launch" because
+      # the existence query ran before the winning row committed. The DB
+      # unique index then rejects the insert. The retry must regenerate a
+      # fresh slug and successfully save.
+      create(:page, user: user, title: "Launch") # slug "launch"
+
+      page = Page.new(user: user, title: "Launch")
+      first_call = true
+      allow(page).to receive(:_create_record).and_wrap_original do |orig, *args, &block|
+        if first_call
+          first_call = false
+          raise ActiveRecord::RecordNotUnique, "Duplicate entry 'launch' for key 'index_pages_on_user_id_and_slug'"
+        else
+          orig.call(*args, &block)
+        end
+      end
+
+      expect { page.save! }.not_to raise_error
+      expect(page.slug).to eq("launch-1")
+    end
+
+    it "gives up after SLUG_RETRY_LIMIT attempts" do
+      create(:page, user: user, title: "Launch")
+      page = Page.new(user: user, title: "Launch")
+      allow(page).to receive(:_create_record).and_raise(
+        ActiveRecord::RecordNotUnique.new("Duplicate entry 'launch' for key 'index_pages_on_user_id_and_slug'")
+      )
+      expect { page.save! }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
   end
 
   describe "profile uniqueness" do

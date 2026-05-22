@@ -90,6 +90,32 @@ class Page < ApplicationRecord
     super
   end
 
+  # generate_slug picks a free slug with a read-then-write check, which is a
+  # TOCTOU: two concurrent inserts with the same title both resolve to the
+  # same candidate before either has persisted. The unique index catches the
+  # collision; this rescue/retry regenerates with a fresh counter so the
+  # second create transparently lands on slug-1, slug-2, etc.
+  SLUG_RETRY_LIMIT = 3
+  private_constant :SLUG_RETRY_LIMIT
+
+  def create_or_update(...)
+    attempts = 0
+    begin
+      super
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless new_record?
+      raise unless e.message.to_s.include?("index_pages_on_user_id_and_slug")
+      attempts += 1
+      raise if attempts > SLUG_RETRY_LIMIT
+      # Re-run the slug picker; the row that won the race is now visible to
+      # generate_slug's existence query, so it picks the next free counter
+      # value instead of repeating the collision.
+      self.slug = nil
+      send(:generate_slug)
+      retry
+    end
+  end
+
   private
     def generate_slug
       return if slug.present?
