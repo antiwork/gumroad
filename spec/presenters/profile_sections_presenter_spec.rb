@@ -173,6 +173,43 @@ describe ProfileSectionsPresenter do
       # Sold-out product on current page should be filtered from total
       expect(product_names).not_to include("Sold Out Product")
     end
+
+    it "does not fire per-product N+1 queries for the sold-out filter" do
+      variant_products = 4.times.map do |i|
+        product = create(:product, user: seller, tags:, name: "Variant Product #{i}", hide_sold_out_variants: true, max_purchase_count: 10)
+        variant_category = create(:variant_category, link: product)
+        create(:variant, variant_category:, max_purchase_count: 5)
+        product
+      end
+      products_section.update!(shown_products: (products + [sold_out_product, in_stock_product] + variant_products).map(&:id))
+      Link.import(force: true, refresh: true)
+
+      queries = []
+      callback = lambda do |_name, _start, _finish, _id, payload|
+        sql = payload[:sql]
+        queries << sql if sql.present? && !sql.start_with?("EXPLAIN") && !sql.match?(/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/i)
+      end
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+      end
+
+      # Per-link bundle_products query: `WHERE bundle_id = N AND deleted_at IS NULL`.
+      # Before the fix, Link#remaining_for_sale_count re-queried `bundle_products.alive`
+      # despite the association being preloaded.
+      per_link_bundle_product_queries = queries.count do |q|
+        q.include?("bundle_products") && q.match?(/bundle_id\s*=\s*\d+/) && !q.include?("IN")
+      end
+
+      # Per-VariantCategory query: `WHERE variant_category_id = N AND deleted_at IS NULL`.
+      # Before the fix, VariantCategory#available? called `variants.alive` instead of
+      # `alive_variants`, re-querying per row.
+      per_vc_variants_queries = queries.count do |q|
+        q.include?("base_variants") && q.match?(/variant_category_id\s*=\s*\d+/) && !q.include?("IN")
+      end
+
+      expect(per_link_bundle_product_queries).to eq(0)
+      expect(per_vc_variants_queries).to eq(0)
+    end
   end
 
   describe "compute_description parameter" do
