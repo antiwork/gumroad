@@ -57,13 +57,27 @@ class Page < ApplicationRecord
     page_versions.order(created_at: :desc).first
   end
 
-  def apply_new_version!(version)
-    update!(
-      html_content: version.html,
-      published_version: (auto_publish ? version : published_version),
-      published: (auto_publish ? true : published),
-      published_at: (auto_publish ? Time.current : published_at),
-    )
+  # Applies a generated version onto the page. `expected_parent_id` is the
+  # version the calling job was branched off at enqueue time; if a newer
+  # version has been applied in the meantime, we'd otherwise silently
+  # overwrite that work with this stale generation. The check runs inside
+  # `with_lock` so two concurrent applies can't both pass the comparison.
+  # Returns true if the version was applied, false if it was skipped as stale.
+  def apply_new_version!(version, expected_parent_id: nil)
+    with_lock do
+      if expected_parent_id
+        current_parent = page_versions.where.not(id: version.id).order(created_at: :desc).first&.id
+        return false if current_parent && current_parent != expected_parent_id
+      end
+
+      update!(
+        html_content: version.html,
+        published_version: (auto_publish ? version : published_version),
+        published: (auto_publish ? true : published),
+        published_at: (auto_publish ? Time.current : published_at),
+      )
+      true
+    end
   end
 
   def page_url(host: nil)

@@ -102,4 +102,37 @@ describe Page do
       expect(page.reload.published).to be(false)
     end
   end
+
+  describe "#apply_new_version!" do
+    it "applies when no parent expectation is given" do
+      page = create(:page, user: user)
+      v1 = create(:page_version, page: page, html: "<section>v1</section>", prompt: "x")
+      expect(page.apply_new_version!(v1)).to be(true)
+      expect(page.reload.html_content).to include("v1")
+    end
+
+    it "applies when the page's latest version still matches expected_parent_id" do
+      page = create(:page, user: user)
+      v1 = create(:page_version, page: page, html: "<section>v1</section>", prompt: "x")
+      page.apply_new_version!(v1)
+      v2 = create(:page_version, page: page, html: "<section>v2</section>", prompt: "y", parent: v1)
+
+      expect(page.apply_new_version!(v2, expected_parent_id: v1.id)).to be(true)
+      expect(page.reload.html_content).to include("v2")
+    end
+
+    it "skips the apply when a newer version has landed since the job was enqueued" do
+      page = create(:page, user: user)
+      v1 = create(:page_version, page: page, html: "<section>v1</section>", prompt: "x")
+      v2 = create(:page_version, page: page, html: "<section>v2</section>", prompt: "y", parent: v1)
+      # Another job has already applied v2 — that's now the latest.
+      page.apply_new_version!(v2)
+
+      # A stale job that branched from v1 finishes and tries to apply its own version.
+      stale = create(:page_version, page: page, html: "<section>stale</section>", prompt: "z", parent: v1)
+      expect(page.apply_new_version!(stale, expected_parent_id: v1.id)).to be(false)
+      expect(page.reload.html_content).to include("v2")
+      expect(page.html_content).not_to include("stale")
+    end
+  end
 end

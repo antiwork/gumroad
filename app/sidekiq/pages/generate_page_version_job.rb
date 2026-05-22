@@ -41,7 +41,15 @@ class Pages::GeneratePageVersionJob
     # Apply the version first so output moderation sees the freshly generated
     # HTML — not the previous html_content. The prompt was moderated in the
     # controller before enqueuing; this is the output-side check.
-    page.apply_new_version!(result.version)
+    applied = page.apply_new_version!(result.version, expected_parent_id: parent_version&.id)
+    unless applied
+      # A newer generation has been applied while this job was running.
+      # Discard the stale apply silently — surfacing an error would
+      # confuse the user, whose newer prompt has already produced output.
+      Rails.logger.info("Pages::GeneratePageVersionJob skipped stale apply page=#{page.id} parent=#{parent_version&.id}")
+      page.update_column(:generating_since, nil)
+      return
+    end
     moderation = ContentModeration::ModerateRecordService.check(page, :page)
     unless moderation.passed
       Rails.logger.warn("Pages::GeneratePageVersionJob output moderation failed page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
