@@ -937,6 +937,11 @@ describe("Download Page", type: :system, js: true) do
       rebuild_srpis_cache
       allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
 
+      # Ensure that Elasticsearch has indexed the products created above before the
+      # recommendation query runs. If the documents are not yet searchable the page
+      # will render without the expected links, causing a flaky failure.
+      Link.import(refresh: true, force: true)
+
       content = create(:product_rich_content, entity: product, description: [{ "type" => RichContent::MORE_LIKE_THIS_NODE_TYPE }])
       purchase = create(:purchase, link: product)
       url_redirect = create(:url_redirect, link: product, purchase:)
