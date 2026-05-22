@@ -614,7 +614,7 @@ class Link < ApplicationRecord
     return tiers.first.quantity_left if tiers.size == 1
 
     minimum_bundle_product_quantity_left = if is_bundle?
-      bundle_products.alive.flat_map do
+      bundle_products.select(&:alive?).flat_map do
         [_1.product.remaining_for_sale_count, _1.variant&.quantity_left]
       end.compact.min
     end

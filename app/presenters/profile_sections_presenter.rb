@@ -92,7 +92,12 @@ class ProfileSectionsPresenter
           )
         end
         cached_props[:search_results] = section_search_results(section, params:) if params.present?
-        products = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).includes(bundle_products: { product: :tiers, variant: [] }).find(cached_props[:search_results][:products])
+        products = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
+                       .includes(
+                         { variant_categories_alive: :alive_variants },
+                         { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } }
+                       )
+                       .find(cached_props[:search_results][:products])
         if !is_owner
           filtered_count = products.count { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
           products = products.reject { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }

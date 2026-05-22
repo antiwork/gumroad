@@ -30,9 +30,9 @@ class VariantCategory < ApplicationRecord
   end
 
   def available?
-    return true if variants.alive.empty?
+    return true if alive_variants.empty?
 
-    variants.alive.any?(&:available?)
+    alive_variants.any?(&:available?)
   end
 
   def as_json(*)
