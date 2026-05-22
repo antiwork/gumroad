@@ -6,7 +6,9 @@ class PagesController < Sellers::BaseController
 
   def index
     authorize Page
-    pages = current_seller.pages.alive.order(updated_at: :desc)
+    # page_json reads p.link&.name, so eager-load :link to avoid N+1
+    # queries when the seller has many pages associated with products.
+    pages = current_seller.pages.alive.includes(:link).order(updated_at: :desc)
     render inertia: "Pages/Index", props: {
       pages: pages.map { |p| page_json(p) },
     }

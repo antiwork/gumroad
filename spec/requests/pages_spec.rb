@@ -48,6 +48,31 @@ describe PagesController, type: :request do
       get pages_path
       expect(response).to have_http_status(:not_found)
     end
+
+    it "eager-loads associated products to avoid N+1 queries" do
+      5.times do |i|
+        product = create(:product, user: seller, name: "Product #{i}")
+        create(:page, user: seller, title: "Page #{i}", link: product)
+      end
+
+      per_id_lookups = count_queries_on_link { get pages_path, headers: { "X-Inertia" => "true" } }
+
+      # With proper eager-loading there should be zero per-id WHERE id = X
+      # lookups against `links` — the single IN (...) batch covers them all.
+      expect(per_id_lookups).to eq(0)
+    end
+  end
+
+  def count_queries_on_link
+    queries = []
+    callback = ->(_name, _start, _finish, _id, payload) do
+      sql = payload[:sql].to_s
+      queries << sql if sql.match?(/FROM `links`/) && !sql.start_with?("SAVEPOINT", "RELEASE", "ROLLBACK")
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    # Look only at lookups by id (the N+1 shape from p.link). Other queries
+    # against the links table from policies/nav are fine.
+    queries.count { |q| q.match?(/WHERE.*`links`\.`id`\s*=\s*\d+/) }
   end
 
   describe "POST /pages" do
