@@ -25,11 +25,10 @@ type PageItem = {
 
 type PageProps = {
   pages: PageItem[];
-  can_create_page: boolean;
 };
 
 export default function PagesIndex() {
-  const { pages, can_create_page } = typia.assert<PageProps>(usePage().props);
+  const { pages } = typia.assert<PageProps>(usePage().props);
   const [deleting, setDeleting] = React.useState<{ slug: string; title: string; state: "confirm" | "deleting" } | null>(
     null,
   );
@@ -39,7 +38,7 @@ export default function PagesIndex() {
       <PageHeader
         title="Pages"
         actions={
-          <NavigationButtonInertia href={Routes.new_page_path()} disabled={!can_create_page} color="accent">
+          <NavigationButtonInertia href={Routes.new_page_path()} color="accent">
             New page
           </NavigationButtonInertia>
         }
@@ -51,7 +50,7 @@ export default function PagesIndex() {
             <h2>Create your first page</h2>
             <p>Build AI-powered landing pages to showcase your products.</p>
             <div>
-              <NavigationButtonInertia href={Routes.new_page_path()} disabled={!can_create_page} color="accent">
+              <NavigationButtonInertia href={Routes.new_page_path()} color="accent">
                 New page
               </NavigationButtonInertia>
             </div>
