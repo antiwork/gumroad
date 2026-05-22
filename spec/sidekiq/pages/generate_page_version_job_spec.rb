@@ -16,6 +16,14 @@ describe Pages::GeneratePageVersionJob do
     it "is configured to retry transient errors" do
       expect(described_class.sidekiq_options["retry"]).to eq(3)
     end
+
+    it "runs on the low-priority queue so it doesn't compete with critical work" do
+      expect(described_class.sidekiq_options["queue"].to_s).to eq("low")
+    end
+
+    it "deduplicates identical jobs via until_executed lock" do
+      expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+    end
   end
 
   describe "#perform" do

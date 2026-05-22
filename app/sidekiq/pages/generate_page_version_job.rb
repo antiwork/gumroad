@@ -8,7 +8,13 @@ class Pages::GeneratePageVersionJob
   # consume retries. The `ensure` block clears `generating_since` on every
   # attempt — including the final failed one — so the page never gets stuck
   # in the "generating" state.
-  sidekiq_options retry: 3, queue: :default
+  #
+  # `lock: :until_executed` deduplicates by job digest (page id + prompt +
+  # parent) so a user repeatedly re-firing the same generation request can't
+  # stack up identical OpenAI calls. Queued on `:low` because generation is
+  # not time-critical and we want it to share fate with the rest of low-prio
+  # work rather than competing with payment/email traffic on `:default`.
+  sidekiq_options retry: 3, queue: :low, lock: :until_executed
 
   sidekiq_retries_exhausted do |msg, _ex|
     page_id = msg["args"]&.first
