@@ -58,6 +58,17 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("Checksum can't be blank")
       end
 
+      it "returns structured errors when required blob parameters are omitted" do
+        [:filename, :byte_size, :checksum].each do |field|
+          expect do
+            post @action, params: @params.deep_dup.tap { |params| params[:blob].delete(field) }
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("#{field} is required")
+        end
+      end
+
       it "rejects unsupported content types before creating a blob" do
         expect do
           post @action, params: @params.deep_merge(blob: { content_type: "application/pdf" })
