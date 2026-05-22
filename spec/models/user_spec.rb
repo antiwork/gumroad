@@ -1333,6 +1333,17 @@ describe User, :vcr do
           expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         end
       end
+
+      context "when avatar blob is deleted but attachment record still exists" do
+        it "returns URL to default avatar" do
+          allow(@user.avatar).to receive(:attached?).and_return(true)
+          allow(@user.avatar).to receive(:variant).and_raise(
+            ActiveRecord::InvalidForeignKey.new("Mysql2::Error: Cannot add or update a child row: a foreign key constraint fails")
+          )
+
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
+        end
+      end
     end
 
     describe "avatar_url" do
