@@ -3,8 +3,8 @@
 class CreatePages < ActiveRecord::Migration[7.1]
   def change
     create_table :pages do |t|
-      t.references :user, null: false, foreign_key: true
-      t.references :link, null: true, foreign_key: true
+      t.references :user, null: false
+      t.references :link, null: true
       t.string :title, null: false
       t.string :slug, null: false
       t.text :html_content
@@ -26,8 +26,8 @@ class CreatePages < ActiveRecord::Migration[7.1]
     end
 
     create_table :page_versions do |t|
-      t.references :page, null: false, foreign_key: true
-      t.references :parent, null: true, foreign_key: { to_table: :page_versions }
+      t.references :page, null: false
+      t.references :parent, null: true
       t.text :html, null: false
       t.text :prompt, null: false
 

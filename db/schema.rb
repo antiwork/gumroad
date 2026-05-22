@@ -2949,8 +2949,4 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000003) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "page_versions", "page_versions", column: "parent_id"
-  add_foreign_key "page_versions", "pages"
-  add_foreign_key "pages", "links"
-  add_foreign_key "pages", "users"
 end
