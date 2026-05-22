@@ -69,6 +69,23 @@ describe Api::V2::DirectUploadsController do
         end
       end
 
+      it "ignores client-supplied metadata" do
+        post @action, params: @params.deep_merge(blob: { metadata: { analyzed: true, width: 500, height: 500, duration: 120 } })
+
+        expect(response).to be_successful
+        blob = ActiveStorage::Blob.last
+        expect(blob.metadata).not_to include("analyzed", "width", "height", "duration")
+      end
+
+      it "rejects missing content type before creating a blob" do
+        expect do
+          post @action, params: @params.deep_dup.tap { |params| params[:blob].delete(:content_type) }
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
+      end
+
       it "rejects unsupported content types before creating a blob" do
         expect do
           post @action, params: @params.deep_merge(blob: { content_type: "application/pdf" })

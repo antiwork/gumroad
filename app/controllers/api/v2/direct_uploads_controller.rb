@@ -25,7 +25,7 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
 
   private
     def direct_upload_blob_args
-      params.require(:blob).permit(:filename, :byte_size, :checksum, :content_type, metadata: {}).to_h.symbolize_keys
+      params.require(:blob).permit(:filename, :byte_size, :checksum, :content_type).to_h.symbolize_keys
     end
 
     def allowed_content_type?(content_type)
