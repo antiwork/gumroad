@@ -98,8 +98,8 @@ class Api::V2::VariantsController < Api::V2::BaseController
 
     def fetch_variant_category
       @variant_category = @product.variant_categories.find_by_external_id(params[:variant_category_id])
+      return error_with_object(:variant_category, nil) if @variant_category.nil?
       @variants = @variant_category.variants
-      error_with_object(:variant_category) if @variant_category.nil?
     end
 
     def success_with_variant(variant = nil)

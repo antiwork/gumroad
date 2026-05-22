@@ -29,6 +29,14 @@ describe Api::V2::VariantsController do
         @params.merge!(access_token: @token.token)
       end
 
+      it "returns error for nonexistent variant_category_id" do
+        get @action, params: @params.merge(variant_category_id: "nonexistent")
+        expect(response.parsed_body).to eq({
+          "success" => false,
+          "message" => "The variant_category was not found."
+        })
+      end
+
       it "shows the 0 variants in that variant category" do
         get @action, params: @params
         expect(response.parsed_body["variants"]).to eq []
