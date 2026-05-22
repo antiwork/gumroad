@@ -107,8 +107,6 @@ const GeneratingPlaceholder = ({ message }: { message: string }) => (
 export default function PageEdit() {
   const { page: initialPage, versions: initialVersions } = typia.assert<PageProps>(usePage().props);
   const currentSeller = useCurrentSeller();
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
-
   const [page, setPage] = React.useState(initialPage);
   const [versions, setVersions] = React.useState(initialVersions);
   const [prompt, setPrompt] = React.useState("");
@@ -120,27 +118,6 @@ export default function PageEdit() {
   const [waitingForFirst, setWaitingForFirst] = React.useState(
     initialPage.html_content == null || initialPage.html_content === "",
   );
-
-  React.useEffect(() => {
-    if (!iframeRef.current || !page.html_content) return;
-    const doc = iframeRef.current.contentDocument;
-    if (!doc) return;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
-      <body>
-        ${page.html_content}
-      </body>
-      </html>
-    `);
-    doc.close();
-  }, [page.html_content]);
 
   // Poll for the latest version while we are waiting on async generation.
   React.useEffect(() => {
@@ -292,7 +269,9 @@ export default function PageEdit() {
     }
   };
 
-  const pageUrl = currentSeller?.subdomain ? `${window.location.origin}/${currentSeller.subdomain}/pages/${page.slug}` : "";
+  const pageUrl = currentSeller?.subdomain
+    ? Routes.custom_domain_view_page_url(page.slug, { host: currentSeller.subdomain })
+    : "";
 
   return (
     <>
@@ -420,7 +399,12 @@ export default function PageEdit() {
         {/* Preview Panel */}
         <div className="relative flex-1 bg-gray-50">
           {page.html_content ? (
-            <iframe ref={iframeRef} className="h-full w-full border-0" title="Page preview" sandbox="allow-scripts" />
+            <iframe
+              className="h-full w-full border-0"
+              title="Page preview"
+              sandbox="allow-scripts"
+              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head><body>${page.html_content}</body></html>`}
+            />
           ) : (
             <GeneratingPlaceholder message="Building your page" />
           )}
