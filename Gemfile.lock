@@ -234,9 +234,6 @@ GEM
       bigdecimal
       rexml
     crass (1.0.6)
-    cronex (0.15.0)
-      tzinfo
-      unicode (>= 0.4.4.5)
     css_parser (1.22.0)
       addressable
     csv (3.3.0)
@@ -320,7 +317,7 @@ GEM
     equalizer (0.0.11)
     erb (6.0.4)
     erubi (1.13.1)
-    et-orbi (1.4.0)
+    et-orbi (1.2.11)
       tzinfo
     ethon (0.16.0)
       ffi (>= 1.15.0)
@@ -379,8 +376,8 @@ GEM
       sanitize (< 7)
     friendly_id (5.5.1)
       activerecord (>= 4.0.0)
-    fugit (1.12.1)
-      et-orbi (~> 1.4)
+    fugit (1.11.1)
+      et-orbi (~> 1, >= 1.2.11)
       raabro (~> 1.4)
     get_process_mem (0.2.7)
       ffi (~> 1.0)
@@ -968,11 +965,10 @@ GEM
       logger
       rack (>= 2.2.4)
       redis-client (>= 0.22.2)
-    sidekiq-cron (2.4.0)
-      cronex (>= 0.13.0)
-      fugit (~> 1.8, >= 1.11.1)
+    sidekiq-cron (1.12.0)
+      fugit (~> 1.8)
       globalid (>= 1.0.1)
-      sidekiq (>= 6.5.0)
+      sidekiq (>= 6)
     sidekiq-unique-jobs (8.0.10)
       concurrent-ruby (~> 1.0, >= 1.0.5)
       sidekiq (>= 7.0.0, < 8.0.0)
@@ -1047,7 +1043,6 @@ GEM
       concurrent-ruby (~> 1.0)
     uber (0.1.0)
     unaccent (0.4.0)
-    unicode (0.4.4.5)
     unicode-display_width (3.1.4)
       unicode-emoji (~> 4.0, >= 4.0.4)
     unicode-emoji (4.0.4)
@@ -1253,7 +1248,7 @@ DEPENDENCIES
   sentry-ruby
   shoulda-matchers (~> 6.0)
   sidekiq (~> 7.2)
-  sidekiq-cron (~> 2.4)
+  sidekiq-cron (~> 1.9)
   sidekiq-pro (~> 7.2)!
   sidekiq-unique-jobs (~> 8.0)
   sitemap_generator (~> 6.3)
