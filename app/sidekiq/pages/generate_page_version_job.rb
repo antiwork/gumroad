@@ -2,7 +2,22 @@
 
 class Pages::GeneratePageVersionJob
   include Sidekiq::Job
-  sidekiq_options retry: 0, queue: :default
+
+  # Retry transient OpenAI failures (timeouts, 5xx, 429). Permanent errors
+  # (moderation rejection, 4xx) return early without raising so they don't
+  # consume retries. The `ensure` block clears `generating_since` on every
+  # attempt — including the final failed one — so the page never gets stuck
+  # in the "generating" state.
+  sidekiq_options retry: 3, queue: :default
+
+  sidekiq_retries_exhausted do |msg, _ex|
+    page_id = msg["args"]&.first
+    page = Page.find_by(id: page_id) if page_id
+    page&.update_columns(
+      generation_error: "Generation failed — please try again.",
+      generating_since: nil,
+    )
+  end
 
   def perform(page_id, prompt, parent_version_id = nil)
     page = Page.find(page_id)
@@ -36,7 +51,8 @@ class Pages::GeneratePageVersionJob
   ensure
     # Belt-and-suspenders for any unhandled error path: never leave the row
     # stuck in the "generating" state. Safe to call when page is nil (find
-    # raised) — guarded below.
+    # raised) — guarded below. Runs on every attempt, so transient retries
+    # don't leave generating_since stale between attempts either.
     page&.update_column(:generating_since, nil) if page&.persisted? && page&.generating_since.present?
   end
 end

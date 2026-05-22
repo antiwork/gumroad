@@ -4,6 +4,17 @@ class Ai::PageGeneratorService
   TIMEOUT_IN_SECONDS = 90
   MAX_TOKENS = 8000
 
+  # Transient errors are re-raised so Sidekiq retries the job. Permanent
+  # errors (bad responses, malformed JSON, our own bugs) return a failure
+  # Result so the job exits cleanly with `generation_error` set.
+  TRANSIENT_ERRORS = [
+    Faraday::TimeoutError,
+    Faraday::ConnectionFailed,
+    Faraday::ServerError, # HTTP 5xx
+    Net::OpenTimeout,
+    Net::ReadTimeout,
+  ].freeze
+
   Result = Struct.new(:html, :version, :error, keyword_init: true) do
     def success? = error.nil?
   end
@@ -68,6 +79,21 @@ class Ai::PageGeneratorService
     )
 
     Result.new(html: sanitized, version: version)
+  rescue *TRANSIENT_ERRORS => e
+    # Re-raise so Sidekiq retries the job — these are network/timeout/5xx
+    # blips that usually resolve on retry.
+    Rails.logger.warn("Ai::PageGeneratorService transient error: #{e.class}: #{e.message}")
+    raise
+  rescue Faraday::ClientError => e
+    # 429 (rate limit) is transient; other 4xx are permanent (bad request,
+    # auth, etc.) and should not retry.
+    status = e.response&.dig(:status)
+    if status == 429
+      Rails.logger.warn("Ai::PageGeneratorService rate-limited (429): #{e.message}")
+      raise
+    end
+    Rails.logger.error("Ai::PageGeneratorService client error #{status}: #{e.message}")
+    Result.new(error: "Failed to generate page. Please try again.")
   rescue => e
     Rails.logger.error("Ai::PageGeneratorService error: #{e.class}: #{e.message}")
     Result.new(error: "Failed to generate page. Please try again.")
