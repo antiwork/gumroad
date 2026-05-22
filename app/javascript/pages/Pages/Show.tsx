@@ -1,7 +1,5 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
-
 type PageProps = {
   page: {
     title: string;
@@ -16,7 +14,7 @@ type PageProps = {
 };
 
 export default function PageShow() {
-  const { page } = typia.assert<PageProps>(usePage().props);
+  const { page } = usePage().props as PageProps;
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {

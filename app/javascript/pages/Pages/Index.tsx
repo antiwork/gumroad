@@ -1,7 +1,5 @@
 import { Link, usePage, router } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
-
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -28,7 +26,7 @@ type PageProps = {
 };
 
 export default function PagesIndex() {
-  const { pages } = typia.assert<PageProps>(usePage().props);
+  const { pages } = usePage<{ pages: PageItem[] }>().props;
   const [deleting, setDeleting] = React.useState<{ slug: string; title: string; state: "confirm" | "deleting" } | null>(
     null,
   );

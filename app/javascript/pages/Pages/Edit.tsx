@@ -1,7 +1,5 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
-
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -105,7 +103,7 @@ const GeneratingPlaceholder = ({ message }: { message: string }) => (
 );
 
 export default function PageEdit() {
-  const { page: initialPage, versions: initialVersions } = typia.assert<PageProps>(usePage().props);
+  const { page: initialPage, versions: initialVersions } = usePage().props as PageProps;
   const currentSeller = useCurrentSeller();
   const [page, setPage] = React.useState(initialPage);
   const [versions, setVersions] = React.useState(initialVersions);
@@ -131,7 +129,7 @@ export default function PageEdit() {
           credentials: "same-origin",
         });
         if (!resp.ok) return;
-        const body = typia.assert<{
+        const body = (await resp.json()) as {
           html_content: string | null;
           latest_version: VersionInfo | null;
           published_version_id: number | null;
@@ -139,7 +137,7 @@ export default function PageEdit() {
           auto_publish: boolean;
           generating: boolean;
           generation_error: string | null;
-        }>(await resp.json());
+        };
         if (cancelled) return;
 
         if (body.html_content && body.html_content !== page.html_content) {

@@ -1,7 +1,5 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
-
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -56,7 +54,7 @@ type FormErrors = {
 };
 
 export default function PagesNew() {
-  const { product, products, templates } = typia.assert<PageProps>(usePage().props);
+  const { product, products, templates } = usePage().props as PageProps;
   const formUID = React.useId();
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -76,7 +74,7 @@ export default function PagesNew() {
     },
   });
 
-  const errors = typia.assert<FormErrors>(form.errors);
+  const errors = form.errors as FormErrors;
 
   const savePage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
