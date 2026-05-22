@@ -60,7 +60,7 @@ class GdprBuyerErasureService
   rescue ArgumentError
     raise
   rescue => e
-    Rails.logger.error("GDPR buyer erasure failed for #{email}: #{e.message}")
+    Rails.logger.error("GDPR buyer erasure failed for #{@anonymized_email || '[no anonymized email yet]'}: #{e.message}")
     raise
   end
 
@@ -155,22 +155,21 @@ class GdprBuyerErasureService
 
     def anonymize_blocked_customer_objects!
       email_object_type = BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email]
-      fingerprint_object_type = BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:charge_processor_fingerprint]
-
-      fingerprint_block_count = BlockedCustomerObject.where(
-        object_type: fingerprint_object_type,
-        buyer_email: email
-      ).update_all(buyer_email: @anonymized_email)
 
       conflict_seller_ids = BlockedCustomerObject.where(object_type: email_object_type, object_value: @anonymized_email).pluck(:seller_id)
       if conflict_seller_ids.any?
         BlockedCustomerObject.where(object_type: email_object_type, object_value: email, seller_id: conflict_seller_ids).delete_all
       end
-      email_block_count = BlockedCustomerObject.where(object_type: email_object_type, object_value: email).update_all(
-        object_value: @anonymized_email,
-      )
 
-      counts[:blocked_customer_objects] = fingerprint_block_count + email_block_count
+      affected_ids = BlockedCustomerObject.where(buyer_email: email)
+                                          .or(BlockedCustomerObject.where(object_type: email_object_type, object_value: email))
+                                          .distinct
+                                          .pluck(:id)
+
+      BlockedCustomerObject.where(id: affected_ids, buyer_email: email).update_all(buyer_email: @anonymized_email)
+      BlockedCustomerObject.where(id: affected_ids, object_type: email_object_type, object_value: email).update_all(object_value: @anonymized_email)
+
+      counts[:blocked_customer_objects] = affected_ids.size
     end
 
     def anonymize_signup_events!
@@ -289,7 +288,7 @@ class GdprBuyerErasureService
                    "Performed by #{performed_by.email}."
         )
       rescue => e
-        Rails.logger.error("GDPR buyer erasure log failed for #{email} on seller #{seller_id}: #{e.message}")
+        Rails.logger.error("GDPR buyer erasure log failed for #{@anonymized_email} on seller #{seller_id}: #{e.message}")
       end
     end
 end

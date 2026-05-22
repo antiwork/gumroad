@@ -26,6 +26,19 @@ describe GdprBuyerErasureService do
       expect { described_class.new("", performed_by: admin).perform! }.to raise_error(ArgumentError)
     end
 
+    it "does not log the original buyer email in plaintext when the erasure fails" do
+      buyer_email = "leak-check@example.com"
+      create(:free_purchase, email: buyer_email, purchaser: nil)
+      allow(Purchase).to receive(:where).and_call_original
+      allow_any_instance_of(ActiveRecord::Relation).to receive(:update_all).and_raise(StandardError, "boom")
+      logged = []
+      allow(Rails.logger).to receive(:error) { |msg| logged << msg }
+
+      expect { described_class.new(buyer_email, performed_by: admin).perform! }.to raise_error(StandardError)
+
+      expect(logged.join("\n")).not_to include(buyer_email)
+    end
+
     it "raises when any purchase under this email belongs to a registered user" do
       registered_buyer = create(:user)
       purchase = create(:free_purchase, email: "mixed-owner@example.com", purchaser: nil)
@@ -169,6 +182,24 @@ describe GdprBuyerErasureService do
         described_class.new(buyer_email, performed_by: admin).perform!
 
         expect(block.reload.object_value).to end_with("@deleted.gumroad.com")
+      end
+
+      it "anonymizes buyer_email on email-type blocked_customer_objects that have it populated" do
+        seller = purchase1.seller
+        block = BlockedCustomerObject.new(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email],
+          object_value: buyer_email,
+          buyer_email: buyer_email,
+          blocked_at: Time.current
+        )
+        block.save!(validate: false)
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        block.reload
+        expect(block.object_value).to end_with("@deleted.gumroad.com")
+        expect(block.buyer_email).to end_with("@deleted.gumroad.com")
       end
 
       it "does not count email-type blocked_customer_objects under the fingerprint scope" do
