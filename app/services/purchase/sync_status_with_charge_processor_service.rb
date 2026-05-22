@@ -23,7 +23,17 @@ class Purchase::SyncStatusWithChargeProcessorService
 
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
-      if charge && success_statuses.include?(charge.status) && !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
+      charge_succeeded = charge && success_statuses.include?(charge.status) &&
+                         !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
+
+      if charge_succeeded && purchase.is_part_of_combined_charge? && charge.flow_of_funds.nil?
+        # Transient unsettled state: the underlying combined Stripe charge succeeded but
+        # `balance_transaction` (and therefore `flow_of_funds`) hasn't been produced yet.
+        # Leave the purchase `in_progress` so a subsequent SyncStuckPurchasesJob run can
+        # re-attempt once Stripe settles, rather than permanently failing a purchase whose
+        # underlying charge actually succeeded.
+        false
+      elsif charge_succeeded
         purchase.flow_of_funds = if purchase.is_part_of_combined_charge?
           purchase.build_flow_of_funds_from_combined_charge(charge.flow_of_funds)
         else
