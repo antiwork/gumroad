@@ -149,6 +149,57 @@ describe GdprBuyerErasureService do
         expect(seller_b.reload.comments.where("content LIKE ?", "%GDPR buyer erasure%")).to exist
       end
 
+      it "anonymizes email-type blocked_customer_objects" do
+        seller = purchase1.seller
+        block = BlockedCustomerObject.create!(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email],
+          object_value: buyer_email,
+          blocked_at: Time.current
+        )
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(block.reload.object_value).to end_with("@deleted.gumroad.com")
+      end
+
+      it "anonymizes fingerprint-type blocked_customer_objects via buyer_email" do
+        seller = purchase1.seller
+        block = BlockedCustomerObject.create!(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:charge_processor_fingerprint],
+          object_value: "fp_xyz",
+          buyer_email: buyer_email,
+          blocked_at: Time.current
+        )
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(block.reload.buyer_email).to end_with("@deleted.gumroad.com")
+        expect(block.object_value).to eq("fp_xyz")
+      end
+
+      it "merges duplicate email-type blocked_customer_objects when an anonymized row already exists" do
+        seller = purchase1.seller
+        anonymized = described_class.new(buyer_email, performed_by: admin).send(:generate_anonymized_email)
+        existing_anonymized = BlockedCustomerObject.create!(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email],
+          object_value: anonymized,
+          blocked_at: Time.current
+        )
+        fresh = BlockedCustomerObject.create!(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email],
+          object_value: buyer_email,
+          blocked_at: Time.current
+        )
+
+        expect { described_class.new(buyer_email, performed_by: admin).perform! }.not_to raise_error
+        expect(BlockedCustomerObject.where(id: existing_anonymized.id)).to exist
+        expect(BlockedCustomerObject.where(id: fresh.id)).not_to exist
+      end
+
       it "does not anonymize discover_searches whose browser_guid is also used by another buyer's purchase" do
         shared_guid = "shared-guid-#{SecureRandom.hex(4)}"
         purchase1.update_columns(browser_guid: shared_guid)

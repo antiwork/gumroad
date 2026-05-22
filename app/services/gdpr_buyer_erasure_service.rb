@@ -153,9 +153,20 @@ class GdprBuyerErasureService
     end
 
     def anonymize_blocked_customer_objects!
-      counts[:blocked_customer_objects] = BlockedCustomerObject.where(buyer_email: email).update_all(
+      fingerprint_block_count = BlockedCustomerObject.where(buyer_email: email).update_all(
         buyer_email: @anonymized_email,
       )
+
+      email_object_type = BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email]
+      conflict_seller_ids = BlockedCustomerObject.where(object_type: email_object_type, object_value: @anonymized_email).pluck(:seller_id)
+      if conflict_seller_ids.any?
+        BlockedCustomerObject.where(object_type: email_object_type, object_value: email, seller_id: conflict_seller_ids).delete_all
+      end
+      email_block_count = BlockedCustomerObject.where(object_type: email_object_type, object_value: email).update_all(
+        object_value: @anonymized_email,
+      )
+
+      counts[:blocked_customer_objects] = fingerprint_block_count + email_block_count
     end
 
     def anonymize_signup_events!
