@@ -1,4 +1,4 @@
-import { usePage } from "@inertiajs/react";
+import { Head, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { assertResponseError, request } from "$app/utils/request";
 
@@ -10,6 +10,8 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Switch } from "$app/components/ui/Switch";
+
+import { buildSrcDoc } from "./srcDoc";
 
 type ProductOption = {
   id: string;
@@ -111,6 +113,12 @@ export default function PageEdit() {
   const [generating, setGenerating] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [titleDraft, setTitleDraft] = React.useState(initialPage.title);
+  const [previewLoaded, setPreviewLoaded] = React.useState(false);
+
+  // Re-fade the preview iframe whenever a new generation arrives.
+  React.useEffect(() => {
+    setPreviewLoaded(false);
+  }, [page.html_content]);
 
   // Initial generation may still be running (kicked off async from New)
   const [waitingForFirst, setWaitingForFirst] = React.useState(
@@ -275,6 +283,9 @@ export default function PageEdit() {
 
   return (
     <>
+      <Head>
+        <link rel="preload" href="/pages-tailwind.css" as="style" />
+      </Head>
       <PageHeader
         className="sticky-top"
         title={
@@ -399,12 +410,15 @@ export default function PageEdit() {
         {/* Preview Panel */}
         <div className="relative flex-1 bg-gray-50">
           {page.html_content ? (
-            <iframe
-              className="h-full w-full border-0"
-              title="Page preview"
-              sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"><script src="https://cdn.tailwindcss.com"></script></head><body>${page.html_content}</body></html>`}
-            />
+            <div className="h-full w-full bg-dark-gray">
+              <iframe
+                className={`h-full w-full border-0 transition-opacity duration-300 ${previewLoaded ? "opacity-100" : "opacity-0"}`}
+                title="Page preview"
+                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                srcDoc={buildSrcDoc(page.html_content, { openLinksInNewTab: true })}
+                onLoad={() => setPreviewLoaded(true)}
+              />
+            </div>
           ) : (
             <GeneratingPlaceholder message="Building your page" />
           )}

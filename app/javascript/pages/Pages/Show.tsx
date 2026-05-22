@@ -1,5 +1,8 @@
-import { usePage } from "@inertiajs/react";
+import { Head, usePage } from "@inertiajs/react";
 import * as React from "react";
+
+import { buildSrcDoc } from "./srcDoc";
+
 type PageProps = {
   page: {
     title: string;
@@ -15,41 +18,22 @@ type PageProps = {
 
 export default function PageShow() {
   const { page } = usePage().props as PageProps;
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
-
-  React.useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !page.html_content) return;
-
-    const doc = iframe.contentDocument;
-    if (!doc) return;
-
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <script src="https://cdn.tailwindcss.com"><\/script>
-          <style>
-            html, body { margin: 0; padding: 0; min-height: 100vh; }
-          </style>
-        </head>
-        <body>${page.html_content}</body>
-      </html>
-    `);
-    doc.close();
-  }, [page.html_content]);
+  const [loaded, setLoaded] = React.useState(false);
 
   return (
-    <div className="min-h-screen">
-      <iframe
-        ref={iframeRef}
-        className="h-screen w-full border-0"
-        title={page.title}
-        sandbox="allow-scripts"
-      />
-    </div>
+    <>
+      <Head>
+        <link rel="preload" href="/pages-tailwind.css" as="style" />
+      </Head>
+      <div className="min-h-screen bg-dark-gray">
+        <iframe
+          className={`h-screen w-full border-0 transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+          title={page.title}
+          sandbox="allow-scripts"
+          srcDoc={buildSrcDoc(page.html_content, { bodyReset: true })}
+          onLoad={() => setLoaded(true)}
+        />
+      </div>
+    </>
   );
 }

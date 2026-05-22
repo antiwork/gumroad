@@ -1,0 +1,17 @@
+/*
+ * Kitchen-sink Tailwind build for AI-generated landing pages.
+ *
+ * Compiled to public/pages-tailwind.css and served by the Page iframes
+ * (Edit preview + Show view) instead of the Play CDN (cdn.tailwindcss.com),
+ * which JIT-compiles in the browser and causes visible flicker.
+ *
+ * Regenerate:
+ *   npx @tailwindcss/cli -i app/javascript/stylesheets/pages_tailwind.css \
+ *                        -o public/pages-tailwind.css --minify
+ *
+ * To extend coverage: add literal class names to safelist.txt next to this file.
+ */
+
+@import "tailwindcss";
+
+@source "./pages_tailwind_safelist.txt";
