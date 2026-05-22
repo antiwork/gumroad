@@ -187,6 +187,15 @@ describe SubscriptionsController do
         end
       end
 
+      context "when CheckoutPresenter#subscription_manager_props returns nil" do
+        it "returns 404 instead of raising NoMethodError on the inertia render" do
+          cookies.encrypted[@subscription.cookie_key] = @subscription.external_id
+          allow_any_instance_of(CheckoutPresenter).to receive(:subscription_manager_props).and_return(nil)
+
+          expect { get :manage, params: { id: @subscription.external_id } }.to raise_error(ActionController::RoutingError)
+        end
+      end
+
       context "when the token is provided but it has expired" do
         it "redirects to the magic link page" do
           @subscription.update!(token: "valid_token", token_expires_at: 1.day.ago)
