@@ -82,6 +82,14 @@ describe Api::V2::VariantsController do
         @params.merge!(access_token: @token.token)
       end
 
+      it "returns error for nonexistent variant_category_id" do
+        post @action, params: @params.merge(variant_category_id: "nonexistent")
+        expect(response.parsed_body).to eq({
+          "success" => false,
+          "message" => "The variant_category was not found."
+        })
+      end
+
       describe "usd" do
         it "works if variants passed in" do
           post :create, params: @params
@@ -162,6 +170,14 @@ describe Api::V2::VariantsController do
         }.as_json)
       end
 
+      it "returns error for nonexistent variant_category_id" do
+        get @action, params: @params.merge(variant_category_id: "nonexistent")
+        expect(response.parsed_body).to eq({
+          "success" => false,
+          "message" => "The variant_category was not found."
+        })
+      end
+
       it "returns the right response" do
         get @action, params: @params
         variant = @product.variant_categories.first.variants.first
@@ -239,6 +255,14 @@ describe Api::V2::VariantsController do
             success: false,
             message: "The variant was not found."
           }.as_json)
+        end
+
+        it "returns error for nonexistent variant_category_id" do
+          put @action, params: @params.merge(variant_category_id: "nonexistent")
+          expect(response.parsed_body).to eq({
+            "success" => false,
+            "message" => "The variant_category was not found."
+          })
         end
       end
 
@@ -528,6 +552,14 @@ describe Api::V2::VariantsController do
           success: false,
           message: "The variant was not found."
         }.as_json)
+      end
+
+      it "returns error for nonexistent variant_category_id" do
+        delete @action, params: @params.merge(variant_category_id: "nonexistent")
+        expect(response.parsed_body).to eq({
+          "success" => false,
+          "message" => "The variant_category was not found."
+        })
       end
 
       describe "usd" do
