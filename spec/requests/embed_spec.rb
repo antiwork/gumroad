@@ -10,6 +10,14 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
   let(:product) { create(:physical_product) }
   let!(:js_nonce) { SecureRandom.base64(32).chomp }
 
+  def expect_affiliate_credit_to_be_created(&block)
+    affiliate_credit_count = AffiliateCredit.count
+
+    block.call
+
+    wait_until_true(sleep_interval: 0.1) { AffiliateCredit.count == affiliate_credit_count + 1 }
+  end
+
   it "accepts product URL" do
     product = create(:product)
 
@@ -29,9 +37,9 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
     within_embed_frame { click_on "Add to cart" }
 
-    expect do
+    expect_affiliate_credit_to_be_created do
       check_out(pwyw_product, email: nil)
-    end.to change { AffiliateCredit.count }.from(0).to(1)
+    end
 
     purchase = pwyw_product.sales.successful.last
     expect(purchase.email).to eq("john@test.com")
@@ -48,13 +56,14 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     visit(create_embed_page(pwyw_product, url: "#{direct_affiliate.referral_url_for_product(pwyw_product)}?", outbound: false))
 
     within_embed_frame do
+      expect(page).to have_field("Name a fair price", wait: 15)
       fill_in "Name a fair price", with: 75
       click_on "Add to cart"
     end
 
-    expect do
+    expect_affiliate_credit_to_be_created do
       check_out(pwyw_product)
-    end.to change { AffiliateCredit.count }.from(0).to(1)
+    end
 
     purchase = pwyw_product.sales.successful.last
     expect(purchase.email).to eq("test@gumroad.com")
@@ -116,12 +125,13 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
 
       within_embed_frame do
         expect(page).to have_text("$75", wait: 15)
+        expect(page).to have_link("Add to cart", href: /affiliate_id=#{direct_affiliate.external_id_numeric}/, wait: 15)
         click_on "Add to cart"
       end
 
-      expect do
+      expect_affiliate_credit_to_be_created do
         check_out(product)
-      end.to change { AffiliateCredit.count }.by(1)
+      end
 
       purchase = product.sales.successful.last.reload
       expect(purchase.affiliate_credit.affiliate).to eq(direct_affiliate)
