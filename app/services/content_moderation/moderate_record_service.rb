@@ -83,6 +83,11 @@ class ContentModeration::ModerateRecordService
 
     def leave_admin_comment(reasons)
       return if user.blank?
+      # Transient proxies (e.g. the prompt-moderation Page used by
+      # PagesController#moderate_prompt) have no id, which would render as
+      # "Page # ()" in the admin comment. Skip logging for those; the
+      # caller decides whether to surface the rejection elsewhere.
+      return if record.id.nil?
 
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
