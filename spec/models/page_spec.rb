@@ -12,8 +12,8 @@ describe Page do
     end
 
     it "appends -1, -2 on slug collision" do
-      create(:page, user: user, title: "Launch")
-      page2 = create(:page, user: user, title: "Launch")
+      create(:product_page, user: user, link: create(:product, user: user), title: "Launch")
+      page2 = create(:product_page, user: user, link: create(:product, user: user), title: "Launch")
       expect(page2.slug).to eq("launch-1")
     end
 
@@ -27,9 +27,9 @@ describe Page do
       # the existence query ran before the winning row committed. The DB
       # unique index then rejects the insert. The retry must regenerate a
       # fresh slug and successfully save.
-      create(:page, user: user, title: "Launch") # slug "launch"
+      create(:product_page, user: user, link: create(:product, user: user), title: "Launch") # slug "launch"
 
-      page = Page.new(user: user, title: "Launch")
+      page = Page.new(user: user, link: create(:product, user: user), title: "Launch")
       first_call = true
       allow(page).to receive(:_create_record).and_wrap_original do |orig, *args, &block|
         if first_call
@@ -45,12 +45,30 @@ describe Page do
     end
 
     it "gives up after SLUG_RETRY_LIMIT attempts" do
-      create(:page, user: user, title: "Launch")
-      page = Page.new(user: user, title: "Launch")
+      create(:product_page, user: user, link: create(:product, user: user), title: "Launch")
+      page = Page.new(user: user, link: create(:product, user: user), title: "Launch")
       allow(page).to receive(:_create_record).and_raise(
         ActiveRecord::RecordNotUnique.new("Duplicate entry 'launch' for key 'index_pages_on_user_id_and_slug'")
       )
       expect { page.save! }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+  end
+
+  describe "title default" do
+    it "falls back to the product's name when the page is owned by a product" do
+      product = create(:product, user: user, name: "My Course")
+      page = Page.create!(user: user, link: product)
+      expect(page.title).to eq("My Course")
+    end
+
+    it "falls back to 'Untitled page' on a profile-owned page when no title is given" do
+      page = Page.create!(user: user, is_profile: true)
+      expect(page.title).to eq("Untitled page")
+    end
+
+    it "leaves an explicit title untouched" do
+      page = Page.create!(user: user, is_profile: true, title: "Hand-rolled")
+      expect(page.title).to eq("Hand-rolled")
     end
   end
 

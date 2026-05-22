@@ -23,7 +23,8 @@ import hands from "$assets/images/illustrations/hands.png";
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
+  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover, uniquePermalink } =
+    useProductEditContext();
 
   const url = useProductUrl();
   const discoverUrl = useDiscoverUrl();
@@ -52,7 +53,7 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </div>
           </section>
-          {currentSeller.pagesEnabled ? <LandingPageSplash productPermalink={product.unique_permalink ?? ""} /> : null}
+          {currentSeller.pagesEnabled ? <LandingPageSplash productPermalink={uniquePermalink} /> : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}

@@ -10,7 +10,9 @@ class Page < ApplicationRecord
   belongs_to :published_version, class_name: "PageVersion", optional: true
   has_many :page_versions, dependent: :destroy
 
-  validates :title, presence: true, length: { maximum: 255 }
+  DEFAULT_TITLE = "Untitled page"
+
+  validates :title, length: { maximum: 255 }
   validates :slug, presence: true, length: { maximum: 100 },
                    format: { with: /\A[a-z0-9]([a-z0-9-]*[a-z0-9])?\z/, message: "can only contain lowercase letters, numbers, and hyphens" }
   validates :slug, uniqueness: { scope: :user_id, conditions: -> { alive } }
@@ -22,6 +24,9 @@ class Page < ApplicationRecord
   # or profile, never as a top-level resource.
   validate :must_have_owner
 
+  # Title is a creator-facing label, not a required input; default it so the
+  # DB NOT NULL constraint never forces callers to invent a placeholder.
+  before_validation :default_title, on: :create
   before_validation :generate_slug, on: :create
 
   scope :published, -> { where(published: true) }
@@ -139,6 +144,11 @@ class Page < ApplicationRecord
     def must_have_owner
       return if link_id.present? || is_profile?
       errors.add(:base, "Page must belong to a product or profile")
+    end
+
+    def default_title
+      return if title.present?
+      self.title = link&.name.presence&.first(255) || DEFAULT_TITLE
     end
 
     def generate_slug

@@ -102,6 +102,15 @@ describe PagesController, type: :request do
       expect(body["success"]).to be(true)
       expect(body["edit_url"]).to eq(edit_page_path(Page.last.slug))
     end
+
+    it "defaults title to the product name when title is omitted" do
+      product = create(:product, user: seller, name: "My Course")
+      post pages_path,
+           params: { page: { product_permalink: product.unique_permalink } }.to_json,
+           headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      expect(Page.last.title).to eq("My Course")
+    end
   end
 
   describe "POST /pages/:id/generate" do
