@@ -86,6 +86,15 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
       end
 
+      it "rejects byte sizes above the upload maximum before creating a blob" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { byte_size: described_class::MAX_FILE_SIZE + 1 })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("byte_size exceeds the #{described_class::MAX_FILE_SIZE_GB} GB maximum")
+      end
+
       it "rejects unsupported content types before creating a blob" do
         expect do
           post @action, params: @params.deep_merge(blob: { content_type: "application/pdf" })

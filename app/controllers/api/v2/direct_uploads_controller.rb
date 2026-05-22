@@ -5,6 +5,8 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
 
   ALLOWED_CONTENT_TYPES = /\A(?:image\/(?:jpeg|jpg|png|gif)|video\/[a-z0-9.+-]+)\z/i
   REQUIRED_BLOB_ARGS = [:filename, :byte_size, :checksum].freeze
+  MAX_FILE_SIZE_GB = 20
+  MAX_FILE_SIZE = MAX_FILE_SIZE_GB.gigabytes
 
   before_action { doorkeeper_authorize! :edit_products }
 
@@ -12,6 +14,7 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     blob_args = direct_upload_blob_args
     missing_blob_arg = REQUIRED_BLOB_ARGS.find { |key| !blob_args.key?(key) }
     return error_400("#{missing_blob_arg} is required") if missing_blob_arg.present?
+    return error_400("byte_size exceeds the #{MAX_FILE_SIZE_GB} GB maximum") if blob_args[:byte_size].to_i > MAX_FILE_SIZE
     return error_400("content_type must be JPEG, PNG, GIF, or video.") unless allowed_content_type?(blob_args[:content_type])
 
     blob = ActiveStorage::Blob.create_before_direct_upload!(**blob_args)
