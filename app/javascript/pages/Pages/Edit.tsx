@@ -433,7 +433,7 @@ export default function PageEdit() {
               <iframe
                 className={`h-full w-full border-0 transition-opacity duration-300 ${previewLoaded ? "opacity-100" : "opacity-0"}`}
                 title="Page preview"
-                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                sandbox="allow-scripts allow-popups"
                 srcDoc={buildSrcDoc(page.html_content, { openLinksInNewTab: true })}
                 onLoad={() => setPreviewLoaded(true)}
               />

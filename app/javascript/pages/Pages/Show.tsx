@@ -29,7 +29,7 @@ export default function PageShow() {
         <iframe
           className={`h-screen w-full border-0 transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
           title={page.title}
-          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-forms"
+          sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation allow-forms"
           srcDoc={buildSrcDoc(page.html_content, { bodyReset: true })}
           onLoad={() => setLoaded(true)}
         />
