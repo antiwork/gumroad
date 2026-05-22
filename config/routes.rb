@@ -46,6 +46,7 @@ Rails.application.routes.draw do
       post "files/presign", to: "files#presign"
       post "files/complete", to: "files#complete"
       post "files/abort", to: "files#abort"
+      post "direct_uploads", to: "direct_uploads#create"
       resources :licenses, only: [] do
         collection do
           post :verify
