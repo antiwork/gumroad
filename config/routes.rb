@@ -74,6 +74,7 @@ Rails.application.routes.draw do
         end
       end
       post "sales/exports", to: "sales#export"
+      get "sales/summary", to: "sales#summary"
       resources :sales, only: [:index, :show] do
         member do
           put :mark_as_shipped
