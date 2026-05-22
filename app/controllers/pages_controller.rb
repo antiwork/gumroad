@@ -39,9 +39,15 @@ class PagesController < Sellers::BaseController
     initial_prompt = resolve_initial_prompt(page)
 
     if page.save
+      # Seed v1 with a snapshot of the currently rendered product/profile so
+      # the editor opens on the real page rather than a blank chat. The first
+      # AI iteration branches off this baseline (parent_version: v1) so the
+      # model can "evolve" the existing page rather than generate from scratch.
+      seed_version = Ai::InitialPageSnapshot.create_for!(page)
+
       if initial_prompt.present?
         page.update_column(:generating_since, Time.current)
-        Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, nil)
+        Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
       end
       respond_to do |format|
         format.html { redirect_to edit_page_path(page.slug) }

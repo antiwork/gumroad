@@ -3,285 +3,512 @@
 module Ai
   module PageTemplates
     TEMPLATES = [
+      # === Reframe the medium ===
       {
-        id: "minimal-product",
-        name: "Minimal product",
-        description: "Clean white, single product showcase, pricing card",
-        icon: "digital",
+        id: "album-not-store",
+        name: "Album, not a store",
+        description: "Treat the page like a record release — tracklist, sleeve notes, credits",
+        icon: "audio",
         prompt: <<~PROMPT.strip,
-          Design a minimal product showcase page in a clean editorial style.
+          Treat this like an album release, not a product page. The visitor is a fan flipping through a record on release day, not a shopper comparing SKUs.
 
           Visual style:
-          - White background, generous margins, body text in zinc-700.
-          - Serif heading paired with sans-serif body.
-          - Calm, gallery-like spacing throughout. `py-16` between sections.
+          - Deep matte black background with a single warm spot-color accent (`bg-amber-500` or `bg-rose-500`).
+          - One large square "album cover" image at the top (16:16 aspect, use a placeholder div if no image).
+          - Heavy use of monospaced type (`font-mono`) for tracklist and credits; sans-serif for body.
+          - Generous letter-spacing on the title (`tracking-widest`), uppercase small caps for section labels.
 
           Sections:
-          - Hero: product name, single sentence positioning, one secondary line of context, and a "Buy now" CTA.
-          - "What's included" section as a list with check marks.
-          - One large quoted testimonial set in serif italics.
-          - Single pricing card centered, with the live price and a CTA.
-          - Lightweight footer with the creator's name.
+          - Hero: square album-cover panel on the left, the work's title + creator name in the style of a record sleeve on the right. A small "Side A — Now playing" label above the title.
+          - Tracklist: numbered list of what's inside, in monospace, with runtime-style metadata (`02:34 — Chapter title`).
+          - "Liner notes": one paragraph of personal context from the creator.
+          - "Credits" block at the bottom, set in 3 columns: produced by, recorded at, thanks to.
+          - Single CTA labeled "Get the record" in the accent color.
 
-          Keep it quiet, confident, and focused on the product.
+          The page should feel like an artefact you'd display, not an item you'd add to a cart.
         PROMPT
       },
       {
-        id: "sleek-dark",
-        name: "Sleek dark",
-        description: "Black background, neon accents, minimal copy",
-        icon: "ebook",
-        prompt: <<~PROMPT.strip,
-          Design a sleek, modern landing page with a dark theme.
-
-          Visual style:
-          - Pure black or near-black background (`bg-zinc-950` or `bg-black`).
-          - One bright accent color (cyan, magenta, or lime) for CTAs and highlights.
-          - Sans-serif typography, generous tracking on headings.
-          - Heavy whitespace, big type, no stock-photo imagery.
-
-          Sections:
-          - Hero: bold one-line value prop, single CTA button, subtle gradient or grid background.
-          - Three-column feature row with icon glyphs.
-          - Single testimonial in a dark card with the buyer's quote, name, and role.
-          - Pricing section with one card highlighted.
-          - Minimal footer with social links.
-        PROMPT
-      },
-      {
-        id: "long-form-sales",
-        name: "Long-form sales letter",
-        description: "Narrative-driven, conversion-optimized, scrolls forever",
+        id: "zine",
+        name: "Build it as a zine",
+        description: "Photocopied, hand-cut, stapled-corner DIY publication",
         icon: "newsletter",
         prompt: <<~PROMPT.strip,
-          Design a long-form sales-letter style landing page focused on conversion.
+          Build this like a photocopied zine — hand-cut, taped, glued, stapled in the corner. Imperfection is the point.
 
           Visual style:
-          - Cream/off-white background (`bg-stone-50`), dark serif headings (`font-serif`), readable sans-serif body.
-          - Body text in zinc-700, max-width prose container.
-          - Generous vertical rhythm — `py-16` between major sections.
-
-          Structure (in this order):
-          1. Hook headline (problem-focused), large serif, italic emphasis on the painful word.
-          2. Sub-headline that twists the knife.
-          3. "Dear [creator type]," opening paragraph.
-          4. Story section: 3-4 paragraphs of narrative setting up the problem.
-          5. "Who this is for / Who this is not for" two-column block.
-          6. "Here's what you get" bullet list of 8-12 benefits (not features) with check marks.
-          7. Three testimonials with first-name + role attribution (no photos required).
-          8. Detailed pricing section with anchoring ("normally $X, today $Y").
-          9. 30-day guarantee block, prominent.
-          10. FAQ accordion (5-7 entries).
-          11. Final CTA section repeating the offer and the urgency framing.
-
-          Heavy on copy. Light on imagery. Lean into conversion-copywriting tropes.
-        PROMPT
-      },
-      {
-        id: "personal-brand",
-        name: "Personal brand",
-        description: "Warm, approachable, story-first creator landing",
-        icon: "coffee",
-        prompt: <<~PROMPT.strip,
-          Design a personal-brand landing page that feels warm and human.
-
-          Visual style:
-          - Off-white background with a subtle warm tint, charcoal body text.
-          - Friendly sans-serif (Inter or similar). Optional serif for the hero name.
-          - Soft rounded corners (`rounded-xl`), low-contrast borders, no hard edges.
+          - Off-white paper background (`bg-stone-100`) with subtle noise. Ink-black type (`text-zinc-900`).
+          - Mixed fonts on purpose: `font-mono` for headers, hand-drawn-feeling serif for body (`font-serif italic`).
+          - Rotated section blocks (`-rotate-1`, `rotate-2`) like pages were laid out crooked under a copier.
+          - Heavy black dividers, hand-drawn underlines (use `border-b-4 border-black`), occasional `bg-black text-white` inverted blocks.
+          - Tape and staple visual marks (use small `bg-yellow-300 rotate-12` rectangles as fake masking tape).
 
           Sections:
-          - Hero: friendly headline in the creator's voice, one-paragraph intro, and CTA.
-          - "About me" section with a circular avatar placeholder and short bio.
-          - "What I'm offering" section presenting the product as a story rather than a SKU.
-          - Single quote block from a happy buyer with first-name attribution.
-          - Soft pricing block, conversational microcopy.
-          - Friendly sign-off line at the bottom ("Made with care by ...").
+          - Cover: oversized title set in mixed type sizes within a single block (think headline cut from a magazine), date stamp in the corner, "Issue #01" label.
+          - "From the editor" — one column of body copy with hard-justified text.
+          - "Inside this issue" — a table of contents with page numbers, set monospace.
+          - "Article": the product/work positioned as a story, with a pull-quote in the margin.
+          - Classifieds-style block at the bottom listing 3 small offers/links.
+          - A CTA cut out and pasted in: "Buy this issue" in a slightly tilted black box.
+
+          Embrace asymmetry and slight ugliness. This is not Squarespace.
         PROMPT
       },
       {
-        id: "neobrutalist",
-        name: "Neobrutalist Gumroad",
-        description: "Block colors, thick borders, raw type, high contrast",
-        icon: "physical",
+        id: "mixtape-cover",
+        name: "Mixtape cover, not a product page",
+        description: "Cassette J-card aesthetic, hand-written tracklist, faded photo",
+        icon: "audio",
         prompt: <<~PROMPT.strip,
-          Design a neobrutalist landing page with strong Gumroad energy.
+          Render this like a cassette mixtape J-card. The visitor should feel handed a tape with a name scribbled on the spine.
 
           Visual style:
-          - Pure white background with one accent color (hot pink, electric blue, or lime).
-          - Thick black borders (`border-2` to `border-4`) on every card, button, and image frame.
-          - Hard drop shadows offset bottom-right (`shadow-[8px_8px_0px_#000]`), no blur.
-          - Sans-serif typography. Big, chunky headings — `font-black`, tracking-tight, 60-90px range.
-          - Buttons are square-edged rectangles with thick borders and the same hard shadow.
+          - Faded sepia or washed-pastel background (`bg-stone-200`, `bg-rose-100`).
+          - Cursive script font for the mixtape title (use a `font-serif italic` with weight + tracking tweaks).
+          - Permanent-marker-feel handwriting for tracklist (use `font-mono` and tilt slightly `-rotate-1`).
+          - A horizontal "cassette" graphic across the top — a long rectangular div with two darker circles inside for tape reels.
+          - Slight grain, slight skew. Imperfect alignment.
 
           Sections:
-          - Hero: oversized headline, single short subhead, one CTA. Headline can break across 2-3 lines with intentional line breaks.
-          - Three-column "What's in the box" block with thick-bordered cards. Each card has an emoji icon, short title, one-line description.
-          - One testimonial in a hard-shadowed card.
-          - Pricing block with a single highlighted card.
-          - Footer: minimal, just a row of links.
+          - Header: a faked J-card with "Side A" / "Side B" labels and the mixtape title in script across the middle.
+          - Tracklist as two columns ("Side A" / "Side B"), 6-8 entries each, in marker-style type.
+          - "From the maker" — one short note, like a dedication on the inside flap.
+          - A single faded photo placeholder (use `bg-zinc-300 aspect-[4/3] grayscale opacity-70`) with a caption underneath in italics.
+          - Closing CTA labeled "Take the tape" — modest, not loud.
 
-          Do not soften anything — no rounded corners beyond `rounded-md`, no gradients, no soft shadows.
+          The whole layout should feel like a personal gift, not a transaction.
         PROMPT
       },
       {
-        id: "design-agency",
-        name: "Minimalist agency",
-        description: "All black and white, generous whitespace, NY design studio",
-        icon: "course",
+        id: "character-select",
+        name: "Character select screen",
+        description: "Fighting-game roster grid with creator-as-character stats",
+        icon: "video",
         prompt: <<~PROMPT.strip,
-          Design a landing page that feels like a minimalist New York design agency.
+          Build this like a fighting-game character select screen. The creator is the playable roster.
 
           Visual style:
-          - Pure white background, pure black type. No accent colors.
-          - Helvetica or Inter — sans-serif throughout. `font-medium` for body, `font-bold` for headings.
-          - Massive whitespace. `py-32` between sections is normal.
-          - Thin hairline rules (`border-t border-black`) as dividers.
-          - Numbered sections (01 / 02 / 03 prefixes in monospace, small caps).
-          - Left-aligned everything. No center alignment except the explicit CTA.
+          - Pure black background with neon arcade accents (electric blue, hot pink, lime green).
+          - Pixel-style heading font (`font-mono`, `tracking-widest`, `uppercase`).
+          - A grid of "character portrait" cards across the top, each with a thick neon border and a glow effect (use `shadow-[0_0_24px_currentColor]`).
+          - Stats displayed as bar charts — labeled "Speed", "Power", "Style", "Vibes" with horizontal bars (`bg-pink-500`/`bg-cyan-400`).
+          - VS-screen style numerals and slashes between sections.
 
           Sections:
-          - Hero: one-line value prop, set in a huge type (think 96-120px), left-aligned. Tiny supporting paragraph below in tracking-wide all-caps.
-          - "01 — What" section: a single short paragraph and a small CTA link with an arrow.
-          - "02 — Why" section: same treatment.
-          - "03 — How" section: same treatment.
-          - A single quote, large, set as a pull-quote.
-          - Pricing as a single line of text. Not a card. Just "$X. One-time. No questions." with a CTA link.
-          - Footer: address-block style with the creator name, the year, and one link.
+          - Top: a grid of 6 character portrait cards. The "selected" character (the creator) is the largest one, highlighted with a flashing border (use `animate-pulse`).
+          - "Player 1: [Creator Name]" header in arcade type.
+          - Character bio block: name, "fighting style" (the creator's actual craft reframed), signature move (their flagship product).
+          - Stats panel with the bar charts described above.
+          - "Movelist" section listing 3-5 products as combo notations ("↓ ↘ → + Buy = Acquire the ebook").
+          - CTA labeled "PRESS START" or "INSERT COIN" — full-width neon banner at the bottom.
 
-          The whole page should feel confident, quiet, and expensive.
+          The page should feel like CRT-scan-lines and quarters-on-the-arcade-cabinet energy.
         PROMPT
       },
       {
-        id: "art-gallery",
-        name: "Art gallery",
-        description: "Image-led hero, museum framing, sparse text",
+        id: "museum-exhibit",
+        name: "Museum exhibit of my work",
+        description: "Curated gallery framing with wall-label microcopy and exhibit signage",
         icon: "bundle",
         prompt: <<~PROMPT.strip,
-          Design an art-gallery style landing page where the imagery does the talking.
+          Frame this as a museum exhibit of the creator's work. The visitor is walking through a curated show, not a shop.
 
           Visual style:
-          - Off-white background (`bg-neutral-50`), warm-gray body text, deep-black headings.
-          - Serif type throughout (`font-serif`).
-          - Generous whitespace and small, museum-label-style microcopy (`text-xs uppercase tracking-widest`).
-          - A single large image at the top of the page (use a placeholder `<div class="bg-neutral-300 aspect-[16/9]">`).
-          - Captions under every image in italic serif, like a gallery wall label.
+          - Off-white walls (`bg-neutral-50`), warm-gray body copy, deep-black headings, all serif type (`font-serif`).
+          - Wall-label microcopy in `text-xs uppercase tracking-widest text-zinc-500`.
+          - Plenty of whitespace. Section padding `py-24`.
+          - One thin black hairline rule between sections.
 
           Sections:
-          - Top: massive hero image (16:9). Below it: artist name in small caps, then the work's title in large serif, then a one-line description in italic.
-          - "About this collection" — a paragraph or two, set narrow (`max-w-prose`), readable type.
-          - Gallery grid: three or four placeholder images in an asymmetric grid with captions.
-          - Pricing as a single museum-label-style block at the bottom: edition number, materials, price.
-          - "Acquire" CTA — small, refined, lowercase.
-          - Closing block with the artist's signature line.
+          - Exhibit title plate: large serif title centered, dates of the "exhibition" below in small caps, then a single descriptive subtitle in italic ("Selected works, [year range]").
+          - Curator's note: one column of prose, set narrow (`max-w-prose`), in body serif. Signed at the bottom with the creator's name.
+          - Gallery wall: 3-4 large image placeholders arranged asymmetrically, each with a wall-label caption underneath (title, year, medium, materials).
+          - "Featured acquisition" block — a single product reframed as the centerpiece of the show, with curator's notes, edition info, and price (in tiny museum-label type).
+          - "Visit information" — hours, location-style closing block with a single CTA labeled "Acquire" in lowercase.
 
-          The page should feel like a curated exhibition catalog, not a sales page.
+          The vibe is quiet, deliberate, and a little reverential. Don't sell. Let the work speak.
         PROMPT
       },
       {
-        id: "retro-90s",
-        name: "Retro 90s",
-        description: "Pixel fonts, gradients, sparkles, GeoCities vibe",
-        icon: "audiobook",
+        id: "magazine-spread",
+        name: "Magazine spread, not a grid",
+        description: "Editorial layout with cover lines, pull quotes, full-bleed photography",
+        icon: "newsletter",
         prompt: <<~PROMPT.strip,
-          Design a retro 90s landing page that channels GeoCities, early web, and Lisa Frank energy.
+          Lay this out like a magazine feature spread — editorial photography, cover lines, pull quotes — not a tile grid of products.
 
           Visual style:
-          - Background: tiling pattern or loud gradient (`bg-gradient-to-br from-fuchsia-400 via-yellow-300 to-cyan-400`).
-          - Pixel font headings (use `font-mono` and add `text-shadow` for chunky look). Sans-serif body in cyan or magenta.
-          - WordArt-style headline with rainbow gradient text (`bg-gradient-to-r from-pink-500 via-yellow-400 to-cyan-500 bg-clip-text text-transparent`).
-          - Animated elements (use `animate-pulse` or `animate-bounce` for emojis).
-          - Heavy emoji use: ✨💾🌟🚀.
-          - "Best viewed in Netscape Navigator" footer joke.
+          - Off-white background (`bg-stone-50`), serif body copy (`font-serif`), bold sans-serif display type for headlines (`font-sans font-black`).
+          - Mix of full-bleed image blocks and tight columns of text. Use `columns-2` for body sections.
+          - Large drop caps at the start of body paragraphs (`first-letter:text-7xl first-letter:font-bold first-letter:float-left first-letter:mr-2 first-letter:leading-none`).
+          - Cover-line callouts in the margins, set in small caps with tracking.
 
           Sections:
-          - Hero: WordArt headline, subhead with sparkles, glowing CTA button.
-          - "Visitor counter" widget at the top right (just a styled span with `0042069`).
-          - Three-column "Features" section with chunky icons and bouncy text.
-          - Testimonial as a guestbook entry.
-          - Pricing in a "BUY NOW!!!" style flashing block (use `animate-pulse`).
-          - Footer with `<blink>`-style microcopy and a "Webring" row of placeholder links.
+          - Cover-style hero: a single oversized headline running across the page, a deck (subhead) in italic serif, a byline in small caps ("By [Creator Name]"), and a "Cover Story" eyebrow label.
+          - Full-bleed photo placeholder (use a `aspect-[16/9] bg-zinc-300`) with a small italic caption underneath.
+          - Feature article: two-column body copy with a drop cap. Insert one pull-quote mid-column in oversized italic serif.
+          - "Sidebar" boxed block with bullet points or stats, set in sans-serif on a tinted background (`bg-amber-50`).
+          - Second photo + caption.
+          - Closing CTA reframed as a "Get the issue" line at the end, plus a small "On newsstands now" microcopy.
 
-          Make it loud. Make it joyful. Make it 1997.
+          The page should reward slow reading, not scanning.
         PROMPT
       },
+
+      # === Reframe the vibe ===
       {
-        id: "limited-offer",
-        name: "Limited-time offer",
-        description: "Urgency banner, countdown timer, scarcity copy",
-        icon: "commission",
+        id: "letter-from-friend",
+        name: "Letter from a friend",
+        description: "Hand-typed personal letter, no marketing voice, warm and direct",
+        icon: "coffee",
         prompt: <<~PROMPT.strip,
-          Design a limited-time offer landing page with explicit urgency and a countdown.
+          Write this like a letter the visitor is opening — typed on a personal machine, signed by hand, no marketing voice at all.
 
           Visual style:
-          - White background with a sticky bright-red banner across the top: "OFFER ENDS IN [countdown]".
-          - The countdown is four boxes (DAYS / HOURS / MINUTES / SECONDS) with bold numerals — render with static placeholder values and a `data-countdown-end` attribute set 14 days from today's date.
-          - Black-and-red palette throughout. Bold sans-serif. Italics for urgency words.
-          - Heavy use of strikethrough on old prices and red highlight on the new price.
+          - Cream paper background (`bg-amber-50`), narrow centered column (`max-w-prose`).
+          - Body in a typewriter or transitional serif (`font-serif`, `text-zinc-800`).
+          - The opening line is the only large type. No giant heading. No CTA bar at the top.
+          - Single column. No images except possibly one small handwriting-style signature at the bottom.
 
           Sections:
-          - Sticky urgency banner with countdown (top).
-          - Hero: "Last chance:" prefix, then the value prop. CTA button labeled "Claim before it's gone".
-          - Scarcity row: "Only N spots left" / "Price goes up at midnight" / "No second chances".
-          - Three benefit cards with red checkmarks.
-          - Single anchored testimonial.
-          - Pricing block emphasizing the discount, with the countdown repeated below the CTA.
-          - "What happens at midnight?" FAQ line at the bottom.
-          - Closing CTA with the countdown one more time.
+          - Date in the top right corner, plain.
+          - Opening: "Dear reader," or "Hey —" in plain body serif.
+          - 4-6 paragraphs in the creator's voice, conversational, about why this thing exists. No bullet points. No "what's included" sections.
+          - Toward the end: "If any of that resonates, I made this for you." Then a one-line link rather than a button (`<a class="underline">Take it home</a>`).
+          - Signed at the bottom: "— [Creator Name]" in handwritten-style italic serif.
+          - PS at the very end with one extra thought.
 
-          Every section should reinforce that time is running out. Don't be subtle.
+          Strip out anything that feels like landing-page copy. If a sentence wouldn't survive in an actual letter, cut it.
         PROMPT
       },
       {
-        id: "valentines",
-        name: "Valentine's day",
-        description: "Pink, red, hearts, romantic copy",
+        id: "group-chat",
+        name: "Group chat, not LinkedIn",
+        description: "Casual, lowercase, unprofessional in the right way",
         icon: "call",
         prompt: <<~PROMPT.strip,
-          Design a Valentine's day themed landing page that feels like a love letter.
+          Write this like a message in the creator's group chat. Casual, lowercase, slightly typo-tolerant, full of side comments. The opposite of a LinkedIn headline.
 
           Visual style:
-          - Background gradient (`from-rose-50` to `to-pink-100`), soft cursive script font for the hero headline.
-          - Heart accents scattered throughout (`❤️` as decoration in headers).
-          - Pink and deep red accent colors, gold for emphasis.
-          - Rounded corners everywhere (`rounded-2xl`), soft drop shadows.
-          - Hand-drawn-feeling section dividers.
+          - Plain white background. Body in a friendly sans-serif (Inter, `font-medium`).
+          - Lowercase throughout — including the headline and CTAs. No capitalised titles.
+          - Sentences run on. Em-dashes everywhere. Occasional `<br>` for dramatic effect.
+          - One inline emoji per section, used sparingly. No emoji bullets.
+          - Small inline image blocks like screenshotted DMs.
 
           Sections:
-          - Hero: "A love letter to..." style headline, romantic positioning paragraph, CTA labeled "Be mine" or "Yours, with love".
-          - "Why you'll fall for it" three-card row, each card with a heart icon.
-          - One testimonial in a tilted, taped-down note card (`-rotate-1`).
-          - Pricing card framed like a Valentine — heart border, red ribbon CTA.
-          - Closing line: "With love, [creator name]" in cursive.
+          - Top: "ok so I made a thing" — that's the headline. Below it, 2-3 lines of context in normal body type.
+          - "wait what is it" — a short, conversational explanation.
+          - "who is this for" — bullets-but-as-sentences ("you, if you've ever...", "your friend who keeps...").
+          - Inline "DM-style" testimonial block — render it like a chat bubble (rounded corner, soft background, with the sender's first name above).
+          - "ok how much" — price written in body copy, not a card. ("it's $29, link below").
+          - Closing line: "anyway, here it is →" with the CTA inline.
 
-          Lean into the romance metaphor in every microcopy. This should feel warm and a little kitschy.
+          The page should read like a text from a friend, not a sales pitch. Refuse to be slick.
         PROMPT
       },
       {
-        id: "membership-tiers",
-        name: "Membership tiers",
-        description: "Tiered pricing cards, perks comparison, recurring framing",
-        icon: "membership",
+        id: "dive-bar",
+        name: "Dive bar version of my homepage",
+        description: "Dim lighting, well-loved wear, written-on-coasters energy",
+        icon: "coffee",
         prompt: <<~PROMPT.strip,
-          Design a membership landing page anchored on tiered pricing cards.
+          Build the dive-bar version of the creator's homepage. Dim, well-loved, slightly worn — the opposite of a polished startup landing page.
 
           Visual style:
-          - Deep-navy background (`bg-slate-900`) with light text. Gold/amber accent (`text-amber-400`) for premium tier.
-          - Sans-serif type. Headings in `font-semibold`, body in `font-light`.
-          - Cards lift slightly on hover (`hover:-translate-y-1`). Premium tier card is taller and has a glowing border.
+          - Deep wood-brown or warm-charcoal background (`bg-stone-800`), dim amber accent (`text-amber-300`).
+          - Body in a humanist serif (`font-serif`), slightly small, slightly tight (`text-sm leading-relaxed`).
+          - Single bare-bulb lighting effect — center the hero on the page like it's lit from above with everything else in shadow.
+          - Chalkboard-feel section labels (`font-mono uppercase tracking-widest text-amber-200`).
+          - One handwritten-style "tonight only" specials board.
 
           Sections:
-          - Hero: aspirational name of the membership, one-sentence promise of belonging, CTA labeled "Join now" or "Become a member".
-          - Three pricing tier cards side-by-side (Bronze / Silver / Gold style, but name them the creator's brand). Middle tier highlighted as "Most popular".
-          - For each tier: name, monthly price, yearly price (with savings callout), list of perks (5-8 items with checkmarks). The premium tier gets extra perks listed in amber.
-          - "What members get every month" timeline (Week 1 / Week 2 / Week 3 / Week 4) — show the recurring cadence.
-          - One member quote in a card with first-name + tenure ("Member since 2024").
-          - FAQ with 4-5 entries focused on cancellation, billing, and access.
-          - Closing CTA with member count framing ("Join 1,200+ members").
+          - Hero: low-key headline (no exclamation marks, no "Unlock!"), one sentence subtitle, a single understated CTA labeled "pull up a stool".
+          - "Tonight's specials" — a chalkboard-style block listing 3-4 products in handwritten type with prices.
+          - "Regulars" — testimonials written as bartender's-notebook entries ("— D., Tuesday, 11pm").
+          - "House rules" — a small list of opinions about the work, in small caps.
+          - Closing: "Last call" CTA in amber on charcoal.
+          - Footer: "open late" microcopy.
 
-          The tiers should feel meaningfully different — not just price points. Each tier earns its price.
+          The page should feel like a place you'd want to spend an hour, not a funnel.
         PROMPT
-      }
+      },
+      {
+        id: "menu",
+        name: "Restaurant menu",
+        description: "Prix-fixe layout, course-by-course, ingredient lists, sommelier energy",
+        icon: "physical",
+        prompt: <<~PROMPT.strip,
+          If the creator's work were a restaurant, this is the menu. Lay it out like a prix-fixe card at a thoughtful neighborhood spot.
+
+          Visual style:
+          - Cream paper background (`bg-stone-50`), forest-green or deep-burgundy accent.
+          - All-serif typography (`font-serif`). Centered alignment.
+          - Section labels in small caps ("APPETIZERS", "MAINS", "DESSERT", "DIGESTIF") in tracking-widest.
+          - Dotted leaders between item name and price (use `border-b border-dotted` rows or a `flex justify-between` with a dotted divider).
+          - Italics for ingredient lists and provenance notes.
+
+          Sections:
+          - Header: restaurant-name-style title in large serif, "Est. [year]" subtitle in italic.
+          - "Tonight's tasting" — a 5-course menu where each "course" is one of the creator's products reframed: name as the dish, italic ingredient list as the description, price on the right.
+          - Wine pairing block — one or two products framed as "pairings" with the main offering.
+          - "From the chef" — a short paragraph from the creator in italic body type.
+          - "Reservations" CTA — small, refined, all-caps, set in the accent color.
+          - Footer: "Cash only" / "Walk-ins welcome" microcopy joke.
+
+          The whole page should feel like dining at a place that knows what it's doing.
+        PROMPT
+      },
+      {
+        id: "fan-site",
+        name: "Fan site for myself",
+        description: "Self-aggrandizing in a winking way, devotional layout, top-ten lists",
+        icon: "course",
+        prompt: <<~PROMPT.strip,
+          Build a fan site — for the creator — by the creator. Self-aggrandizing in a winking, fully-aware way. The joke is that this exists.
+
+          Visual style:
+          - Bright pastel background (`bg-pink-100`, `bg-yellow-100`), heavy use of pink and gold accents.
+          - Mid-2000s fan-site type: chunky sans-serif headings, bubbly drop shadows, slight gradients.
+          - Star icons (`★`) scattered throughout. Sparkle emojis at the start of section headings.
+          - "Webring" style row of placeholder fan-site links at the bottom.
+          - Slightly glossy "stickers" rotated at small angles (`-rotate-3`).
+
+          Sections:
+          - Hero banner: "[Creator Name] — The Unofficial Fan Site" in big bubbly type, with a "since [year]" badge in the corner.
+          - "About them" — third-person bio that's a little too enthusiastic.
+          - "Top 10 [Creator Name] Moments" — a numbered list, dramatic.
+          - "Discography" / "Filmography" / "Bibliography" — the creator's products listed as canonical works with release dates and "★★★★★" reviews.
+          - "Visitor sign-the-guestbook" placeholder block.
+          - CTA labeled "Become a fan — official merch here" with a single product.
+          - Footer: "Not affiliated with [Creator Name]. (Yes I am.)"
+
+          Lean fully into the bit. The reader is in on the joke.
+        PROMPT
+      },
+      {
+        id: "anti-squarespace",
+        name: "Opposite of a Squarespace template",
+        description: "Reject every default — wrong fonts, weird proportions, refusal to be generic",
+        icon: "digital",
+        prompt: <<~PROMPT.strip,
+          Refuse every Squarespace default. Wrong fonts. Weird proportions. Section padding that "shouldn't" work. The page must look like nobody else's.
+
+          Visual style:
+          - Unexpected color pairing — try `bg-lime-200` with `text-purple-900`, or `bg-orange-300` with `text-emerald-900`.
+          - One serif paired with one mono — never just two sans-serifs.
+          - Asymmetric layout: 70/30 column splits, content pulled hard to one side, intentional empty space on the other.
+          - One element does something a template wouldn't: a giant section heading rotated 90° in the margin, body text in a single tall narrow column, oversized bullet glyphs.
+          - Generous, intentional ugliness in one specific place (a hand-drawn-feeling border, a chunky underline, a slab of solid color).
+
+          Sections:
+          - A hero that doesn't fill the viewport. Title on the left third, no image, the right two-thirds left empty on purpose.
+          - "What this is" — one paragraph, set narrow, in mono.
+          - A wide horizontal band of solid accent color with a single bold statement in it.
+          - "What's inside" — a list, but the bullets are oversized custom glyphs (`→`, `■`, `▲`).
+          - Pricing block: just text, large and confident. No card. No shadow.
+          - Footer that's a single line of mono.
+
+          The reader should be unable to identify what template this came from, because it doesn't come from one.
+        PROMPT
+      },
+
+      # === Era / aesthetic anchors ===
+      {
+        id: "tasteful-geocities",
+        name: "Tasteful GeoCities, 1998",
+        description: "Web 1.0 with intention — tiled backgrounds, sectioned tables, dignified",
+        icon: "ebook",
+        prompt: <<~PROMPT.strip,
+          Channel GeoCities 1998 — but tastefully. A personal website made by someone who knew exactly what they were doing in HTML 4.
+
+          Visual style:
+          - Tiled background pattern (use `bg-[url('data:image/svg+xml...')]` or a `bg-repeat` div with a subtle pattern).
+          - Times New Roman / Georgia headings (`font-serif`), Verdana / Geneva body (`font-sans`).
+          - Hard-edged, table-style section borders (use `border-2 border-zinc-800`).
+          - One visible "Best viewed in 800×600" microcopy at the bottom.
+          - Two-tone color scheme: a single deep accent (forest green, burgundy, navy) with cream.
+          - Animated GIF placeholders — small rotating glyphs near the headline.
+
+          Sections:
+          - Top banner: a centered title with horizontal rule underneath (`<hr>`-style), set in classic serif.
+          - "Welcome!" intro paragraph in body type, with `<font color="#...">` -style colored words (just use spans with colors).
+          - "Navigation" — a vertical sidebar of links rendered as bordered table cells.
+          - "What's New" — a dated list with timestamps ("Updated: March 12, 1998").
+          - "About me" — a paragraph or two, no photo required.
+          - "Sign my guestbook" CTA.
+          - "Webring" row of fake adjacent-site links.
+          - Footer: visitor counter graphic placeholder, "© [Year] [Name]. Best viewed in Netscape Navigator."
+
+          The page should feel curated, not chaotic. This is the version of GeoCities that aged well.
+        PROMPT
+      },
+      {
+        id: "tumblr-2014",
+        name: "Tumblr 2014 personal blog",
+        description: "Pastel goth, infinite-scroll reblog culture, soft serif headlines",
+        icon: "newsletter",
+        prompt: <<~PROMPT.strip,
+          Channel a 2014 Tumblr personal blog — pastel goth, soft-serif headlines, infinite-scroll reblog culture energy.
+
+          Visual style:
+          - Lavender or dusty-pink background (`bg-purple-100`, `bg-rose-100`).
+          - Headlines in a soft serif (`font-serif`, italics encouraged). Body in `font-sans`.
+          - Generous line-height. Reading column narrow (`max-w-2xl mx-auto`).
+          - Soft drop shadows under image blocks. Rounded corners (`rounded-2xl`).
+          - Heart icons and small caps section labels.
+
+          Sections:
+          - Header: a single italic-serif blog title and a one-line tagline. No nav bar.
+          - "Posts" — a vertical stack of 3-4 mock blog entries: photo placeholder + short body + tags at the bottom (`#aesthetic #softgrunge #writing`).
+          - One entry is a quote card (`bg-purple-200` with the quote in italic serif, attribution beneath).
+          - Reblog-style note count at the bottom of each post ("12,453 notes").
+          - "About me" sidebar — short bio, list of interests, and a small avatar circle.
+          - CTA reframed as a "click here to read more" link at the very bottom — modest, blog-style.
+
+          The vibe is melancholic, soft, and absolutely Of Its Time.
+        PROMPT
+      },
+      {
+        id: "y2k-shopping-channel",
+        name: "Y2K shopping channel",
+        description: "QVC chyron banners, 'limited time only', metallic gradients, urgent voice",
+        icon: "commission",
+        prompt: <<~PROMPT.strip,
+          Build this like a Y2K shopping channel broadcast. QVC chyron banners, metallic gradients, "limited time only", and an urgent VO voice in the copy.
+
+          Visual style:
+          - Metallic silver-to-blue gradient background (`bg-gradient-to-b from-slate-300 to-blue-400`).
+          - Chunky bevelled buttons with hard inner-shadow (`shadow-inner`).
+          - "TV chyron" bar across the bottom (a sticky `bg-red-600 text-white` band) saying "ON AIR — LIMITED OFFER".
+          - Pixel-perfect-feeling sans-serif type, italics for urgency.
+          - Bright price callouts in red and yellow ("WAS $89.99 — NOW $39.99!!").
+          - A static-noise effect overlay near the top (low-opacity zinc texture).
+
+          Sections:
+          - Top: "ON AIR" chyron and a "VIEWERS CALLING NOW: 2,347" ticker.
+          - Hero: an oversized "AS SEEN ON TV"-style headline, the product name in big chunky type, an exclamation-heavy tagline.
+          - "Operators standing by" CTA in a glossy beveled button.
+          - "WHAT YOU GET" — a numbered list with red checkmarks and "$X value!" callouts after each item.
+          - "But wait, there's more!" bonus section listing an extra freebie.
+          - "Call now" price block with strikethrough on original price.
+          - "Order in the next 10 minutes" countdown stub at the bottom.
+          - Footer chyron: "Offer expires soon — call 1-800-[creator]."
+
+          Be loud. Be gauche. Be 1999 at 3am.
+        PROMPT
+      },
+      {
+        id: "vinyl-liner-notes",
+        name: "Liner notes from a vinyl record",
+        description: "Gatefold layout, dense credits, recorded-at-such-and-such studio energy",
+        icon: "audio",
+        prompt: <<~PROMPT.strip,
+          Lay this out like the liner notes from a vinyl gatefold sleeve. Dense credits, intimate sleeve notes, recorded-at-such-and-such-studio energy.
+
+          Visual style:
+          - Cream paper background with a faint texture (`bg-stone-100`).
+          - All-serif typography (`font-serif`). Body small and dense (`text-sm leading-relaxed`).
+          - Two-column layout for the sleeve notes block.
+          - Tracklist in small monospaced type with running-time markers.
+          - Tasteful black-and-white photo placeholder in the center of the spread.
+          - A subtle drop-cap on the first paragraph of the sleeve notes.
+
+          Sections:
+          - Top: artist name + record title in elegant serif. Year and label below in small caps.
+          - "Side A / Side B" tracklist in monospaced type, two columns.
+          - Sleeve notes essay: 3-4 paragraphs of intimate prose explaining the context of the work, set in two columns with a drop cap.
+          - "Credits" block: dense list of "Recorded at:", "Produced by:", "Special thanks to:", set in small type with `font-bold` labels.
+          - A pull-quote from a fictional review of the work, set in italics.
+          - "Available on" CTA framed as a record-label-style line ("Out now on [Creator Records]") with a small button.
+          - Footer: catalog number microcopy ("Cat. #001 — Edition of 500").
+
+          The whole page should feel like something you'd read on the train home with the record in your bag.
+        PROMPT
+      },
+
+      # === Identity prompts ===
+      {
+        id: "brain-as-webpage",
+        name: "My brain as a webpage",
+        description: "Stream-of-consciousness layout, sidebars of unrelated obsessions, no hierarchy",
+        icon: "subscription",
+        prompt: <<~PROMPT.strip,
+          Render the creator's brain as a webpage. Stream-of-consciousness layout. Sidebars of unrelated obsessions. No clear hierarchy. Tangents welcome.
+
+          Visual style:
+          - Off-white background, plain serif body (`font-serif`).
+          - Many short blocks of text in different sizes, stitched together — no obvious section structure.
+          - Marginalia: small annotations in italic serif pushed to the side margin (`absolute -left-32 italic text-xs text-zinc-500` on each block).
+          - Footnotes at the bottom of blocks (`text-xs` with superscript numbers).
+          - Inline hyperlink underlines everywhere (`underline decoration-zinc-400`).
+          - One central column, but with content "leaking" out into the margins via marginalia and pull-quote callouts.
+
+          Sections (loose):
+          - A short opening manifesto — "things I think about, in no particular order".
+          - A block on "what I'm currently obsessed with" (3-4 items, one paragraph each, unrelated to one another).
+          - A list of "tabs I have open right now" — links to articles, songs, ideas.
+          - A pull quote, large and italic, from a writer the creator admires.
+          - "Things I made" — the products surfaced as items in a recommended-reading list, not as products.
+          - A footnote-style endnote section at the bottom citing whatever was referenced.
+          - The CTA is reframed: "if any of this resonates, you might like this →" with a link.
+
+          The page should feel like reading someone's notebook. There should be no marketing voice anywhere.
+        PROMPT
+      },
+      {
+        id: "30-second-intro",
+        name: "30-second intro to a stranger",
+        description: "Elevator-pitch single-screen layout — no scroll required, every word earned",
+        icon: "digital",
+        prompt: <<~PROMPT.strip,
+          Design this as the 30-second introduction the creator would give a stranger at a party. One screen. No scroll. Every word has to earn its place.
+
+          Visual style:
+          - Pure white background, deep-black type. No accent color except for one link.
+          - Single column, centered, `max-w-xl mx-auto`.
+          - Vertical centering — the content sits in the middle of the viewport, not the top.
+          - Large display serif for the first line. Sans-serif for the rest.
+          - No images. No icons. No header. No footer. No nav.
+
+          Sections (all in one viewport):
+          - Line 1 (largest): the creator's name, in serif.
+          - Line 2: what they do, in one sentence ("I [verb] [thing] for [audience].").
+          - Line 3: one more sentence of differentiation ("Specifically, [the angle].").
+          - A 3-item list, each item a single line: a recent project, a current preoccupation, a thing they're known for.
+          - A single underlined link: "More →".
+
+          That's the whole page. No CTA buttons. No social proof. No pricing. The link goes somewhere else if the visitor wants more.
+
+          Treat the constraint seriously: if it doesn't fit in one viewport on a laptop, cut something.
+        PROMPT
+      },
+      {
+        id: "dinner-party",
+        name: "Dinner party for my customers",
+        description: "Hospitable host energy — place settings, name cards, considered atmosphere",
+        icon: "bundle",
+        prompt: <<~PROMPT.strip,
+          Design this like the creator is hosting a small dinner party for their customers. Considered, warm, hospitable, slightly formal in a charming way.
+
+          Visual style:
+          - Warm-white background (`bg-stone-50`), candlelight-amber accent (`text-amber-700`).
+          - Serif headings, sans-serif body. Tight column widths (`max-w-prose`).
+          - Hand-drawn-feeling underlines beneath section titles (`border-b border-amber-700`).
+          - Italic serif for "menu cards" and notes.
+          - Generous whitespace and `py-16` between sections — the page breathes like a slow evening.
+
+          Sections:
+          - "An invitation" header: serif, in italic, with the date stylized like an event invite ("This evening — [season, year]").
+          - "From your host" — a paragraph from the creator welcoming the visitor by name (generic "friend" or "you").
+          - "Tonight's offerings" — products presented as courses on a menu card, each with a name and a one-sentence description.
+          - "Place setting" — a small block about who else has joined, framed as testimonials but in the "I'm-glad-you-could-make-it" voice.
+          - "Stay a while" — a closing block with a single CTA: "Pull up a chair" or "Reserve your seat", set in serif on the amber accent.
+          - Footer: "Thank you for coming. — [Creator Name]" in italic.
+
+          The page should feel like the host actually wants the visitor there, not like a funnel.
+        PROMPT
+      },
     ].freeze
 
     def self.find(id)

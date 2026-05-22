@@ -216,7 +216,7 @@ describe PagesController, type: :request do
     it "exposes the template list via the JSON templates endpoint" do
       get templates_pages_path, headers: { "Accept" => "application/json" }
       body = JSON.parse(response.body)
-      expect(body["templates"].map { |t| t["id"] }).to include("minimal-product", "sleek-dark", "neobrutalist")
+      expect(body["templates"].map { |t| t["id"] }).to include("album-not-store", "dive-bar", "tasteful-geocities")
     end
   end
 

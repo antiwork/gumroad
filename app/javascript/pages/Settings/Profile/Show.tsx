@@ -12,6 +12,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
@@ -48,6 +49,7 @@ export default function SettingsPage() {
   );
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
+  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
@@ -162,6 +164,7 @@ export default function SettingsPage() {
               }}
               disabled={!canUpdate}
             />
+            {currentSeller?.pagesEnabled ? <CustomizeProfilePageSection /> : null}
             {loggedInUser?.policies.settings_profile.manage_social_connections ? (
               <Fieldset>
                 <FieldsetTitle>Social links</FieldsetTitle>
@@ -291,3 +294,78 @@ export default function SettingsPage() {
     </SettingsLayout>
   );
 }
+
+const CustomizeProfilePageSection = () => {
+  const [existingPageSlug, setExistingPageSlug] = React.useState<string | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/pages?is_profile=true", {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Page lookup failed: ${r.status}`))))
+      .then((data: { pages: { slug: string }[] }) => {
+        if (!cancelled && data.pages[0]) setExistingPageSlug(data.pages[0].slug);
+      })
+      .catch(() => {
+        /* silent — falls back to "Customize page" CTA */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const goToEditor = (slug: string) => {
+    window.location.href = `/pages/${slug}/edit?fullscreen=1`;
+  };
+
+  const handleCustomize = async () => {
+    if (existingPageSlug) {
+      goToEditor(existingPageSlug);
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/pages", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? "",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ page: { is_profile: true } }),
+      });
+      const data: { success: boolean; slug?: string; error?: string } = await res.json();
+      if (!res.ok || !data.success || !data.slug) {
+        setError(data.error ?? "Could not create page.");
+        return;
+      }
+      goToEditor(data.slug);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Fieldset>
+      <FieldsetTitle>Custom profile page</FieldsetTitle>
+      <FieldsetDescription>
+        Use the standard Gumroad profile, or let AI build a custom one for you. The editor is a full-screen chat —
+        describe what you want and iterate.
+      </FieldsetDescription>
+      <div className="flex items-center gap-3">
+        <Button onClick={() => void handleCustomize()} disabled={creating}>
+          {creating ? "Opening…" : existingPageSlug ? "Edit page" : "Customize page"}
+        </Button>
+        {error ? <span className="text-sm text-destructive">{error}</span> : null}
+      </div>
+    </Fieldset>
+  );
+};

@@ -45,10 +45,18 @@ type PageData = {
   page_url: string;
 };
 
+type TemplateSummary = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+};
+
 type PageProps = {
   page: PageData;
   products: ProductOption[];
   versions: VersionInfo[];
+  templates: TemplateSummary[];
 };
 
 type LatestVersionResponse = {
@@ -125,7 +133,7 @@ const GeneratingPlaceholder = ({ message }: { message: string }) => (
 );
 
 export default function PageEdit() {
-  const { page: initialPage, versions: initialVersions } = usePage<PageProps>().props;
+  const { page: initialPage, versions: initialVersions, templates } = usePage<PageProps>().props;
   const [page, setPage] = React.useState(initialPage);
   const [versions, setVersions] = React.useState(initialVersions);
   const [prompt, setPrompt] = React.useState("");
@@ -133,6 +141,20 @@ export default function PageEdit() {
   const [publishing, setPublishing] = React.useState(false);
   const [titleDraft, setTitleDraft] = React.useState(initialPage.title);
   const [previewLoaded, setPreviewLoaded] = React.useState(false);
+
+  // Surface three random starter prompts on first load so creators aren't
+  // staring at a blank "describe your vibe" box. Picked once per mount so
+  // the chips don't reshuffle as the user types — `useMemo` over a stable
+  // input is intentional.
+  const suggestedTemplates = React.useMemo<TemplateSummary[]>(() => {
+    if (!templates || templates.length === 0) return [];
+    const pool = [...templates];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+    }
+    return pool.slice(0, 3);
+  }, [templates]);
 
   // Re-fade the preview iframe whenever a new generation arrives.
   React.useEffect(() => {
@@ -411,6 +433,24 @@ export default function PageEdit() {
               void sendPrompt();
             }}
           >
+            {versions.length === 0 && !generating && !waitingForFirst && suggestedTemplates.length > 0 ? (
+              <div className="mb-3 flex flex-col gap-2">
+                <small className="text-muted">Try one of these, or mix two (e.g. "zine × dive bar"):</small>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setPrompt(t.name)}
+                      className="rounded-full border border-border bg-background px-3 py-1 text-left text-xs transition-colors hover:bg-active-bg"
+                      title={t.description}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="flex gap-2">
               <Input
                 value={prompt}

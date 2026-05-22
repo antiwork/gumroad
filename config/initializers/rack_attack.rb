@@ -284,10 +284,10 @@ class Rack::Attack
                             requests: 10,
                             period: 60.seconds
 
-  # Throttle AI page generation. Each call hits OpenAI on a background job
+  # Throttle AI page generation. Each call hits Claude on a background job
   # so we cap the request side to keep cost and queue depth bounded.
-  # 10 requests per 60 seconds (per logged-in user, falling back to IP).
-  throttle("pages/generate", limit: 10, period: 60.seconds) do |req|
+  # 10 requests per hour (per logged-in seller, falling back to IP).
+  throttle("pages/generate", limit: 10, period: 1.hour) do |req|
     if req.path.match?(/\A\/pages\/[^\/]+\/generate\z/) && req.post?
       req.env["warden"]&.user&.id || req.remote_ip
     end

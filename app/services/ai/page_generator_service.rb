@@ -4,6 +4,15 @@ class Ai::PageGeneratorService
   TIMEOUT_IN_SECONDS = 90
   MAX_TOKENS = 8000
 
+  # Generation runs through the Vercel AI Gateway (OpenAI-compatible API),
+  # which lets us swap models with a one-line change to MODEL — the Ruby
+  # OpenAI client interface is preserved end-to-end. Set AI_GATEWAY_URL to
+  # an empty string (or override to direct OpenAI) in dev/test if needed.
+  DEFAULT_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1"
+  GATEWAY_URL = ENV["AI_GATEWAY_URL"].presence || DEFAULT_GATEWAY_URL
+  ACCESS_TOKEN = ENV["AI_GATEWAY_API_KEY"].presence || ENV["OPENAI_API_KEY"]
+  MODEL = "anthropic/claude-opus-4-7"
+
   # Transient errors are re-raised so Sidekiq retries the job. Permanent
   # errors (bad responses, malformed JSON, our own bugs) return a failure
   # Result so the job exits cleanly with `generation_error` set.
@@ -59,7 +68,7 @@ class Ai::PageGeneratorService
     messages = build_messages
     response = openai_client.chat(
       parameters: {
-        model: "gpt-4o",
+        model: MODEL,
         max_tokens: MAX_TOKENS,
         temperature: 0.7,
         messages: messages,
@@ -135,6 +144,10 @@ class Ai::PageGeneratorService
   end
 
   def openai_client
-    @openai_client ||= OpenAI::Client.new(request_timeout: TIMEOUT_IN_SECONDS)
+    @openai_client ||= OpenAI::Client.new(
+      access_token: ACCESS_TOKEN,
+      uri_base: GATEWAY_URL,
+      request_timeout: TIMEOUT_IN_SECONDS,
+    )
   end
 end

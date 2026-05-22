@@ -2,7 +2,7 @@
 
 class PagePolicy < ApplicationPolicy
   def index?
-    user.role_admin_for?(seller) || user.role_marketing_for?(seller)
+    admin_or_marketing?
   end
 
   def templates?
@@ -26,10 +26,17 @@ class PagePolicy < ApplicationPolicy
   end
 
   def update?
-    user.role_admin_for?(seller) || user.role_marketing_for?(seller)
+    admin_or_marketing?
   end
 
   def destroy?
     update?
   end
+
+  private
+    def admin_or_marketing?
+      user.role_admin_for?(seller) || user.role_marketing_for?(seller)
+    rescue ActiveRecord::RecordNotFound
+      false
+    end
 end
