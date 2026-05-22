@@ -104,7 +104,7 @@ Rails.application.routes.draw do
       # one-shot proxy to Claude for post-walk product drafting.
       namespace :walks do
         resources :realtime_tokens, only: [:create]
-        resources :synthesis, only: [:create]
+        post "synthesis", to: "synthesis#create"
       end
     end
   end

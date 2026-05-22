@@ -133,8 +133,17 @@ class Rack::Attack
     # replayed JWS would otherwise be unbounded — IP throttling caps that
     # blast radius at ~$10/IP/hr of OpenAI spend. 5 req/IP/hour is generous
     # for real users (1-2 walks/day).
-    throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour
-    throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour
+    #
+    # `max_level: 1` skips the exponential-backoff tiers — with a 1-hour base
+    # period, `rpm * level` rounds to <1 and Rack::Attack would block the very
+    # first request that escalates. The base 5/hour limit is already strict.
+    #
+    # Both `/api/v2/walks/...` (gumroad.com) and `/v2/walks/...` (api.gumroad.com)
+    # need throttles since `api_routes` is mounted under both prefixes.
+    throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/realtime_tokens",     method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/synthesis",           method: :post, requests: 5, period: 1.hour, max_level: 1
   end
 
   throttle_by_ip path: "/",                               requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours
