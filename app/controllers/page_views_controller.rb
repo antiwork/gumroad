@@ -7,11 +7,16 @@ class PageViewsController < ApplicationController
     return head :not_found if user.suspended?
 
     page = user.pages.alive.published.find_by!(slug: params[:slug])
+    # A published row without a pinned version means there is nothing safe to
+    # serve publicly — falling back to html_content would leak the seller's
+    # working draft. publish! guards against this on the write path, but the
+    # check here is the read-side belt-and-suspenders.
+    return head :not_found if page.published_version.nil?
 
     render inertia: "Pages/Show", props: {
       page: {
         title: page.title,
-        html_content: page.published_version&.html || page.html_content,
+        html_content: page.published_version.html,
         slug: page.slug,
         seller: {
           name: user.display_name,

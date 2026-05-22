@@ -61,5 +61,14 @@ describe Page do
       page = create(:page, user: user)
       expect { page.publish! }.to raise_error(ActiveRecord::RecordInvalid, /Generate the page before publishing/)
     end
+
+    it "raises when the page has html_content but no pinned version" do
+      # html_content alone is the editor's working draft — publishing without
+      # a versioned snapshot would let the public viewer serve a draft that
+      # was never reviewed.
+      page = create(:page, user: user, html_content: "<div>working draft</div>")
+      expect { page.publish! }.to raise_error(ActiveRecord::RecordInvalid, /Generate the page before publishing/)
+      expect(page.reload.published).to be(false)
+    end
   end
 end

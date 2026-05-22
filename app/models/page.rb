@@ -32,8 +32,10 @@ class Page < ApplicationRecord
   # matches what's published.
   def publish!(version: nil)
     target = version || latest_version
-    resolved_html = target&.html || html_content
-    if resolved_html.blank?
+    # Refuse to mark a page published unless we have a concrete version to
+    # pin. Without a version, the public view has nothing safe to serve and
+    # would otherwise leak the seller's editor draft from html_content.
+    if target.nil?
       errors.add(:base, "Generate the page before publishing it.")
       raise ActiveRecord::RecordInvalid, self
     end
@@ -43,7 +45,7 @@ class Page < ApplicationRecord
       published_at: Time.current,
       published_version: target,
     }
-    attrs[:html_content] = resolved_html if version.nil?
+    attrs[:html_content] = target.html if version.nil?
     update!(attrs)
   end
 

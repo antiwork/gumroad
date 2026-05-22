@@ -49,5 +49,14 @@ describe PageViewsController, type: :request do
       get "/nobody-here/pages/#{page.slug}", headers: inertia_headers
       expect(response).to have_http_status(:not_found)
     end
+
+    it "returns 404 (not a draft leak) when the row is published with no pinned version" do
+      # Simulate the corrupt state publish! now refuses to create. We bypass
+      # publish! to force published=true with published_version_id=nil and
+      # confirm the controller refuses to serve the html_content draft.
+      page.update_columns(published: true, published_version_id: nil)
+      get "/#{seller.username}/pages/#{page.slug}", headers: inertia_headers
+      expect(response).to have_http_status(:not_found)
+    end
   end
 end
