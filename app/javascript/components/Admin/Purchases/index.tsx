@@ -126,6 +126,7 @@ export type Purchase = PurchaseStatesInfo & {
   buyer_blocked: boolean;
   is_deleted_by_buyer: boolean;
   is_guest_buyer: boolean;
+  is_buyer_email_anonymized: boolean;
   comments_count: number;
 };
 
@@ -651,7 +652,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         success_message="Undeleted!"
       />
     ) : null}
-    {purchase.is_guest_buyer && !purchase.email?.endsWith("@deleted.gumroad.com") ? (
+    {purchase.is_guest_buyer && !purchase.is_buyer_email_anonymized ? (
       <AdminActionButton
         label="GDPR Erase Buyer"
         url={Routes.gdpr_erase_buyer_admin_purchase_path(purchase.external_id)}

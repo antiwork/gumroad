@@ -49,6 +49,8 @@ class GdprBuyerErasureService
     log_erasure!
 
     { success: true, email: email, anonymized_to: @anonymized_email, counts: counts }
+  rescue ArgumentError
+    raise
   rescue => e
     Rails.logger.error("GDPR buyer erasure failed for #{email}: #{e.message}")
     raise
@@ -100,6 +102,8 @@ class GdprBuyerErasureService
     end
 
     def anonymize_audience_members!
+      conflict_seller_ids = AudienceMember.where(email: @anonymized_email).pluck(:seller_id)
+      AudienceMember.where(email: email, seller_id: conflict_seller_ids).delete_all if conflict_seller_ids.any?
       counts[:audience_members] = AudienceMember.where(email: email).update_all(
         email: @anonymized_email,
         details: nil,
@@ -107,6 +111,8 @@ class GdprBuyerErasureService
     end
 
     def anonymize_followers!
+      conflict_followed_ids = Follower.where(email: @anonymized_email).pluck(:followed_id)
+      Follower.where(email: email, followed_id: conflict_followed_ids).delete_all if conflict_followed_ids.any?
       counts[:followers] = Follower.where(email: email).update_all(
         email: @anonymized_email,
       )
@@ -132,6 +138,8 @@ class GdprBuyerErasureService
     end
 
     def anonymize_sent_post_emails!
+      conflict_post_ids = SentPostEmail.where(email: @anonymized_email).pluck(:post_id)
+      SentPostEmail.where(email: email, post_id: conflict_post_ids).delete_all if conflict_post_ids.any?
       counts[:sent_post_emails] = SentPostEmail.where(email: email).update_all(
         email: @anonymized_email,
       )
@@ -200,7 +208,12 @@ class GdprBuyerErasureService
       return if @credit_card_ids.empty?
 
       user_owned_ids = User.where(credit_card_id: @credit_card_ids).pluck(:credit_card_id)
-      guest_card_ids = @credit_card_ids - user_owned_ids
+      shared_with_other_buyers_ids = Purchase
+        .where(credit_card_id: @credit_card_ids)
+        .where.not(id: @purchase_ids)
+        .distinct
+        .pluck(:credit_card_id)
+      guest_card_ids = @credit_card_ids - user_owned_ids - shared_with_other_buyers_ids
       return if guest_card_ids.empty?
 
       counts[:credit_cards] = CreditCard.where(id: guest_card_ids).update_all(

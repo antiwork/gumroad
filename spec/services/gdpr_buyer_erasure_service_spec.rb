@@ -21,6 +21,11 @@ describe GdprBuyerErasureService do
       expect { described_class.new("deleted-user@example.com", performed_by: admin).perform! }.to raise_error(ArgumentError, /Use GdprDataErasureService/)
     end
 
+    it "does not log validation failures as erasure failures" do
+      expect(Rails.logger).not_to receive(:error).with(/GDPR buyer erasure failed/)
+      expect { described_class.new("", performed_by: admin).perform! }.to raise_error(ArgumentError)
+    end
+
     context "with guest buyer data" do
       let!(:purchase1) do
         create(:free_purchase, email: buyer_email, purchaser: nil).tap do |p|
@@ -146,6 +151,23 @@ describe GdprBuyerErasureService do
         end
       end
 
+      describe "second erasure after a fresh purchase under the same email" do
+        it "merges duplicate audience_members without violating the unique index" do
+          seller = purchase1.seller
+          anonymized = described_class.new(buyer_email, performed_by: admin).send(:generate_anonymized_email)
+          AudienceMember.where(seller: seller, email: [buyer_email, anonymized]).delete_all
+          existing_anonymized = AudienceMember.new(seller: seller, email: anonymized, details: { purchases: [{ id: 1 }] })
+          existing_anonymized.save!(validate: false)
+          fresh = AudienceMember.new(seller: seller, email: buyer_email, details: { purchases: [{ id: 2 }] })
+          fresh.save!(validate: false)
+
+          expect { described_class.new(buyer_email, performed_by: admin).perform! }.not_to raise_error
+          expect(AudienceMember.where(seller: seller, email: buyer_email).count).to eq(0)
+          expect(AudienceMember.where(id: existing_anonymized.id)).to exist
+          expect(AudienceMember.where(id: fresh.id)).not_to exist
+        end
+      end
+
       describe "credit cards" do
         it "anonymizes guest credit cards but leaves user-owned cards untouched" do
           guest_card = CreditCard.new(visual: "**** 1111", card_type: "visa", stripe_fingerprint: "fp_guest")
@@ -161,6 +183,19 @@ describe GdprBuyerErasureService do
 
           expect(guest_card.reload.visual).to eq("[redacted]")
           expect(owned_card.reload.visual).to eq("**** 2222")
+        end
+
+        it "does not anonymize a credit card also used by another buyer's purchase" do
+          shared_card = CreditCard.new(visual: "**** 9999", card_type: "visa", stripe_fingerprint: "fp_shared")
+          shared_card.save!(validate: false)
+
+          purchase1.update_columns(credit_card_id: shared_card.id)
+          other_buyer_purchase = create(:free_purchase, email: "other-guest@example.com", purchaser: nil)
+          other_buyer_purchase.update_columns(credit_card_id: shared_card.id)
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(shared_card.reload.visual).to eq("**** 9999")
         end
       end
     end
