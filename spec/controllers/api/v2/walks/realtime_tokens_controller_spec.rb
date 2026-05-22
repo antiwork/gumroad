@@ -66,6 +66,16 @@ describe Api::V2::Walks::RealtimeTokensController do
       expect(response.parsed_body["error"]).to match(/reach/i)
     end
 
+    it "returns 502 when OpenAI returns 200 with a malformed JSON body" do
+      stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
+        .to_return(status: 200, body: "<!DOCTYPE html><html>upstream proxy error</html>", headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x" }
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(response.parsed_body["error"]).to match(/parse/i)
+    end
+
     it "returns 402 when the X-Apple-Transaction-JWS header is missing" do
       stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
         .to_return(status: 200, body: { "value" => "ek_x" }.to_json, headers: { "Content-Type" => "application/json" })

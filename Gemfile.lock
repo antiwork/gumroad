@@ -1150,6 +1150,7 @@ DEPENDENCIES
   google-apis-androidpublisher_v3 (~> 0.64)
   googleauth (~> 1.7)
   htmlentities (~> 4.3)
+  http (~> 5.2)
   http_accept_language (~> 2.1)
   httparty (~> 0.21)
   ibandit (~> 1.26)

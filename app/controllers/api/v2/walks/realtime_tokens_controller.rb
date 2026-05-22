@@ -45,6 +45,9 @@ class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
   rescue HTTP::Error => e
     Rails.logger.warn("OpenAI realtime token network error: #{e.class} #{e.message}")
     render json: { error: "Could not reach realtime service." }, status: :bad_gateway
+  rescue JSON::ParserError => e
+    Rails.logger.warn("OpenAI realtime token returned non-JSON: #{e.class} #{e.message}")
+    render json: { error: "Could not parse realtime session response." }, status: :bad_gateway
   end
 
   private
