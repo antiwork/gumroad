@@ -70,6 +70,7 @@ class PagesController < Sellers::BaseController
 
   def publish
     authorize @page, :update?
+    version = nil
     if params[:version_id].present?
       version = @page.page_versions.find_by(id: params[:version_id])
       return render json: { success: false, error: "Version not found" }, status: :unprocessable_entity if version.nil?

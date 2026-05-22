@@ -11,17 +11,22 @@ class Ai::PageSanitizer
     details summary
   ].freeze
 
-  ALLOWED_ATTRIBUTES = %w[
+  HTML_ATTRIBUTES = %w[
     class id
     src href alt title target rel
     width height loading
     data-gumroad-ref data-gumroad-field data-gumroad-action
     aria-label aria-hidden role
     type name value placeholder disabled
+  ].freeze
+
+  SVG_ATTRIBUTES = %w[
     viewBox xmlns preserveAspectRatio
     d fill stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule
     cx cy r rx ry x y x1 y1 x2 y2 points transform
   ].freeze
+
+  ALLOWED_ATTRIBUTES = (HTML_ATTRIBUTES + SVG_ATTRIBUTES).freeze
 
   DANGEROUS_PATTERNS = [
     /javascript:/i,
