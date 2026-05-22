@@ -95,7 +95,7 @@ class PagesController < Sellers::BaseController
     return render json: { error: "Prompt cannot be blank" }, status: :unprocessable_entity if prompt.blank?
 
     moderation = moderate_prompt(@page, prompt)
-    return render json: { success: false, error: "Content moderation blocked this prompt." }, status: :unprocessable_entity unless moderation.passed
+    return render json: { success: false, error: "This prompt isn't allowed. Try wording it differently." }, status: :unprocessable_entity unless moderation.passed
 
     # Flip the page into generating state *before* enqueuing so a fast worker
     # can't complete the job and clear generating_since before we set it.

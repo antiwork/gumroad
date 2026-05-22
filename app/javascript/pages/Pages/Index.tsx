@@ -46,7 +46,7 @@ export default function PagesIndex() {
           <Placeholder>
             <PlaceholderImage src={placeholder} />
             <h2>Create your first page</h2>
-            <p>Build AI-powered landing pages to showcase your products.</p>
+            <p>Design custom landing pages for any of your products.</p>
             <div>
               <NavigationButtonInertia href={Routes.new_page_path()} color="accent">
                 New page

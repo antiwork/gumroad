@@ -100,7 +100,7 @@ export default function PagesNew() {
               </Link>
             </Button>
             <Button color="accent" type="submit" form={`new-page-form-${formUID}`} disabled={form.processing}>
-              {form.processing ? "Creating..." : "Next: Customize"}
+              {form.processing ? "Creating..." : "Start designing"}
             </Button>
           </>
         }
@@ -179,7 +179,7 @@ export default function PagesNew() {
                     ]}
                   />
                   <small className="text-muted">
-                    Link this page to a specific product for AI context and the buy button.
+                    Pick the product this page features. We'll use it for the buy button.
                   </small>
                 </Fieldset>
               ) : null}

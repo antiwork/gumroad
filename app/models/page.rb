@@ -34,7 +34,7 @@ class Page < ApplicationRecord
     target = version || latest_version
     resolved_html = target&.html || html_content
     if resolved_html.blank?
-      errors.add(:base, "Cannot publish a page that has no generated content yet")
+      errors.add(:base, "Generate the page before publishing it.")
       raise ActiveRecord::RecordInvalid, self
     end
 

@@ -204,7 +204,7 @@ describe PagesController, type: :request do
         post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
       end.not_to change(Pages::GeneratePageVersionJob.jobs, :size)
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(JSON.parse(response.body)["error"]).to include("moderation")
+      expect(JSON.parse(response.body)["error"]).to include("isn't allowed")
       expect(page.reload.html_content).to be_blank
     end
 

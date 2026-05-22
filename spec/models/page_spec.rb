@@ -59,7 +59,7 @@ describe Page do
 
     it "raises when there is no generated content" do
       page = create(:page, user: user)
-      expect { page.publish! }.to raise_error(ActiveRecord::RecordInvalid, /no generated content/)
+      expect { page.publish! }.to raise_error(ActiveRecord::RecordInvalid, /Generate the page before publishing/)
     end
   end
 end

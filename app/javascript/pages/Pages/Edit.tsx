@@ -323,7 +323,7 @@ export default function PageEdit() {
                     <Switch
                       checked={page.auto_publish}
                       onChange={(e) => void toggleAutoPublish(e.target.checked)}
-                      label="Auto-publish latest"
+                      label="Auto-publish the latest version"
                     />
                   </div>
                   {page.published ? (
@@ -371,7 +371,7 @@ export default function PageEdit() {
               <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-muted">
                 <p className="text-lg font-medium">Describe your landing page</p>
                 <p className="text-sm">
-                  Tell the AI what you want and it'll build it. You can iterate with follow-up messages.
+                  Describe what you want. You can refine it with follow-up messages.
                 </p>
               </div>
             ) : (
