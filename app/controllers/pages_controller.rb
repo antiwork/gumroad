@@ -196,6 +196,7 @@ class PagesController < Sellers::BaseController
           generating: @page.generating_since.present?,
           generation_error: @page.generation_error,
           product: @page.link ? product_summary(@page.link) : nil,
+          page_url: @page.page_url,
         },
         products: current_seller.products.alive.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
         templates: Ai::PageTemplates.public_list,

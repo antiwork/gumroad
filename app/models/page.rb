@@ -65,8 +65,18 @@ class Page < ApplicationRecord
   end
 
   def page_url(host: nil)
-    base = host || "#{Rails.application.config.short_url_host}"
-    "#{base}/pages/#{slug}"
+    # Prefer the seller's custom subdomain when configured (matches
+    # custom_domain_view_page in config/routes.rb). Falls back to the
+    # username-scoped public route on the canonical app host so the URL is
+    # always non-empty — clients can copy/share it even for sellers without
+    # a subdomain configured.
+    if host
+      "#{host}/pages/#{slug}"
+    elsif user&.subdomain_with_protocol.present?
+      "#{user.subdomain_with_protocol}/pages/#{slug}"
+    else
+      "#{PROTOCOL}://#{DOMAIN}/#{user.username}/pages/#{slug}"
+    end
   end
 
   # Free up the slug for reuse when soft-deleting. Truncate the base so the

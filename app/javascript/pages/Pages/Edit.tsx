@@ -42,6 +42,7 @@ type PageData = {
   generating: boolean;
   generation_error: string | null;
   product: ProductOption | null;
+  page_url: string;
 };
 
 type PageProps = {
@@ -125,7 +126,6 @@ const GeneratingPlaceholder = ({ message }: { message: string }) => (
 
 export default function PageEdit() {
   const { page: initialPage, versions: initialVersions } = usePage<PageProps>().props;
-  const currentSeller = useCurrentSeller();
   const [page, setPage] = React.useState(initialPage);
   const [versions, setVersions] = React.useState(initialVersions);
   const [prompt, setPrompt] = React.useState("");
@@ -293,9 +293,10 @@ export default function PageEdit() {
     }
   };
 
-  const pageUrl = currentSeller?.subdomain
-    ? Routes.custom_domain_view_page_url(page.slug, { host: currentSeller.subdomain })
-    : "";
+  // Backend computes page_url: subdomain URL when configured, falls back to
+  // the username-scoped public route. Always non-empty so Copy URL works
+  // for every seller.
+  const pageUrl = page.page_url;
 
   return (
     <>
