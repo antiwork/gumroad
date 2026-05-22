@@ -1382,6 +1382,12 @@ describe PurchasesController, :vcr do
         expect { get :unsubscribe, params: { id: "notreal" } }.to raise_error(ActionController::RoutingError)
       end
 
+      it "404s when secure_external_id is invalid and confirmation_text is present" do
+        expect do
+          get :unsubscribe, params: { id: "invalid_token", confirmation_text: "bot@example.com" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
       context "with secure_external_id" do
         it "sets can_contact to false for all purchases from same seller and email" do
           purchase = create(:purchase, can_contact: true)
