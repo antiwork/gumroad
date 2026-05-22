@@ -31,14 +31,32 @@ describe Pages::GeneratePageVersionJob do
       expect(page.html_content).to include("Hello")
     end
 
-    it "sets generation_error and exits without retrying when moderation fails" do
+    it "sets generation_error when output moderation fails on the generated content" do
       allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(failed_moderation)
-      expect(Ai::PageGeneratorService).not_to receive(:new)
+      service = instance_double(Ai::PageGeneratorService, call: Ai::PageGeneratorService::Result.new(version: fake_version))
+      allow(Ai::PageGeneratorService).to receive(:new).and_return(service)
 
-      described_class.new.perform(page.id, "bad prompt")
+      described_class.new.perform(page.id, "anything")
       page.reload
       expect(page.generation_error).to match(/Content moderation/)
       expect(page.generating_since).to be_nil
+    end
+
+    it "runs output moderation against the newly generated content, not the previous html" do
+      page.update!(html_content: "<div>previous</div>")
+      new_version = create(:page_version, page: page, html: "<section>fresh</section>", prompt: "x")
+      service = instance_double(Ai::PageGeneratorService, call: Ai::PageGeneratorService::Result.new(version: new_version))
+      allow(Ai::PageGeneratorService).to receive(:new).and_return(service)
+
+      seen_html = nil
+      allow(ContentModeration::ModerateRecordService).to receive(:check) do |record, _kind|
+        seen_html = record.html_content
+        passed_moderation
+      end
+
+      described_class.new.perform(page.id, "make it fresh")
+      expect(seen_html).to include("fresh")
+      expect(seen_html).not_to include("previous")
     end
 
     it "sets generation_error when the service returns a permanent failure (does not raise)" do

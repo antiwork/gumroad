@@ -26,13 +26,6 @@ class Pages::GeneratePageVersionJob
     # Clear any previous error so the polling endpoint sees generating=true.
     page.update_columns(generation_error: nil, generating_since: Time.current)
 
-    moderation = ContentModeration::ModerateRecordService.check(page, :page)
-    unless moderation.passed
-      Rails.logger.warn("Pages::GeneratePageVersionJob skipped page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
-      page.update_columns(generation_error: "Content moderation failed — try a different prompt.", generating_since: nil)
-      return
-    end
-
     result = Ai::PageGeneratorService.new(
       page: page,
       seller: page.user,
@@ -40,14 +33,25 @@ class Pages::GeneratePageVersionJob
       parent_version: parent_version,
     ).call
 
-    if result.success?
-      # Write content first, then flip generating off in the same UPDATE so a
-      # poll tick can't see generating=false with stale html_content.
-      page.apply_new_version!(result.version)
-      page.update_column(:generating_since, nil)
-    else
+    unless result.success?
       page.update_columns(generation_error: "Generation failed — please try again.", generating_since: nil)
+      return
     end
+
+    # Apply the version first so output moderation sees the freshly generated
+    # HTML — not the previous html_content. The prompt was moderated in the
+    # controller before enqueuing; this is the output-side check.
+    page.apply_new_version!(result.version)
+    moderation = ContentModeration::ModerateRecordService.check(page, :page)
+    unless moderation.passed
+      Rails.logger.warn("Pages::GeneratePageVersionJob output moderation failed page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
+      page.update_columns(generation_error: "Content moderation failed — try a different prompt.", generating_since: nil)
+      return
+    end
+
+    # Write content first, then flip generating off in the same UPDATE so a
+    # poll tick can't see generating=false with stale html_content.
+    page.update_column(:generating_since, nil)
   ensure
     # Belt-and-suspenders for any unhandled error path: never leave the row
     # stuck in the "generating" state. Safe to call when page is nil (find
