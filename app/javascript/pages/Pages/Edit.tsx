@@ -402,8 +402,8 @@ export default function PageEdit() {
             <iframe
               className="h-full w-full border-0"
               title="Page preview"
-              sandbox="allow-scripts"
-              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head><body>${page.html_content}</body></html>`}
+              sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"><script src="https://cdn.tailwindcss.com"></script></head><body>${page.html_content}</body></html>`}
             />
           ) : (
             <GeneratingPlaceholder message="Building your page" />
