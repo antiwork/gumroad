@@ -118,6 +118,14 @@ describe GdprBuyerErasureService do
         expect(result[:anonymized_to]).to end_with("@deleted.gumroad.com")
       end
 
+      it "uses HMAC keyed on secret_key_base, not a plain truncated SHA256 of the email" do
+        service = described_class.new(buyer_email, performed_by: admin)
+        anonymized = service.send(:generate_anonymized_email)
+        plain_sha_truncated = Digest::SHA256.hexdigest(buyer_email)[0..11]
+        expect(anonymized).not_to include(plain_sha_truncated)
+        expect(anonymized).to include(OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, buyer_email)[0..15])
+      end
+
       it "does not touch purchases with different emails" do
         described_class.new(buyer_email, performed_by: admin).perform!
 
@@ -161,6 +169,25 @@ describe GdprBuyerErasureService do
         described_class.new(buyer_email, performed_by: admin).perform!
 
         expect(block.reload.object_value).to end_with("@deleted.gumroad.com")
+      end
+
+      it "does not count email-type blocked_customer_objects under the fingerprint scope" do
+        seller = purchase1.seller
+        # An email-type row that happens to have buyer_email set should not be
+        # counted twice when we tally fingerprint-type vs email-type updates.
+        email_row = BlockedCustomerObject.new(
+          seller: seller,
+          object_type: BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email],
+          object_value: buyer_email,
+          buyer_email: buyer_email,
+          blocked_at: Time.current
+        )
+        email_row.save!(validate: false)
+
+        result = described_class.new(buyer_email, performed_by: admin).perform!
+
+        # One row touched once (object_value updated), not double-counted.
+        expect(result[:counts][:blocked_customer_objects]).to eq(1)
       end
 
       it "anonymizes fingerprint-type blocked_customer_objects via buyer_email" do

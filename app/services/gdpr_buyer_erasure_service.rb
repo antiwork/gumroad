@@ -26,15 +26,16 @@ class GdprBuyerErasureService
     end
 
     @anonymized_email = generate_anonymized_email
-    purchases = Purchase.where(email: email, purchaser_id: nil)
-    @purchase_ids = purchases.pluck(:id)
-    @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
-    candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
-    shared_browser_guids = candidate_browser_guids.any? ? Purchase.where(browser_guid: candidate_browser_guids).where.not(id: @purchase_ids).distinct.pluck(:browser_guid) : []
-    @browser_guids = candidate_browser_guids - shared_browser_guids
-    @seller_ids = purchases.distinct.pluck(:seller_id)
 
     ActiveRecord::Base.transaction do
+      purchases = Purchase.where(email: email, purchaser_id: nil)
+      @purchase_ids = purchases.pluck(:id)
+      @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
+      candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+      shared_browser_guids = candidate_browser_guids.any? ? Purchase.where(browser_guid: candidate_browser_guids).where.not(id: @purchase_ids).distinct.pluck(:browser_guid) : []
+      @browser_guids = candidate_browser_guids - shared_browser_guids
+      @seller_ids = purchases.distinct.pluck(:seller_id)
+
       anonymize_purchases!
       anonymize_events!
       anonymize_audience_members!
@@ -65,7 +66,7 @@ class GdprBuyerErasureService
 
   private
     def generate_anonymized_email
-      digest = Digest::SHA256.hexdigest(email)[0..11]
+      digest = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, email)[0..15]
       "buyer-#{digest}@#{ANONYMIZED_EMAIL_DOMAIN}"
     end
 
@@ -153,11 +154,14 @@ class GdprBuyerErasureService
     end
 
     def anonymize_blocked_customer_objects!
-      fingerprint_block_count = BlockedCustomerObject.where(buyer_email: email).update_all(
-        buyer_email: @anonymized_email,
-      )
-
       email_object_type = BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:email]
+      fingerprint_object_type = BlockedCustomerObject::SUPPORTED_OBJECT_TYPES[:charge_processor_fingerprint]
+
+      fingerprint_block_count = BlockedCustomerObject.where(
+        object_type: fingerprint_object_type,
+        buyer_email: email
+      ).update_all(buyer_email: @anonymized_email)
+
       conflict_seller_ids = BlockedCustomerObject.where(object_type: email_object_type, object_value: @anonymized_email).pluck(:seller_id)
       if conflict_seller_ids.any?
         BlockedCustomerObject.where(object_type: email_object_type, object_value: email, seller_id: conflict_seller_ids).delete_all
