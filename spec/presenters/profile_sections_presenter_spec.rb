@@ -175,13 +175,26 @@ describe ProfileSectionsPresenter do
     end
 
     it "does not fire per-product N+1 queries for the sold-out filter" do
+      # Variant products — exercise VariantCategory#available?
+      # (variants.alive → alive_variants).
       variant_products = 4.times.map do |i|
         product = create(:product, user: seller, tags:, name: "Variant Product #{i}", hide_sold_out_variants: true, max_purchase_count: 10)
         variant_category = create(:variant_category, link: product)
         create(:variant, variant_category:, max_purchase_count: 5)
         product
       end
-      products_section.update!(shown_products: (products + [sold_out_product, in_stock_product] + variant_products).map(&:id))
+
+      # Bundles — exercise Link#remaining_for_sale_count's is_bundle? branch
+      # (bundle_products.alive → bundle_products.select(&:alive?) when loaded).
+      # Without bundles in the section, the per-link bundle assertion below
+      # passes trivially (no bundle queries are ever issued).
+      bundles = 3.times.map do |i|
+        bundle = create(:product, :bundle, user: seller, tags:, name: "Bundle #{i}", hide_sold_out_variants: true)
+        bundle.bundle_products.each { |bp| bp.product.update!(max_purchase_count: 5) }
+        bundle
+      end
+
+      products_section.update!(shown_products: (products + [sold_out_product, in_stock_product] + variant_products + bundles).map(&:id))
       Link.import(force: true, refresh: true)
 
       queries = []
