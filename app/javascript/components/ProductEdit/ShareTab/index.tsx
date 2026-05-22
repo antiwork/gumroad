@@ -154,78 +154,83 @@ const DiscoverEligibilityPromo = () => {
   );
 };
 
-type Template = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-};
-
-const rawSplashIcons = import.meta.glob<string>("$assets/images/native_types/*", {
-  eager: true,
-  query: "?url",
-  import: "default",
-});
-const splashIcons = Object.fromEntries(
-  Object.entries(rawSplashIcons).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
-);
-
 const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) => {
-  const [templates, setTemplates] = React.useState<Template[]>([]);
+  const [existingPageSlug, setExistingPageSlug] = React.useState<string | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
+  // Check if this product already has a page on mount so the button label
+  // can flip between "Customize page" (no page yet → POST and redirect) and
+  // "Edit page" (page exists → just navigate). One request, single-entry
+  // response (PagesController#index is now scoped by product_id).
   React.useEffect(() => {
+    if (!productPermalink) return;
     let cancelled = false;
-    fetch("/pages/templates", { headers: { Accept: "application/json" }, credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Templates fetch failed: ${r.status}`))))
-      .then((data: { templates: Template[] }) => {
-        if (!cancelled) setTemplates(data.templates);
+    fetch(`/pages?product_id=${encodeURIComponent(productPermalink)}`, {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Page lookup failed: ${r.status}`))))
+      .then((data: { pages: { slug: string }[] }) => {
+        if (!cancelled && data.pages[0]) setExistingPageSlug(data.pages[0].slug);
       })
       .catch(() => {
-        /* silent — section still works as a plain CTA */
+        /* silent — falls back to "Customize page" CTA */
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [productPermalink]);
 
-  const newPageHref = (templateId?: string) => {
-    const params = new URLSearchParams();
-    if (productPermalink) params.set("product_id", productPermalink);
-    if (templateId) params.set("template", templateId);
-    return `/pages/new?${params.toString()}`;
+  const goToEditor = (slug: string) => {
+    window.location.href = `/pages/${slug}/edit?fullscreen=1`;
+  };
+
+  const handleCustomize = async () => {
+    if (existingPageSlug) {
+      goToEditor(existingPageSlug);
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/pages", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? "",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ page: { product_permalink: productPermalink } }),
+      });
+      const data: { success: boolean; slug?: string; error?: string } = await res.json();
+      if (!res.ok || !data.success || !data.slug) {
+        setError(data.error ?? "Could not create page.");
+        return;
+      }
+      goToEditor(data.slug);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
-    <section className="grid gap-6 border-t border-border p-4 md:p-8">
+    <section className="grid gap-4 border-t border-border p-4 md:p-8">
       <header>
         <h2>Landing page</h2>
         <p className="text-sm text-muted">
-          Use the basic Gumroad product page, or pick a template and let AI build a custom landing page for this
-          product.
+          Use the basic Gumroad product page, or let AI build a custom one tailored to this product. The editor is a
+          full-screen chat — describe what you want and iterate.
         </p>
       </header>
-      {templates.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {templates.map((template) => {
-            const iconSrc = splashIcons[`./${template.icon}.png`];
-            return (
-              <a
-                key={template.id}
-                href={newPageHref(template.id)}
-                className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left no-underline transition-colors hover:border-accent/50"
-              >
-                {iconSrc ? <img src={iconSrc} alt={template.name} width="40" height="40" /> : null}
-                <h4 className="font-bold">{template.name}</h4>
-                <p className="text-sm text-muted">{template.description}</p>
-              </a>
-            );
-          })}
-        </div>
-      ) : null}
-      <div>
-        <Button asChild>
-          <a href={newPageHref()}>Start from scratch</a>
+      <div className="flex items-center gap-3">
+        <Button onClick={() => void handleCustomize()} disabled={creating}>
+          {creating ? "Opening…" : existingPageSlug ? "Edit page" : "Customize page"}
         </Button>
+        {error ? <span className="text-sm text-destructive">{error}</span> : null}
       </div>
     </section>
   );

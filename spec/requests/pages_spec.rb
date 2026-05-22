@@ -36,61 +36,71 @@ describe PagesController, type: :request do
   end
 
   describe "GET /pages" do
-    it "renders the Pages/Index inertia page" do
-      get pages_path, headers: { "X-Inertia" => "true" }
+    it "returns 400 when neither product_id nor is_profile is given" do
+      get pages_path, headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "returns the existing page for a product" do
+      product = create(:product, user: seller)
+      page = create(:page, user: seller, link: product, is_profile: false, title: "Course landing")
+      get pages_path, params: { product_id: product.unique_permalink }, headers: { "Accept" => "application/json" }
       expect(response).to have_http_status(:ok)
-      props = JSON.parse(response.body)["props"]
-      expect(props["pages"]).to eq([])
+      body = JSON.parse(response.body)
+      expect(body["pages"].map { |p| p["slug"] }).to eq([page.slug])
+    end
+
+    it "returns an empty array when the product has no page yet" do
+      product = create(:product, user: seller)
+      get pages_path, params: { product_id: product.unique_permalink }, headers: { "Accept" => "application/json" }
+      expect(JSON.parse(response.body)["pages"]).to eq([])
+    end
+
+    it "returns the profile page when is_profile=true" do
+      page = create(:page, user: seller, is_profile: true, title: "About me")
+      get pages_path, params: { is_profile: "true" }, headers: { "Accept" => "application/json" }
+      expect(JSON.parse(response.body)["pages"].map { |p| p["slug"] }).to eq([page.slug])
     end
 
     it "returns 404 when the pages feature flag is off" do
       Feature.deactivate(:pages)
-      get pages_path
+      get pages_path, params: { is_profile: "true" }
       expect(response).to have_http_status(:not_found)
     end
-
-    it "eager-loads associated products to avoid N+1 queries" do
-      5.times do |i|
-        product = create(:product, user: seller, name: "Product #{i}")
-        create(:page, user: seller, title: "Page #{i}", link: product)
-      end
-
-      per_id_lookups = count_queries_on_link { get pages_path, headers: { "X-Inertia" => "true" } }
-
-      # With proper eager-loading there should be zero per-id WHERE id = X
-      # lookups against `links` — the single IN (...) batch covers them all.
-      expect(per_id_lookups).to eq(0)
-    end
-  end
-
-  def count_queries_on_link
-    queries = []
-    callback = ->(_name, _start, _finish, _id, payload) do
-      sql = payload[:sql].to_s
-      queries << sql if sql.match?(/FROM `links`/) && !sql.start_with?("SAVEPOINT", "RELEASE", "ROLLBACK")
-    end
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
-    # Look only at lookups by id (the N+1 shape from p.link). Other queries
-    # against the links table from policies/nav are fine.
-    queries.count { |q| q.match?(/WHERE.*`links`\.`id`\s*=\s*\d+/) }
   end
 
   describe "POST /pages" do
-    it "creates a page and redirects to edit" do
+    it "fails when neither product nor profile is given (must have owner)" do
       expect do
         post pages_path, params: { page: { title: "Launch" } }
-      end.to change(Page, :count).by(1)
+      end.not_to change(Page, :count)
+      expect(response).to have_http_status(:found) # redirect_back fallback
+    end
 
-      page = Page.last
-      expect(page.title).to eq("Launch")
-      expect(page.user).to eq(seller)
-      expect(response).to redirect_to(edit_page_path(page.slug))
+    it "creates a profile page when is_profile=true" do
+      expect do
+        post pages_path, params: { page: { title: "About me", is_profile: "true" } }
+      end.to change(Page, :count).by(1)
+      expect(Page.last.is_profile).to be(true)
+      expect(response).to redirect_to(edit_page_path(Page.last.slug))
     end
 
     it "associates with a product when permalink given" do
       product = create(:product, user: seller)
       post pages_path, params: { page: { title: "Course landing", product_permalink: product.unique_permalink } }
       expect(Page.last.link).to eq(product)
+      expect(response).to redirect_to(edit_page_path(Page.last.slug))
+    end
+
+    it "returns JSON edit_url when Accept: application/json" do
+      product = create(:product, user: seller)
+      post pages_path,
+           params: { page: { product_permalink: product.unique_permalink } }.to_json,
+           headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["edit_url"]).to eq(edit_page_path(Page.last.slug))
     end
   end
 
@@ -179,8 +189,8 @@ describe PagesController, type: :request do
       expect(job_prompt).to include("My Course")
     end
 
-    it "uses an explicit initial_prompt when supplied" do
-      post pages_path, params: { page: { title: "Hand-rolled", initial_prompt: "An emerald hero section with a single CTA" } }
+    it "uses an explicit initial_prompt when supplied (profile page owner)" do
+      post pages_path, params: { page: { title: "Hand-rolled", is_profile: "true", initial_prompt: "An emerald hero section with a single CTA" } }
       expect(Pages::GeneratePageVersionJob.jobs.last["args"][1]).to include("emerald hero")
     end
   end
@@ -190,14 +200,14 @@ describe PagesController, type: :request do
 
     it "seeds the queued generation with the chosen template's prompt" do
       template = Ai::PageTemplates::TEMPLATES.first
-      post pages_path, params: { page: { title: "From template", template_id: template[:id] } }
+      post pages_path, params: { page: { title: "From template", is_profile: "true", template_id: template[:id] } }
       expect(Pages::GeneratePageVersionJob.jobs.last["args"][1]).to eq(template[:prompt])
     end
 
-    it "exposes the template list as an inertia prop on /pages/new" do
-      get new_page_path, headers: { "X-Inertia" => "true" }
-      props = JSON.parse(response.body)["props"]
-      expect(props["templates"].map { |t| t["id"] }).to include("minimal-product", "sleek-dark", "neobrutalist")
+    it "exposes the template list via the JSON templates endpoint" do
+      get templates_pages_path, headers: { "Accept" => "application/json" }
+      body = JSON.parse(response.body)
+      expect(body["templates"].map { |t| t["id"] }).to include("minimal-product", "sleek-dark", "neobrutalist")
     end
   end
 
@@ -212,7 +222,9 @@ describe PagesController, type: :request do
       expect do
         post pages_path, params: { page: { title: "Another profile", is_profile: "true" } }
       end.not_to change(Page, :count)
-      expect(response).to redirect_to(new_page_path)
+      # Now redirect_back falls back to products_path because there is no
+      # standalone /pages/new surface to bounce to anymore.
+      expect(response).to have_http_status(:found)
     end
   end
 

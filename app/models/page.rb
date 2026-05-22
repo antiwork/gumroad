@@ -16,6 +16,11 @@ class Page < ApplicationRecord
   validates :slug, uniqueness: { scope: :user_id, conditions: -> { alive } }
   validates :html_content, length: { maximum: 500_000 }
   validates :is_profile, uniqueness: { scope: :user_id, conditions: -> { alive.where(is_profile: true) }, message: "already exists for this user" }, if: :is_profile?
+  # A page must belong to exactly one owner — a product (link_id) or the
+  # seller's profile (is_profile=true). Standalone pages are no longer
+  # supported; pages are surfaced via the "Customize" button on a product
+  # or profile, never as a top-level resource.
+  validate :must_have_owner
 
   before_validation :generate_slug, on: :create
 
@@ -131,6 +136,11 @@ class Page < ApplicationRecord
   end
 
   private
+    def must_have_owner
+      return if link_id.present? || is_profile?
+      errors.add(:base, "Page must belong to a product or profile")
+    end
+
     def generate_slug
       return if slug.present?
       base = title.to_s.parameterize.first(80)

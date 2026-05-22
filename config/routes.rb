@@ -855,8 +855,13 @@ Rails.application.routes.draw do
 
     get "/products", to: "links#index", as: :products
 
-    # Pages (AI landing pages)
-    resources :pages, param: :id, only: [:index, :new, :create, :destroy] do
+    # Pages (AI landing pages) — pages are not a standalone resource anymore.
+    # They're owned by a product (link_id) or the seller's profile
+    # (is_profile=true) and surfaced through a "Customize page" button on
+    # those edit screens. We keep index for the ProductEdit/Profile lookups
+    # ("does this product/profile already have a page?"), create + destroy
+    # for the Customize CTA, and edit/update/generate/publish for the chat UX.
+    resources :pages, param: :id, only: [:index, :create, :destroy] do
       collection do
         get :templates, defaults: { format: :json }
       end

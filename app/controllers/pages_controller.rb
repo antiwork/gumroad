@@ -6,22 +6,21 @@ class PagesController < Sellers::BaseController
 
   def index
     authorize Page
-    # page_json reads p.link&.name, so eager-load :link to avoid N+1
-    # queries when the seller has many pages associated with products.
-    pages = current_seller.pages.alive.includes(:link).order(updated_at: :desc)
-    render inertia: "Pages/Index", props: {
-      pages: pages.map { |p| page_json(p) },
-    }
-  end
-
-  def new
-    authorize Page
-    product = current_seller.products.alive.find_by(unique_permalink: params[:product_id]) if params[:product_id]
-    render inertia: "Pages/New", props: {
-      product: product ? product_summary(product) : nil,
-      products: current_seller.products.alive.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
-      templates: Ai::PageTemplates.public_list,
-    }
+    # Scoped lookup: "does this product/profile already have a page?"
+    # Callers pass either ?product_id=<unique_permalink> or ?is_profile=true.
+    # Returns a single-entry array (or empty) keeping the contract narrow —
+    # we never need the seller's full page list anymore now that the Pages
+    # nav surface is gone.
+    pages = current_seller.pages.alive.includes(:link)
+    if params[:product_id].present?
+      product = current_seller.products.alive.find_by(unique_permalink: params[:product_id])
+      pages = product ? pages.where(link_id: product.id) : pages.none
+    elsif ActiveModel::Type::Boolean.new.cast(params[:is_profile])
+      pages = pages.where(is_profile: true)
+    else
+      return render json: { error: "product_id or is_profile required" }, status: :bad_request
+    end
+    render json: { pages: pages.map { |p| page_json(p) } }
   end
 
   def templates
@@ -44,9 +43,15 @@ class PagesController < Sellers::BaseController
         page.update_column(:generating_since, Time.current)
         Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, nil)
       end
-      redirect_to edit_page_path(page.slug)
+      respond_to do |format|
+        format.html { redirect_to edit_page_path(page.slug) }
+        format.json { render json: { success: true, edit_url: edit_page_path(page.slug), id: page.external_id, slug: page.slug } }
+      end
     else
-      redirect_to new_page_path, alert: page.errors.full_messages.join(", ")
+      respond_to do |format|
+        format.html { redirect_back fallback_location: products_path, alert: page.errors.full_messages.join(", ") }
+        format.json { render json: { success: false, error: page.errors.full_messages.join(", ") }, status: :unprocessable_entity }
+      end
     end
   end
 
@@ -66,8 +71,16 @@ class PagesController < Sellers::BaseController
 
   def destroy
     authorize @page
+    fallback = if @page.link
+                 edit_link_path(@page.link.unique_permalink)
+               else
+                 products_path
+               end
     @page.mark_deleted!
-    redirect_to pages_path
+    respond_to do |format|
+      format.html { redirect_back fallback_location: fallback, notice: "Page deleted." }
+      format.json { render json: { success: true, redirect_url: fallback } }
+    end
   end
 
   def publish
