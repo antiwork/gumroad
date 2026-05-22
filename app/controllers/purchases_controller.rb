@@ -59,7 +59,7 @@ class PurchasesController < ApplicationController
     # If the confirmation_text is present, we are here from secure_redirect_controller#create.
     # There's a chance Charge#id is used instead of Purchase#id in the original unsubscribe URL.
     # We need to look up the purchase by Charge#id in that case.
-    if params[:confirmation_text].present? && @purchase&.email != params[:confirmation_text]
+    if params[:confirmation_text].present? && @purchase.present? && @purchase.email != params[:confirmation_text]
       @purchase = Purchase.find_by(id: @purchase.charge.id) if @purchase.charge.present?
       if @purchase&.email != params[:confirmation_text]
         Rails.logger.info("[Error unsubscribing buyer] purchase: #{@purchase&.id}, confirmation_text: #{params[:confirmation_text]}")
