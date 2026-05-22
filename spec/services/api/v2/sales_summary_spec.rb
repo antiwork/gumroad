@@ -66,6 +66,22 @@ describe Api::V2::SalesSummary do
                                        ])
     end
 
+    it "paginates breakdown buckets" do
+      stub_const("#{described_class}::ES_MAX_BUCKET_SIZE", 2)
+      seller = create(:user, timezone: "UTC")
+      products = create_list(:product, 3, user: seller, price_cents: 10_00)
+      products.each do |product|
+        create(:purchase, link: product, price_cents: 10_00, created_at: Time.utc(2026, 1, 1, 12))
+      end
+      index_model_records(Purchase)
+
+      expect(Purchase).to receive(:search).exactly(3).times.and_call_original
+
+      result = described_class.new(seller:, from: Date.new(2026, 1, 1), to: Date.new(2026, 1, 31), group_by: "product").as_json
+
+      expect(result[:breakdown].map { _1[:key] }).to match_array(products.map(&:external_id))
+    end
+
     it "groups date breakdowns in the seller's timezone" do
       seller = create(:user, timezone: "Pacific Time (US & Canada)")
       product = create(:product, user: seller, price_cents: 10_00)

@@ -510,7 +510,7 @@ describe Api::V2::SalesController do
         )
       end
 
-      it "uses the requested end date when only from is provided" do
+      it "defaults the end date to today in the seller's timezone when only from is provided" do
         travel_to(Time.utc(2026, 5, 21, 12)) do
           get :summary, params: @params.merge(from: "2026-05-01")
         end
