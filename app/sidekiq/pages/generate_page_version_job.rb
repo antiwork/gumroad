@@ -26,10 +26,17 @@ class Pages::GeneratePageVersionJob
     ).call
 
     if result.success?
-      page.update_column(:generating_since, nil)
+      # Write content first, then flip generating off in the same UPDATE so a
+      # poll tick can't see generating=false with stale html_content.
       page.apply_new_version!(result.version)
+      page.update_column(:generating_since, nil)
     else
       page.update_columns(generation_error: "Generation failed — please try again.", generating_since: nil)
     end
+  ensure
+    # Belt-and-suspenders for any unhandled error path: never leave the row
+    # stuck in the "generating" state. Safe to call when page is nil (find
+    # raised) — guarded below.
+    page&.update_column(:generating_since, nil) if page&.persisted? && page&.generating_since.present?
   end
 end

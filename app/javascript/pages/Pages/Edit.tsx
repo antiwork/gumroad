@@ -228,13 +228,20 @@ export default function PageEdit() {
   const publishVersion = async (versionId?: number) => {
     setPublishing(true);
     try {
-      await request({
+      const resp = await request({
         method: "POST",
         url: Routes.publish_page_path(page.slug),
         accept: "json",
         data: versionId ? { version_id: versionId } : {},
       });
-      setPage((prev) => ({ ...prev, published: true, published_version_id: versionId ?? prev.published_version_id }));
+      const body = typia.assert<{ success: boolean; published_version_id: number | null; error?: string }>(
+        await resp.json(),
+      );
+      if (!body.success) {
+        showAlert(body.error || "Failed to publish.", "error");
+        return;
+      }
+      setPage((prev) => ({ ...prev, published: true, published_version_id: body.published_version_id }));
       showAlert("Published!", "success");
     } catch (e) {
       assertResponseError(e);
@@ -330,23 +337,25 @@ export default function PageEdit() {
                       Publish latest version
                     </Button>
                   )}
-                  {versions.length > 0 ? (
+                  {versions.some((v) => v.id > 0) ? (
                     <div className="flex flex-col gap-1">
                       <small className="text-muted">Or publish a previous version:</small>
                       <div className="max-h-64 overflow-y-auto">
-                        {versions.map((v) => (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => void publishVersion(v.id)}
-                            className={`flex w-full flex-col gap-0.5 rounded p-2 text-left transition-colors hover:bg-active-bg ${
-                              v.id === page.published_version_id ? "bg-active-bg" : ""
-                            }`}
-                          >
-                            <small className="font-medium">{new Date(v.created_at).toLocaleString()}</small>
-                            <small className="line-clamp-2 text-muted">{v.prompt}</small>
-                          </button>
-                        ))}
+                        {versions
+                          .filter((v) => v.id > 0)
+                          .map((v) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => void publishVersion(v.id)}
+                              className={`flex w-full flex-col gap-0.5 rounded p-2 text-left transition-colors hover:bg-active-bg ${
+                                v.id === page.published_version_id ? "bg-active-bg" : ""
+                              }`}
+                            >
+                              <small className="font-medium">{new Date(v.created_at).toLocaleString()}</small>
+                              <small className="line-clamp-2 text-muted">{v.prompt}</small>
+                            </button>
+                          ))}
                       </div>
                     </div>
                   ) : null}

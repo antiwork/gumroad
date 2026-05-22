@@ -18,6 +18,9 @@ class Ai::PageSanitizer
     data-gumroad-ref data-gumroad-field data-gumroad-action
     aria-label aria-hidden role
     type name value placeholder disabled
+    viewBox xmlns preserveAspectRatio
+    d fill stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule
+    cx cy r rx ry x y x1 y1 x2 y2 points transform
   ].freeze
 
   DANGEROUS_PATTERNS = [

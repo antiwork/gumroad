@@ -22,6 +22,14 @@ class Page < ApplicationRecord
   scope :published, -> { where(published: true) }
   scope :draft, -> { where(published: false) }
 
+  # When promoting an explicit older version, the caller's working draft in
+  # html_content stays put — only published_version flips. The public view
+  # serves published_version.html (see PageViewsController), so the draft a
+  # creator is iterating on isn't displaced from the editor.
+  #
+  # When publishing without a target (auto-publish or "publish latest"), we
+  # mirror the resolved html onto html_content so the model's current state
+  # matches what's published.
   def publish!(version: nil)
     target = version || latest_version
     resolved_html = target&.html || html_content
@@ -30,12 +38,13 @@ class Page < ApplicationRecord
       raise ActiveRecord::RecordInvalid, self
     end
 
-    update!(
+    attrs = {
       published: true,
       published_at: Time.current,
       published_version: target,
-      html_content: resolved_html,
-    )
+    }
+    attrs[:html_content] = resolved_html if version.nil?
+    update!(attrs)
   end
 
   def unpublish!
@@ -60,9 +69,12 @@ class Page < ApplicationRecord
     "#{base}/pages/#{slug}"
   end
 
-  # Free up the slug for reuse when soft-deleting
+  # Free up the slug for reuse when soft-deleting. Truncate the base so the
+  # `-deleted-#{id}` suffix can't push the slug past the 100-char validation.
   def mark_deleted!
-    self.slug = "#{slug}-deleted-#{id}"
+    suffix = "-deleted-#{id}"
+    base = slug.to_s.first(100 - suffix.length)
+    self.slug = "#{base}#{suffix}"
     super
   end
 

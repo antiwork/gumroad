@@ -105,14 +105,26 @@ describe PagesController, type: :request do
       expect(page.html_content).to include("v1")
     end
 
-    it "publishes a specific version when version_id given" do
+    it "publishes a specific version without clobbering the working draft" do
       page = create(:page, user: seller, html_content: "<div>current</div>")
       v1 = create(:page_version, page: page, html: "<section>old</section>", prompt: "x")
       _v2 = create(:page_version, page: page, html: "<section>new</section>", prompt: "y")
       post publish_page_path(page.slug), params: { version_id: v1.id }, headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:ok)
       page.reload
       expect(page.published_version_id).to eq(v1.id)
-      expect(page.html_content).to include("old")
+      # html_content is the editor's working draft — promoting an older version
+      # must not displace it. Public visitors see published_version.html.
+      expect(page.html_content).to eq("<div>current</div>")
+    end
+
+    it "returns 422 when version_id refers to a non-existent version" do
+      page = create(:page, user: seller, html_content: "<div>x</div>")
+      _v = create(:page_version, page: page, html: "<section>x</section>", prompt: "x")
+      post publish_page_path(page.slug), params: { version_id: 999_999_999 },
+                                         headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)["error"]).to eq("Version not found")
     end
   end
 

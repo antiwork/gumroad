@@ -9,7 +9,6 @@ class PagesController < Sellers::BaseController
     pages = current_seller.pages.alive.order(updated_at: :desc)
     render inertia: "Pages/Index", props: {
       pages: pages.map { |p| page_json(p) },
-      can_create_page: true,
     }
   end
 
@@ -39,7 +38,10 @@ class PagesController < Sellers::BaseController
     initial_prompt = resolve_initial_prompt(page)
 
     if page.save
-      Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, nil) if initial_prompt.present?
+      if initial_prompt.present?
+        page.update_column(:generating_since, Time.current)
+        Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, nil)
+      end
       redirect_to edit_page_path(page.slug)
     else
       redirect_to new_page_path, alert: page.errors.full_messages.join(", ")
@@ -68,7 +70,10 @@ class PagesController < Sellers::BaseController
 
   def publish
     authorize @page, :update?
-    version = params[:version_id].present? ? @page.page_versions.find_by(id: params[:version_id]) : nil
+    if params[:version_id].present?
+      version = @page.page_versions.find_by(id: params[:version_id])
+      return render json: { success: false, error: "Version not found" }, status: :unprocessable_entity if version.nil?
+    end
     @page.update!(auto_publish: true) if ActiveModel::Type::Boolean.new.cast(params[:auto_publish])
     @page.publish!(version: version)
     render json: { success: true, published_version_id: @page.published_version_id }
@@ -91,8 +96,12 @@ class PagesController < Sellers::BaseController
     moderation = moderate_prompt(@page, prompt)
     return render json: { success: false, error: "Content moderation blocked this prompt." }, status: :unprocessable_entity unless moderation.passed
 
+    # Flip the page into generating state *before* enqueuing so a fast worker
+    # can't complete the job and clear generating_since before we set it.
+    # Also clear any stale generation_error so the spinner isn't accompanied by
+    # the previous run's error message during the poll window.
+    @page.update_columns(generating_since: Time.current, generation_error: nil)
     Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
-    @page.update_column(:generating_since, Time.current)
     render json: { success: true, queued: true }
   end
 
@@ -123,7 +132,9 @@ class PagesController < Sellers::BaseController
       # html_content is only written by Pages::GeneratePageVersionJob via apply_new_version!
       # (and by publish! when a prior version is promoted). Letting clients PUT it directly
       # would bypass Ai::PageSanitizer.
-      params.require(:page).permit(:title, :slug, :is_profile, :auto_publish)
+      # :slug is intentionally not permitted — renaming the slug silently breaks every
+      # published URL pointing at the old one. Slugs are immutable post-creation.
+      params.require(:page).permit(:title, :is_profile, :auto_publish)
     end
 
     def resolve_initial_prompt(page)
@@ -181,6 +192,8 @@ class PagesController < Sellers::BaseController
           published_version_id: @page.published_version_id,
           auto_publish: @page.auto_publish,
           is_profile: @page.is_profile,
+          generating: @page.generating_since.present?,
+          generation_error: @page.generation_error,
           product: @page.link ? product_summary(@page.link) : nil,
         },
         products: current_seller.products.alive.not_is_bundle.order(name: :asc).map { |p| product_summary(p) },
