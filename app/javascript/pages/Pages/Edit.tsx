@@ -1,5 +1,6 @@
 import { Head, usePage } from "@inertiajs/react";
 import * as React from "react";
+
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -38,6 +39,8 @@ type PageData = {
   published_version_id: number | null;
   auto_publish: boolean;
   is_profile: boolean;
+  generating: boolean;
+  generation_error: string | null;
   product: ProductOption | null;
 };
 
@@ -45,6 +48,22 @@ type PageProps = {
   page: PageData;
   products: ProductOption[];
   versions: VersionInfo[];
+};
+
+type LatestVersionResponse = {
+  html_content: string | null;
+  latest_version: VersionInfo | null;
+  published_version_id: number | null;
+  published: boolean;
+  auto_publish: boolean;
+  generating: boolean;
+  generation_error: string | null;
+};
+
+type PublishResponse = {
+  success: boolean;
+  published_version_id: number | null;
+  error?: string;
 };
 
 const POLL_INTERVAL_MS = 3000;
@@ -105,12 +124,12 @@ const GeneratingPlaceholder = ({ message }: { message: string }) => (
 );
 
 export default function PageEdit() {
-  const { page: initialPage, versions: initialVersions } = usePage().props as PageProps;
+  const { page: initialPage, versions: initialVersions } = usePage<PageProps>().props;
   const currentSeller = useCurrentSeller();
   const [page, setPage] = React.useState(initialPage);
   const [versions, setVersions] = React.useState(initialVersions);
   const [prompt, setPrompt] = React.useState("");
-  const [generating, setGenerating] = React.useState(false);
+  const [generating, setGenerating] = React.useState(initialPage.generating);
   const [publishing, setPublishing] = React.useState(false);
   const [titleDraft, setTitleDraft] = React.useState(initialPage.title);
   const [previewLoaded, setPreviewLoaded] = React.useState(false);
@@ -137,15 +156,7 @@ export default function PageEdit() {
           credentials: "same-origin",
         });
         if (!resp.ok) return;
-        const body = (await resp.json()) as {
-          html_content: string | null;
-          latest_version: VersionInfo | null;
-          published_version_id: number | null;
-          published: boolean;
-          auto_publish: boolean;
-          generating: boolean;
-          generation_error: string | null;
-        };
+        const body: LatestVersionResponse = await resp.json();
         if (cancelled) return;
 
         if (body.html_content && body.html_content !== page.html_content) {
@@ -234,7 +245,7 @@ export default function PageEdit() {
         accept: "json",
         data: versionId ? { version_id: versionId } : {},
       });
-      const body = (await resp.json()) as { success: boolean; published_version_id: number | null; error?: string };
+      const body: PublishResponse = await resp.json();
       if (!body.success) {
         showAlert(body.error || "Failed to publish.", "error");
         return;

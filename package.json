@@ -64,6 +64,7 @@
   "devDependencies": {
     "@eslint/compat": "^1.1.1",
     "@eslint/js": "^9.6.0",
+    "@tailwindcss/cli": "^4.1.14",
     "@tailwindcss/postcss": "^4.1.14",
     "@tailwindcss/typography": "^0.5.19",
     "@types/braintree-web": "^3.75.22",
@@ -124,10 +125,11 @@
     "csstype": "3.1.3"
   },
   "scripts": {
-    "build": "npx vite build",
+    "build": "npm run build:pages-tailwind && npx vite build",
+    "build:pages-tailwind": "node scripts/build_pages_tailwind.mjs",
     "build:widget": "WIDGET_TARGET=gumroad npx vite build --config vite.config.widget.ts && WIDGET_TARGET=gumroad-embed npx vite build --config vite.config.widget.ts",
     "lint-fast": "DISABLE_TYPE_CHECKED=1 npx eslint",
-    "setup": "bundle exec rails js:export",
+    "setup": "bundle exec rails js:export && npm run build:pages-tailwind",
     "postinstall": "patch-package && ts-patch install -s"
   },
   "repository": {

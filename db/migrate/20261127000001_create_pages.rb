@@ -7,7 +7,7 @@ class CreatePages < ActiveRecord::Migration[7.1]
       t.references :link, null: true
       t.string :title, null: false
       t.string :slug, null: false
-      t.text :html_content
+      t.text :html_content, size: :medium
       t.json :json_data
       t.boolean :published, default: false, null: false
       t.boolean :is_profile, default: false, null: false
@@ -28,8 +28,8 @@ class CreatePages < ActiveRecord::Migration[7.1]
     create_table :page_versions do |t|
       t.references :page, null: false
       t.references :parent, null: true
-      t.text :html, null: false
-      t.text :prompt, null: false
+      t.text :html, size: :medium, null: false
+      t.text :prompt, size: :medium, null: false
 
       t.timestamps
     end

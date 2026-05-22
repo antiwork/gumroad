@@ -28,11 +28,13 @@
 /node_modules
 /public/packs
 /public/packs-test
+/public/pages-tailwind.css
 /public/vite
 /public/vite-dev
 /public/vite-test
 /vendor/bundle
 app/javascript/json_schemas
+app/javascript/stylesheets/pages_tailwind.generated.html
 app/javascript/utils/routes.*
 docker/base/Gemfile*
 dump.rdb

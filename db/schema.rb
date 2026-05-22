@@ -1373,8 +1373,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000003) do
   create_table "page_versions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "page_id", null: false
     t.bigint "parent_id"
-    t.text "html", null: false
-    t.text "prompt", null: false
+    t.text "html", size: :medium, null: false
+    t.text "prompt", size: :medium, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["page_id"], name: "index_page_versions_on_page_id"
@@ -1386,7 +1386,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_27_000003) do
     t.bigint "link_id"
     t.string "title", null: false
     t.string "slug", null: false
-    t.text "html_content"
+    t.text "html_content", size: :medium
     t.json "json_data"
     t.boolean "published", default: false, null: false
     t.boolean "is_profile", default: false, null: false
