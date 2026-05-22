@@ -544,4 +544,43 @@ describe SaveInstallmentService do
 
     include_examples "updates profile posts sections"
   end
+
+  describe "#save_with_unique_slug!" do
+    it "retries with a unique suffix on ActiveRecord::RecordNotUnique for slug index" do
+      other_seller = create(:user)
+      existing = create(:installment, seller: other_seller, name: "Hello")
+      expect(existing.slug).to eq("hello")
+
+      service = described_class.new(seller:, params: params.deep_merge(installment: { name: "Hello" }), installment: nil, preview_email_recipient:)
+
+      save_call_count = 0
+      allow_any_instance_of(Installment).to receive(:save).and_wrap_original do |original_method|
+        save_call_count += 1
+        if save_call_count == 1
+          original_method.receiver.send(:set_slug)
+          raise ActiveRecord::RecordNotUnique.new("Mysql2::Error: Duplicate entry 'hello' for key 'installments.index_installments_on_slug'")
+        else
+          original_method.call
+        end
+      end
+
+      service.process
+
+      expect(service.error).to be_nil
+      expect(service.installment).to be_persisted
+      expect(service.installment.slug).to include("hello")
+      expect(service.installment.slug).not_to eq("hello")
+    end
+
+    it "re-raises RecordNotUnique for non-slug index violations" do
+      service = described_class.new(seller:, params:, installment: nil, preview_email_recipient:)
+
+      allow_any_instance_of(Installment).to receive(:save).and_raise(
+        ActiveRecord::RecordNotUnique.new("Mysql2::Error: Duplicate entry for key 'installments.some_other_index'")
+      )
+
+      service.process
+      expect(service.error).to include("Duplicate entry")
+    end
+  end
 end
