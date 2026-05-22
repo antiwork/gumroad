@@ -10,7 +10,7 @@ class PageViewsController < ApplicationController
     render inertia: "Pages/Show", props: {
       page: {
         title: page.title,
-        html_content: page.html_content,
+        html_content: page.published_version&.html || page.html_content,
         slug: page.slug,
         seller: {
           name: user.display_name,
