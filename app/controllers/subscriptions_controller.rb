@@ -37,11 +37,11 @@ class SubscriptionsController < ApplicationController
     set_meta_tag(title: @subscription.is_installment_plan ? "Manage installment plan" : "Manage membership")
     set_product_page_meta(product)
 
-    set_subscription_confirmed_redirect_cookie
-
     props = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
               .subscription_manager_props(subscription: @subscription)
     return e404 if props.nil?
+
+    set_subscription_confirmed_redirect_cookie
 
     render inertia: "Subscriptions/Manage", props: props
   end
