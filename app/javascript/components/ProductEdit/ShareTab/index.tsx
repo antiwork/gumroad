@@ -52,9 +52,7 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </div>
           </section>
-          {currentSeller.pagesEnabled ? (
-            <LandingPageSplash productPermalink={product.custom_permalink ?? product.unique_permalink ?? ""} />
-          ) : null}
+          {currentSeller.pagesEnabled ? <LandingPageSplash productPermalink={product.unique_permalink ?? ""} /> : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
@@ -163,11 +161,11 @@ type Template = {
   icon: string;
 };
 
-const rawSplashIcons = import.meta.glob("$assets/images/native_types/*", {
+const rawSplashIcons = import.meta.glob<string>("$assets/images/native_types/*", {
   eager: true,
   query: "?url",
   import: "default",
-}) as Record<string, string>;
+});
 const splashIcons = Object.fromEntries(
   Object.entries(rawSplashIcons).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
 );
