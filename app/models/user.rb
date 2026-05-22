@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo, EmailNormalization, GumroadWalksEntitlement
+          AttributeBlockable, PayoutInfo, EmailNormalization
 
   has_many :user_external_authentications, dependent: :destroy
 
