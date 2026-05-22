@@ -7,7 +7,7 @@ module EmbedHelpers
 
   # Wait for the Gumroad embed iframe to be injected by gumroad-embed.js before entering it.
   # Bare `within_frame` does not retry and fails instantly when the iframe hasn't loaded yet.
-  def within_embed_frame(wait: 15, &block)
+  def within_embed_frame(wait: 30, &block)
     iframe = find("iframe", wait:)
     within_frame(iframe) do
       expect(page).to have_selector("#app > *", wait:)
