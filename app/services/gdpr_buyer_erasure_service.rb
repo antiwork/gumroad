@@ -20,11 +20,18 @@ class GdprBuyerErasureService
       raise ArgumentError, "This email belongs to user ##{user.id}. Use GdprDataErasureService for account holders."
     end
 
+    registered_purchase_count = Purchase.where(email: email).where.not(purchaser_id: nil).count
+    if registered_purchase_count > 0
+      raise ArgumentError, "This email is associated with #{registered_purchase_count} purchase(s) belonging to registered users. Erase those account holders with GdprDataErasureService first."
+    end
+
     @anonymized_email = generate_anonymized_email
-    purchases = Purchase.where(email: email)
+    purchases = Purchase.where(email: email, purchaser_id: nil)
     @purchase_ids = purchases.pluck(:id)
     @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
-    @browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+    candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+    shared_browser_guids = candidate_browser_guids.any? ? Purchase.where(browser_guid: candidate_browser_guids).where.not(id: @purchase_ids).distinct.pluck(:browser_guid) : []
+    @browser_guids = candidate_browser_guids - shared_browser_guids
     @seller_ids = purchases.distinct.pluck(:seller_id)
 
     ActiveRecord::Base.transaction do
@@ -266,8 +273,8 @@ class GdprBuyerErasureService
                    "All buyer PII anonymized across #{counts.values.sum} records. " \
                    "Performed by #{performed_by.email}."
         )
+      rescue => e
+        Rails.logger.error("GDPR buyer erasure log failed for #{email} on seller #{seller_id}: #{e.message}")
       end
-    rescue => e
-      Rails.logger.error("GDPR buyer erasure log failed for #{email}: #{e.message}")
     end
 end

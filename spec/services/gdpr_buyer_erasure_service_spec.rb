@@ -26,6 +26,15 @@ describe GdprBuyerErasureService do
       expect { described_class.new("", performed_by: admin).perform! }.to raise_error(ArgumentError)
     end
 
+    it "raises when any purchase under this email belongs to a registered user" do
+      registered_buyer = create(:user)
+      purchase = create(:free_purchase, email: "mixed-owner@example.com", purchaser: nil)
+      purchase.update_columns(purchaser_id: registered_buyer.id)
+      expect { described_class.new("mixed-owner@example.com", performed_by: admin).perform! }
+        .to raise_error(ArgumentError, /belonging to registered users/)
+      expect(purchase.reload.email).to eq("mixed-owner@example.com")
+    end
+
     context "with guest buyer data" do
       let!(:purchase1) do
         create(:free_purchase, email: buyer_email, purchaser: nil).tap do |p|
@@ -125,6 +134,33 @@ describe GdprBuyerErasureService do
         purchase1.reload
         expect(purchase1.email).to end_with("@deleted.gumroad.com")
         expect(purchase1.full_name).to eq("[deleted]")
+      end
+
+      it "continues logging on other sellers when one seller's comment fails" do
+        other_purchase = create(:free_purchase, email: buyer_email, purchaser: nil)
+        seller_a = purchase1.seller
+        seller_b = other_purchase.seller
+
+        allow(User).to receive(:find_by).and_call_original
+        allow(User).to receive(:find_by).with(id: seller_a.id).and_raise(StandardError, "boom")
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(seller_b.reload.comments.where("content LIKE ?", "%GDPR buyer erasure%")).to exist
+      end
+
+      it "does not anonymize discover_searches whose browser_guid is also used by another buyer's purchase" do
+        shared_guid = "shared-guid-#{SecureRandom.hex(4)}"
+        purchase1.update_columns(browser_guid: shared_guid)
+        other_buyer_purchase = create(:free_purchase, email: "other-guest@example.com", purchaser: nil)
+        other_buyer_purchase.update_columns(browser_guid: shared_guid)
+        search = DiscoverSearch.create!(browser_guid: shared_guid, ip_address: "9.9.9.9")
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        search.reload
+        expect(search.browser_guid).to eq(shared_guid)
+        expect(search.ip_address).to eq("9.9.9.9")
       end
 
       describe "charges with shared purchases across buyers" do
