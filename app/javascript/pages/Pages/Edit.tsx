@@ -183,10 +183,8 @@ export default function PageEdit() {
   const sendPrompt = async () => {
     if (!prompt.trim() || generating) return;
     const userPrompt = prompt.trim();
-    const optimisticId = -Date.now();
     setPrompt("");
     setGenerating(true);
-    setVersions((prev) => [{ id: optimisticId, prompt: userPrompt, created_at: new Date().toISOString() }, ...prev]);
 
     try {
       await request({
@@ -195,10 +193,10 @@ export default function PageEdit() {
         accept: "json",
         data: { prompt: userPrompt },
       });
+      setVersions((prev) => [{ id: -Date.now(), prompt: userPrompt, created_at: new Date().toISOString() }, ...prev]);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message || "Failed to generate. Try again.", "error");
-      setVersions((prev) => prev.filter((v) => v.id !== optimisticId));
       setGenerating(false);
     }
   };
