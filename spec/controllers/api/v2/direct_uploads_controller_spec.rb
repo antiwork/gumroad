@@ -95,6 +95,17 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("byte_size exceeds the #{described_class::MAX_FILE_SIZE_GB} GB maximum")
       end
 
+      it "rejects non-positive byte sizes before creating a blob" do
+        [0, -1].each do |byte_size|
+          expect do
+            post @action, params: @params.deep_merge(blob: { byte_size: })
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("byte_size is required")
+        end
+      end
+
       it "rejects unsupported content types before creating a blob" do
         expect do
           post @action, params: @params.deep_merge(blob: { content_type: "application/pdf" })
