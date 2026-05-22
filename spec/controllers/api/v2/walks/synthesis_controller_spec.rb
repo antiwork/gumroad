@@ -71,6 +71,54 @@ describe Api::V2::Walks::SynthesisController do
       expect(response.parsed_body["error"]).to match(/too long/i)
     end
 
+    it "returns 422 when the topic is over the length cap" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x" * 501, exchanges: exchanges }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to match(/topic too long/i)
+      expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
+    end
+
+    it "returns 422 when an exchange is a bare string rather than a hash" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      bad = (1..6).map { |i| "Q#{i}? A#{i}." }
+      post :create, params: { topic: "x", exchanges: bad }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to match(/object with question and answer/i)
+      expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
+    end
+
+    it "returns 422 when an exchange's question exceeds the content length cap" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      oversized = exchanges.dup
+      oversized[0] = { question: "x" * 2001, answer: "A1" }
+      post :create, params: { topic: "x", exchanges: oversized }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to match(/object with question and answer/i)
+      expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
+    end
+
+    it "returns 422 when an exchange's answer exceeds the content length cap" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      oversized = exchanges.dup
+      oversized[1] = { question: "Q2", answer: "x" * 2001 }
+      post :create, params: { topic: "x", exchanges: oversized }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
+    end
+
     it "returns 502 when Claude returns unparseable JSON" do
       anthropic_body = { "content" => [{ "type" => "text", "text" => "Sure! Here is your product:" }] }
       stub_request(:post, "https://api.anthropic.com/v1/messages")

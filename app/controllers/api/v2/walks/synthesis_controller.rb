@@ -11,12 +11,20 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
 
   MIN_EXCHANGES = 5
   MAX_EXCHANGES = 100
+  MAX_TOPIC_LENGTH = 500
+  MAX_EXCHANGE_CONTENT_LENGTH = 2000
   ANTHROPIC_MODEL = "claude-opus-4-7"
   MAX_TOKENS = 4096
 
   def create
     topic = params[:topic].to_s
     exchanges = Array(params[:exchanges])
+
+    if topic.length > MAX_TOPIC_LENGTH
+      return render json: {
+        error: "Topic too long — please keep it under #{MAX_TOPIC_LENGTH} characters.",
+      }, status: :unprocessable_entity
+    end
 
     if exchanges.length < MIN_EXCHANGES
       return render json: {
@@ -30,7 +38,14 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       }, status: :unprocessable_entity
     end
 
-    transcript = format_transcript(exchanges)
+    normalized_exchanges = normalize_exchanges(exchanges)
+    if normalized_exchanges.nil?
+      return render json: {
+        error: "Each exchange must be an object with question and answer fields no longer than #{MAX_EXCHANGE_CONTENT_LENGTH} characters.",
+      }, status: :unprocessable_entity
+    end
+
+    transcript = format_transcript(normalized_exchanges)
     user_prompt = GumroadWalksPrompts.synthesizer_user(topic:, transcript:)
 
     upstream = HTTP.timeout(120)
@@ -66,11 +81,24 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
   end
 
   private
+    # Returns an array of `{ question:, answer: }` hashes, or nil if any
+    # element isn't a hash-like or has fields over MAX_EXCHANGE_CONTENT_LENGTH.
+    # Hostile clients can send arrays of bare strings — without this guard the
+    # `ex[:question]` reads in format_transcript raise TypeError.
+    def normalize_exchanges(exchanges)
+      exchanges.map do |ex|
+        return nil unless ex.is_a?(Hash) || ex.is_a?(ActionController::Parameters)
+        question = (ex[:question].presence || ex["question"]).to_s
+        answer = (ex[:answer].presence || ex["answer"]).to_s
+        return nil if question.length > MAX_EXCHANGE_CONTENT_LENGTH
+        return nil if answer.length > MAX_EXCHANGE_CONTENT_LENGTH
+        { question:, answer: }
+      end
+    end
+
     def format_transcript(exchanges)
       exchanges.each_with_index.map do |ex, i|
-        question = ex[:question].to_s.presence || ex["question"].to_s
-        answer = ex[:answer].to_s.presence || ex["answer"].to_s
-        "Q#{i + 1}: #{question}\nA#{i + 1}: #{answer}"
+        "Q#{i + 1}: #{ex[:question]}\nA#{i + 1}: #{ex[:answer]}"
       end.join("\n\n")
     end
 
@@ -79,7 +107,7 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
     # decided to be helpful.
     def extract_json_from_anthropic_response(body)
       blocks = body.dig("content") || []
-      text = blocks.select { |b| b["type"] == "text" }.map { |b| b["text"].to_s }.join
+      text = blocks.filter_map { |b| b["text"].to_s if b["type"] == "text" }.join
       cleaned = text.strip.delete_prefix("```json").delete_prefix("```").delete_suffix("```").strip
       JSON.parse(cleaned)
     rescue JSON::ParserError => e
