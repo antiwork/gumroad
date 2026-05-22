@@ -8,8 +8,11 @@ module EmbedHelpers
   # Wait for the Gumroad embed iframe to be injected by gumroad-embed.js before entering it.
   # Bare `within_frame` does not retry and fails instantly when the iframe hasn't loaded yet.
   def within_embed_frame(wait: 15, &block)
-    expect(page).to have_selector("iframe", wait:)
-    within_frame(&block)
+    iframe = find("iframe", wait:)
+    within_frame(iframe) do
+      expect(page).to have_selector("#app > *", wait:)
+      block.call
+    end
   end
 
   def create_embed_page(product, template_name: "embed_page.html.erb", url: nil, gumroad_params: nil, outbound: true, insert_anchor_tag: true, custom_domain_base_uri: nil, query_params: {})
