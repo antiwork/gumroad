@@ -28,6 +28,11 @@ describe "Impersonate", type: :system, js: true do
     impersonate_and_verify(seller, seller.merchant_accounts.sole.charge_processor_merchant_id)
   end
 
+  it "impersonates and unimpersonates a suspended seller" do
+    seller.update!(user_risk_state: "suspended_for_fraud")
+    impersonate_and_verify(seller, seller.email)
+  end
+
   def impersonate_and_verify(seller, identifier)
     visit "/admin"
     fill_in "Enter user email, username, or Stripe account ID", with: identifier
