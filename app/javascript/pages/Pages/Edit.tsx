@@ -234,9 +234,7 @@ export default function PageEdit() {
         accept: "json",
         data: versionId ? { version_id: versionId } : {},
       });
-      const body = typia.assert<{ success: boolean; published_version_id: number | null; error?: string }>(
-        await resp.json(),
-      );
+      const body = (await resp.json()) as { success: boolean; published_version_id: number | null; error?: string };
       if (!body.success) {
         showAlert(body.error || "Failed to publish.", "error");
         return;
