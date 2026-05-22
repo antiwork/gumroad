@@ -56,12 +56,20 @@ class SaveInstallmentService
         installment.link = product_or_variant_type? ? product : nil
         installment.seller = seller
       end
-      if (installment.published? || installment.add_and_validate_filters(installment_attrs, seller)) && installment.save
+      if (installment.published? || installment.add_and_validate_filters(installment_attrs, seller)) && save_with_unique_slug!
         SaveFilesService.perform(installment, product_files_params)
         update_profile_posts_sections!
       else
         @error = installment.errors.full_messages.first
       end
+    end
+
+    def save_with_unique_slug!
+      installment.save
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless e.message.include?("index_installments_on_slug")
+      installment.slug = "#{installment.slug}-#{SecureRandom.hex(4)}"
+      installment.save
     end
 
     def update_profile_posts_sections!
