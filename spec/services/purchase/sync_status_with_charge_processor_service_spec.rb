@@ -131,47 +131,23 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(@seller.reload.unpaid_balance_cents).to eq(@initial_balance + purchase.payment_cents)
   end
 
-  it "returns false for a combined charge purchase when charge has nil flow_of_funds" do
-    product = create(:product, user: @seller, price_cents: 10_00)
-    params = {
-      email: "buyer@example.com",
-      cc_zipcode: "12345",
-      purchase: {
-        full_name: "Edgar Gumstein",
-        zip_code: "94117"
-      },
-      browser_guid: SecureRandom.uuid,
-      ip_address: "0.0.0.0",
-      session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
-      is_mobile: false,
-      line_items: [
-        {
-          uid: "unique-id-0",
-          permalink: product.unique_permalink,
-          perceived_price_cents: product.price_cents,
-          quantity: 1
-        }
-      ]
-    }.merge(StripePaymentMethodHelper.success.to_stripejs_params)
-    allow_any_instance_of(Charge).to receive(:id).and_return(1234567)
-
-    order, _ = Order::CreateService.new(params:).perform
-    Order::ChargeService.new(order:, params:).perform
-    purchase = order.purchases.last
-    purchase.update!(purchase_state: "in_progress", stripe_transaction_id: nil)
-
-    expect(purchase.reload.in_progress?).to be(true)
-    expect(purchase.is_part_of_combined_charge?).to be(true)
+  it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
+    purchase = build(:purchase, link: @product, purchase_state: "in_progress")
+    purchase.save!(validate: false)
+    allow(purchase).to receive(:is_part_of_combined_charge?).and_return(true)
 
     charge_with_nil_fof = BaseProcessorCharge.new
     charge_with_nil_fof.id = "ch_test_nil_fof"
     charge_with_nil_fof.status = "succeeded"
     charge_with_nil_fof.charge_processor_id = StripeChargeProcessor.charge_processor_id
     charge_with_nil_fof.flow_of_funds = nil
-    allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(charge_with_nil_fof)
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(charge_with_nil_fof)
 
     expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase, mark_as_failed: true).perform).to be(false)
-    expect(purchase.reload.failed?).to be(true)
+    # Crucially: even with mark_as_failed: true, the purchase stays in_progress so the next
+    # SyncStuckPurchasesJob run can re-attempt once Stripe settles balance_transaction.
+    expect(purchase.reload.in_progress?).to be(true)
+    expect(purchase.reload.failed?).to be(false)
   end
 
   it "marks the associated gift and giftee purchase as successful too in case of a successful gift purchase" do

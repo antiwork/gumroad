@@ -2804,8 +2804,6 @@ class Purchase < ApplicationRecord
   end
 
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
-    return if combined_flow_of_funds.nil?
-
     total_issued_amount_cents = combined_flow_of_funds.issued_amount.cents
     purchase_portion = total_transaction_cents * 1.0 / charge.amount_cents
     purchase_gumroad_amount_portion = if charge.gumroad_amount_cents == 0
