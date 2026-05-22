@@ -290,5 +290,7 @@ class GdprBuyerErasureService
       rescue => e
         Rails.logger.error("GDPR buyer erasure log failed for #{@anonymized_email} on seller #{seller_id}: #{e.message}")
       end
+    rescue => e
+      Rails.logger.error("GDPR buyer erasure log_erasure! unexpected failure for #{@anonymized_email}: #{e.message}")
     end
 end

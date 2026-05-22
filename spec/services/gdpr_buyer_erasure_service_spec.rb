@@ -157,6 +157,14 @@ describe GdprBuyerErasureService do
         expect(purchase1.full_name).to eq("[deleted]")
       end
 
+      it "swallows unexpected log_erasure! failures so a logging hiccup is not reported as a failed erasure" do
+        service = described_class.new(buyer_email, performed_by: admin)
+        service.instance_variable_set(:@anonymized_email, "buyer-test@deleted.gumroad.com")
+        service.instance_variable_set(:@seller_ids, nil)
+
+        expect { service.send(:log_erasure!) }.not_to raise_error
+      end
+
       it "continues logging on other sellers when one seller's comment fails" do
         other_purchase = create(:free_purchase, email: buyer_email, purchaser: nil)
         seller_a = purchase1.seller
