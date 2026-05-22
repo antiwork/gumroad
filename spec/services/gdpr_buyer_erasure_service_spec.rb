@@ -95,6 +95,39 @@ describe GdprBuyerErasureService do
         expect(unrelated_purchase.email).to eq("other@example.com")
       end
 
+      it "anonymizes all PII columns on matching events rows" do
+        event = Event.new(
+          email: buyer_email,
+          ip_address: "9.9.9.9",
+          ip_country: "US",
+          ip_state: "NY",
+          billing_zip: "11111",
+          card_type: "visa",
+          card_visual: "**** 4242",
+          fingerprint: "fp_event",
+          browser_fingerprint: "bfp_event",
+          browser_plugins: "Flash, Java",
+          browser_guid: "guid_event",
+          event_name: "purchase",
+        )
+        event.save!(validate: false)
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        event.reload
+        expect(event.email).to be_nil
+        expect(event.ip_address).to be_nil
+        expect(event.ip_country).to be_nil
+        expect(event.ip_state).to be_nil
+        expect(event.billing_zip).to be_nil
+        expect(event.card_type).to be_nil
+        expect(event.card_visual).to be_nil
+        expect(event.fingerprint).to be_nil
+        expect(event.browser_fingerprint).to be_nil
+        expect(event.browser_plugins).to be_nil
+        expect(event.browser_guid).to be_nil
+      end
+
       it "anonymizes followers by email" do
         follower = Follower.create!(email: buyer_email, user: purchase1.seller)
 

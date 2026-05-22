@@ -103,9 +103,14 @@ class GdprBuyerErasureService
         email: nil,
         ip_address: nil,
         ip_country: nil,
+        ip_state: nil,
+        billing_zip: nil,
+        card_type: nil,
         card_visual: nil,
         fingerprint: nil,
-        billing_zip: nil,
+        browser_fingerprint: nil,
+        browser_plugins: nil,
+        browser_guid: nil,
       )
     end
 
