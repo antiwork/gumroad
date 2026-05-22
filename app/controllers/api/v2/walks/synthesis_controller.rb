@@ -89,8 +89,7 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
 
     def require_walks_entitlement
       jws = request.headers["X-Apple-Transaction-JWS"].to_s.presence
-      return if jws.nil?
-      return if AppStoreWalksJwsVerifier.verify(jws).valid?
+      return if jws && AppStoreWalksJwsVerifier.verify(jws).valid?
       render json: { error: "Active Gumroad Walks subscription required." }, status: :payment_required
     end
 end

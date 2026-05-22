@@ -6,10 +6,17 @@ describe Api::V2::Walks::RealtimeTokensController do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("OPENAI_API_KEY").and_return("sk-test-openai")
+
+    # Default: every test (except the JWS-failure ones below) sends a valid
+    # JWS. The iOS app guarantees this by enrolling fresh installs into a
+    # StoreKit free trial before the first request.
+    allow(AppStoreWalksJwsVerifier).to receive(:verify)
+      .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
+    request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
   end
 
   describe "POST create" do
-    it "returns the OpenAI ephemeral token verbatim on success (anonymous, no JWS — free-trial path)" do
+    it "returns the OpenAI ephemeral token verbatim on success" do
       openai_response = {
         "id" => "ek_proj_xyz",
         "value" => "ek_proj_xyz",
@@ -59,6 +66,17 @@ describe Api::V2::Walks::RealtimeTokensController do
       expect(response.parsed_body["error"]).to match(/reach/i)
     end
 
+    it "returns 402 when the X-Apple-Transaction-JWS header is missing" do
+      stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
+        .to_return(status: 200, body: { "value" => "ek_x" }.to_json, headers: { "Content-Type" => "application/json" })
+      request.headers["X-Apple-Transaction-JWS"] = nil
+
+      post :create, params: { topic: "x" }
+
+      expect(response).to have_http_status(:payment_required)
+      expect(WebMock).not_to have_requested(:post, "https://api.openai.com/v1/realtime/client_secrets")
+    end
+
     it "returns 402 when an X-Apple-Transaction-JWS header is present but invalid" do
       stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
         .to_return(status: 200, body: { "value" => "ek_x" }.to_json, headers: { "Content-Type" => "application/json" })
@@ -69,18 +87,6 @@ describe Api::V2::Walks::RealtimeTokensController do
       post :create, params: { topic: "x" }
 
       expect(response).to have_http_status(:payment_required)
-    end
-
-    it "allows the call when the JWS verifies as a valid ProSub subscription" do
-      stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
-        .to_return(status: 200, body: { "value" => "ek_ok" }.to_json, headers: { "Content-Type" => "application/json" })
-      allow(AppStoreWalksJwsVerifier).to receive(:verify)
-        .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
-
-      request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
-      post :create, params: { topic: "x" }
-
-      expect(response).to have_http_status(:ok)
     end
   end
 end

@@ -129,11 +129,10 @@ class Rack::Attack
 
     # Gumroad Walks: realtime token creation is an *expensive* endpoint — each
     # successful response gives the client up to 2h of OpenAI Realtime usage
-    # against our key. The controller accepts anonymous calls (free first
-    # walk has no JWS yet) so without rate limits this would be the most
-    # cost-exposed surface in the app. 5 requests/IP/hour is generous for
-    # real users (1-2 walks/day) and caps a hijacked client at ~$10/IP/hr of
-    # OpenAI spend.
+    # against our key. JWS verification is the primary gate, but a leaked or
+    # replayed JWS would otherwise be unbounded — IP throttling caps that
+    # blast radius at ~$10/IP/hr of OpenAI spend. 5 req/IP/hour is generous
+    # for real users (1-2 walks/day).
     throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour
     throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour
   end

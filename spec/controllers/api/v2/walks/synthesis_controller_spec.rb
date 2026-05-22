@@ -6,6 +6,12 @@ describe Api::V2::Walks::SynthesisController do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
+
+    # See RealtimeTokensController spec: every request needs a valid JWS;
+    # the JWS-failure cases below override these.
+    allow(AppStoreWalksJwsVerifier).to receive(:verify)
+      .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
+    request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
   end
 
   let(:exchanges) do
@@ -13,7 +19,7 @@ describe Api::V2::Walks::SynthesisController do
   end
 
   describe "POST create" do
-    it "proxies to Anthropic and returns the parsed JSON draft (anonymous, no JWS)" do
+    it "proxies to Anthropic and returns the parsed JSON draft" do
       draft = {
         title: "Pricing Without Spreadsheets",
         description: "Three short paragraphs.",
@@ -93,6 +99,17 @@ describe Api::V2::Walks::SynthesisController do
 
       expect(response).to have_http_status(:bad_gateway)
       expect(response.parsed_body["error"]).to match(/reach/i)
+    end
+
+    it "returns 402 when the X-Apple-Transaction-JWS header is missing" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+      request.headers["X-Apple-Transaction-JWS"] = nil
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:payment_required)
+      expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
     end
 
     it "returns 402 when an X-Apple-Transaction-JWS header is present but invalid" do

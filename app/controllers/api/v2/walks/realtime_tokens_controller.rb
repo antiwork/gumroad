@@ -17,8 +17,8 @@
 class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
   # No Doorkeeper. Gumroad OAuth is only required to *publish* the post-walk
   # draft (see GumroadAuth#publishProduct in the iOS app); starting a walk
-  # itself only needs the StoreKit subscription, and the first walk is free.
-  # require_walks_entitlement does the JWS-or-anonymous gating below.
+  # itself only needs an active StoreKit subscription (free-trial included).
+  # require_walks_entitlement verifies the JWS on every request.
   skip_before_action :verify_authenticity_token, only: [:create]
   before_action :require_walks_entitlement
 
@@ -72,19 +72,14 @@ class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
       }
     end
 
-    # Two entitlement paths:
-    #   - Subscriber: X-Apple-Transaction-JWS header verifies via Apple's
-    #     chain -> active ProSub -> allow.
-    #   - Anonymous (no JWS): treated as free-trial. Rack::Attack throttles
-    #     by IP keep abuse bounded (see config/initializers/rack_attack.rb).
-    #     The iOS client only sends an anonymous request for the user's first
-    #     walk; subsequent walks either attach the JWS or surface the paywall.
-    # If a JWS IS present but invalid/expired, reject with 402 — we know the
-    # user is supposed to be subscribed and the proof failed.
+    # Every request must carry a valid X-Apple-Transaction-JWS header — the
+    # iOS app puts the user into a free trial subscription on first launch so
+    # `Transaction.currentEntitlements` always has a JWS to send. Missing or
+    # invalid/expired JWS → 402. Rack::Attack also throttles by IP as a
+    # backstop against a leaked or replayed JWS (see config/initializers/rack_attack.rb).
     def require_walks_entitlement
       jws = request.headers["X-Apple-Transaction-JWS"].to_s.presence
-      return if jws.nil?
-      return if AppStoreWalksJwsVerifier.verify(jws).valid?
+      return if jws && AppStoreWalksJwsVerifier.verify(jws).valid?
       render json: { error: "Active Gumroad Walks subscription required." }, status: :payment_required
     end
 end
