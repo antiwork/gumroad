@@ -50,6 +50,28 @@ describe Pages::GeneratePageVersionJob do
       expect(page.generating_since).to be_nil
     end
 
+    it "does not apply the new version when output moderation fails" do
+      page.update!(html_content: "<div>previous</div>", auto_publish: true)
+      v_parent = create(:page_version, page: page, html: "<div>previous</div>", prompt: "p")
+      page.apply_new_version!(v_parent)
+      new_version = create(:page_version, page: page, html: "<section>unsafe</section>", prompt: "x", parent: v_parent)
+      service = instance_double(Ai::PageGeneratorService, call: Ai::PageGeneratorService::Result.new(version: new_version))
+      allow(Ai::PageGeneratorService).to receive(:new).and_return(service)
+      allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(failed_moderation)
+
+      described_class.new.perform(page.id, "make it fresh", v_parent.id)
+
+      page.reload
+      # The rejected html must never reach html_content (which feeds the
+      # editor preview) or published_version (which feeds the public viewer).
+      expect(page.html_content).not_to include("unsafe")
+      expect(page.html_content).to include("previous")
+      expect(page.published_version_id).to eq(v_parent.id)
+      # The rejected version itself is discarded so it can't be promoted later
+      # via "publish a previous version".
+      expect(PageVersion.where(id: new_version.id)).to be_empty
+    end
+
     it "runs output moderation against the newly generated content, not the previous html" do
       page.update!(html_content: "<div>previous</div>")
       new_version = create(:page_version, page: page, html: "<section>fresh</section>", prompt: "x")

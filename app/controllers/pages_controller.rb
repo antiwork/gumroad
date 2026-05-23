@@ -38,6 +38,21 @@ class PagesController < Sellers::BaseController
 
     initial_prompt = resolve_initial_prompt(page)
 
+    # Moderate the initial prompt before we create the Page row or enqueue a
+    # generation job. Letting a rejected prompt through creates an orphan
+    # Page and burns an Anthropic call; pre-rejecting also matches the
+    # symmetry with #generate, which already moderates before enqueuing.
+    if initial_prompt.present?
+      prompt_moderation = moderate_prompt(page, initial_prompt)
+      unless prompt_moderation.passed
+        respond_to do |format|
+          format.html { redirect_back fallback_location: products_path, alert: "This prompt isn't allowed. Try wording it differently." }
+          format.json { render json: { success: false, error: "This prompt isn't allowed. Try wording it differently." }, status: :unprocessable_entity }
+        end
+        return
+      end
+    end
+
     if page.save
       # Seed v1 with a snapshot of the currently rendered product/profile so
       # the editor opens on the real page rather than a blank chat. The first

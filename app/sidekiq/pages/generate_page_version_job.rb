@@ -44,9 +44,25 @@ class Pages::GeneratePageVersionJob
       return
     end
 
-    # Apply the version first so output moderation sees the freshly generated
-    # HTML — not the previous html_content. The prompt was moderated in the
-    # controller before enqueuing; this is the output-side check.
+    # Moderate the freshly generated HTML *before* applying the new version.
+    # apply_new_version! writes html_content and, when auto_publish is on,
+    # flips published_version — so running moderation after the apply means
+    # rejected content goes briefly live on the public Show view. Build a
+    # transient proxy carrying the new html so moderation sees exactly the
+    # bytes we're about to publish, without mutating the persisted page.
+    proxy = Page.new(user: page.user, title: page.title, html_content: result.version.html)
+    moderation = ContentModeration::ModerateRecordService.check(proxy, :page)
+    unless moderation.passed
+      Rails.logger.warn("Pages::GeneratePageVersionJob output moderation failed page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
+      # Drop the rejected version — leaving it in page_versions would surface
+      # it in the editor's version list and risk a later "publish previous"
+      # promoting unsafe content. Nothing else points at it yet because
+      # apply_new_version! never ran.
+      result.version.destroy
+      page.update_columns(generation_error: "Content moderation failed — try a different prompt.", generating_since: nil)
+      return
+    end
+
     applied = page.apply_new_version!(result.version, expected_parent_id: parent_version&.id)
     unless applied
       # A newer generation has been applied while this job was running.
@@ -54,12 +70,6 @@ class Pages::GeneratePageVersionJob
       # confuse the user, whose newer prompt has already produced output.
       Rails.logger.info("Pages::GeneratePageVersionJob skipped stale apply page=#{page.id} parent=#{parent_version&.id}")
       page.update_column(:generating_since, nil)
-      return
-    end
-    moderation = ContentModeration::ModerateRecordService.check(page, :page)
-    unless moderation.passed
-      Rails.logger.warn("Pages::GeneratePageVersionJob output moderation failed page=#{page.id} reasons=#{moderation.reasons.join('; ')}")
-      page.update_columns(generation_error: "Content moderation failed — try a different prompt.", generating_since: nil)
       return
     end
 

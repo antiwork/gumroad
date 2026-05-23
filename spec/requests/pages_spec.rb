@@ -262,6 +262,19 @@ describe PagesController, type: :request do
       expect(response).to have_http_status(:ok)
       expect(Pages::GeneratePageVersionJob.jobs.size).to eq(1)
     end
+
+    it "rejects the create call before persisting the page when initial_prompt is flagged" do
+      allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+        ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["disallowed"])
+      )
+      expect do
+        post pages_path,
+             params: { page: { is_profile: "true", initial_prompt: "something nasty" } }.to_json,
+             headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      end.to not_change(Page, :count).and not_change(Pages::GeneratePageVersionJob.jobs, :size)
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)["error"]).to include("isn't allowed")
+    end
   end
 
   describe "GET /pages/:id/latest_version" do
