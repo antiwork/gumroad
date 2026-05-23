@@ -6,6 +6,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
+import { CreatePagePromptButton, useCreatePagePrompt } from "$app/components/Pages/CreatePagePrompt";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
@@ -53,7 +54,9 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </div>
           </section>
-          {currentSeller.pagesEnabled ? <LandingPageSplash productPermalink={uniquePermalink} /> : null}
+          {currentSeller.pagesEnabled ? (
+            <LandingPageSplash productPermalink={uniquePermalink} productName={product.name} />
+          ) : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
@@ -155,68 +158,22 @@ const DiscoverEligibilityPromo = () => {
   );
 };
 
-const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) => {
-  const [existingPageSlug, setExistingPageSlug] = React.useState<string | null>(null);
-  const [creating, setCreating] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  // Check if this product already has a page on mount so the button label
-  // can flip between "Customize page" (no page yet → POST and redirect) and
-  // "Edit page" (page exists → just navigate). One request, single-entry
-  // response (PagesController#index is now scoped by product_id).
-  React.useEffect(() => {
-    if (!productPermalink) return;
-    let cancelled = false;
-    fetch(`/pages?product_id=${encodeURIComponent(productPermalink)}`, {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Page lookup failed: ${r.status}`))))
-      .then((data: { pages: { slug: string }[] }) => {
-        if (!cancelled && data.pages[0]) setExistingPageSlug(data.pages[0].slug);
-      })
-      .catch(() => {
-        /* silent — falls back to "Customize page" CTA */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [productPermalink]);
-
-  const goToEditor = (slug: string) => {
-    window.location.href = `/pages/${slug}/edit?fullscreen=1`;
-  };
-
-  const handleCustomize = async () => {
-    if (existingPageSlug) {
-      goToEditor(existingPageSlug);
-      return;
-    }
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch("/pages", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? "",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({ page: { product_permalink: productPermalink } }),
-      });
-      const data: { success: boolean; slug?: string; error?: string } = await res.json();
-      if (!res.ok || !data.success || !data.slug) {
-        setError(data.error ?? "Could not create page.");
-        return;
-      }
-      goToEditor(data.slug);
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setCreating(false);
-    }
-  };
+const LandingPageSplash = ({
+  productPermalink,
+  productName,
+}: {
+  productPermalink: string;
+  productName: string;
+}) => {
+  // Pass the product name as the title so the page is created with the
+  // creator-facing label they already recognize, rather than relying on
+  // the server's fallback to derive one. The server still defaults if we
+  // somehow ship an empty string (the controller treats blank as "use the
+  // link name"), so this is belt-and-suspenders rather than required.
+  const state = useCreatePagePrompt({
+    existsQuery: `product_id=${encodeURIComponent(productPermalink)}`,
+    createBody: { product_permalink: productPermalink, title: productName },
+  });
 
   return (
     <section className="grid gap-4 border-t border-border p-4 md:p-8">
@@ -227,12 +184,7 @@ const LandingPageSplash = ({ productPermalink }: { productPermalink: string }) =
           full-screen chat — describe what you want and iterate.
         </p>
       </header>
-      <div className="flex items-center gap-3">
-        <Button onClick={() => void handleCustomize()} disabled={creating}>
-          {creating ? "Opening…" : existingPageSlug ? "Edit page" : "Customize page"}
-        </Button>
-        {error ? <span className="text-sm text-destructive">{error}</span> : null}
-      </div>
+      <CreatePagePromptButton state={state} />
     </section>
   );
 };

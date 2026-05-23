@@ -15,6 +15,7 @@ import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { CreatePagePromptButton, useCreatePagePrompt } from "$app/components/Pages/CreatePagePrompt";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Profile, Props as ProfileProps } from "$app/components/Profile";
@@ -296,62 +297,10 @@ export default function SettingsPage() {
 }
 
 const CustomizeProfilePageSection = () => {
-  const [existingPageSlug, setExistingPageSlug] = React.useState<string | null>(null);
-  const [creating, setCreating] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetch("/pages?is_profile=true", {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Page lookup failed: ${r.status}`))))
-      .then((data: { pages: { slug: string }[] }) => {
-        if (!cancelled && data.pages[0]) setExistingPageSlug(data.pages[0].slug);
-      })
-      .catch(() => {
-        /* silent — falls back to "Customize page" CTA */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const goToEditor = (slug: string) => {
-    window.location.href = `/pages/${slug}/edit?fullscreen=1`;
-  };
-
-  const handleCustomize = async () => {
-    if (existingPageSlug) {
-      goToEditor(existingPageSlug);
-      return;
-    }
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch("/pages", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? "",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({ page: { is_profile: true } }),
-      });
-      const data: { success: boolean; slug?: string; error?: string } = await res.json();
-      if (!res.ok || !data.success || !data.slug) {
-        setError(data.error ?? "Could not create page.");
-        return;
-      }
-      goToEditor(data.slug);
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setCreating(false);
-    }
-  };
+  const state = useCreatePagePrompt({
+    existsQuery: "is_profile=true",
+    createBody: { is_profile: true },
+  });
 
   return (
     <Fieldset>
@@ -360,12 +309,7 @@ const CustomizeProfilePageSection = () => {
         Use the standard Gumroad profile, or let AI build a custom one for you. The editor is a full-screen chat —
         describe what you want and iterate.
       </FieldsetDescription>
-      <div className="flex items-center gap-3">
-        <Button onClick={() => void handleCustomize()} disabled={creating}>
-          {creating ? "Opening…" : existingPageSlug ? "Edit page" : "Customize page"}
-        </Button>
-        {error ? <span className="text-sm text-destructive">{error}</span> : null}
-      </div>
+      <CreatePagePromptButton state={state} />
     </Fieldset>
   );
 };
