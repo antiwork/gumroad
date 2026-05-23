@@ -271,11 +271,17 @@ class Installment < ApplicationRecord
     seller.presence || link.user
   end
 
-  def installment_mobile_json_data(purchase: nil, subscription: nil, imported_customer: nil, follower: nil)
+  def installment_mobile_json_data(purchase: nil, subscription: nil, imported_customer: nil, follower: nil,
+                                   preloaded_purchase_url_redirect: :not_preloaded,
+                                   preloaded_purchase_email_info: :not_preloaded)
     installment_url_redirect = if subscription.present?
       url_redirect(subscription) || generate_url_redirect_for_subscription(subscription)
     elsif purchase.present?
-      purchase_url_redirect(purchase) || generate_url_redirect_for_purchase(purchase)
+      if preloaded_purchase_url_redirect != :not_preloaded
+        preloaded_purchase_url_redirect || generate_url_redirect_for_purchase(purchase)
+      else
+        purchase_url_redirect(purchase) || generate_url_redirect_for_purchase(purchase)
+      end
     elsif imported_customer.present?
       imported_customer_url_redirect(imported_customer) || generate_url_redirect_for_imported_customer(imported_customer)
     elsif follower.present?
@@ -287,7 +293,11 @@ class Installment < ApplicationRecord
       installment_url_redirect.mobile_product_file_json_data(product_file)
     end
     released_at = if purchase.present?
-      action_at_for_purchase(purchase.original_purchase)
+      if preloaded_purchase_email_info != :not_preloaded
+        action_at_from_email_info(preloaded_purchase_email_info)
+      else
+        action_at_for_purchase(purchase.original_purchase)
+      end
     elsif subscription.present?
       action_at_for_purchase(subscription.original_purchase)
     end
@@ -705,6 +715,10 @@ class Installment < ApplicationRecord
 
   def action_at_for_purchases(purchase_ids)
     email_info = CreatorContactingCustomersEmailInfo.where(installment_id: id, purchase_id: purchase_ids).last
+    action_at_from_email_info(email_info)
+  end
+
+  def action_at_from_email_info(email_info)
     action_at = email_info.present? ? email_info.sent_at || email_info.delivered_at || email_info.opened_at : published_at
     action_at || Time.current
   end

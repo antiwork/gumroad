@@ -497,6 +497,126 @@ describe "PurchaseInstallments", :vcr do
         expect(new_purchase.update_json_data_for_mobile.map { |post| post[:external_id] }).to match_array [post_1.external_id, post_2.external_id]
       end
     end
+
+    context "Purchase.preload_product_updates_data!" do
+      def capture_queries
+        queries = []
+        callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].present? && !payload[:sql].start_with?("EXPLAIN", "SAVEPOINT", "RELEASE", "ROLLBACK", "BEGIN", "COMMIT") }
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+        queries
+      end
+
+      it "produces output byte-identical to the single-purchase path" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        purchase = create(:membership_purchase, link: product, subscription:)
+        subscription.reload
+
+        5.times do |i|
+          post = create(:installment, link: product, published_at: (i + 1).days.ago)
+          create(:product_file, installment: post, link: product)
+          create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
+        end
+
+        # Compare results using fresh instances so neither path's caching contaminates the other.
+        single_purchase = Purchase.find(purchase.id)
+        single_result = single_purchase.update_json_data_for_mobile
+
+        batch_purchase = Purchase.find(purchase.id)
+        Purchase.preload_product_updates_data!([batch_purchase])
+        batch_result = batch_purchase.update_json_data_for_mobile
+
+        expect(batch_result).to eq(single_result)
+      end
+
+      it "issues a bounded number of queries regardless of installment count" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        purchase = create(:membership_purchase, link: product, subscription:)
+        subscription.reload
+
+        5.times do |i|
+          post = create(:installment, link: product, published_at: (i + 1).days.ago)
+          create(:product_file, installment: post, link: product)
+          create(:url_redirect, installment: post, purchase:)
+          create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
+        end
+
+        # Reload to drop AR caches.
+        fresh = Purchase.find(purchase.id)
+
+        queries = capture_queries do
+          Purchase.preload_product_updates_data!([fresh])
+          fresh.update_json_data_for_mobile
+        end
+
+        # Per-installment queries are the smoking gun. With 5 installments, an unfixed
+        # N+1 would show 5+ per-row `installment_id = ?` (no IN) lookups in each table.
+        per_installment_url_redirect = queries.count { |q| q.include?("url_redirects") && q.include?("installment_id") && !q.include?("IN") }
+        per_installment_product_file = queries.count { |q| q.include?("product_files") && q.include?("installment_id") && !q.include?("IN") }
+        per_installment_email_info = queries.count { |q| q.include?("email_infos") && q.include?("installment_id") && !q.include?("IN") }
+
+        expect(per_installment_url_redirect).to eq(0)
+        expect(per_installment_product_file).to eq(0)
+        expect(per_installment_email_info).to eq(0)
+      end
+
+      it "matches the single-purchase path for subscription renewals (email_info keyed on original_purchase.id)" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        # Live original (not archived) — this is what `subscription.original_purchase` resolves to,
+        # so the renewal lookup actually exercises the `original_purchase&.id` key in the batch path.
+        original = create(:membership_purchase, link: product, subscription:)
+        renewal = create(:recurring_membership_purchase, link: product, subscription:, email: original.email)
+        subscription.reload
+
+        post = create(:installment, link: product, published_at: 1.day.ago)
+        create(:product_file, installment: post, link: product)
+        # EmailInfo is keyed on the original purchase, not the renewal — the batch path must
+        # find it via original_purchase.id. A regression that keys on the renewal's own id
+        # would return no email_info for the renewal and diverge from the single-purchase path.
+        create(:creator_contacting_customers_email_info_sent, purchase: original, installment: post, sent_at: 1.hour.ago)
+
+        # Sanity-check the setup: the live-original lookup path is actually exercised.
+        expect(Purchase.find(renewal.id).subscription.original_purchase).to eq(original)
+        expect(Purchase.find(renewal.id).subscription.original_purchase.id).not_to eq(renewal.id)
+
+        single = Purchase.find(renewal.id).update_json_data_for_mobile
+
+        batch_target = Purchase.find(renewal.id)
+        Purchase.preload_product_updates_data!([batch_target])
+        batch = batch_target.update_json_data_for_mobile
+
+        expect(batch).to eq(single)
+        # The renewal must surface the post via the original's email_info — not an empty result.
+        expect(batch.map { |p| p[:external_id] }).to include(post.external_id)
+      end
+
+      it "picks the lowest-id UrlRedirect when duplicates exist for the same (purchase, installment)" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        purchase = create(:membership_purchase, link: product, subscription:)
+        subscription.reload
+
+        post = create(:installment, link: product, published_at: 1.day.ago)
+        create(:product_file, installment: post, link: product)
+        # email_info qualifies the post in product_installments lookup
+        create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: 1.hour.ago)
+
+        first_redirect = create(:url_redirect, installment: post, purchase:)
+        second_redirect = create(:url_redirect, installment: post, purchase:)
+        expect(first_redirect.id).to be < second_redirect.id
+
+        batch_target = Purchase.find(purchase.id)
+        Purchase.preload_product_updates_data!([batch_target])
+        batch = batch_target.update_json_data_for_mobile
+
+        single = Purchase.find(purchase.id).update_json_data_for_mobile
+
+        expect(batch).to eq(single)
+        expect(batch.first[:url_redirect_external_id]).to eq(first_redirect.external_id)
+      end
+    end
   end
 
   describe "#schedule_workflows" do
