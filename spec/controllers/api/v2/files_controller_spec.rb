@@ -191,6 +191,18 @@ describe Api::V2::FilesController do
         expect(response.parsed_body["error"]).to eq("each part must have scalar part_number and etag values")
       end
 
+      it "returns 400 when parts contains a string element" do
+        post action, params: params.merge(parts: ["not-a-hash"])
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to eq("each part must have scalar part_number and etag values")
+      end
+
+      it "returns 400 when parts contains a nested array element" do
+        post action, params: params.merge(parts: [[1, '"etag-abc"']])
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to eq("each part must have scalar part_number and etag values")
+      end
+
       it "returns 400 with the S3 error message when the upload_id no longer exists" do
         allow_any_instance_of(Aws::S3::Client).to receive(:complete_multipart_upload)
           .and_raise(Aws::S3::Errors::NoSuchUpload.new(nil, "The specified upload does not exist."))
