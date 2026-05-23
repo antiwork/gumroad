@@ -53,7 +53,7 @@ sync_watched_users:
   class: SyncWatchedUsersJob
   description: Refreshes revenue and unpaid balance snapshots for users in the risk watchlist
 large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
-  cron: "0 8 * * *" # UTC 08:00
+  cron: "0 10 * * *" # UTC 10:00 - Staggered 2h after PerformDailyInstantPayoutsWorker to avoid DB contention
   class: LargeSellersUpdateUserBalanceStatsCacheWorker
 update_large_sellers_sales_count: # Duration: <5min
   cron: "0 6 * * *" # UTC 06:00 - Run before balance stats cache update
