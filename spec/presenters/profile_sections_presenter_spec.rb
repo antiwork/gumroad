@@ -120,6 +120,16 @@ describe ProfileSectionsPresenter do
                                                                                               sections:
                                                                                             })
     end
+
+    it "returns nil props for featured product section when the product no longer exists" do
+      subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+
+      products.first.update!(deleted_at: Time.current)
+
+      result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+      featured_section = result[:sections].find { _1[:type] == "SellerProfileFeaturedProductSection" }
+      expect(featured_section[:props]).to be_nil
+    end
   end
 
   describe "sold-out product filtering" do

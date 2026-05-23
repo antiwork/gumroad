@@ -114,10 +114,11 @@ class ProfileSectionsPresenter
         end
       when "SellerProfileFeaturedProductSection"
         unless is_owner
+          featured_product = cached_props[:featured_product_id].present? ? seller.products.find_by_external_id(cached_props.delete(:featured_product_id)) : nil
           cached_props.merge!(
             {
-              props: cached_props[:featured_product_id].present? ?
-                       ProductPresenter.new(product: seller.products.find_by_external_id(cached_props.delete(:featured_product_id)), pundit_user:, request:).product_props(seller_custom_domain_url:) :
+              props: featured_product ?
+                       ProductPresenter.new(product: featured_product, pundit_user:, request:).product_props(seller_custom_domain_url:) :
                        nil,
             }
           )
