@@ -19,9 +19,24 @@ describe PageViewsController, type: :request do
     it "renders the public page for an alive seller with a published page" do
       get "/#{seller.username}/pages/#{page.slug}", headers: inertia_headers
       expect(response).to have_http_status(:ok)
-      props = JSON.parse(response.body)["props"]
+      body = JSON.parse(response.body)
+      expect(body["component"]).to eq("Pages/Show")
+      props = body["props"]
       expect(props["page"]["slug"]).to eq(page.slug)
+      expect(props["page"]["title"]).to eq(page.title)
+      expect(props["page"]["html_content"]).to include("Live page")
       expect(props["page"]["seller"]["username"]).to eq(seller.username)
+    end
+
+    it "ships the published_version html in the iframe payload" do
+      version.update!(html: "<section>Pinned version html</section>")
+      page.update!(html_content: "<section>Editor draft</section>")
+      page.publish!(version: version)
+
+      get "/#{seller.username}/pages/#{page.slug}", headers: inertia_headers
+      props = JSON.parse(response.body)["props"]
+      expect(props["page"]["html_content"]).to include("Pinned version html")
+      expect(props["page"]["html_content"]).not_to include("Editor draft")
     end
 
     it "returns 404 when the seller is suspended" do
