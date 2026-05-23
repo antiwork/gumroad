@@ -392,6 +392,84 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
+  test_minitest:
+    name: Test Minitest${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_minitest
+    runs-on: ubicloud-standard-2
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Start services and pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker pull --quiet $WEB_REPO:${{ needs.build.outputs.test_image_tag }} &
+            PULL_PID=$!
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis
+            COMPOSE_EXIT=$?
+            wait $PULL_PID
+            PULL_EXIT=$?
+            exit $((COMPOSE_EXIT + PULL_EXIT))
+        env:
+          COMPOSE_HTTP_TIMEOUT: "300"
+          WEB_REPO: gumroadteam/web
+      - name: Wait for services and prepare schema
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
+            NET=${{ env.COMPOSE_PROJECT_NAME }}_default
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 &
+            DB_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh redis 6379 &
+            REDIS_PID=$!
+            wait $DB_PID || exit 1
+            wait $REDIS_PID || exit 1
+            docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
+        env:
+          WEB_REPO: gumroadteam/web
+      - name: Run Minitest
+        timeout-minutes: 10
+        run: |
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RUBY_YJIT_ENABLE \
+            -e CI \
+            -e IN_DOCKER \
+            $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
+            /usr/local/bin/gosu app bundle exec rails test
+        env:
+          RUBY_YJIT_ENABLE: 1
+          CI: true
+          IN_DOCKER: true
+          WEB_REPO: gumroadteam/web
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
   test_slow:
     name: Test Slow ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
@@ -592,7 +670,7 @@ jobs:
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
-    needs: [test_fast, test_slow]
+    needs: [test_fast, test_slow, test_minitest]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build

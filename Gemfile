@@ -36,6 +36,8 @@ group :test do
   gem "capybara", "~> 3.38"
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
+  # Rails 7.1's test runner is not compatible with Minitest 6.x APIs.
+  gem "minitest", "~> 5.25"
   gem "rspec", "~> 3.12"
   gem "rspec-github", "~> 2.4.0", require: false
   gem "rspec-rails", "~> 6.0"
