@@ -121,14 +121,18 @@ describe ProfileSectionsPresenter do
                                                                                             })
     end
 
-    it "returns nil props for featured product section when the product no longer exists" do
-      subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+    it "clears featured_product_id from the section when the product is deleted via Link#delete!" do
+      featured_section = sections.find { _1.is_a?(SellerProfileFeaturedProductSection) }
+      expect(featured_section.featured_product_id).to eq(products.first.id)
 
-      products.first.update!(deleted_at: Time.current)
+      products.first.delete!
+
+      expect(featured_section.reload.featured_product_id).to be_nil
 
       result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
-      featured_section = result[:sections].find { _1[:type] == "SellerProfileFeaturedProductSection" }
-      expect(featured_section[:props]).to be_nil
+      featured_section_props = result[:sections].find { _1[:type] == "SellerProfileFeaturedProductSection" }
+      expect(featured_section_props[:props]).to be_nil
+      expect(featured_section_props[:featured_product_id]).to be_nil
     end
   end
 

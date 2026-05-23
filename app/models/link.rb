@@ -398,6 +398,7 @@ class Link < ApplicationRecord
 
   def delete!
     mark_deleted!
+    clear_featured_product_sections!
     custom_domain&.mark_deleted!
     alive_public_files.update_all(scheduled_for_deletion_at: 10.minutes.from_now)
     CancelSubscriptionsForProductWorker.perform_in(10.minutes, id) if subscriptions.active.present?
@@ -1329,6 +1330,17 @@ class Link < ApplicationRecord
     end
 
   private
+    # When a product is soft-deleted, clear any references to it from
+    # SellerProfileFeaturedProductSection.featured_product_id (a JSON column).
+    # Without this, the section's cached props would point at a missing product
+    # and crash the seller's profile page until the cache TTL elapsed.
+    def clear_featured_product_sections!
+      SellerProfileFeaturedProductSection
+        .where(seller_id: user_id)
+        .where(%q{CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?}, id)
+        .find_each { |section| section.update!(json_data: section.json_data.except("featured_product_id")) }
+    end
+
     def compute_ppp_prices(price_cents, factors, currency)
       factors.keys.index_with do |country_code|
         price_cents == 0 ? 0 : [factors[country_code] * price_cents, currency["min_price"]].max.round
