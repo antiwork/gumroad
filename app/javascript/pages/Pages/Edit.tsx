@@ -75,6 +75,20 @@ type PublishResponse = {
   error?: string;
 };
 
+// `request()` resolves (not rejects) on 4xx. Without this check, a 422 from
+// moderation/validation runs the success branch and the user never sees the
+// error. Reads `error`/`error_message` because the Pages API mixes both keys
+// across endpoints — `/publish` returns `error`, `/update` returns
+// `error_message`.
+const errorFromResponse = async (resp: Response, fallback: string): Promise<string> => {
+  try {
+    const body: { error?: string; error_message?: string } = await resp.json();
+    return body.error ?? body.error_message ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 const POLL_INTERVAL_MS = 3000;
 
 const CoinShower = () => {
@@ -228,12 +242,17 @@ export default function PageEdit() {
     setVersions((prev) => [{ id: optimisticId, prompt: userPrompt, created_at: new Date().toISOString() }, ...prev]);
 
     try {
-      await request({
+      const resp = await request({
         method: "POST",
         url: Routes.generate_page_path(page.slug),
         accept: "json",
         data: { prompt: userPrompt },
       });
+      if (!resp.ok) {
+        showAlert(await errorFromResponse(resp, "Failed to generate. Try again."), "error");
+        setVersions((prev) => prev.filter((v) => v.id !== optimisticId));
+        setGenerating(false);
+      }
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message || "Failed to generate. Try again.", "error");
@@ -245,12 +264,16 @@ export default function PageEdit() {
   const saveTitle = async (next: string) => {
     if (next === page.title) return;
     try {
-      await request({
+      const resp = await request({
         method: "PUT",
         url: Routes.update_page_path(page.slug),
         accept: "json",
         data: { page: { title: next } },
       });
+      if (!resp.ok) {
+        showAlert(await errorFromResponse(resp, "Could not update title."), "error");
+        return;
+      }
       setPage((prev) => ({ ...prev, title: next }));
     } catch (e) {
       assertResponseError(e);
@@ -267,6 +290,10 @@ export default function PageEdit() {
         accept: "json",
         data: versionId ? { version_id: versionId } : {},
       });
+      if (!resp.ok) {
+        showAlert(await errorFromResponse(resp, "Failed to publish."), "error");
+        return;
+      }
       const body: PublishResponse = await resp.json();
       if (!body.success) {
         showAlert(body.error || "Failed to publish.", "error");
@@ -285,11 +312,15 @@ export default function PageEdit() {
   const unpublish = async () => {
     setPublishing(true);
     try {
-      await request({
+      const resp = await request({
         method: "POST",
         url: Routes.unpublish_page_path(page.slug),
         accept: "json",
       });
+      if (!resp.ok) {
+        showAlert(await errorFromResponse(resp, "Could not unpublish."), "error");
+        return;
+      }
       setPage((prev) => ({ ...prev, published: false }));
       showAlert("Unpublished!", "success");
     } catch (e) {
@@ -302,12 +333,16 @@ export default function PageEdit() {
 
   const toggleAutoPublish = async (next: boolean) => {
     try {
-      await request({
+      const resp = await request({
         method: "PUT",
         url: Routes.update_page_path(page.slug),
         accept: "json",
         data: { page: { auto_publish: next } },
       });
+      if (!resp.ok) {
+        showAlert(await errorFromResponse(resp, "Could not update auto-publish."), "error");
+        return;
+      }
       setPage((prev) => ({ ...prev, auto_publish: next }));
     } catch (e) {
       assertResponseError(e);
