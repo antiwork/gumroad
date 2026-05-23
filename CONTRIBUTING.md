@@ -51,11 +51,11 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 - Use factories for test data instead of creating objects directly
 - Tests must fail when the fix is reverted. If the test passes without the application code change, it is invalid.
 - Scope VCR cassettes to specific test files. Sharing cassettes across tests causes collisions where tests read incorrect cached responses.
-- When your code change causes a spec to follow a new HTTP code path (e.g., removing a guard clause, adding a new API call), run the spec locally to regenerate VCR cassettes. Do not stub external APIs to work around missing cassettes. See [VCR Cassettes](#vcr-cassettes) in docs/testing.md.
-- Don't start Rspec test names with "should". See https://www.betterspecs.org/#should
+- Tests live under `test/` and use Minitest. Use `bin/rails test` for the full suite, `bin/rails test test/models test/services test/sidekiq` for common unit coverage, `bin/rails test:integration` for controller/integration/routing coverage, and `bin/rails test:system` for Playwright system coverage.
+- When your code change causes a test to follow a new HTTP code path (e.g., removing a guard clause, adding a new API call), run the test locally to regenerate VCR cassettes. Do not stub external APIs to work around missing cassettes. See [VCR Cassettes](#vcr-cassettes) in docs/testing.md.
 - Use `@example.com` for emails in tests
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
-- Avoid `to_not have_enqueued_sidekiq_job` or `not_to have_enqueued_sidekiq_job` because they're prone to false positives. Make assertions on `SidekiqWorkerName.jobs.size` instead.
+- Avoid negative queued-job matchers because they're prone to false positives. Make assertions on `SidekiqWorkerName.jobs.size` instead.
 
 ### Branch hygiene
 

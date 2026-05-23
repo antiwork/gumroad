@@ -1,4 +1,34 @@
 #!/usr/bin/env ruby
+
+if %w[test:integration test:system].include?(ARGV.first) && ARGV.include?("--shard")
+  require "yaml"
+
+  suite = ARGV.first.delete_prefix("test:")
+  shard = ARGV[ARGV.index("--shard") + 1]
+  shard_index, shard_total = shard.to_s.split("/", 2).map(&:to_i)
+  abort "Invalid --shard value: #{shard}" unless shard_index.positive? && shard_total.positive?
+
+  root = File.expand_path("..", __dir__)
+  manifest = YAML.load_file(File.join(root, "test/.shards.yml"))
+  configured_total = manifest.fetch(suite).fetch("total")
+  abort "Shard total mismatch for #{suite}: expected #{configured_total}, got #{shard_total}" unless configured_total == shard_total
+
+  files = manifest.fetch(suite).fetch("files").select { |_file, index| index == shard_index }.keys
+  abort "No test files found for #{suite} shard #{shard}" if files.empty?
+
+  ENV["DISABLE_SPRING"] = "1"
+  exec(
+    Gem.bin_path("bundler", "bundle"),
+    "exec",
+    "ruby",
+    "-Itest",
+    "-Itest/system",
+    "-e",
+    "ARGV.each { |file| require File.expand_path(file) }",
+    *files,
+  )
+end
+
 load File.expand_path("spring", __dir__)
 
 APP_PATH = File.expand_path('../config/application', __dir__)

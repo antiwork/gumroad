@@ -1,0 +1,24 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class CacheUnreviewedUsersDataWorkerTest < ActiveSupport::TestCase
+  self.described_class = CacheUnreviewedUsersDataWorker
+
+
+
+  context_ CacheUnreviewedUsersDataWorker do
+  context_ "#perform" do
+  test "caches unreviewed users data via the service" do
+        user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
+        create(:balance, user:, amount_cents: 15_000)
+
+        described_class.new.perform
+
+        cached_data = Admin::UnreviewedUsersService.cached_users_data
+        expect(cached_data[:users].size).to eq(1)
+        expect(cached_data[:users].first[:external_id]).to eq(user.external_id)
+      end
+    end
+  end
+end

@@ -1,0 +1,92 @@
+# frozen_string_literal: true
+
+require "test_helper"
+require "shared_examples/authorize_called"
+
+class AssetPreviewsControllerTest < ActionController::TestCase
+  self.described_class = AssetPreviewsController
+  tests AssetPreviewsController
+
+
+
+  context_ AssetPreviewsController do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:s3_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.png" }
+
+    include_context "with user signed in as admin for seller"
+
+  context_ "POST create" do
+      it_behaves_like "authorize called for action", :post, :create do
+        let(:record) { AssetPreview }
+        let(:request_params) { { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json } }
+      end
+
+  test "fails if not logged in" do
+        sign_out(user_with_role_for_seller)
+        expect do
+          expect do
+            post(:create, params: { link_id: product.id, asset_preview: { url: s3_url } })
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+        end.not_to change { AssetPreview.count }
+      end
+
+  test "adds a preview if one already exists" do
+        allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)
+        product = create(:product, user: seller, preview: fixture_file_upload("kFDzu.png", "image/png"))
+        expect do
+          post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json })
+        end.to change { product.asset_previews.alive.count }.by(1)
+      end
+
+  test "returns an error for a URL without a host" do
+        post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: "https:///path" }, format: :json })
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+
+  test "returns a graceful error when the URL hostname cannot be resolved", skip_ssrf_stub: true do
+        allow(SsrfFilter).to receive(:get).and_raise(SsrfFilter::UnresolvedHostname, "Could not resolve hostname")
+        post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: "https://unresolvable-host.example" }, format: :json })
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error"]).to eq("Could not process your preview, please try again.")
+      end
+
+  test "doesn't add a preview if there are too many previews" do
+        stub_const("Link::MAX_PREVIEW_COUNT", 1)
+        allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+        create(:asset_preview, link: product)
+        expect do
+          post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json })
+        end.not_to change { AssetPreview.count }
+      end
+    end
+
+  context_ "DELETE destroy" do
+      let!(:asset_preview) { create(:asset_preview, link: product) }
+
+      it_behaves_like "authorize called for action", :post, :destroy do
+        let(:record) { asset_preview }
+        let(:request_params) { { link_id: product.unique_permalink, id: product.main_preview.guid } }
+      end
+
+  test "fails if not logged in" do
+        sign_out(user_with_role_for_seller)
+        expect do
+          expect do
+            delete(:destroy, params: { link_id: product.unique_permalink, id: product.main_preview.guid })
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+        end.not_to change { product.asset_previews.alive.count }
+      end
+
+  test "removes a preview" do
+        expect do
+          delete(:destroy, params: { link_id: product.unique_permalink, id: product.main_preview.guid })
+        end.to change { product.asset_previews.alive.count }.from(1).to(0)
+        expect(product.main_preview).to be(nil)
+      end
+    end
+  end
+end

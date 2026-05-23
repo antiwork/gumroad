@@ -254,17 +254,14 @@ jobs:
               || logger "Failed to push test-cache (non-fatal)"
           fi
 
-  test_fast:
-    name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+  test_unit:
+    name: Test Unit${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
-      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_unit
+      WEB_REPO: gumroadteam/web
     runs-on: ubicloud-standard-4
     needs: build
-    strategy:
-      fail-fast: true
-      matrix:
-        ci_node_total: [18]
-        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -296,141 +293,7 @@ jobs:
             exit $((COMPOSE_EXIT + PULL_EXIT))
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
-          WEB_REPO: gumroadteam/web
       - name: Wait for services and prepare test database
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
-            NET=${{ env.COMPOSE_PROJECT_NAME }}_default
-            # db:prepare only needs db_test; ES/minio waits run in parallel.
-            (
-              docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
-                && docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
-            ) &
-            DB_PID=$!
-            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
-            ES_PID=$!
-            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
-            MINIO_PID=$!
-            wait $DB_PID || exit 1
-            wait $ES_PID || exit 1
-            wait $MINIO_PID || exit 1
-        env:
-          WEB_REPO: gumroadteam/web
-
-      - name: Run tests
-        timeout-minutes: 15
-        run: |
-          mkdir -p ./test-logs
-          chmod 777 ./test-logs
-          set +e
-          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            -v "$(pwd)/test-logs:/app/log" \
-            -e RUBY_YJIT_ENABLE \
-            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
-            -e KNAPSACK_PRO_CI_NODE_TOTAL \
-            -e KNAPSACK_PRO_CI_NODE_INDEX \
-            -e KNAPSACK_PRO_LOG_LEVEL \
-            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
-            -e KNAPSACK_PRO_TEST_FILE_PATTERN \
-            -e KNAPSACK_PRO_TEST_FILE_EXCLUDE_PATTERN \
-            -e KNAPSACK_PRO_COMMIT_HASH \
-            -e KNAPSACK_PRO_BRANCH \
-            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
-            -e KNAPSACK_PRO_PROJECT_DIR \
-            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
-            -e CI \
-            -e IN_DOCKER \
-            $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
-            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
-          TEST_EXIT=$?
-          if [ $TEST_EXIT -ne 0 ]; then
-            echo ""
-            echo "============================================"
-            echo "TESTS FAILED (exit code $TEST_EXIT)"
-            echo "Waiting 60s for other containers to report failures..."
-            echo "============================================"
-            sleep 60
-            exit $TEST_EXIT
-          fi
-        env:
-          RUBY_YJIT_ENABLE: 1
-          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
-          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
-          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
-          KNAPSACK_PRO_LOG_LEVEL: info
-          KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
-          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/**/*_spec.rb"
-          KNAPSACK_PRO_TEST_FILE_EXCLUDE_PATTERN: "spec/requests/**/*_spec.rb"
-          KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
-          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
-          KNAPSACK_PRO_PROJECT_DIR: /app
-          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
-          CI: true
-          IN_DOCKER: true
-          WEB_REPO: gumroadteam/web
-      - name: Archive flaky specs log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flaky-specs-fast-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
-          path: ./test-logs/flaky_specs.log
-          retention-days: 14
-          if-no-files-found: ignore
-      - name: Clean up
-        if: always()
-        run: |
-          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
-          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
-          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
-          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
-
-  test_minitest:
-    name: Test Minitest${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    env:
-      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_minitest
-    runs-on: ubicloud-standard-2
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Login to Docker Hub
-        uses: nick-fields/retry@v3
-        with:
-          timeout_seconds: 120
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Start services and pull test image
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 5
-          command: |
-            docker pull --quiet $WEB_REPO:${{ needs.build.outputs.test_image_tag }} &
-            PULL_PID=$!
-            docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis
-            COMPOSE_EXIT=$?
-            wait $PULL_PID
-            PULL_EXIT=$?
-            exit $((COMPOSE_EXIT + PULL_EXIT))
-        env:
-          COMPOSE_HTTP_TIMEOUT: "300"
-          WEB_REPO: gumroadteam/web
-      - name: Wait for services and prepare schema
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 5
@@ -443,25 +306,67 @@ jobs:
             DB_PID=$!
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh redis 6379 &
             REDIS_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh mongo 27017 &
+            MONGO_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
+            ES_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
+            MINIO_PID=$!
             wait $DB_PID || exit 1
             wait $REDIS_PID || exit 1
+            wait $MONGO_PID || exit 1
+            wait $ES_PID || exit 1
+            wait $MINIO_PID || exit 1
             docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
-        env:
-          WEB_REPO: gumroadteam/web
-      - name: Run Minitest
-        timeout-minutes: 10
+      - name: Run unit tests
+        timeout-minutes: 35
         run: |
+          mkdir -p ./test-logs
+          chmod 777 ./test-logs
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
             -e CI \
             -e IN_DOCKER \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
-            /usr/local/bin/gosu app bundle exec rails test
+            /usr/local/bin/gosu app bundle exec rails test \
+              test/business \
+              test/channels \
+              test/config \
+              test/helpers \
+              test/jobs \
+              test/lib \
+              test/mailers \
+              test/models \
+              test/modules \
+              test/observers \
+              test/policies \
+              test/presenters \
+              test/services \
+              test/shared_examples \
+              test/sidekiq \
+              test/validators \
+              test/factory_bot_linting_test.rb
         env:
           RUBY_YJIT_ENABLE: 1
           CI: true
           IN_DOCKER: true
-          WEB_REPO: gumroadteam/web
+      - name: Archive test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-logs-attempt-${{ github.run_attempt }}
+          path: ./test-logs/test.log
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive flaky specs log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-specs-unit-attempt-${{ github.run_attempt }}
+          path: ./test-logs/flaky_specs.log
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Clean up
         if: always()
         run: |
@@ -470,70 +375,18 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
-  test_slow:
-    name: Test Slow ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+  test_integration:
+    name: Test Integration ${{ matrix.shard }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
-      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_integration_${{ matrix.shard }}
       WEB_REPO: gumroadteam/web
     runs-on: ubicloud-standard-4
     needs: build
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [50]
-        ci_node_index:
-          [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            25,
-            26,
-            27,
-            28,
-            29,
-            30,
-            31,
-            32,
-            33,
-            34,
-            35,
-            36,
-            37,
-            38,
-            39,
-            40,
-            41,
-            42,
-            43,
-            44,
-            45,
-            46,
-            47,
-            48,
-            49,
-          ]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -565,7 +418,6 @@ jobs:
             exit $((COMPOSE_EXIT + PULL_EXIT))
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
-          WEB_REPO: gumroadteam/web
       - name: Wait for services and prepare test database
         uses: nick-fields/retry@v3
         with:
@@ -575,79 +427,43 @@ jobs:
           command: |
             IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
             NET=${{ env.COMPOSE_PROJECT_NAME }}_default
-            # db:prepare only needs db_test; ES/minio waits run in parallel.
-            (
-              docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
-                && docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
-            ) &
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 &
             DB_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh redis 6379 &
+            REDIS_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh mongo 27017 &
+            MONGO_PID=$!
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
             ES_PID=$!
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
             MINIO_PID=$!
             wait $DB_PID || exit 1
+            wait $REDIS_PID || exit 1
+            wait $MONGO_PID || exit 1
             wait $ES_PID || exit 1
             wait $MINIO_PID || exit 1
-        env:
-          WEB_REPO: gumroadteam/web
-
-      - name: Run tests
-        timeout-minutes: 25
+            docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
+      - name: Run integration tests
+        timeout-minutes: 30
         run: |
-          mkdir -p ./capybara-artifacts
-          chmod 777 ./capybara-artifacts
           mkdir -p ./test-logs
           chmod 777 ./test-logs
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
-            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
-            -e KNAPSACK_PRO_CI_NODE_TOTAL \
-            -e KNAPSACK_PRO_CI_NODE_INDEX \
-            -e KNAPSACK_PRO_LOG_LEVEL \
-            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
-            -e KNAPSACK_PRO_TEST_FILE_PATTERN \
-            -e KNAPSACK_PRO_COMMIT_HASH \
-            -e KNAPSACK_PRO_BRANCH \
-            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
-            -e KNAPSACK_PRO_PROJECT_DIR \
-            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
             -e IN_DOCKER \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
-            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+            /usr/local/bin/gosu app bundle exec rails test:integration -- --shard ${{ matrix.shard }}/4
         env:
           RUBY_YJIT_ENABLE: 1
-          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
-          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
-          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
-          KNAPSACK_PRO_LOG_LEVEL: info
-          KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
-          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*_spec.rb"
-          KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
-          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
-          KNAPSACK_PRO_PROJECT_DIR: /app
-          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
           IN_DOCKER: true
-          WEB_REPO: gumroadteam/web
-      - name: Archive capybara artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: capybara-screenshots-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
-          path: ./capybara-artifacts/*.png
-          retention-days: 7
-          if-no-files-found: ignore
       - name: Archive test logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-logs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          name: integration-test-logs-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: ./test-logs/test.log
           retention-days: 7
           if-no-files-found: ignore
@@ -655,7 +471,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flaky-specs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          name: flaky-specs-integration-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: ./test-logs/flaky_specs.log
           retention-days: 14
           if-no-files-found: ignore
@@ -667,10 +483,117 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
+  test_system:
+    name: Test System ${{ matrix.shard }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    runs-on: ubuntu-22.04
+    needs: build
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      mysql:
+        image: mysql:8.0.32
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: gumroad_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+      mongo:
+        image: mongo:4.0.19
+        ports:
+          - 27017:27017
+      elasticsearch:
+        image: elasticsearch:7.17.18
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+        ports:
+          - 9200:9200
+      memcached:
+        image: memcached:latest
+        ports:
+          - 11211:11211
+    env:
+      RAILS_ENV: test
+      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Prepare database
+        run: bundle exec rake db:prepare
+      - name: Generate JS routes and JSON schemas
+        run: bundle exec rake js:export
+      - name: Install Playwright Chromium
+        timeout-minutes: 5
+        run: npx --yes playwright@1.60.0 install --with-deps chromium
+      - name: Start Vite dev server
+        run: |
+          mkdir -p log tmp
+          nohup stdbuf -oL -eL bin/vite dev --mode test --host 127.0.0.1 --clearScreen false \
+            > log/vite-dev.log 2>&1 &
+          echo $! > tmp/vite-dev.pid
+          for i in $(seq 1 180); do
+            if curl -sf http://127.0.0.1:3037/vite-test/@vite/client > /dev/null; then
+              echo "vite dev ready after ${i}s"
+              cat log/vite-dev.log
+              exit 0
+            fi
+            if ! kill -0 "$(cat tmp/vite-dev.pid)" 2>/dev/null; then
+              cat log/vite-dev.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat log/vite-dev.log
+          exit 1
+        env:
+          VITE_RUBY_HOST: 127.0.0.1
+          VITE_RUBY_TEST_DEV_SERVER: "true"
+      - name: Run system tests
+        timeout-minutes: 12
+        run: bin/rails test:system -- --shard ${{ matrix.shard }}/4
+        env:
+          VITE_RUBY_HOST: 127.0.0.1
+          VITE_RUBY_TEST_DEV_SERVER: "true"
+      - name: Archive test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-test-logs-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: log/
+          retention-days: 7
+          if-no-files-found: ignore
+
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
-    needs: [test_fast, test_slow, test_minitest]
+    needs: [test_unit, test_integration, test_system]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build

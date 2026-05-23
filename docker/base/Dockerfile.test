@@ -63,7 +63,6 @@ ARG LANG=C.UTF-8
 # Make app a sudoer
 RUN echo 'app ALL=NOPASSWD: ALL' >> /etc/sudoers.d/50-app
 
-# create scratch space for rspec test results
+# create scratch space for test results
 RUN mkdir -p /tmp/test-results/ \
   && chmod -R 2777 /tmp/test-results/
-

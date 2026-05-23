@@ -1,0 +1,49 @@
+# frozen_string_literal: true
+
+require "test_helper"
+require "shared_examples/authorize_called"
+
+class WishlistsFollowingControllerTest < ActionController::TestCase
+  self.described_class = Wishlists::FollowingController
+  tests Wishlists::FollowingController
+
+
+
+  context_ Wishlists::FollowingController, type: :controller, inertia: true do
+    let(:user) { create(:user) }
+
+  context_ "GET index" do
+      before do
+        sign_in(user)
+      end
+
+      it_behaves_like "authorize called for action", :get, :index do
+        let(:record) { Wishlist }
+      end
+
+  test "renders Wishlists/Following/Index with Inertia and wishlists the seller is currently following" do
+        create(:wishlist, user: user)
+
+        following_wishlist = create(:wishlist)
+        create(:wishlist_follower, follower_user: user, wishlist: following_wishlist)
+
+        deleted_follower = create(:wishlist)
+        create(:wishlist_follower, follower_user: user, wishlist: deleted_follower, deleted_at: Time.current)
+
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Wishlists/Following/Index")
+        expect(inertia.props[:wishlists]).to contain_exactly(a_hash_including(id: following_wishlist.external_id))
+      end
+
+  context_ "when the feature flag is off" do
+        before { Feature.deactivate(:follow_wishlists) }
+
+  test "returns 404" do
+          expect { get :index }.to raise_error(ActionController::RoutingError, "Not Found")
+        end
+      end
+    end
+  end
+end

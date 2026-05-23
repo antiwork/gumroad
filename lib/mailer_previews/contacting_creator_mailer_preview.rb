@@ -151,7 +151,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     user = User.last
     if user&.financial_annual_report_url_for(year: 2022).nil?
       user&.annual_reports&.attach(
-        io: Rack::Test::UploadedFile.new("#{Rails.root}/spec/support/fixtures/financial-annual-summary-2022.csv"),
+        io: Rack::Test::UploadedFile.new("#{Rails.root}/test/support/fixtures/financial-annual-summary-2022.csv"),
         filename: "Financial summary for 2022.csv",
         content_type: "text/csv",
         metadata: { year: 2022 }

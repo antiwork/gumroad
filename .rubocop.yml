@@ -28,7 +28,6 @@ Layout/EmptyLineBetweenDefs:
 
 plugins:
   - rubocop-rails
-  - rubocop-rspec
   - rubocop-performance
   - rubocop-rake
 

@@ -90,10 +90,10 @@ module Gumroad
     end
 
     config.generators do |g|
-      g.helper_specs false
+      g.helper false
       g.stylesheets false
-      g.test_framework :rspec, fixture: true, views: false
-      g.fixture_replacement :factory_bot, dir: "spec/support/factories"
+      g.test_framework :test_unit, fixture: true
+      g.fixture_replacement :factory_bot, dir: "test/factories"
       g.orm :active_record
     end
 

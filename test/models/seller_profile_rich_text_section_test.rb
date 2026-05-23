@@ -1,0 +1,32 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class SellerProfileRichTextSectionTest < ActiveSupport::TestCase
+  self.described_class = SellerProfileRichTextSection
+
+
+
+  context_ SellerProfileRichTextSection do
+  context_ "validations" do
+  test "validates json_data with the correct schema" do
+        section = build(:seller_profile_rich_text_section)
+        section.json_data["garbage"] = "should not be here"
+        schema = JSON.parse(File.read(Rails.root.join("lib", "json_schemas", "seller_profile_rich_text_section.json").to_s))
+        expect(JSON::Validator).to receive(:new).with(schema, insert_defaults: true, record_errors: true).and_wrap_original do |original, *args|
+          validator = original.call(*args)
+          expect(validator).to receive(:validate).with(section.json_data).and_call_original
+          validator
+        end
+        section.validate
+        expect(section.errors.full_messages.to_sentence).to eq("The property '#/' contains additional properties [\"garbage\"] outside of the schema when none are allowed")
+      end
+    end
+
+  test "limits the size of the text object" do
+      section = build(:seller_profile_rich_text_section, text: { text: "a" * 500000 })
+      expect(section).not_to be_valid
+      expect(section.errors.full_messages.to_sentence).to eq "Text is too large"
+    end
+  end
+end

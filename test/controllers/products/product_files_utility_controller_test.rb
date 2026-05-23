@@ -1,0 +1,213 @@
+# frozen_string_literal: true
+
+require "test_helper"
+require "shared_examples/authorize_called"
+
+class ProductFilesUtilityControllerTest < ActionController::TestCase
+  self.described_class = ProductFilesUtilityController
+  self.rspec_metadata = { vcr: true }
+  tests ProductFilesUtilityController
+
+
+
+  context_ ProductFilesUtilityController, :vcr do
+  context_ "GET external_link_title", :skip_ssrf_stub do
+      before do
+        @user = create(:user)
+        sign_in @user
+      end
+
+  test "extracts title if valid url is passed" do
+        post :external_link_title, params: { url: "https://en.wikipedia.org" }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["title"]).to eq("Wikipedia, the free encyclopedia")
+      end
+
+  test "falls back to 'Untitled' if title is blank" do
+        post :external_link_title, params: { url: "https://drive.protonmail.com/urls/FJT6WRE0S0#SD4fDZbd1Bxy" }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["title"]).to eq("Untitled")
+      end
+
+  test "fails if invalid url is passed" do
+        post :external_link_title, params: { url: "invalid url" }
+
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+
+  test "fails if the url is a local IP address" do
+        post :external_link_title, params: { url: "http://127.0.0.1" }
+
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
+
+  context_ "GET download_product_files" do
+      let(:seller) { create(:named_seller) }
+      let(:product) { create(:product, user: seller) }
+
+      include_context "with user signed in as admin for seller"
+
+  test "fails if user is not logged in" do
+        sign_out(seller)
+        get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: ["123"] }
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it_behaves_like "authorize called for action", :get, :download_product_files do
+        let(:record) { product }
+        let(:policy_method) { :edit? }
+        let(:request_params) { { product_id: product.external_id, product_file_ids: ["123"] } }
+      end
+
+  test "returns failure response if the product is not found" do
+        expect { get :download_product_files, format: :json, params: { product_id: "123", product_file_ids: ["123"] } }.to raise_error(ActionController::RoutingError)
+      end
+
+  test "returns failure response if the requested product files are not found" do
+        expect { get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [] } }.to raise_error(ActionController::RoutingError)
+        expect { get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: ["123", "456"] } }.to raise_error(ActionController::RoutingError)
+      end
+
+  test "returns the file download info for all requested files" do
+        file1 = create(:readable_document, link: product, display_name: "file1")
+        file2 = create(:streamable_video, link: product, display_name: "file2")
+
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file1).and_return("https://example.com/file1.pdf")
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file2).and_return("https://example.com/file2.pdf")
+        get :download_product_files, format: :json, params: { product_file_ids: [file1.external_id, file2.external_id], product_id: product.external_id }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["files"]).to eq(product.product_files.map { { "url" => "https://example.com/#{_1.display_name}.pdf", "filename" => _1.s3_filename } })
+      end
+
+  test "redirects to the first product file if the format is HTML" do
+        file = create(:product_file, link: product)
+        expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file.srt")
+        get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
+
+        expect(response).to redirect_to("https://example.com/file.srt")
+      end
+
+  context_ "when the S3 file is missing" do
+        let!(:file) { create(:product_file, link: product) }
+
+        before do
+          allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file)
+            .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+        end
+
+  test "returns a not_found JSON response for JSON requests" do
+          expect(ErrorNotifier).to receive(:notify).with(
+            instance_of(Aws::S3::Errors::NotFound),
+            context: { product_id: product.id, product_file_ids: [file.external_id] }
+          )
+
+          get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
+
+          expect(response).to have_http_status(:not_found)
+          expect(response.parsed_body["error"]).to eq("This file is no longer available. Please re-upload it.")
+        end
+
+  test "redirects to the product edit page with a warning flash for HTML requests" do
+          expect(ErrorNotifier).to receive(:notify).with(
+            instance_of(Aws::S3::Errors::NotFound),
+            context: { product_id: product.id, product_file_ids: [file.external_id] }
+          )
+
+          get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
+
+          expect(response).to redirect_to(edit_link_url(product.unique_permalink))
+          expect(flash[:warning]).to eq("This file is no longer available. Please re-upload it.")
+        end
+      end
+    end
+
+  context_ "GET download_folder_archive" do
+      let(:seller) { create(:named_seller) }
+      let(:product) { create(:product, user: seller) }
+      let(:file) { create(:product_file, link: product, display_name: "File 1") }
+      let(:pdf_file) { create(:readable_document, link: product) }
+      let(:video_file) { create(:streamable_video, link: product) }
+
+      include_context "with user signed in as admin for seller"
+
+      before do
+        @archive = product.product_files_archives.new(folder_id: SecureRandom.uuid)
+        @archive.product_files = product.product_files
+        @archive.save!
+        @archive.mark_in_progress!
+        @archive.mark_ready!
+      end
+
+  test "fails if user is not logged in" do
+        sign_out(seller)
+        get :download_folder_archive, format: :json, params: { product_id: product.external_id, folder_id: "123" }
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it_behaves_like "authorize called for action", :get, :download_folder_archive do
+        let(:record) { product }
+        let(:policy_method) { :edit? }
+        let(:request_params) { { product_id: product.external_id, folder_id: "123" } }
+      end
+
+  test "returns failure response if the product is not found" do
+        expect { get :download_folder_archive, format: :json, params: { product_id: "123", folder_id: "123" } }.to raise_error(ActionController::RoutingError)
+      end
+
+  test "returns nil if the archive is not found" do
+        get :download_folder_archive, format: :json, params: { product_id: product.external_id, folder_id: "123" }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["url"]).to be_nil
+      end
+
+  test "returns the download URL if the archive is ready" do
+        expect_any_instance_of(SignedUrlHelper).to receive(:download_folder_archive_url).with(@archive.folder_id, { variant_id: nil, product_id: product.external_id }).and_return("https://example.com/zip-archive.zip")
+        get :download_folder_archive, format: :json, params: { product_id: product.external_id, folder_id: @archive.folder_id }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["url"]).to eq("https://example.com/zip-archive.zip")
+      end
+
+  test "redirects to the download URL if the archive is ready and the format is HTML" do
+        expect_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename).with(@archive.s3_key, @archive.s3_filename).and_return("https://example.com/zip-archive.zip")
+        get :download_folder_archive, format: :html, params: { product_id: product.external_id, folder_id: @archive.folder_id }
+
+        expect(response).to redirect_to("https://example.com/zip-archive.zip")
+      end
+
+  context_ "with variants" do
+        before do
+          category = create(:variant_category, link: product, title: "Versions")
+          @variant = create(:variant, variant_category: category, name: "Version 1")
+          @variant.product_files = product.product_files
+
+          @variant_archive = @variant.product_files_archives.new(folder_id: SecureRandom.uuid)
+          @variant_archive.product_files = @variant.product_files
+          @variant_archive.save!
+          @variant_archive.mark_in_progress!
+          @variant_archive.mark_ready!
+        end
+
+  test "returns the download URL if the variant archive is ready" do
+          expect_any_instance_of(SignedUrlHelper).to receive(:download_folder_archive_url).with(@variant_archive.folder_id, { variant_id: @variant.external_id, product_id: product.external_id }).and_return("https://example.com/zip-archive.zip")
+          get :download_folder_archive, format: :json, params: { product_id: product.external_id, variant_id: @variant.external_id, folder_id: @variant_archive.folder_id }
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body["url"]).to eq("https://example.com/zip-archive.zip")
+        end
+
+  test "redirects to the download URL if the variant archive is ready and the format is HTML" do
+          expect_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename).with(@variant_archive.s3_key, @variant_archive.s3_filename).and_return("https://example.com/zip-archive.zip")
+          get :download_folder_archive, format: :html, params: { product_id: product.external_id, variant_id: @variant.external_id, folder_id: @variant_archive.folder_id }
+
+          expect(response).to redirect_to("https://example.com/zip-archive.zip")
+        end
+      end
+    end
+  end
+end

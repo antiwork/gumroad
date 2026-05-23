@@ -90,7 +90,7 @@ services:
       createbuckets:
         condition: service_completed_successfully
     volumes:
-      - ../spec/support/fixtures:/fixtures:ro
+      - ../test/support/fixtures:/fixtures:ro
       - ./fixture-files-private.txt:/fixture-files-private.txt:ro
       - ./fixture-files-public.txt:/fixture-files-public.txt:ro
     entrypoint: >

@@ -1,0 +1,318 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class SecureExternalIdTest < ActiveSupport::TestCase
+  self.described_class = SecureExternalId
+
+
+
+  context_ SecureExternalId do
+    let(:test_class) do
+      Class.new do
+        include SecureExternalId
+
+        def self.name
+          "TestClass"
+        end
+
+        def self.find_by(conditions)
+          new if conditions[:id] == 123
+        end
+
+        def id
+          123
+        end
+      end
+    end
+
+    let(:test_instance) { test_class.new }
+
+    before do
+      allow(GlobalConfig).to receive(:dig)
+        .with(:secure_external_id, default: nil)
+        .and_return({
+                      primary_key_version: "1",
+                      keys: { "1" => "a" * 32 }
+                    })
+    end
+
+  context_ "#secure_external_id" do
+  test "generates an encrypted token" do
+        token = test_instance.secure_external_id(scope: "test")
+        expect(token).to be_a(String)
+        expect(token.length).to be >= 50
+      end
+    end
+
+  context_ ".find_by_secure_external_id" do
+  test "finds record with valid token" do
+        token = test_instance.secure_external_id(scope: "test")
+        expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+      end
+
+  test "returns nil for invalid token" do
+        expect(test_class.find_by_secure_external_id("invalid", scope: "test")).to be_nil
+      end
+
+  test "returns nil for wrong scope" do
+        token = test_instance.secure_external_id(scope: "test")
+        expect(test_class.find_by_secure_external_id(token, scope: "wrong")).to be_nil
+      end
+
+  test "checks for expired token" do
+        expires_at = 1.hour.from_now
+        token = test_instance.secure_external_id(scope: "test", expires_at: expires_at)
+
+        travel_to 45.minutes.from_now do
+          expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+        end
+
+        travel_to 2.hours.from_now do
+          expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_nil # expired
+        end
+      end
+
+
+  test "returns nil for non-string input" do
+        expect(test_class.find_by_secure_external_id(123, scope: "test")).to be_nil
+      end
+
+  test "returns nil for invalid base64" do
+        expect(test_class.find_by_secure_external_id("invalid base64!", scope: "test")).to be_nil
+      end
+
+  test "returns nil for tokens with invalid UTF-8 encoding" do
+        # Simulate a token that decodes to bytes with invalid UTF-8 sequences
+        invalid_utf8_token = Base64.urlsafe_encode64("{\"v\":\"1\",\"d\":\"|Y\xB8\"}")
+        expect(test_class.find_by_secure_external_id(invalid_utf8_token, scope: "test")).to be_nil
+      end
+
+  test "returns nil for wrong model name" do
+        other_class = Class.new do
+          include SecureExternalId
+
+          def self.name
+            "OtherClass"
+          end
+
+          def id
+            123
+          end
+        end
+
+        token = test_instance.secure_external_id(scope: "test")
+        expect(other_class.find_by_secure_external_id(token, scope: "test")).to be_nil
+      end
+
+  test "supports key rotation" do
+        token_v1 = test_instance.secure_external_id(scope: "test")
+
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "2",
+                        keys: {
+                          "1" => "a" * 32,
+                          "2" => "b" * 32
+                        }
+                      })
+
+        expect(test_class.find_by_secure_external_id(token_v1, scope: "test")).to be_a(test_class)
+
+        token_v2 = test_instance.secure_external_id(scope: "test")
+        expect(test_class.find_by_secure_external_id(token_v2, scope: "test")).to be_a(test_class)
+      end
+    end
+
+  context_ "configuration validation" do
+  test "raises error when configuration is blank" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({})
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "SecureExternalId configuration is missing")
+      end
+
+  test "raises error when primary_key_version is missing" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        keys: { "1" => "a" * 32 }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "primary_key_version is required in SecureExternalId config")
+      end
+
+  test "raises error when primary_key_version is blank" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "",
+                        keys: { "1" => "a" * 32 }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "primary_key_version is required in SecureExternalId config")
+      end
+
+  test "raises error when keys are missing" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "1"
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "keys are required in SecureExternalId config")
+      end
+
+  test "raises error when keys are blank" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "1",
+                        keys: {}
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "keys are required in SecureExternalId config")
+      end
+
+  test "raises error when primary key version is not found in keys" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "2",
+                        keys: { "1" => "a" * 32 }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "Primary key version '2' not found in keys")
+      end
+
+  test "raises error when key is not exactly 32 bytes" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "1",
+                        keys: { "1" => "short_key" }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "Key for version '1' must be exactly 32 bytes for aes-256-gcm")
+      end
+
+  test "raises error when any key in rotation is not exactly 32 bytes" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "1",
+                        keys: {
+                          "1" => "a" * 32,
+                          "2" => "too_short"
+                        }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.to raise_error(SecureExternalId::Error, "Key for version '2' must be exactly 32 bytes for aes-256-gcm")
+      end
+
+  test "passes validation with proper configuration" do
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return({
+                        primary_key_version: "1",
+                        keys: {
+                          "1" => "a" * 32,
+                          "2" => "b" * 32
+                        }
+                      })
+
+        expect do
+          test_instance.secure_external_id(scope: "test")
+        end.not_to raise_error
+      end
+    end
+
+  context_ "environment variable configuration" do
+      let(:primary_key_version_value) { "1" }
+      let(:key_versions) { { "1" => "a" * 32 } }
+
+      def stub_env_config(primary_version: primary_key_version_value, keys: key_versions)
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, default: nil)
+          .and_return(nil)
+        allow(GlobalConfig).to receive(:dig)
+          .with(:secure_external_id, :primary_key_version, default: nil)
+          .and_return(primary_version)
+        (1..10).each do |version|
+          key_value = keys[version.to_s]
+          allow(GlobalConfig).to receive(:dig)
+            .with(:secure_external_id, :keys, version.to_s, default: nil)
+            .and_return(key_value)
+        end
+      end
+
+  context_ "when credentials are not present" do
+        before do
+          stub_env_config
+        end
+
+  test "builds config from environment variables" do
+          token = test_instance.secure_external_id(scope: "test")
+          expect(token).to be_a(String)
+          expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+        end
+
+  test "builds config with multiple key versions" do
+          stub_env_config(primary_version: "2", keys: { "1" => "a" * 32, "2" => "b" * 32 })
+
+          token = test_instance.secure_external_id(scope: "test")
+          expect(token).to be_a(String)
+          expect(test_class.find_by_secure_external_id(token, scope: "test")).to be_a(test_class)
+        end
+
+  test "supports key rotation with env vars" do
+          token_v1 = test_instance.secure_external_id(scope: "test")
+
+          test_class.instance_variable_set(:@config, nil)
+          test_class.instance_variable_set(:@encryptors, nil)
+
+          stub_env_config(primary_version: "2", keys: { "1" => "a" * 32, "2" => "b" * 32 })
+
+          expect(test_class.find_by_secure_external_id(token_v1, scope: "test")).to be_a(test_class)
+
+          token_v2 = test_instance.secure_external_id(scope: "test")
+          expect(test_class.find_by_secure_external_id(token_v2, scope: "test")).to be_a(test_class)
+        end
+
+  test "raises error when primary_key_version is missing" do
+          stub_env_config(primary_version: nil, keys: {})
+
+          expect do
+            test_instance.secure_external_id(scope: "test")
+          end.to raise_error(SecureExternalId::Error, "SecureExternalId configuration is missing")
+        end
+
+  test "raises error when primary_key_version is blank" do
+          stub_env_config(primary_version: "", keys: {})
+
+          expect do
+            test_instance.secure_external_id(scope: "test")
+          end.to raise_error(SecureExternalId::Error, "SecureExternalId configuration is missing")
+        end
+      end
+    end
+  end
+end

@@ -18,52 +18,28 @@ end
 group :development, :test do
   gem "bundler"
   gem "dotenv-rails", "~> 2.8"
-  gem "knapsack_pro", "~> 7.0"
   gem "pry-byebug", "~> 3.10"
   gem "pry-rails", "~> 0.3", require: "pry-rails/console"
   gem "rubocop", "~> 1.79", require: false
   gem "rubocop-rails", "~> 2.32", require: false
   gem "rubocop-performance", "~> 1.25", require: false
-  gem "rubocop-rspec", "~> 3.6", require: false
   gem "rubocop-rake", "~> 0.7", require: false
   gem "active_record_query_trace", "~> 1.8"
   gem "shoulda-matchers", "~> 6.0"
   gem "spring", "~> 4.0"
-  gem "spring-commands-rspec", "~> 1.0"
 end
 
 group :test do
-  gem "capybara", "~> 3.38"
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
   # Rails 7.1's test runner is not compatible with Minitest 6.x APIs.
   gem "minitest", "~> 5.25"
-  gem "rspec", "~> 3.12"
-  gem "rspec-github", "~> 2.4.0", require: false
-  gem "rspec-rails", "~> 6.0"
-  gem "rspec-retry", "~> 0.6"
-  gem "rspec_junit_formatter", "~> 0.6"
-  gem "rspec-sidekiq", "~> 5.0"
   gem "rails-controller-testing", "~> 1.0"
   gem "vcr", "~> 6.1"
-  gem "webmock", "~> 3.18", require: "webmock/rspec"
-  gem "json_matchers", "~> 0.11", require: "json_matchers/rspec"
-  gem "capybara_accessible_selectors", github: "citizensadvice/capybara_accessible_selectors",
-                                       ref: "161b8c5b1a0a5408af914d7544956372e9da2c9e"
-  gem "puffing-billy", "~> 4.0.0", require: "billy/capybara/rspec"
-  gem "super_diff", "~> 0.12.0", require: false
+  gem "webmock", "~> 3.18", require: "webmock/minitest"
 
-  # New Minitest + Playwright system-test suite (test/system). Will replace
-  # the RSpec + Capybara + Selenium suite as tests are migrated. No Capybara,
-  # no rspec-rails — Playwright is driven directly via playwright-ruby-client.
   gem "playwright-ruby-client", "~> 1.60"
   gem "database_cleaner-active_record", "~> 2.2"
-
-  # Pin minitest to 5.x. The rubygems index has a stub `minitest 6.0.6` with
-  # no actual code (just metadata + a `bin/minitest` script), and bundler
-  # happily resolves to it for any `>= 5.x` constraint from transitive deps,
-  # which breaks `require "minitest/mock"` and friends.
-  gem "minitest", "~> 5.27"
 end
 
 group :deployer do
@@ -179,7 +155,6 @@ gem "ruby-oembed", "~> 0.16", require: "oembed"
 gem "rubyzip", "~> 2.3"
 gem "sassc", "~> 2.4"
 gem "secure_headers", "~> 6.5"
-gem "selenium-webdriver", "~> 4.35"
 gem "sendgrid-ruby", "~> 6.6"
 gem "vite_rails", "~> 3.0"
 gem "sidekiq-cron", "~> 1.9"
