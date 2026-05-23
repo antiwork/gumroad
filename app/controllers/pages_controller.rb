@@ -62,13 +62,34 @@ class PagesController < Sellers::BaseController
       end
     end
 
-    if page.save
-      # Seed v1 with a snapshot of the currently rendered product/profile so
-      # the editor opens on the real page rather than a blank chat. The first
-      # AI iteration branches off this baseline (parent_version: v1) so the
-      # model can "evolve" the existing page rather than generate from scratch.
-      seed_version = Ai::InitialPageSnapshot.create_for!(page)
+    # Wrap the Page insert and the v1 snapshot in a single transaction so a
+    # snapshot failure rolls back the Page row (and any placeholder page_version
+    # rows that Ai::InitialPageSnapshot.create_for! may have inserted before
+    # raising). Without this, a raise inside create_for! left an orphan Page —
+    # listed in the seller's editor with no version, no html_content, and no
+    # path forward except manual deletion.
+    seed_version = nil
+    snapshot_error = nil
+    saved =
+      begin
+        ActiveRecord::Base.transaction do
+          ok = page.save
+          if ok
+            # Seed v1 with a snapshot of the currently rendered product/profile so
+            # the editor opens on the real page rather than a blank chat. The first
+            # AI iteration branches off this baseline (parent_version: v1) so the
+            # model can "evolve" the existing page rather than generate from scratch.
+            seed_version = Ai::InitialPageSnapshot.create_for!(page)
+          end
+          ok
+        end
+      rescue StandardError => e
+        snapshot_error = e
+        Rails.logger.error("PagesController#create snapshot failed user=#{current_seller.id} error=#{e.class}: #{e.message}")
+        false
+      end
 
+    if saved
       if initial_prompt.present?
         page.update_column(:generating_since, Time.current)
         enqueued = Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
@@ -82,9 +103,10 @@ class PagesController < Sellers::BaseController
         format.json { render json: { success: true, edit_url: edit_page_path(page.slug), id: page.external_id, slug: page.slug } }
       end
     else
+      error_message = snapshot_error ? "Could not create page. Please try again." : page.errors.full_messages.join(", ")
       respond_to do |format|
-        format.html { redirect_back fallback_location: products_path, alert: page.errors.full_messages.join(", ") }
-        format.json { render json: { success: false, error: page.errors.full_messages.join(", ") }, status: :unprocessable_entity }
+        format.html { redirect_back fallback_location: products_path, alert: error_message }
+        format.json { render json: { success: false, error: error_message }, status: :unprocessable_entity }
       end
     end
   end

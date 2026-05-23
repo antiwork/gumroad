@@ -132,6 +132,37 @@ describe PagesController, type: :request do
       expect(response).to have_http_status(:ok)
       expect(Page.last.title).to eq("Inkwell")
     end
+
+    context "when the v1 snapshot raises (defect 4)" do
+      it "rolls back the Page insert so no orphan row is left behind" do
+        allow(Ai::InitialPageSnapshot).to receive(:create_for!).and_raise(StandardError, "boom")
+        expect do
+          post pages_path,
+               params: { page: { is_profile: "true" } }.to_json,
+               headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+        end.not_to change(Page, :count)
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)["success"]).to be(false)
+      end
+
+      it "rolls back any placeholder page_version rows the snapshot inserted before raising" do
+        # Simulate the realistic failure mode: create_for! inserts a placeholder
+        # page_version (its first DB write) and then raises before updating the
+        # page. Without the transaction, both the Page and the orphan version
+        # row survive; with it, neither does.
+        allow(Ai::InitialPageSnapshot).to receive(:create_for!).and_wrap_original do |_orig, page|
+          page.page_versions.create!(html: "<div>placeholder</div>", prompt: "seed")
+          raise StandardError, "snapshot crashed after writing placeholder"
+        end
+
+        expect do
+          post pages_path,
+               params: { page: { is_profile: "true" } }.to_json,
+               headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+        end.to not_change(Page, :count).and not_change(PageVersion, :count)
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
   end
 
   describe "POST /pages/:id/generate" do
