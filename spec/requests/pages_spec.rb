@@ -163,6 +163,25 @@ describe PagesController, type: :request do
         expect(response).to have_http_status(:unprocessable_entity)
       end
     end
+
+    it "clears generating_since and records an error when the initial enqueue raises" do
+      # When Redis is down at create time, perform_async raises before the
+      # worker can run. Without the rescue, the row is left with
+      # generating_since set forever (no worker exists to clear it).
+      product = create(:product, user: seller, name: "Bookcase")
+      allow(Pages::GeneratePageVersionJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "down")
+
+      post pages_path,
+           params: { page: { product_permalink: product.unique_permalink, initial_prompt: "make it" } }.to_json,
+           headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+
+      # The Page row is still created — the prompt-generation step is
+      # separate from page creation. But generating_since must not stick.
+      page = Page.last
+      expect(page).to be_present
+      expect(page.generating_since).to be_nil
+      expect(page.generation_error).to be_present
+    end
   end
 
   describe "POST /pages/:id/generate" do
@@ -215,6 +234,20 @@ describe PagesController, type: :request do
       expect(response).to have_http_status(:ok)
       expect(JSON.parse(response.body)["queued"]).to be(false)
       expect(page.reload.generating_since).to be_nil
+    end
+
+    it "clears generating_since and surfaces an error when enqueue raises (Redis outage)" do
+      page.update_column(:generating_since, nil)
+      # If perform_async raises (Redis down, sidekiq-unique-jobs broken), the
+      # worker's `ensure` never fires. The controller must clear the row
+      # itself and return a non-2xx so the editor stops spinning.
+      allow(Pages::GeneratePageVersionJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "down")
+
+      post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:service_unavailable)
+      page.reload
+      expect(page.generating_since).to be_nil
+      expect(page.generation_error).to be_present
     end
   end
 

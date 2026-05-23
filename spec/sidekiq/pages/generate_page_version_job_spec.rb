@@ -110,6 +110,21 @@ describe Pages::GeneratePageVersionJob do
 
       expect(page.reload.generating_since).to be_nil
     end
+
+    it "swallows ActiveRecord::RecordNotFound when the page was deleted mid-flight" do
+      # The page row may be hard-deleted between enqueue and pickup (or the
+      # find may race with destroy). The job's ensure routes through
+      # `Page.where(id:).update_all` so the deleted-row path is a no-op
+      # rather than raising — and the original RecordNotFound is allowed to
+      # surface so Sidekiq's retry policy decides what to do.
+      expect do
+        described_class.new.perform(0, "anything")
+      end.to raise_error(ActiveRecord::RecordNotFound)
+
+      # No exception escapes the ensure block — the where(...).update_all
+      # call is safe even when no row matches.
+      expect(Page.where(id: 0)).to be_empty
+    end
   end
 
   describe "sidekiq_retries_exhausted" do

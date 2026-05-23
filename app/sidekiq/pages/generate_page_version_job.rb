@@ -69,18 +69,14 @@ class Pages::GeneratePageVersionJob
       # Discard the stale apply silently — surfacing an error would
       # confuse the user, whose newer prompt has already produced output.
       Rails.logger.info("Pages::GeneratePageVersionJob skipped stale apply page=#{page.id} parent=#{parent_version&.id}")
-      page.update_column(:generating_since, nil)
-      return
     end
-
-    # Write content first, then flip generating off in the same UPDATE so a
-    # poll tick can't see generating=false with stale html_content.
-    page.update_column(:generating_since, nil)
   ensure
-    # Belt-and-suspenders for any unhandled error path: never leave the row
-    # stuck in the "generating" state. Safe to call when page is nil (find
-    # raised) — guarded below. Runs on every attempt, so transient retries
-    # don't leave generating_since stale between attempts either.
-    page&.update_column(:generating_since, nil) if page&.persisted? && page&.generating_since.present?
+    # Belt-and-suspenders: never leave the row stuck in the "generating"
+    # state, regardless of how the body exited. Going through
+    # `Page.where(id:).update_all` (instead of `page.update_column`) means
+    # this still works even if `Page.find` raised — `page` is unassigned
+    # then — or if the row was deleted mid-flight, because `update_all` is
+    # a no-op for an empty scope and never raises StaleObject.
+    Page.where(id: page_id).update_all(generating_since: nil)
   end
 end

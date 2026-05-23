@@ -92,11 +92,16 @@ class PagesController < Sellers::BaseController
     if saved
       if initial_prompt.present?
         page.update_column(:generating_since, Time.current)
-        enqueued = Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
-        # Symmetric with #generate: if the job dedups to nil, clear
-        # generating_since so the editor doesn't spin forever on a job
-        # that won't run.
-        page.update_column(:generating_since, nil) if enqueued.nil?
+        # If Redis is down or sidekiq-unique-jobs hits an error, the job never
+        # gets enqueued and there is nothing to clear generating_since. Reset
+        # it here so the editor doesn't spin forever on a job that won't run.
+        begin
+          enqueued = Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
+          page.update_column(:generating_since, nil) if enqueued.nil?
+        rescue StandardError => e
+          page.update_columns(generating_since: nil, generation_error: "Generation failed — please try again.")
+          Rails.logger.error("PagesController#create enqueue failed page=#{page.id} error=#{e.class}: #{e.message}")
+        end
       end
       respond_to do |format|
         format.html { redirect_to edit_page_path(page.slug) }
@@ -174,7 +179,16 @@ class PagesController < Sellers::BaseController
     # Also clear any prior generation_error so it doesn't trail next to the
     # fresh spinner during the poll window.
     @page.update_columns(generating_since: Time.current, generation_error: nil)
-    enqueued = Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
+    begin
+      enqueued = Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
+    rescue StandardError => e
+      # Redis outage / sidekiq-unique-jobs failure — the job never enqueued,
+      # so the worker's `ensure` will never run. Clear generating_since and
+      # surface a generic error rather than leaving the editor stuck.
+      @page.update_columns(generating_since: nil, generation_error: "Generation failed — please try again.")
+      Rails.logger.error("PagesController#generate enqueue failed page=#{@page.id} error=#{e.class}: #{e.message}")
+      return render json: { success: false, error: "Generation failed — please try again." }, status: :service_unavailable
+    end
     if enqueued.nil?
       # sidekiq-unique-jobs returned nil — an identical job is still inflight
       # or its lock leaked. Either way no *new* worker will run to clear
