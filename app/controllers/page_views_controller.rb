@@ -3,7 +3,14 @@
 class PageViewsController < ApplicationController
   def show
     user = resolve_seller
-    return head :not_found unless user
+    # `user.alive?` covers the soft-deleted custom-domain path:
+    # `Subdomain.find_seller_by_request` already filters on `User.alive`,
+    # but `CustomDomain.find_by_host(...).user` resolves to whatever user
+    # is on the CustomDomain row — and a CustomDomain is not auto-detached
+    # when the owning user is soft-deleted. Without this guard the
+    # deleted seller's pages would stay reachable via their old custom
+    # domain.
+    return head :not_found unless user&.alive?
     return head :not_found if user.suspended?
 
     page = user.pages.alive.published.find_by!(slug: params[:slug])

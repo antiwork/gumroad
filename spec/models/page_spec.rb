@@ -97,6 +97,21 @@ describe Page do
     end
   end
 
+  describe "#mark_deleted!" do
+    # Regression: mark_deleted! appends "-deleted-<id>" to free up the slug
+    # for reuse. If the original slug is already near the 100-char max,
+    # naive concatenation breaks the length validation and the soft-delete
+    # raises — leaving the page un-deletable.
+    it "soft-deletes a page whose slug is already at the maximum length" do
+      page = create(:page, user: user, title: "a")
+      page.update_column(:slug, "a" * 100)
+      expect { page.mark_deleted! }.not_to raise_error
+      expect(page.reload.deleted_at).to be_present
+      expect(page.slug.length).to be <= 100
+      expect(page.slug).to end_with("-deleted-#{page.id}")
+    end
+  end
+
   describe "#publish! / #unpublish!" do
     it "sets published and published_at" do
       page = create(:page, user: user)

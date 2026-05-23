@@ -60,6 +60,20 @@ describe PageViewsController, type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "returns 404 when the seller is soft-deleted, even via a custom domain" do
+      # CustomDomain.find_by_host returns the domain row regardless of
+      # whether the owning user is alive. Without the alive guard, the
+      # deleted seller's pages stay reachable via their previously
+      # configured custom domain.
+      domain_host = "shop.example.org"
+      create(:custom_domain, user: seller, domain: domain_host)
+      allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(domain_host)
+      seller.update!(deleted_at: Time.current)
+
+      get "/pages/#{page.slug}", headers: inertia_headers
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "returns 404 for unknown sellers" do
       get "/nobody-here/pages/#{page.slug}", headers: inertia_headers
       expect(response).to have_http_status(:not_found)

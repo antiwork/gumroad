@@ -89,5 +89,19 @@ describe Ai::PageSanitizer do
       expect(out).not_to include("<iframe")
       expect(out).to include("kept")
     end
+
+    # Regression: form-input tags must not be allow-listed. A hallucinated
+    # AI page or compromised template otherwise serves a credible
+    # <form action="https://attacker/login"> under the seller's custom
+    # domain — a turn-key phishing primitive. Buy buttons render as
+    # <a data-gumroad-action="buy">, not <button>, so we never need them.
+    it "strips form-input tags so AI pages can't phish credentials" do
+      %w[form input button select textarea option label fieldset].each do |tag|
+        html = %(<#{tag} action="/login">visible</#{tag}>)
+        out = described_class.sanitize(html)
+        expect(out).not_to include("<#{tag}"), "expected <#{tag}> to be stripped, got: #{out}"
+        expect(out).to include("visible") if tag.in?(%w[button label option fieldset]) # block-level tags keep inner text; void/replaced (<input>) do not
+      end
+    end
   end
 end

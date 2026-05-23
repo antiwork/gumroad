@@ -1,12 +1,18 @@
 # frozen_string_literal: true
 
 class Ai::PageSanitizer
+  # Form input tags (input, button, select, textarea, form, option, label,
+  # fieldset) are intentionally NOT allow-listed. AI-generated pages don't
+  # need them and they enable credential phishing on a seller-controlled
+  # custom domain — a hallucinated <form action="..."> with a password
+  # field would be served under the seller's brand. Buy/checkout buttons
+  # in templates render as <a data-gumroad-action="buy"> instead.
   ALLOWED_TAGS = %w[
     div span p h1 h2 h3 h4 h5 h6 a img ul ol li
     section header footer nav main article aside
     strong em b i u s br hr blockquote pre code
     table thead tbody tfoot tr th td
-    figure figcaption button label input select option
+    figure figcaption
     svg path circle rect line polyline polygon
     details summary
   ].freeze
@@ -17,7 +23,6 @@ class Ai::PageSanitizer
     width height loading
     data-gumroad-ref data-gumroad-field data-gumroad-action
     aria-label aria-hidden role
-    type name value placeholder disabled
   ].freeze
 
   SVG_ATTRIBUTES = %w[
