@@ -30,11 +30,20 @@ class PagesController < Sellers::BaseController
 
   def create
     authorize Page
+    # The Customize-page button posts {page: {product_permalink:}} (or
+    # is_profile) with no title. Derive a server-side default rather than
+    # 422-ing the client: prefer the product name when this page owns a
+    # product, otherwise fall back to Page::DEFAULT_TITLE. We *also* rely on
+    # Page#default_title (a before_validation callback), but doing it here too
+    # makes the intent obvious at the entry point and survives any later
+    # change to the model callback.
+    requested_title = params.dig(:page, :title).to_s.strip.presence
     page = current_seller.pages.build(
-      title: params.dig(:page, :title),
+      title: requested_title,
       is_profile: ActiveModel::Type::Boolean.new.cast(params.dig(:page, :is_profile)) || false,
     )
     page.link = current_seller.products.alive.find_by(unique_permalink: params.dig(:page, :product_permalink)) if params.dig(:page, :product_permalink).present?
+    page.title ||= page.link&.name.presence&.first(255) || Page::DEFAULT_TITLE
 
     initial_prompt = resolve_initial_prompt(page)
 
@@ -62,7 +71,11 @@ class PagesController < Sellers::BaseController
 
       if initial_prompt.present?
         page.update_column(:generating_since, Time.current)
-        Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
+        enqueued = Pages::GeneratePageVersionJob.perform_async(page.id, initial_prompt, seed_version&.id)
+        # Symmetric with #generate: if the job dedups to nil, clear
+        # generating_since so the editor doesn't spin forever on a job
+        # that won't run.
+        page.update_column(:generating_since, nil) if enqueued.nil?
       end
       respond_to do |format|
         format.html { redirect_to edit_page_path(page.slug) }
@@ -133,13 +146,21 @@ class PagesController < Sellers::BaseController
     moderation = moderate_prompt(@page, prompt)
     return render json: { success: false, error: "This prompt isn't allowed. Try wording it differently." }, status: :unprocessable_entity unless moderation.passed
 
-    # Flip the page into generating state *before* enqueuing so a fast worker
-    # can't complete the job and clear generating_since before we set it.
-    # Also clear any stale generation_error so the spinner isn't accompanied by
-    # the previous run's error message during the poll window.
+    # Clear any stale generating_since left over from a previous run that
+    # bailed without resetting (e.g. Sidekiq lost the worker mid-perform) so
+    # the spinner doesn't stay up forever when the new attempt dedups.
+    # Also clear any prior generation_error so it doesn't trail next to the
+    # fresh spinner during the poll window.
     @page.update_columns(generating_since: Time.current, generation_error: nil)
-    Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
-    render json: { success: true, queued: true }
+    enqueued = Pages::GeneratePageVersionJob.perform_async(@page.id, prompt, @page.latest_version&.id)
+    if enqueued.nil?
+      # sidekiq-unique-jobs returned nil — an identical job is still inflight
+      # or its lock leaked. Either way no *new* worker will run to clear
+      # generating_since on completion. Reset it now so the editor's poll
+      # doesn't see a forever-spinner.
+      @page.update_column(:generating_since, nil)
+    end
+    render json: { success: true, queued: !enqueued.nil? }
   end
 
   def latest_version

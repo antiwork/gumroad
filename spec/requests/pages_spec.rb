@@ -111,6 +111,27 @@ describe PagesController, type: :request do
       expect(response).to have_http_status(:ok)
       expect(Page.last.title).to eq("My Course")
     end
+
+    it "creates a profile page with a server-derived default title when none is supplied" do
+      # The Customize-page button on the profile editor posts is_profile=true
+      # with no title. The server must derive a default rather than 422.
+      post pages_path,
+           params: { page: { is_profile: "true" } }.to_json,
+           headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      page = Page.last
+      expect(page.is_profile).to be(true)
+      expect(page.title).to be_present
+    end
+
+    it "creates a product page with a server-derived default title when title is an empty string" do
+      product = create(:product, user: seller, name: "Inkwell")
+      post pages_path,
+           params: { page: { title: "", product_permalink: product.unique_permalink } }.to_json,
+           headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      expect(Page.last.title).to eq("Inkwell")
+    end
   end
 
   describe "POST /pages/:id/generate" do
@@ -134,6 +155,35 @@ describe PagesController, type: :request do
     it "returns 422 on blank prompt" do
       post generate_page_path(page.slug), params: { prompt: "  " }, headers: { "Accept" => "application/json" }
       expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "clears generating_since on a retry after a previously failed generation" do
+      # Simulate the post-failure state: a stale generating_since from a job
+      # that bailed without resetting (Sidekiq worker died, lock leaked, etc.)
+      # and a leftover generation_error from the prior run. Retrying must end
+      # with generating_since cleared once the new job drains.
+      page.update_columns(generating_since: 10.minutes.ago, generation_error: "Generation failed - please try again.")
+
+      post generate_page_path(page.slug), params: { prompt: "fresh attempt" }, headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      drain_page_jobs
+
+      page.reload
+      expect(page.generating_since).to be_nil
+      expect(page.generation_error).to be_nil
+    end
+
+    it "clears generating_since when perform_async dedups so the spinner is not stuck" do
+      page.update_column(:generating_since, 5.minutes.ago)
+      # Simulate sidekiq-unique-jobs returning nil (existing identical job
+      # still locked, or leaked lock). No new worker will run, so the
+      # controller must reset generating_since itself.
+      allow(Pages::GeneratePageVersionJob).to receive(:perform_async).and_return(nil)
+
+      post generate_page_path(page.slug), params: { prompt: "anything" }, headers: { "Accept" => "application/json" }
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)["queued"]).to be(false)
+      expect(page.reload.generating_since).to be_nil
     end
   end
 
