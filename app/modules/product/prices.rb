@@ -26,13 +26,13 @@ module Product::Prices
   def rental_price_cents
     return read_attribute(:rental_price_cents) unless persisted?
 
-    rentable? ? alive_prices.where(currency: price_currency_type).select(&:is_rental?).last&.price_cents : nil
+    rentable? ? alive_prices.select { |p| p.currency == price_currency_type && p.is_rental? }.last&.price_cents : nil
   end
 
   def default_price
-    return alive_prices.where(currency: price_currency_type).select(&:is_rental?).last if rent_only?
+    return alive_prices.select { |p| p.currency == price_currency_type && p.is_rental? }.last if rent_only?
 
-    relevant_prices = alive_prices.where(currency: price_currency_type).select(&:is_buy?)
+    relevant_prices = alive_prices.select { |p| p.currency == price_currency_type && p.is_buy? }
     relevant_prices = relevant_prices.select(&:is_default_recurrence?) if is_recurring_billing && subscription_duration.present?
     relevant_prices.last
   end
@@ -320,8 +320,7 @@ module Product::Prices
 
     def lowest_variant_price_difference_cents
       return if is_tiered_membership?
-      lowest_variant = current_base_variants.order(price_difference_cents: :asc).first
-      lowest_variant&.price_difference_cents
+      variant_categories_alive.flat_map(&:alive_variants).min_by { |v| v.price_difference_cents.to_i }&.price_difference_cents
     end
 
     def display_recurrence
