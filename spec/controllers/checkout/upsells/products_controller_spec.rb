@@ -182,6 +182,27 @@ describe Checkout::Upsells::ProductsController do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq([])
     end
+
+    it "eager-loads associations needed by the presenter" do
+      sign_in seller
+
+      get :index
+
+      expect(response).to have_http_status(:ok)
+
+      products = seller.products
+        .eligible_for_content_upsells
+        .includes(*Checkout::Upsells::ProductsController::PRODUCT_INCLUDES)
+        .order(created_at: :desc, id: :desc)
+        .limit(Checkout::Upsells::ProductsController::MAX_PRODUCTS)
+        .to_a
+
+      products.each do |product|
+        expect(product.association(:alive_prices)).to be_loaded
+        expect(product.association(:thumbnail_alive)).to be_loaded
+        expect(product.association(:display_asset_previews)).to be_loaded
+      end
+    end
   end
 
   describe "GET #show" do

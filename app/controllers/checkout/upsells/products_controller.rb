@@ -6,12 +6,13 @@ class Checkout::Upsells::ProductsController < ApplicationController
   MAX_PRODUCTS = 25
 
   PRODUCT_INCLUDES = [
+    :alive_prices,
     :skus_alive_not_default,
     :variant_categories_alive,
     :product_review_stat,
     { alive_variants: { variant_category: :link },
-      thumbnail_alive: { file_attachment: :blob },
-      display_asset_previews: { file_attachment: :blob } },
+      thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+      display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
   ].freeze
 
   def index
