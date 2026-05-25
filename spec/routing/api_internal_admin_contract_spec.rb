@@ -52,6 +52,23 @@ describe "internal admin API routing" do
     )
   end
 
+  it "routes the scheduled payout write endpoints" do
+    expect(route_for("/internal/admin/scheduled_payouts", :post)).to include(
+      controller: "api/internal/admin/scheduled_payouts",
+      action: "create"
+    )
+    expect(route_for("/internal/admin/scheduled_payouts/abc123/execute", :post)).to include(
+      controller: "api/internal/admin/scheduled_payouts",
+      action: "execute",
+      id: "abc123"
+    )
+    expect(route_for("/internal/admin/scheduled_payouts/abc123/cancel", :post)).to include(
+      controller: "api/internal/admin/scheduled_payouts",
+      action: "cancel",
+      id: "abc123"
+    )
+  end
+
   it "routes the products endpoints" do
     expect(route_for("/internal/admin/products", :get)).to include(controller: "api/internal/admin/products", action: "index")
     expect(route_for("/internal/admin/products/abc123", :get)).to include(controller: "api/internal/admin/products", action: "show", id: "abc123")

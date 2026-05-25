@@ -187,6 +187,38 @@ describe ScheduledPayout do
         expect(scheduled_payout.executed_at).to be_present
       end
 
+      it "uses the stored processor when payout executes" do
+        scheduled_payout.update!(processor: PayoutProcessorType::STRIPE)
+        payment = instance_double(Payment, failed?: false, reload: nil)
+        allow(payment).to receive(:reload).and_return(payment)
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        expect(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
+          .and_return([payment, nil])
+        expect(PayoutProcessorType).to receive(:get).with(PayoutProcessorType::STRIPE).and_return(processor)
+        expect(processor).to receive(:process_payments).with([payment])
+
+        scheduled_payout.execute!
+
+        expect(scheduled_payout.reload.status).to eq("executed")
+      end
+
+      it "falls back to the user's current processor for legacy scheduled payouts" do
+        scheduled_payout.update_column(:processor, nil)
+        payment = instance_double(Payment, failed?: false, reload: nil)
+        allow(payment).to receive(:reload).and_return(payment)
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        expect(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([payment, nil])
+        expect(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
+        expect(processor).to receive(:process_payments).with([payment])
+
+        scheduled_payout.execute!
+
+        expect(scheduled_payout.reload.status).to eq("executed")
+      end
+
       it "raises if payout fails" do
         payment = instance_double(Payment, failed?: true, errors: double(full_messages: ["Stripe account not found"]))
         allow(payment).to receive(:reload).and_return(payment)

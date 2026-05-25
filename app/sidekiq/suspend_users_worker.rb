@@ -28,6 +28,7 @@ class SuspendUsersWorker
       record = user.scheduled_payouts.create!(
         action: scheduled_payout["action"],
         delay_days: scheduled_payout["delay_days"].presence || DEFAULT_SCHEDULED_PAYOUT_DELAY_DAYS,
+        processor: scheduled_payout["action"] == "payout" ? user.current_payout_processor : nil,
         payout_amount_cents: user.unpaid_balance_cents,
         created_by: author
       )

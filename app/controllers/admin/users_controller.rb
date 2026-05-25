@@ -227,6 +227,7 @@ class Admin::UsersController < Admin::BaseController
       scheduled_payout = @user.scheduled_payouts.create!(
         action: sp_params[:action],
         delay_days: sp_params[:delay_days].presence || 21,
+        processor: sp_params[:action] == "payout" ? @user.current_payout_processor : nil,
         payout_amount_cents: @user.unpaid_balance_cents,
         created_by: current_user
       )
