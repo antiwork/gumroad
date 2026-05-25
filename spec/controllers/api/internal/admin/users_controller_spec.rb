@@ -2674,6 +2674,21 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
     end
 
+    it "returns 404 when the product is not alive" do
+      deleted_product = create(:product, user:)
+      deleted_product.mark_deleted!
+      banned_product = create(:product, user:, banned_at: 1.day.ago)
+      purchase_disabled_product = create(:product, user:, purchase_disabled_at: 1.day.ago)
+
+      [deleted_product, banned_product, purchase_disabled_product].each do |inactive_product|
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: inactive_product.external_id }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+        expect(user.reload).to be_compliant
+      end
+    end
+
     it "returns 422 without flagging the user when the product belongs to another user" do
       other_product = create(:product)
 
@@ -2709,6 +2724,7 @@ describe Api::Internal::Admin::UsersController do
         content: include("Flagged for a policy violation")
       )
       expect(user_comment.content).to include("Policy problem guide")
+      expect(user_comment.content).to include("by #{admin_user.name_or_username}")
 
       product_comment = product.comments.last
       expect(product_comment).to have_attributes(

@@ -771,7 +771,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def find_internal_admin_product_or_render
-      product = Link.find_by_external_id(params[:product_id])
+      product = Link.alive.find_by_external_id(params[:product_id])
       return product if product.present?
 
       render json: { success: false, message: "Product not found" }, status: :not_found
@@ -779,7 +779,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def flag_for_tos_violation_comment_content(product)
-      "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} for a product named '#{product.name}'"
+      "Flagged for a policy violation by #{Current.admin_actor.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} for product named '#{product.name}'"
     end
 
     def parse_threshold_cents(raw)
