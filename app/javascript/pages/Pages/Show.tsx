@@ -42,7 +42,7 @@ const PagesShow = () => {
           <iframe
             className="block h-screen w-full border-0"
             title={page.title}
-            sandbox="allow-scripts allow-popups"
+            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-forms"
             srcDoc={buildSrcDoc(page.html_content, { openLinksInNewTab: true, bodyReset: true })}
           />
         </main>

@@ -312,16 +312,20 @@ export default function PageEdit() {
   const unpublish = async () => {
     setPublishing(true);
     try {
+      // Also disable auto_publish — otherwise the next generation will
+      // silently re-publish the page (apply_new_version! flips published
+      // back to true when auto_publish is on), undoing the unpublish.
       const resp = await request({
         method: "POST",
         url: Routes.unpublish_page_path(page.slug),
         accept: "json",
+        data: { disable_auto_publish: true },
       });
       if (!resp.ok) {
         showAlert(await errorFromResponse(resp, "Could not unpublish."), "error");
         return;
       }
-      setPage((prev) => ({ ...prev, published: false }));
+      setPage((prev) => ({ ...prev, published: false, auto_publish: false }));
       showAlert("Unpublished!", "success");
     } catch (e) {
       assertResponseError(e);
