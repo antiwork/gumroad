@@ -11,6 +11,7 @@ class AngolaBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
+  before_validation :normalize_account_number
   validate :validate_bank_code
   validate :validate_account_number
 
@@ -43,13 +44,20 @@ class AngolaBankAccount < BankAccount
   end
 
   private
+    def normalize_account_number
+      decrypted = account_number_decrypted.to_s
+      return if decrypted.empty?
+      cleaned = decrypted.strip.gsub(/[ -]/, "")
+      self.account_number = cleaned if cleaned != decrypted
+    end
+
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
     end
 
     def validate_account_number
-      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted.to_s.gsub(/[ -]/, ""))
+      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
       errors.add :base, "The account number is invalid."
     end
 end

@@ -70,4 +70,24 @@ describe AngolaBankAccount do
       expect(build(:angola_bank_account, account_number: "AO06-0044-0000-6729-5030-1010-2")).to be_valid
     end
   end
+
+  describe "normalization" do
+    it "strips spaces from the saved account number so the value Stripe receives is clean" do
+      ba = build(:angola_bank_account, account_number: "AO06 0044 0000 6729 5030 1010 2")
+      ba.valid?
+      expect(ba.send(:account_number_decrypted)).to eq("AO06004400006729503010102")
+    end
+
+    it "strips dashes from the saved account number" do
+      ba = build(:angola_bank_account, account_number: "AO06-0044-0000-6729-5030-1010-2")
+      ba.valid?
+      expect(ba.send(:account_number_decrypted)).to eq("AO06004400006729503010102")
+    end
+
+    it "strips leading and trailing whitespace" do
+      ba = build(:angola_bank_account, account_number: "  AO06004400006729503010102  ")
+      ba.valid?
+      expect(ba.send(:account_number_decrypted)).to eq("AO06004400006729503010102")
+    end
+  end
 end
