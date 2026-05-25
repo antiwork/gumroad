@@ -21,28 +21,41 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
     return unless user
 
     record_admin_write(action: "scheduled_payouts.create", target: user) do
-      return render json: { success: false, message: "User is not suspended." }, status: :unprocessable_entity unless user.suspended?
-
-      if user.scheduled_payouts.in_progress.exists?
-        return render json: { success: false, message: "User already has a scheduled payout in progress" }, status: :unprocessable_entity
-      end
-
       delay_days = (payout_date - today).to_i
-      payout_note = build_scheduled_payout_note(user:, payout_date:, delay_days:, processor:, note: params[:note])
-      return render_invalid_scheduled_payout_comment(payout_note) if payout_note.invalid?
 
       scheduled_payout = nil
+      failure_message = nil
+
       User.transaction do
-        scheduled_payout = user.scheduled_payouts.create!(
-          action: "payout",
-          delay_days:,
-          scheduled_at: payout_date.in_time_zone("UTC"),
-          processor:,
-          payout_amount_cents: user.unpaid_balance_cents,
-          created_by: Current.admin_actor
-        )
-        payout_note.save!
+        user.lock!
+
+        if !user.suspended?
+          failure_message = "User is not suspended."
+        elsif user.scheduled_payouts.in_progress.exists?
+          failure_message = "User already has a scheduled payout in progress"
+        elsif user.unpaid_balance_cents.to_i <= 0
+          failure_message = "User has no unpaid balance."
+        else
+          payout_note = build_scheduled_payout_note(user:, payout_date:, delay_days:, processor:, note: params[:note])
+          failure_message = payout_note.errors.full_messages.to_sentence if payout_note.invalid?
+
+          if failure_message.blank?
+            scheduled_payout = user.scheduled_payouts.create!(
+              action: "payout",
+              delay_days:,
+              scheduled_at: payout_date.in_time_zone("UTC"),
+              processor:,
+              payout_amount_cents: user.unpaid_balance_cents,
+              created_by: Current.admin_actor
+            )
+            payout_note.save!
+          end
+        end
+
+        raise ActiveRecord::Rollback if failure_message.present?
       end
+
+      return render json: { success: false, message: failure_message }, status: :unprocessable_entity if failure_message.present?
 
       render json: {
         success: true,
@@ -165,13 +178,10 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
 
       user.comments.new(
         author_id: current_admin_actor_id,
+        author_name: Current.admin_actor.name,
         comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
         content:
       )
-    end
-
-    def render_invalid_scheduled_payout_comment(comment)
-      render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
     end
 
     def render_scheduled_payout_error(error)

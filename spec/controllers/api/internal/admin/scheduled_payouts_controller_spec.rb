@@ -14,6 +14,7 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
 
   describe "POST create" do
     let(:suspended_user) { create(:user, user_risk_state: "suspended_for_tos_violation", email: "seller@example.com") }
+    let(:merchant_account) { create(:merchant_account, user: nil) }
 
     include_examples "admin api authorization required", :post, :create, { processor: "stripe", user_id: "missing" }
 
@@ -62,7 +63,6 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
     end
 
     it "creates a scheduled payout for a suspended user with the default payout date" do
-      merchant_account = create(:merchant_account, user: nil)
       create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
 
       travel_to Time.utc(2026, 5, 25, 12) do
@@ -100,12 +100,18 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
         )
       )
       payout_note = suspended_user.comments.with_type_payout_note.last
-      expect(payout_note).to have_attributes(author_id: admin_user.id, comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE)
+      expect(payout_note).to have_attributes(
+        author_id: admin_user.id,
+        author_name: "Risk admin",
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE
+      )
       expect(payout_note.content).to include("Scheduled payout via stripe for June 15, 2026 (21 day delay)")
       expect(payout_note.content).to include("Appeal window closes before payout.")
     end
 
     it "creates a scheduled payout for an explicit UTC payout date" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
       travel_to Time.utc(2026, 5, 25, 12) do
         post :create, params: {
           user_id: suspended_user.external_id,
@@ -141,7 +147,17 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
       expect(response.parsed_body).to eq({ success: false, message: "User is not suspended." }.as_json)
     end
 
+    it "returns 422 when the user has no unpaid balance" do
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe" }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User has no unpaid balance." }.as_json)
+    end
+
     it "returns 422 when the user has an in-progress scheduled payout" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
       create(:scheduled_payout, user: suspended_user, status: "pending")
 
       expect do
@@ -153,6 +169,8 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
     end
 
     it "returns 422 without creating a scheduled payout when the note is invalid" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
       expect do
         post :create, params: { user_id: suspended_user.external_id, processor: "stripe", note: "x" * 10_001 }
       end.not_to change { ScheduledPayout.count }
@@ -163,6 +181,8 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
     end
 
     it "writes an admin audit log targeting the suspended user" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
       expect do
         post :create, params: { user_id: suspended_user.external_id, processor: "stripe" }
       end.to change { AdminApiAuditLog.count }.by(1)
