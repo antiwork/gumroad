@@ -17,6 +17,10 @@ class ProductReviewVideos::StreamsControllerTest < ActionController::TestCase
     # Stub VideoFile.find / association lookup to return our instance.
     target = @video_file
     VideoFile.singleton_class.send(:define_method, :__test_target) { target }
+    # `smil_xml` is defined directly on VideoFile — capture+restore the
+    # UnboundMethod so `remove_method` doesn't strip the real implementation
+    # and leak NoMethodError into sibling tests.
+    orig_smil = VideoFile.instance_method(:smil_xml) if VideoFile.method_defined?(:smil_xml)
     begin
       VideoFile.define_method(:smil_xml) { SMIL_XML }
       get :show, params: { product_review_video_id: @prv.external_id, format: :smil }
@@ -24,7 +28,11 @@ class ProductReviewVideos::StreamsControllerTest < ActionController::TestCase
       assert_includes response.content_type, "application/smil+xml"
       assert_equal SMIL_XML, response.body
     ensure
-      VideoFile.remove_method(:smil_xml) if VideoFile.instance_methods(false).include?(:smil_xml)
+      if orig_smil
+        VideoFile.define_method(:smil_xml, orig_smil)
+      elsif VideoFile.instance_methods(false).include?(:smil_xml)
+        VideoFile.remove_method(:smil_xml)
+      end
       VideoFile.singleton_class.send(:remove_method, :__test_target)
     end
   end

@@ -29,19 +29,21 @@ class Admin::BaseControllerTest < ActionController::TestCase
     @not_admin.save! if @not_admin.external_id.blank?
 
     # Pundit looks up policies via `Module.const_get(:DummyPolicy)` against the
-    # controller's ancestors. Stub by aliasing the symbol :dummy to our nested
-    # TestDummyPolicy via Pundit::PolicyFinder isn't possible without redefining
-    # the constant. The simplest approach: define a top-level DummyPolicy if
-    # missing, pointing at our impl.
-    unless Object.const_defined?(:DummyPolicy)
-      Object.const_set(:DummyPolicy, TestDummyPolicy)
-      @defined_dummy = true
-    end
+    # controller's ancestors. Always swap the constant to our impl for the
+    # duration of this test — `pundit_authorization_test.rb` also defines a
+    # top-level `DummyPolicy` (with a different action: `action?` instead of
+    # `index_with_policy?`), so the "only define if missing" pattern leaks the
+    # wrong policy when that test runs first and we lose
+    # `index_with_policy?` here.
+    @prev_dummy = Object.const_defined?(:DummyPolicy) ? Object.const_get(:DummyPolicy) : nil
+    Object.send(:remove_const, :DummyPolicy) if Object.const_defined?(:DummyPolicy)
+    Object.const_set(:DummyPolicy, TestDummyPolicy)
   end
 
   teardown do
     ActionController::Base.define_method(:protect_against_forgery?, @orig_protect) if @orig_protect
-    Object.send(:remove_const, :DummyPolicy) if @defined_dummy
+    Object.send(:remove_const, :DummyPolicy) if Object.const_defined?(:DummyPolicy)
+    Object.const_set(:DummyPolicy, @prev_dummy) if @prev_dummy
   end
 
   def with_routes

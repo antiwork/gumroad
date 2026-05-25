@@ -29,6 +29,12 @@ class Admin::PaydaysControllerTest < ActionController::TestCase
   end
 
   test "POST pay_user with no created payments redirects with 'Payment was not sent.' notice" do
+    # Capture the original UnboundMethod and restore it after the stub runs.
+    # `remove_method` would strip the real implementation (which is defined
+    # directly on Payouts' singleton class), leaking
+    # `NameError: undefined method 'create_payments_for_balances_up_to_date_for_users'`
+    # into sibling tests.
+    orig_method = Payouts.singleton_class.instance_method(:create_payments_for_balances_up_to_date_for_users)
     stub = lambda { |_date, _proc, _users, **_opts| [[]] }
     Payouts.define_singleton_method(:create_payments_for_balances_up_to_date_for_users, stub)
     begin
@@ -36,7 +42,7 @@ class Admin::PaydaysControllerTest < ActionController::TestCase
       assert_redirected_to admin_user_url(@user)
       assert_equal "Payment was not sent.", flash[:notice]
     ensure
-      Payouts.singleton_class.remove_method(:create_payments_for_balances_up_to_date_for_users)
+      Payouts.singleton_class.send(:define_method, :create_payments_for_balances_up_to_date_for_users, orig_method)
     end
   end
 end

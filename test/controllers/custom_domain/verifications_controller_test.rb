@@ -12,11 +12,19 @@ class CustomDomain::VerificationsControllerTest < ActionController::TestCase
     @admin = users(:admin_for_named_seller)
     [@seller, @admin].each { |u| u.save(validate: false) if u.external_id.blank? }
     sign_in_as_seller(@admin, @seller)
+    # `process` is defined directly on CustomDomainVerificationService — capture
+    # the original UnboundMethod so we can restore it. `remove_method` alone
+    # would strip the real implementation and leak NoMethodError into other tests.
+    @orig_cdvs_process = CustomDomainVerificationService.instance_method(:process) if CustomDomainVerificationService.method_defined?(:process)
   end
 
   teardown do
     restore_protect_against_forgery!
-    CustomDomainVerificationService.send(:remove_method, :process) if CustomDomainVerificationService.instance_methods(false).include?(:process)
+    if @orig_cdvs_process
+      CustomDomainVerificationService.define_method(:process, @orig_cdvs_process)
+    elsif CustomDomainVerificationService.instance_methods(false).include?(:process)
+      CustomDomainVerificationService.send(:remove_method, :process)
+    end
   end
 
   def stub_service_result(result)

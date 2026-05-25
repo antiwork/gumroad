@@ -14,11 +14,19 @@ class Settings::DismissAiProductGenerationPromosControllerTest < ActionControlle
     Feature.activate(:ai_product_generation)
     # Bypass eligibility chain (sales_cents_total + has_completed_payouts? both hit
     # external/ES surfaces in the Minitest lane).
+    # Capture+restore via UnboundMethod — `eligible_for_ai_product_generation?`
+    # is defined directly on User, so `remove_method` would strip the real
+    # implementation and leak NameError into sibling tests.
+    @orig_eligible = User.instance_method(:eligible_for_ai_product_generation?) if User.method_defined?(:eligible_for_ai_product_generation?)
     User.define_method(:eligible_for_ai_product_generation?) { true }
   end
 
   teardown do
-    User.remove_method(:eligible_for_ai_product_generation?) if User.instance_methods(false).include?(:eligible_for_ai_product_generation?)
+    if @orig_eligible
+      User.define_method(:eligible_for_ai_product_generation?, @orig_eligible)
+    elsif User.instance_methods(false).include?(:eligible_for_ai_product_generation?)
+      User.remove_method(:eligible_for_ai_product_generation?)
+    end
     restore_protect_against_forgery!
   end
 

@@ -19,8 +19,15 @@ class Helper::UnblockEmailServiceTest < ActiveSupport::TestCase
     Feature.deactivate(:auto_reply_for_blocked_emails_in_helper)
 
     # Stub Helper::Client + EmailSuppressionManager via class-level method overrides.
+    # Capture original UnboundMethods so teardown can restore them — using
+    # `remove_method` would strip the real implementations (these are defined
+    # directly on the classes) and leak NoMethodError into sibling tests.
     @client_calls = []
     cc = @client_calls
+    @orig_helper_methods = {}
+    [:add_note, :send_reply, :close_conversation].each do |m|
+      @orig_helper_methods[m] = Helper::Client.instance_method(m) if Helper::Client.method_defined?(m)
+    end
     Helper::Client.define_method(:add_note) do |**kwargs|
       cc << [:add_note, kwargs]
       true
@@ -37,16 +44,28 @@ class Helper::UnblockEmailServiceTest < ActiveSupport::TestCase
     @suppression_reasons = {}
     sup_unblock = -> { @suppression_unblock_value }
     sup_reasons = -> { @suppression_reasons }
+    @orig_esm_methods = {}
+    [:unblock_email, :reasons_for_suppression].each do |m|
+      @orig_esm_methods[m] = EmailSuppressionManager.instance_method(m) if EmailSuppressionManager.method_defined?(m)
+    end
     EmailSuppressionManager.define_method(:unblock_email) { sup_unblock.call }
     EmailSuppressionManager.define_method(:reasons_for_suppression) { sup_reasons.call }
   end
 
   teardown do
     [:add_note, :send_reply, :close_conversation].each do |m|
-      Helper::Client.remove_method(m) if Helper::Client.instance_methods(false).include?(m)
+      if (orig = @orig_helper_methods && @orig_helper_methods[m])
+        Helper::Client.define_method(m, orig)
+      elsif Helper::Client.instance_methods(false).include?(m)
+        Helper::Client.remove_method(m)
+      end
     end
     [:unblock_email, :reasons_for_suppression].each do |m|
-      EmailSuppressionManager.remove_method(m) if EmailSuppressionManager.instance_methods(false).include?(m)
+      if (orig = @orig_esm_methods && @orig_esm_methods[m])
+        EmailSuppressionManager.define_method(m, orig)
+      elsif EmailSuppressionManager.instance_methods(false).include?(m)
+        EmailSuppressionManager.remove_method(m)
+      end
     end
     Feature.deactivate(:helper_unblock_emails)
     Feature.deactivate(:auto_reply_for_blocked_emails_in_helper)

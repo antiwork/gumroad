@@ -9,8 +9,13 @@ class PostToIndividualPingEndpointWorkerTest < ActiveSupport::TestCase
     def @http_double.code; 200; end
   end
 
+  # Capture HTTParty.post as an UnboundMethod so we can restore it faithfully
+  # in teardown. `remove_method(:post)` would strip the real implementation
+  # (it's defined directly on HTTParty's singleton class), leaking
+  # `NoMethodError: undefined method 'post' for HTTParty` into sibling tests.
   def stub_httparty_post(expected_args_matcher)
     calls = []
+    orig_post = HTTParty.singleton_class.instance_method(:post)
     HTTParty.define_singleton_method(:post) do |*args, **kwargs|
       calls << [args, kwargs]
       expected_args_matcher.call(args, kwargs) if expected_args_matcher
@@ -19,7 +24,7 @@ class PostToIndividualPingEndpointWorkerTest < ActiveSupport::TestCase
     HTTParty.instance_variable_set(:@stub_response, @http_double)
     yield calls
   ensure
-    HTTParty.singleton_class.send(:remove_method, :post) if HTTParty.singleton_class.method_defined?(:post)
+    HTTParty.singleton_class.send(:define_method, :post, orig_post) if orig_post
     HTTParty.instance_variable_set(:@stub_response, nil)
   end
 
@@ -60,38 +65,49 @@ class PostToIndividualPingEndpointWorkerTest < ActiveSupport::TestCase
   end
 
   test "does not raise on SocketError" do
+    orig_post = HTTParty.singleton_class.instance_method(:post)
+    orig_info = Rails.logger.singleton_class.instance_method(:info) rescue nil
     HTTParty.define_singleton_method(:post) { |*_a, **_k| raise SocketError.new("socket error message") }
     log_msgs = []
-    logger_method_original = Rails.logger.method(:info)
     Rails.logger.define_singleton_method(:info) { |msg| log_msgs << msg }
     begin
       PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
     ensure
-      Rails.logger.singleton_class.send(:remove_method, :info)
-      HTTParty.singleton_class.send(:remove_method, :post)
+      if orig_info
+        Rails.logger.singleton_class.send(:define_method, :info, orig_info)
+      else
+        Rails.logger.singleton_class.send(:remove_method, :info) if Rails.logger.singleton_class.method_defined?(:info)
+      end
+      HTTParty.singleton_class.send(:define_method, :post, orig_post)
     end
     assert log_msgs.any? { |m| m.include?("[SocketError]") && m.include?("PostToIndividualPingEndpointWorker") && m.include?("socket error message") }
   end
 
   test "re-raises non-internet error" do
+    orig_post = HTTParty.singleton_class.instance_method(:post)
     HTTParty.define_singleton_method(:post) { |*_a, **_k| raise StandardError }
     begin
       assert_raises(StandardError) do
         PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
       end
     ensure
-      HTTParty.singleton_class.send(:remove_method, :post)
+      HTTParty.singleton_class.send(:define_method, :post, orig_post)
     end
   end
 
   test "logs response code, url and params" do
     stub_httparty_post(nil) do |_calls|
       log_msgs = []
+      orig_info = Rails.logger.singleton_class.instance_method(:info) rescue nil
       Rails.logger.define_singleton_method(:info) { |msg| log_msgs << msg }
       begin
         PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 })
       ensure
-        Rails.logger.singleton_class.send(:remove_method, :info)
+        if orig_info
+          Rails.logger.singleton_class.send(:define_method, :info, orig_info)
+        else
+          Rails.logger.singleton_class.send(:remove_method, :info) if Rails.logger.singleton_class.method_defined?(:info)
+        end
       end
       assert log_msgs.any? { |m| m.include?("response=200") && m.include?("url=https://notification.com") && m.include?("\"a\"") && m.include?("=>") }
     end

@@ -58,13 +58,19 @@ class CustomerLowPriorityMailerTest < ActionMailer::TestCase
     # The mailer reads @subscription.email which falls through to the
     # original_purchase's email; the subscription fixture doesn't have one,
     # so stub on the Subscription instance via override.
+    # Capture the original Subscription#email UnboundMethod and restore it,
+    # rather than `remove_method`-ing — `:email` is defined directly on
+    # Subscription, so removing strips the real implementation and leaks
+    # `undefined local variable or method 'email' for an instance of Subscription`
+    # into sibling tests.
+    orig_email = Subscription.instance_method(:email)
     Subscription.define_method(:email) { "subscriber@example.com" }
     begin
       mail = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id)
       assert_equal ["subscriber@example.com"], mail.to
       assert_equal "Someone tried to purchase a membership you already have", mail.subject
     ensure
-      Subscription.remove_method(:email) if Subscription.instance_methods(false).include?(:email)
+      Subscription.define_method(:email, orig_email)
     end
   end
 end
