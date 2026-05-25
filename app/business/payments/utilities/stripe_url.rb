@@ -10,7 +10,10 @@ module StripeUrl
   end
 
   def self.transfer_url(transfer_id, account_id: nil)
-    [base_url(account_id:), "transfers", transfer_id].join("/")
+    segments = [base_url]
+    segments += ["connect", "view-as", account_id] if account_id
+    segments += ["payouts", transfer_id]
+    segments.join("/")
   end
 
   def self.charge_url(charge_id)
