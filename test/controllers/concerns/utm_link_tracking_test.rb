@@ -35,6 +35,7 @@ class UtmLinkTrackingTest < ActionController::TestCase
 
   teardown do
     ActionController::Base.define_method(:protect_against_forgery?, @orig_protect) if @orig_protect
+    Feature.deactivate_user(:utm_links, @seller) if @seller
   end
 
   def matching_utm_params

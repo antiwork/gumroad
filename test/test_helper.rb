@@ -89,6 +89,22 @@ module ActiveSupport
     if fixtures_dir.directory? && Dir[fixtures_dir.join("*.yml")].any?
       fixtures :all
     end
+
+    # Activate features that the RSpec suite activates globally in
+    # spec_helper.rb (`config.before(:each)` around line 336). Tests that
+    # un-stubbed from RSpec inherit this assumption — e.g. EmailEvent
+    # writes are gated on `:log_email_events`, otherwise the observer
+    # silently no-ops and `assert_difference { EmailEvent.count }` fails.
+    setup do
+      %i[
+        store_discover_searches
+        log_email_events
+        follow_wishlists
+        seller_refund_policy_new_users_enabled
+        paypal_payout_fee
+        disable_braintree_sales
+      ].each { |feature| Feature.activate(feature) }
+    end
   end
 end
 
