@@ -30,6 +30,15 @@ module User::Posts
       purchases = sales.for_visible_posts(purchaser_id: pundit_user.user.id)
       if purchases.exists?
         product_post_ids = Set.new
+        seller_sales = sales
+
+        seller_type_installments = installments.where("installment_type = ?", Installment::SELLER_TYPE).to_a
+        all_not_bought_permalinks = seller_type_installments
+          .flat_map { |post| Array.wrap(post.not_bought_products) }
+          .uniq
+        permalink_to_link_id = all_not_bought_permalinks.present? ?
+          Link.where(unique_permalink: all_not_bought_permalinks).pluck(:unique_permalink, :id).to_h : {}
+
         filters = purchases.joins(:link)
                            .select(:email,
                                    :country,
@@ -53,13 +62,13 @@ module User::Posts
                               .where("published_at >= ?", purchase.created_at)
           posts = posts.where("published_at < ?", terminated_at) if terminated_at.present?
           posts = posts.filter { |post| subscription.alive_at?(post.published_at) } if subscription.present?
-          product_post_ids += posts.filter_map { |post| post.id if post.purchase_passes_filters(purchase) }
+          product_post_ids += posts.filter_map { |post| post.id if post.purchase_passes_filters(purchase, seller_sales:) }
         end
         filters = filters.symbolize_keys.except(:id)
         filters[:product_permalinks] = filters[:product_permalinks].split(",").compact if filters[:product_permalinks].present?
 
-        seller_post_ids = installments.where("installment_type = ?", Installment::SELLER_TYPE)
-                                      .filter_map { |post| post.id if post.seller_post_passes_filters(**filters) }
+        seller_post_ids = seller_type_installments
+                            .filter_map { |post| post.id if post.seller_post_passes_filters(**filters, permalink_to_link_id:, seller_sales:) }
 
         display_audience_posts = true
       end

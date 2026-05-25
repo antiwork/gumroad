@@ -110,7 +110,7 @@ module WithFiltering
     true
   end
 
-  def purchase_passes_filters(purchase)
+  def purchase_passes_filters(purchase, permalink_to_link_id: nil, seller_sales: nil)
     params = purchase.slice(:email, :country, :ip_country)
     params[:min_created_at] = purchase.created_at
     params[:max_created_at] = purchase.created_at
@@ -119,10 +119,10 @@ module WithFiltering
     params[:product_permalinks] = [purchase.link.unique_permalink]
     params[:variant_external_ids] = purchase.variant_attributes.map(&:external_id)
 
-    seller_post_passes_filters(**params.symbolize_keys)
+    seller_post_passes_filters(**params.symbolize_keys, permalink_to_link_id:, seller_sales:)
   end
 
-  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [])
+  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [], permalink_to_link_id: nil, seller_sales: nil)
     return false if created_after.present? && (min_created_at.nil? || (min_created_at.present? && min_created_at < created_after))
     return false if created_before.present? && (max_created_at.nil? || (max_created_at.present? && max_created_at > created_before))
     excludes_product = bought_products.present? && (product_permalinks.empty? || (bought_products & product_permalinks).empty?)
@@ -139,9 +139,17 @@ module WithFiltering
     return false if paid_less_than_cents.present? && (max_price_cents.nil? || (max_price_cents.present? && max_price_cents > paid_less_than_cents))
     return false if bought_from.present? && !(country == bought_from || (country.nil? && ip_country == bought_from))
 
-    exclude_product_ids = not_bought_products.present? ? Link.find_by(unique_permalink: not_bought_products)&.id : []
+    exclude_product_ids = if not_bought_products.present?
+      if permalink_to_link_id
+        not_bought_products.filter_map { |p| permalink_to_link_id[p] }
+      else
+        Array.wrap(Link.find_by(unique_permalink: not_bought_products)&.id).compact
+      end
+    else
+      []
+    end
     return false if (exclude_product_ids.present? || not_bought_variants.present?) &&
-      seller.sales
+      (seller_sales || seller.sales)
             .not_is_archived_original_subscription_purchase
             .not_subscription_or_original_purchase
             .by_external_variant_ids_or_products(not_bought_variants, exclude_product_ids)

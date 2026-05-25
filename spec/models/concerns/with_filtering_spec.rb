@@ -506,6 +506,56 @@ describe WithFiltering do
         end
       end
     end
+
+    describe "with preloaded caches" do
+      before do
+        @product = create(:product, user: @creator)
+        @purchase = create(:purchase, link: @product, seller: @creator)
+      end
+
+      it "uses permalink_to_link_id cache to exclude buyers of not_bought_products" do
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        permalink_to_link_id = { @product.unique_permalink => @product.id }
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id:,
+          seller_sales: @creator.sales
+        )).to eq(false)
+      end
+
+      it "returns true via cache when buyer has not purchased the excluded product" do
+        other_product = create(:product, user: @creator)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [other_product.unique_permalink] })
+        permalink_to_link_id = { other_product.unique_permalink => other_product.id }
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id:,
+          seller_sales: @creator.sales
+        )).to eq(true)
+      end
+
+      it "uses seller_sales scope instead of seller association" do
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          seller_sales: @creator.sales
+        )).to eq(false)
+      end
+
+      it "forwards caches through purchase_passes_filters" do
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        permalink_to_link_id = { @product.unique_permalink => @product.id }
+
+        expect(post.purchase_passes_filters(
+          @purchase,
+          permalink_to_link_id:,
+          seller_sales: @creator.sales
+        )).to eq(false)
+      end
+    end
   end
 
   describe "#affiliate_passes_filters" do
