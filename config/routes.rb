@@ -361,7 +361,7 @@ Rails.application.routes.draw do
             end
           end
 
-          resources :scheduled_payouts, only: [:index] do
+          resources :scheduled_payouts, only: [:index, :create] do
             member do
               post :execute
               post :cancel

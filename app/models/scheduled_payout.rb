@@ -14,6 +14,7 @@ class ScheduledPayout < ApplicationRecord
 
   validates :action, presence: true, inclusion: { in: ACTIONS }
   validates :status, presence: true, inclusion: { in: STATUSES }
+  validates :processor, inclusion: { in: PayoutProcessorType.all }, allow_nil: true
   validates :delay_days, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :scheduled_at, presence: true
   validates :payout_amount_cents, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
@@ -66,9 +67,10 @@ class ScheduledPayout < ApplicationRecord
 
     if process_payout
       begin
+        payout_processor_type = processor.presence || user.current_payout_processor
         payment, payment_errors = Payouts.create_payment(
           Date.yesterday.to_s,
-          user.current_payout_processor,
+          payout_processor_type,
           user
         )
 
@@ -81,7 +83,7 @@ class ScheduledPayout < ApplicationRecord
           raise "Payout failed: #{error_detail}"
         end
 
-        payout_processor = PayoutProcessorType.get(user.current_payout_processor)
+        payout_processor = PayoutProcessorType.get(payout_processor_type)
         payout_processor.process_payments([payment])
 
         if payment.reload.failed?
