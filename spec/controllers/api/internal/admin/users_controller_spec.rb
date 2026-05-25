@@ -1967,6 +1967,212 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :suspension, method: :get, build_user: -> { create(:compliant_user) }
   end
 
+  describe "GET unpaid_balance" do
+    include_examples "admin api authorization required", :get, :unpaid_balance
+
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+    let(:user) { create(:tos_user, email: "seller@example.com") }
+    let(:product) { create(:product, user:) }
+
+    def create_purchase_for_unpaid_balance(seller:, product:, balance:, price_cents:, gumroad_tax_cents: 0, **attributes)
+      create(:purchase,
+             {
+               seller:,
+               link: product,
+               purchase_success_balance: balance,
+               price_cents:,
+               gumroad_tax_cents:,
+               total_transaction_cents: price_cents + gumroad_tax_cents
+             }.merge(attributes))
+    end
+
+    it "returns count and total for refundable purchases on unpaid balances" do
+      unpaid_balance = create(:balance, user:)
+      matching_purchase = create_purchase_for_unpaid_balance(seller: user, product:, balance: unpaid_balance, price_cents: 15_00, gumroad_tax_cents: 2_00)
+      create(:refund, purchase: matching_purchase, amount_cents: 5_00, gumroad_tax_cents: 1_00)
+
+      paid_balance = create(:balance, user:)
+      paid_balance.mark_processing!
+      paid_balance.mark_paid!
+      create_purchase_for_unpaid_balance(seller: user, product:, balance: paid_balance, price_cents: 20_00)
+      create(:purchase, seller: user, link: product, price_cents: 30_00, purchase_success_balance: nil)
+      create_purchase_for_unpaid_balance(seller: user, product:, balance: unpaid_balance, price_cents: 40_00, stripe_refunded: true)
+      other_user = create(:tos_user)
+      create_purchase_for_unpaid_balance(seller: other_user, product: create(:product, user: other_user), balance: create(:balance, user: other_user), price_cents: 50_00)
+
+      get :unpaid_balance, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        count: 1,
+        total: 11_00,
+        total_amount_cents: 11_00,
+        currency: "usd"
+      }.as_json)
+    end
+
+    it "returns zero totals when no purchases match the refund worker query" do
+      get :unpaid_balance, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        count: 0,
+        total: 0,
+        total_amount_cents: 0,
+        currency: "usd"
+      }.as_json)
+    end
+
+    it "returns a bad request when user lookup params are missing" do
+      get :unpaid_balance
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "does not write an admin audit log" do
+      expect do
+        get :unpaid_balance, params: { user_id: user.external_id }
+      end.not_to change { AdminApiAuditLog.count }
+    end
+
+    include_examples "supports user lookup by user_id", :unpaid_balance, method: :get, build_user: -> { create(:tos_user) }
+  end
+
+  describe "POST refund_balance" do
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+    let(:user) { create(:tos_user, email: "seller@example.com") }
+    let(:balance) { create(:balance, user:) }
+    let(:product) { create(:product, user:) }
+    let!(:purchase) do
+      create(:purchase,
+             seller: user,
+             link: product,
+             purchase_success_balance: balance,
+             price_cents: 12_34,
+             gumroad_tax_cents: 1_00,
+             total_transaction_cents: 13_34)
+    end
+
+    include_examples "admin api authorization required", :post, :refund_balance, {
+      user_id: "missing",
+      expected_email: "seller@example.com",
+      expected_purchase_count: 0,
+      expected_total_amount_cents: 0
+    }
+
+    def refund_balance_params(user, overrides = {})
+      summary = RefundUnpaidPurchasesWorker.unpaid_balance_summary_for(user)
+      {
+        user_id: user.external_id,
+        expected_email: user.email,
+        expected_purchase_count: summary[:count],
+        expected_total_amount_cents: summary[:total_amount_cents]
+      }.merge(overrides)
+    end
+
+    it "returns 400 when user_id is missing" do
+      post :refund_balance, params: {
+        expected_email: user.email,
+        expected_purchase_count: 1,
+        expected_total_amount_cents: 13_34
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+
+    it "returns 400 when expected_email is missing" do
+      post :refund_balance, params: refund_balance_params(user).except(:expected_email)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email is required" }.as_json)
+    end
+
+    it "returns 400 when expected_purchase_count is missing" do
+      post :refund_balance, params: refund_balance_params(user).except(:expected_purchase_count)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_purchase_count is required" }.as_json)
+    end
+
+    it "returns 400 when an expected value is not a non-negative integer" do
+      post :refund_balance, params: refund_balance_params(user, expected_total_amount_cents: "12.34")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_total_amount_cents must be a non-negative integer" }.as_json)
+    end
+
+    it "returns 422 when the user is not suspended" do
+      user.update!(user_risk_state: "compliant")
+
+      expect do
+        post :refund_balance, params: refund_balance_params(user)
+      end.not_to change { RefundUnpaidPurchasesWorker.jobs.size }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User must be suspended to refund unpaid purchases" }.as_json)
+    end
+
+    it "returns 409 with current values when the expected count or total is stale" do
+      expect do
+        post :refund_balance, params: refund_balance_params(user, expected_total_amount_cents: 1)
+      end.not_to change { RefundUnpaidPurchasesWorker.jobs.size }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({
+        success: false,
+        user_id: user.external_id,
+        message: "Expected unpaid balance does not match current unpaid balance",
+        current: {
+          count: 1,
+          total: 13_34,
+          total_amount_cents: 13_34,
+          currency: "usd"
+        }
+      }.as_json)
+    end
+
+    it "enqueues a refund worker when the expected values match" do
+      expect do
+        post :refund_balance, params: refund_balance_params(user)
+      end.to change { RefundUnpaidPurchasesWorker.jobs.size }.by(1)
+        .and change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        status: "queued",
+        message: "Refund balance queued",
+        count: 1,
+        total: 13_34,
+        total_amount_cents: 13_34,
+        currency: "usd"
+      }.as_json)
+      expect(RefundUnpaidPurchasesWorker).to have_enqueued_sidekiq_job(user.id, admin_user.id)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "users.refund_balance",
+        actor_user_id: admin_user.id,
+        target_type: "User",
+        target_id: user.id,
+        response_status: 200
+      )
+    end
+
+    include_examples "requires user_id for user mutation",
+                     :refund_balance,
+                     extra_params: { expected_email: "seller@example.com", expected_purchase_count: 0, expected_total_amount_cents: 0 }
+    include_examples "checks expected_email for user mutation",
+                     :refund_balance,
+                     build_user: -> { create(:tos_user) },
+                     extra_params: { expected_purchase_count: 0, expected_total_amount_cents: 0 }
+  end
+
   describe "POST reset_password" do
     let(:user) { create(:user) }
 

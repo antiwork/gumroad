@@ -3,8 +3,44 @@
 require "spec_helper"
 
 describe RefundUnpaidPurchasesWorker, :vcr do
+  it "uses a unique execution lock" do
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+  end
+
+  it "locks by user id only" do
+    expect(described_class.lock_args([123, 456])).to eq([123])
+  end
+
+  describe ".unpaid_balance_summary_for" do
+    it "computes refundable totals without calling per-purchase refundable helpers" do
+      create(:merchant_account, user: nil)
+      user = create(:tos_user)
+      product = create(:product, user:)
+      balance = create(:balance, user:)
+      purchase = create(:purchase,
+                        seller: user,
+                        link: product,
+                        purchase_success_balance: balance,
+                        price_cents: 15_00,
+                        gumroad_tax_cents: 2_00,
+                        total_transaction_cents: 17_00)
+      create(:refund, purchase:, amount_cents: 5_00, gumroad_tax_cents: 1_00)
+
+      expect_any_instance_of(Purchase).not_to receive(:gross_amount_refundable_cents)
+      expect(ActiveRecord::Base.connection).not_to receive(:stick_to_primary!)
+
+      expected_summary = {
+        count: 1,
+        total_amount_cents: 11_00,
+        currency: "usd"
+      }
+      expect(described_class.unpaid_balance_summary_for(user)).to eq(expected_summary)
+    end
+  end
+
   describe "#perform" do
     before do
+      create(:merchant_account, user: nil)
       @admin_user = create(:admin_user)
       @purchase = create(:purchase_in_progress, chargeable: create(:chargeable))
       @purchase.process!
