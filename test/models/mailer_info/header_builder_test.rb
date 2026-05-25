@@ -135,10 +135,15 @@ class MailerInfo::HeaderBuilderTest < ActiveSupport::TestCase
 
   private
     def with_preorder_auth_stub(auth_purchase)
-      stub_mod = Module.new do
-        define_method(:authorization_purchase) { auth_purchase }
+      # Use define_method + UnboundMethod restore (P-M9 pattern).
+      # Earlier impl used Preorder.prepend(...) which permanently mutated
+      # the class and leaked across tests (cancel_preorder_worker_test failures).
+      original = Preorder.instance_method(:authorization_purchase)
+      Preorder.define_method(:authorization_purchase) { auth_purchase }
+      begin
+        yield
+      ensure
+        Preorder.define_method(:authorization_purchase, original)
       end
-      Preorder.prepend(stub_mod)
-      yield
     end
 end

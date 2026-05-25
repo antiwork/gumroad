@@ -166,7 +166,7 @@ module Product::Prices
     if is_tiered_membership?
       lowest_tier_price(for_default_duration:).price_cents || 0
     else
-      default_price_cents + (lowest_variant_price_difference_cents || 0)
+      (default_price_cents || 0) + (lowest_variant_price_difference_cents || 0)
     end
   end
 
