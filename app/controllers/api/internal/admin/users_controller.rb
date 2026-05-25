@@ -131,6 +131,13 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                      })
   end
 
+  def unpaid_balance
+    user = find_internal_admin_user_for_read_or_render
+    return unless user
+
+    render json: internal_admin_user_success_payload(user, unpaid_balance_payload(RefundUnpaidPurchasesWorker.unpaid_balance_summary_for(user)))
+  end
+
   def reset_password
     user = find_internal_admin_user_for_write_or_render
     return unless user
@@ -320,6 +327,51 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                        })
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
+  def refund_balance
+    return render_internal_admin_user_id_required if params[:user_id].blank?
+    return render json: { success: false, message: "expected_email is required" }, status: :bad_request if params[:expected_email].blank?
+
+    expected_purchase_count = parse_non_negative_integer_param(:expected_purchase_count)
+    return if performed?
+
+    expected_total_amount_cents = parse_non_negative_integer_param(:expected_total_amount_cents)
+    return if performed?
+
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    unless user.suspended?
+      return render json: { success: false, message: "User must be suspended to refund unpaid purchases" }, status: :unprocessable_entity
+    end
+
+    current_summary = RefundUnpaidPurchasesWorker.unpaid_balance_summary_for(user)
+    unless unpaid_balance_summary_matches?(current_summary, expected_purchase_count:, expected_total_amount_cents:)
+      payload = {
+        success: false,
+        message: "Expected unpaid balance does not match current unpaid balance",
+        current: unpaid_balance_payload(current_summary)
+      }
+      return render json: internal_admin_user_success_payload(user, payload), status: :conflict
+    end
+
+    record_admin_write(action: "users.refund_balance", target: user) do
+      job_id = RefundUnpaidPurchasesWorker.perform_async(user.id, current_admin_actor_id)
+      if job_id.blank?
+        payload = {
+          success: false,
+          message: "Refund balance is already queued or running",
+          current: unpaid_balance_payload(current_summary)
+        }
+        return render json: internal_admin_user_success_payload(user, payload), status: :conflict
+      end
+
+      render json: internal_admin_user_success_payload(user, {
+        status: "queued",
+        message: "Refund balance queued",
+      }.merge(unpaid_balance_payload(current_summary)))
     end
   end
 
@@ -780,6 +832,35 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def flag_for_tos_violation_comment_content(product)
       "Flagged for a policy violation by #{Current.admin_actor.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} for product named '#{product.name}'"
+    end
+
+    def parse_non_negative_integer_param(name)
+      raw = params[name]
+      if raw.blank?
+        render json: { success: false, message: "#{name} is required" }, status: :bad_request
+        return
+      end
+
+      value = raw.to_s
+      unless value.match?(/\A\d+\z/)
+        render json: { success: false, message: "#{name} must be a non-negative integer" }, status: :bad_request
+        return
+      end
+
+      value.to_i
+    end
+
+    def unpaid_balance_summary_matches?(summary, expected_purchase_count:, expected_total_amount_cents:)
+      summary[:count] == expected_purchase_count && summary[:total_amount_cents] == expected_total_amount_cents
+    end
+
+    def unpaid_balance_payload(summary)
+      {
+        count: summary[:count],
+        total: summary[:total_amount_cents],
+        total_amount_cents: summary[:total_amount_cents],
+        currency: summary[:currency]
+      }
     end
 
     def parse_threshold_cents(raw)
