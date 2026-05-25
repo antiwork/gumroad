@@ -249,7 +249,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         return render json: internal_admin_user_success_payload(user, status: "already_suspended", message: "User is already suspended for fraud")
       end
 
-      suspension_note = build_suspension_note(user) if params[:suspension_note].present?
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
       return render_invalid_comment(suspension_note) if suspension_note&.invalid?
 
       user.suspend_for_fraud!(author_id: current_admin_actor_id)
@@ -272,7 +272,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                                                                 })
       end
 
-      suspension_note = build_suspension_note(user, params[:note]) if params[:note].present?
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
       return render_invalid_comment(suspension_note) if suspension_note&.invalid?
 
       user.suspend_for_tos_violation!(author_id: current_admin_actor_id)
@@ -721,7 +721,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       )
     end
 
-    def build_suspension_note(user, content = params[:suspension_note])
+    def build_suspension_note(user, content:)
       user.comments.new(
         author_id: current_admin_actor_id,
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,

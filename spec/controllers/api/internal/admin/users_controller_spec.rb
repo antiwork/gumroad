@@ -2574,7 +2574,7 @@ describe Api::Internal::Admin::UsersController do
 
     it "creates an extra suspension note when one is provided" do
       expect do
-        post :suspend_for_tos_violation, params: { user_id: user.external_id, note: "DMCA takedown notice confirmed" }
+        post :suspend_for_tos_violation, params: { user_id: user.external_id, suspension_note: "DMCA takedown notice confirmed" }
       end.to change { user.comments.reload.count }.by(2)
 
       expect(response).to have_http_status(:ok)
@@ -2588,7 +2588,7 @@ describe Api::Internal::Admin::UsersController do
 
     it "returns 422 without suspending the user when the note is invalid" do
       expect do
-        post :suspend_for_tos_violation, params: { user_id: user.external_id, note: "x" * 10_001 }
+        post :suspend_for_tos_violation, params: { user_id: user.external_id, suspension_note: "x" * 10_001 }
       end.not_to change { user.comments.reload.count }
 
       expect(response).to have_http_status(:unprocessable_entity)
@@ -2601,7 +2601,7 @@ describe Api::Internal::Admin::UsersController do
       user.update!(user_risk_state: "suspended_for_tos_violation")
 
       expect do
-        post :suspend_for_tos_violation, params: { user_id: user.external_id, note: "Retry" }
+        post :suspend_for_tos_violation, params: { user_id: user.external_id, suspension_note: "Retry" }
       end.not_to change { user.comments.reload.count }
 
       expect(response).to have_http_status(:ok)
