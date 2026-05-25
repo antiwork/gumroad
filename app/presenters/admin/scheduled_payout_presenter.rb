@@ -12,6 +12,7 @@ class Admin::ScheduledPayoutPresenter
     {
       external_id: scheduled_payout.external_id,
       action: scheduled_payout.action,
+      processor: scheduled_payout.processor,
       status: scheduled_payout.status,
       delay_days: scheduled_payout.delay_days,
       scheduled_at: scheduled_payout.scheduled_at,

@@ -4,10 +4,198 @@ require "spec_helper"
 require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::ScheduledPayoutsController do
+  let(:admin_user) { create(:admin_user, name: "Risk admin") }
   let(:user) { create(:compliant_user) }
+  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
 
   before do
-    stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
+    stub_const("GUMROAD_ADMIN_ID", admin_user.id)
+  end
+
+  describe "POST create" do
+    let(:suspended_user) { create(:user, user_risk_state: "suspended_for_tos_violation", email: "seller@example.com") }
+    let(:merchant_account) { create(:merchant_account, user: nil) }
+
+    include_examples "admin api authorization required", :post, :create, { processor: "stripe", user_id: "missing" }
+
+    it "returns 400 when user_id is missing" do
+      post :create, params: { processor: "stripe" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :create, params: { user_id: "missing", processor: "stripe" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns 400 when processor is missing" do
+      post :create, params: { user_id: suspended_user.external_id }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "processor is required" }.as_json)
+    end
+
+    it "returns 400 when processor is invalid" do
+      post :create, params: { user_id: suspended_user.external_id, processor: "ach" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "processor must be stripe or paypal" }.as_json)
+    end
+
+    it "returns 400 when payout_date is invalid" do
+      post :create, params: { user_id: suspended_user.external_id, processor: "stripe", payout_date: "not-a-date" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "payout_date is invalid" }.as_json)
+    end
+
+    it "returns 400 when payout_date is in the past" do
+      travel_to Time.utc(2026, 5, 25, 12) do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe", payout_date: "2026-05-24" }
+      end
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "payout_date cannot be in the past" }.as_json)
+    end
+
+    it "creates a scheduled payout for a suspended user with the default payout date" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
+      travel_to Time.utc(2026, 5, 25, 12) do
+        expect do
+          post :create, params: {
+            user_id: suspended_user.external_id,
+            processor: "stripe",
+            expected_email: "seller@example.com",
+            note: "Appeal window closes before payout."
+          }
+        end.to change { ScheduledPayout.count }.by(1)
+          .and change { suspended_user.comments.with_type_payout_note.count }.by(1)
+      end
+
+      expect(response).to have_http_status(:ok)
+      scheduled_payout = ScheduledPayout.last
+      expect(scheduled_payout).to have_attributes(
+        user: suspended_user,
+        action: "payout",
+        delay_days: 21,
+        scheduled_at: Time.utc(2026, 6, 15),
+        processor: PayoutProcessorType::STRIPE,
+        payout_amount_cents: 12_345,
+        created_by: admin_user
+      )
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => suspended_user.external_id,
+        "message" => "Scheduled payout created",
+        "scheduled_payout" => hash_including(
+          "external_id" => scheduled_payout.external_id,
+          "action" => "payout",
+          "processor" => PayoutProcessorType::STRIPE,
+          "payout_amount_cents" => 12_345
+        )
+      )
+      payout_note = suspended_user.comments.with_type_payout_note.last
+      expect(payout_note).to have_attributes(
+        author_id: admin_user.id,
+        author_name: "Risk admin",
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE
+      )
+      expect(payout_note.content).to include("Scheduled payout via stripe for June 15, 2026 (21 day delay)")
+      expect(payout_note.content).to include("Appeal window closes before payout.")
+    end
+
+    it "creates a scheduled payout for an explicit UTC payout date" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
+      travel_to Time.utc(2026, 5, 25, 12) do
+        post :create, params: {
+          user_id: suspended_user.external_id,
+          processor: "paypal",
+          payout_date: "2026-06-01"
+        }
+      end
+
+      expect(response).to have_http_status(:ok)
+      scheduled_payout = ScheduledPayout.last
+      expect(scheduled_payout).to have_attributes(
+        delay_days: 7,
+        scheduled_at: Time.utc(2026, 6, 1),
+        processor: PayoutProcessorType::PAYPAL
+      )
+    end
+
+    it "returns 409 when expected_email does not match" do
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe", expected_email: "other@example.com" }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email does not match the user's current email" }.as_json)
+    end
+
+    it "returns 422 when the user is not suspended" do
+      expect do
+        post :create, params: { user_id: user.external_id, processor: "stripe" }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User is not suspended." }.as_json)
+    end
+
+    it "returns 422 when the user has no unpaid balance" do
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe" }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User has no unpaid balance." }.as_json)
+    end
+
+    it "returns 422 when the user has an in-progress scheduled payout" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+      create(:scheduled_payout, user: suspended_user, status: "pending")
+
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe" }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User already has a scheduled payout in progress" }.as_json)
+    end
+
+    it "returns 422 without creating a scheduled payout when the note is invalid" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe", note: "x" * 10_001 }
+      end.not_to change { ScheduledPayout.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("Content is too long")
+    end
+
+    it "writes an admin audit log targeting the suspended user" do
+      create(:balance, user: suspended_user, merchant_account:, amount_cents: 12_345, state: "unpaid")
+
+      expect do
+        post :create, params: { user_id: suspended_user.external_id, processor: "stripe" }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "scheduled_payouts.create",
+        actor_user_id: admin_user.id,
+        target_type: "User",
+        target_id: suspended_user.id,
+        target_external_id: suspended_user.external_id,
+        response_status: 200
+      )
+    end
   end
 
   describe "GET index" do
