@@ -249,12 +249,38 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         return render json: internal_admin_user_success_payload(user, status: "already_suspended", message: "User is already suspended for fraud")
       end
 
-      suspension_note = build_suspension_note(user) if params[:suspension_note].present?
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
       return render_invalid_comment(suspension_note) if suspension_note&.invalid?
 
       user.suspend_for_fraud!(author_id: current_admin_actor_id)
       suspension_note&.save!
       render json: internal_admin_user_success_payload(user, status: "suspended_for_fraud", message: "User suspended for fraud")
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
+  def suspend_for_tos_violation
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    record_admin_write(action: "users.suspend_for_tos_violation", target: user) do
+      if user.suspended_for_tos_violation?
+        return render json: internal_admin_user_success_payload(user, {
+                                                                  status: "already_suspended",
+                                                                  message: "User is already suspended for a policy violation"
+                                                                })
+      end
+
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
+      return render_invalid_comment(suspension_note) if suspension_note&.invalid?
+
+      user.suspend_for_tos_violation!(author_id: current_admin_actor_id)
+      suspension_note&.save!
+      render json: internal_admin_user_success_payload(user, {
+                                                         status: "suspended_for_tos_violation",
+                                                         message: "User suspended for a policy violation"
+                                                       })
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
@@ -695,11 +721,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       )
     end
 
-    def build_suspension_note(user)
+    def build_suspension_note(user, content:)
       user.comments.new(
         author_id: current_admin_actor_id,
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-        content: params[:suspension_note]
+        content:
       )
     end
 
