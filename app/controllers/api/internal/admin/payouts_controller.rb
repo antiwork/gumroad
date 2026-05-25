@@ -8,7 +8,7 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
 
   def index
     records, pagination = paginate_with_cursor(@user.payments.includes(:bank_account), order: [[:created_at, :desc], [:id, :desc]])
-    payout_note = @user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last&.content
+    payout_note = @user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).last&.content
 
     render json: {
       success: true,

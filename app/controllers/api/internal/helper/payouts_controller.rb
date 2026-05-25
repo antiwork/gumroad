@@ -20,7 +20,7 @@ class Api::Internal::Helper::PayoutsController < Api::Internal::Helper::BaseCont
 
     next_payout_date = @user.next_payout_date
     balance_for_next_payout = @user.formatted_balance_for_next_payout_date
-    payout_note = @user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last&.content
+    payout_note = @user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).last&.content
 
     render json: { success: true, last_payouts: payouts, next_payout_date:, balance_for_next_payout:, payout_note: }
   end
@@ -78,7 +78,7 @@ class Api::Internal::Helper::PayoutsController < Api::Internal::Helper::BaseCont
         render json: { success: false, message: error_message }, status: :unprocessable_entity
       end
     else
-      payout_note = @user.reload.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last&.content
+      payout_note = @user.reload.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).last&.content
       payout_note&.gsub!("via #{payout_processor_type.capitalize} on #{payout_date.to_fs(:formatted_date_full_month)} ", "")
       message = "User is not eligible for payout."
       message += " #{payout_note}" if payout_note.present?
