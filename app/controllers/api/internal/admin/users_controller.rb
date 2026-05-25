@@ -286,6 +286,43 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  def flag_for_tos_violation
+    return render json: { success: false, message: "product_id is required" }, status: :bad_request if params[:product_id].blank?
+
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    product = find_internal_admin_product_or_render
+    return unless product
+
+    unless product.user_id == user.id
+      return render json: { success: false, message: "Product does not belong to user" }, status: :unprocessable_entity
+    end
+
+    record_admin_write(action: "users.flag_for_tos_violation", target: user) do
+      if user.flagged_for_tos_violation?
+        return render json: internal_admin_user_success_payload(user, {
+                                                                  product_id: product.external_id,
+                                                                  status: "already_flagged",
+                                                                  message: "User is already flagged for a policy violation"
+                                                                })
+      end
+
+      user.flag_for_tos_violation!(
+        author_id: current_admin_actor_id,
+        product_id: product.id,
+        content: flag_for_tos_violation_comment_content(product)
+      )
+      render json: internal_admin_user_success_payload(user, {
+                                                         product_id: product.external_id,
+                                                         status: "flagged_for_tos_violation",
+                                                         message: "User flagged for a policy violation"
+                                                       })
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
   def watch
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
@@ -731,6 +768,18 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def render_invalid_comment(comment)
       render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
+    def find_internal_admin_product_or_render
+      product = Link.alive.find_by_external_id(params[:product_id])
+      return product if product.present?
+
+      render json: { success: false, message: "Product not found" }, status: :not_found
+      nil
+    end
+
+    def flag_for_tos_violation_comment_content(product)
+      "Flagged for a policy violation by #{Current.admin_actor.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} for product named '#{product.name}'"
     end
 
     def parse_threshold_cents(raw)

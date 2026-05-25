@@ -45,6 +45,13 @@ describe "internal admin API routing" do
     )
   end
 
+  it "routes the user policy-violation flag write endpoint" do
+    expect(route_for("/internal/admin/users/flag_for_tos_violation", :post)).to include(
+      controller: "api/internal/admin/users",
+      action: "flag_for_tos_violation"
+    )
+  end
+
   it "routes the products endpoints" do
     expect(route_for("/internal/admin/products", :get)).to include(controller: "api/internal/admin/products", action: "index")
     expect(route_for("/internal/admin/products/abc123", :get)).to include(controller: "api/internal/admin/products", action: "show", id: "abc123")

@@ -2640,6 +2640,155 @@ describe Api::Internal::Admin::UsersController do
     include_examples "checks expected_email for user mutation", :suspend_for_tos_violation, build_user: -> { create(:compliant_user) }
   end
 
+  describe "POST flag_for_tos_violation" do
+    let(:user) { create(:compliant_user, email: "seller@example.com") }
+    let(:product) { create(:product, user:, name: "Policy problem guide") }
+
+    include_examples "admin api authorization required", :post, :flag_for_tos_violation, { product_id: "missing" }
+
+    it "returns 400 when user_id is missing" do
+      post :flag_for_tos_violation, params: { product_id: product.external_id }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+
+    it "returns 400 when product_id is missing" do
+      post :flag_for_tos_violation, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "product_id is required" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :flag_for_tos_violation, params: { user_id: "missing", product_id: product.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns 404 when the product does not exist" do
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+    end
+
+    it "returns 404 when the product is not alive" do
+      deleted_product = create(:product, user:)
+      deleted_product.mark_deleted!
+      banned_product = create(:product, user:, banned_at: 1.day.ago)
+      purchase_disabled_product = create(:product, user:, purchase_disabled_at: 1.day.ago)
+
+      [deleted_product, banned_product, purchase_disabled_product].each do |inactive_product|
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: inactive_product.external_id }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+        expect(user.reload).to be_compliant
+      end
+    end
+
+    it "returns 422 without flagging the user when the product belongs to another user" do
+      other_product = create(:product)
+
+      expect do
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: other_product.external_id }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "Product does not belong to user" }.as_json)
+      expect(user.reload).to be_compliant
+    end
+
+    it "flags the user for a policy violation and creates user and product comments attributed to the admin actor" do
+      expect do
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+      end.to change { user.comments.reload.count }.by(1)
+        .and change { product.comments.reload.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        product_id: product.external_id,
+        status: "flagged_for_tos_violation",
+        message: "User flagged for a policy violation"
+      }.as_json)
+      expect(user.reload).to be_flagged_for_tos_violation
+
+      user_comment = user.comments.last
+      expect(user_comment).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_FLAGGED,
+        content: include("Flagged for a policy violation")
+      )
+      expect(user_comment.content).to include("Policy problem guide")
+      expect(user_comment.content).to include("by #{admin_user.name_or_username}")
+
+      product_comment = product.comments.last
+      expect(product_comment).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: "flagged",
+        content: user_comment.content
+      )
+    end
+
+    it "records the admin API audit log with the TOS flag action key" do
+      expect do
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "users.flag_for_tos_violation",
+        actor_user_id: admin_user.id,
+        target_type: "User",
+        target_id: user.id,
+        response_status: 200
+      )
+    end
+
+    it "returns success without creating another comment when the user is already flagged for a policy violation" do
+      user.flag_for_tos_violation!(author_id: admin_user.id, product_id: product.id)
+
+      expect do
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        product_id: product.external_id,
+        status: "already_flagged",
+        message: "User is already flagged for a policy violation"
+      }.as_json)
+    end
+
+    it "returns 422 when the state machine rejects the flag" do
+      user.update!(verified: true)
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.reload).to be_compliant
+    end
+
+    it "rejects mismatched expected_email without mutating the user" do
+      expect do
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id, expected_email: "other@example.com" }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email does not match the user's current email" }.as_json)
+      expect(user.reload).to be_compliant
+    end
+
+    include_examples "requires user_id for user mutation", :flag_for_tos_violation, extra_params: { product_id: "missing" }
+  end
+
   describe "POST watch" do
     let(:user) { create(:user) }
 
