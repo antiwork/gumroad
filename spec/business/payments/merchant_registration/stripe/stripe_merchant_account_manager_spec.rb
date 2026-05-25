@@ -9209,6 +9209,28 @@ describe StripeMerchantAccountManager, :vcr do
         expect(bank_account_2.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
       end
 
+      it "clears stale Stripe bank sync failure payout notes on successful sync" do
+        stale_failure_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+        stale_retry_note = user.add_payout_note(content: "Stripe bank sync failed and exhausted Sidekiq retries for bank_account_id=#{bank_account_1.id}. See Sentry for the underlying Stripe error.")
+        unrelated_note = user.add_payout_note(content: "Scheduled payouts paused on May 1, 2026")
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+
+        expect(Comment.where(id: stale_failure_note.id)).not_to exist
+        expect(Comment.where(id: stale_retry_note.id)).not_to exist
+        expect(Comment.where(id: unrelated_note.id)).to exist
+      end
+
+      it "does not clear failure notes when sync fails" do
+        stale_failure_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+        expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Invalid account number", "invalid_account_number"))
+
+        result = subject.update_bank_account(user, passphrase: "1234")
+
+        expect(result).to eq(:invalid_bank_account)
+        expect(Comment.where(id: stale_failure_note.id)).to exist
+      end
+
       describe "invalid account number provided" do
         before do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Invalid account number", "invalid_account_number"))
