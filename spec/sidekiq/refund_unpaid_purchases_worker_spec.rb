@@ -3,8 +3,13 @@
 require "spec_helper"
 
 describe RefundUnpaidPurchasesWorker, :vcr do
+  it "uses a unique execution lock" do
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+  end
+
   describe "#perform" do
     before do
+      create(:merchant_account, user: nil)
       @admin_user = create(:admin_user)
       @purchase = create(:purchase_in_progress, chargeable: create(:chargeable))
       @purchase.process!
