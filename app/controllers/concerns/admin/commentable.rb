@@ -2,6 +2,11 @@
 
 module Admin::Commentable
   include Pagy::Backend
+  # pagy/extras/standalone may have injected a stub `params` method into this
+  # module (when the extra was loaded before the module). That stub would
+  # shadow ActionController's real `params` in controllers including this
+  # module. Remove it so the real `params` accessor is used.
+  remove_method(:params) if instance_methods(false).include?(:params)
 
   def index
     pagination, comments = pagy(

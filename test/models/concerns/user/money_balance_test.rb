@@ -8,32 +8,35 @@ class User::MoneyBalanceTest < ActiveSupport::TestCase
   end
 
   test "#instantly_payable_unpaid_balances returns maximum unpaid balances whose sum is less than instantly payable amount available on Stripe" do
-    user = users(:money_balance_stripe_user)
-    stripe_ma = merchant_accounts(:money_balance_stripe_account)
-    gumroad_ma = merchant_accounts(:forfeit_gumroad_stripe_account)
+    travel_to Time.utc(2024, 6, 15, 12, 0, 0) do
+      user = users(:money_balance_stripe_user)
+      stripe_ma = merchant_accounts(:money_balance_stripe_account)
+      gumroad_ma = merchant_accounts(:forfeit_gumroad_stripe_account)
 
-    bal1 = create_balance(user, stripe_ma, Date.current - 3.days, 500_00)
-    bal2 = create_balance(user, stripe_ma, Date.current - 2.days, 400_00)
-    bal3 = create_balance(user, stripe_ma, Date.current - 1.days, 300_00)
-    bal4 = create_balance(user, stripe_ma, Date.current, 200_00)
-    bal5 = create_balance(user, gumroad_ma, Date.current - 3.days, 500_00)
-    bal6 = create_balance(user, gumroad_ma, Date.current - 2.days, 500_00)
-    bal7 = create_balance(user, gumroad_ma, Date.current - 1.days, 500_00)
-    bal8 = create_balance(user, gumroad_ma, Date.current, 500_00)
+      today = Date.today
+      bal1 = create_balance(user, stripe_ma, today - 3.days, 500_00)
+      bal2 = create_balance(user, stripe_ma, today - 2.days, 400_00)
+      bal3 = create_balance(user, stripe_ma, today - 1.days, 300_00)
+      bal4 = create_balance(user, stripe_ma, today, 200_00)
+      bal5 = create_balance(user, gumroad_ma, today - 3.days, 500_00)
+      bal6 = create_balance(user, gumroad_ma, today - 2.days, 500_00)
+      bal7 = create_balance(user, gumroad_ma, today - 1.days, 500_00)
+      bal8 = create_balance(user, gumroad_ma, today, 500_00)
 
-    cases = {
-      1400_00 => [bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8],
-      1000_00 => [bal1, bal2, bal5, bal6],
-      1200_00 => [bal1, bal2, bal3, bal5, bal6, bal7],
-       600_00 => [bal1, bal5],
-      1500_00 => [bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8],
-    }
+      cases = {
+        1400_00 => [bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8],
+        1000_00 => [bal1, bal2, bal5, bal6],
+        1200_00 => [bal1, bal2, bal3, bal5, bal6, bal7],
+         600_00 => [bal1, bal5],
+        1500_00 => [bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8],
+      }
 
-    cases.each do |cents_available, expected|
-      StripePayoutProcessor.stub(:instantly_payable_amount_cents_on_stripe, ->(_) { cents_available }) do
-        assert_equal expected.map(&:id).sort,
-                     user.instantly_payable_unpaid_balances.map(&:id).sort,
-                     "for cents_available=#{cents_available}"
+      cases.each do |cents_available, expected|
+        StripePayoutProcessor.stub(:instantly_payable_amount_cents_on_stripe, ->(_) { cents_available }) do
+          assert_equal expected.map(&:id).sort,
+                       user.instantly_payable_unpaid_balances.map(&:id).sort,
+                       "for cents_available=#{cents_available}"
+        end
       end
     end
   end

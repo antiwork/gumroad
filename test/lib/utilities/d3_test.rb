@@ -4,8 +4,9 @@ require "test_helper"
 
 class D3Test < ActiveSupport::TestCase
   test "formatted_date returns 'Today' when the date is today" do
-    assert_equal "Today", D3.formatted_date(Date.today)
-    assert_not_equal "Today", D3.formatted_date(Date.yesterday)
+    today = Date.new(2020, 6, 15)
+    assert_equal "Today", D3.formatted_date(today, today_date: today)
+    assert_not_equal "Today", D3.formatted_date(today - 1, today_date: today)
     assert_equal "Today", D3.formatted_date(Date.new(2020, 1, 2), today_date: Date.new(2020, 1, 2))
   end
 
@@ -15,8 +16,10 @@ class D3Test < ActiveSupport::TestCase
   end
 
   test "formatted_date_with_timezone returns 'Today' when the date is today" do
-    assert_equal "Today", D3.formatted_date_with_timezone(Date.today, Time.current.zone)
-    assert_not_equal "Today", D3.formatted_date_with_timezone(Date.yesterday, Time.current.zone)
+    travel_to Time.utc(2020, 6, 15, 12, 0, 0) do
+      assert_equal "Today", D3.formatted_date_with_timezone(Time.current, "UTC")
+      assert_not_equal "Today", D3.formatted_date_with_timezone(Time.current - 1.day, "UTC")
+    end
   end
 
   test "formatted_date_with_timezone formats the date for a given timezone" do

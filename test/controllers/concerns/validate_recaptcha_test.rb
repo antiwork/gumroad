@@ -23,12 +23,23 @@ class ValidateRecaptchaTest < ActionController::TestCase
     @routes = ActionDispatch::Routing::RouteSet.new
     @routes.draw { post "action" => "validate_recaptcha_test#action" }
 
-    @original_env = Rails.env
-    Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new("development"))
+    @orig_env_test = Rails.env.singleton_class.instance_method(:test?) rescue nil
+    Rails.env.singleton_class.send(:define_method, :test?) { false }
+    @orig_env_production = Rails.env.singleton_class.instance_method(:production?) rescue nil
+    Rails.env.singleton_class.send(:define_method, :production?) { false }
   end
 
   teardown do
-    Rails.instance_variable_set(:@_env, ActiveSupport::EnvironmentInquirer.new(@original_env.to_s))
+    if @orig_env_test
+      Rails.env.singleton_class.send(:define_method, :test?, @orig_env_test)
+    else
+      Rails.env.singleton_class.send(:remove_method, :test?) if Rails.env.singleton_class.method_defined?(:test?)
+    end
+    if @orig_env_production
+      Rails.env.singleton_class.send(:define_method, :production?, @orig_env_production)
+    else
+      Rails.env.singleton_class.send(:remove_method, :production?) if Rails.env.singleton_class.method_defined?(:production?)
+    end
     WebMock.reset!
   end
 

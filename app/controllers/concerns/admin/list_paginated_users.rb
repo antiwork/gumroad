@@ -3,6 +3,10 @@
 module Admin::ListPaginatedUsers
   extend ActiveSupport::Concern
   include Pagy::Backend
+  # pagy/extras/standalone may have injected a stub `params` method on this
+  # module if the extra was loaded first. Strip it so controllers including
+  # this module use ActionController's real `params`.
+  remove_method(:params) if instance_methods(false).include?(:params)
 
   # We list 5 users per page by default for the following reasons:
   # - Feature: A list of user cards is used for the refund queue or for searching users, so we don't need to display too many users per page to avoid overwhelming the user.

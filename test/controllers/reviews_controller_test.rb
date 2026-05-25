@@ -14,7 +14,10 @@ class ReviewsControllerTest < ActionController::TestCase
     @request.headers["X-Inertia"] = "true"
   end
 
-  teardown { restore_protect_against_forgery! }
+  teardown do
+    Feature.deactivate(:reviews_page)
+    restore_protect_against_forgery!
+  end
 
   test "GET index renders Reviews/Index with reviews + purchases props" do
     get :index

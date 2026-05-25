@@ -7,6 +7,14 @@ class ProductReviewPolicyTest < ActiveSupport::TestCase
 
   ACTIONS = %i[index?].freeze
 
+  setup do
+    Flipper.remove(:reviews_page)
+  end
+
+  teardown do
+    Flipper.remove(:reviews_page)
+  end
+
   # feature flag inactive — all roles denied
   test "index? denies owner when reviews_page is inactive" do
     refute_policy_permits ProductReviewPolicy, nil, :named_seller, *ACTIONS

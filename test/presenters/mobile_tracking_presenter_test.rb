@@ -5,7 +5,6 @@ require "test_helper"
 class MobileTrackingPresenterTest < ActiveSupport::TestCase
   setup do
     @seller = users(:named_seller)
-    @seller.update_column(:external_id, "extidnamedseller") if @seller.external_id.blank?
     @product = links(:named_seller_product)
     @presenter = MobileTrackingPresenter.new(seller: @seller)
   end
