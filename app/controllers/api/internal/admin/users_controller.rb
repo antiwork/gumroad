@@ -249,12 +249,75 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         return render json: internal_admin_user_success_payload(user, status: "already_suspended", message: "User is already suspended for fraud")
       end
 
-      suspension_note = build_suspension_note(user) if params[:suspension_note].present?
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
       return render_invalid_comment(suspension_note) if suspension_note&.invalid?
 
       user.suspend_for_fraud!(author_id: current_admin_actor_id)
       suspension_note&.save!
       render json: internal_admin_user_success_payload(user, status: "suspended_for_fraud", message: "User suspended for fraud")
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
+  def suspend_for_tos_violation
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    record_admin_write(action: "users.suspend_for_tos_violation", target: user) do
+      if user.suspended_for_tos_violation?
+        return render json: internal_admin_user_success_payload(user, {
+                                                                  status: "already_suspended",
+                                                                  message: "User is already suspended for a policy violation"
+                                                                })
+      end
+
+      suspension_note = build_suspension_note(user, content: params[:suspension_note]) if params[:suspension_note].present?
+      return render_invalid_comment(suspension_note) if suspension_note&.invalid?
+
+      user.suspend_for_tos_violation!(author_id: current_admin_actor_id)
+      suspension_note&.save!
+      render json: internal_admin_user_success_payload(user, {
+                                                         status: "suspended_for_tos_violation",
+                                                         message: "User suspended for a policy violation"
+                                                       })
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
+  def flag_for_tos_violation
+    return render json: { success: false, message: "product_id is required" }, status: :bad_request if params[:product_id].blank?
+
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    product = find_internal_admin_product_or_render
+    return unless product
+
+    unless product.user_id == user.id
+      return render json: { success: false, message: "Product does not belong to user" }, status: :unprocessable_entity
+    end
+
+    record_admin_write(action: "users.flag_for_tos_violation", target: user) do
+      if user.flagged_for_tos_violation?
+        return render json: internal_admin_user_success_payload(user, {
+                                                                  product_id: product.external_id,
+                                                                  status: "already_flagged",
+                                                                  message: "User is already flagged for a policy violation"
+                                                                })
+      end
+
+      user.flag_for_tos_violation!(
+        author_id: current_admin_actor_id,
+        product_id: product.id,
+        content: flag_for_tos_violation_comment_content(product)
+      )
+      render json: internal_admin_user_success_payload(user, {
+                                                         product_id: product.external_id,
+                                                         status: "flagged_for_tos_violation",
+                                                         message: "User flagged for a policy violation"
+                                                       })
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
@@ -695,16 +758,28 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       )
     end
 
-    def build_suspension_note(user)
+    def build_suspension_note(user, content:)
       user.comments.new(
         author_id: current_admin_actor_id,
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-        content: params[:suspension_note]
+        content:
       )
     end
 
     def render_invalid_comment(comment)
       render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
+    def find_internal_admin_product_or_render
+      product = Link.alive.find_by_external_id(params[:product_id])
+      return product if product.present?
+
+      render json: { success: false, message: "Product not found" }, status: :not_found
+      nil
+    end
+
+    def flag_for_tos_violation_comment_content(product)
+      "Flagged for a policy violation by #{Current.admin_actor.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} for product named '#{product.name}'"
     end
 
     def parse_threshold_cents(raw)
