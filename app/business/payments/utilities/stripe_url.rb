@@ -10,10 +10,14 @@ module StripeUrl
   end
 
   def self.transfer_url(transfer_id, account_id: nil)
-    segments = [base_url]
-    segments += ["connect", "view-as", account_id] if account_id
-    segments += ["payouts", transfer_id]
-    segments.join("/")
+    if account_id
+      segments = ["https://dashboard.stripe.com", "connect", "view-as", account_id]
+      segments << "test" unless Rails.env.production?
+      segments += ["payouts", transfer_id]
+      segments.join("/")
+    else
+      [base_url, "payouts", transfer_id].join("/")
+    end
   end
 
   def self.charge_url(charge_id)

@@ -69,9 +69,9 @@ describe StripeUrl do
     end
 
     describe "not production" do
-      it "returns a test-mode connected-account payout url when account_id is provided" do
+      it "returns a test-mode connected-account payout url with /test/ scoped inside the view-as context" do
         expect(described_class.transfer_url("po_123", account_id: "acct_456"))
-          .to eq("https://dashboard.stripe.com/test/connect/view-as/acct_456/payouts/po_123")
+          .to eq("https://dashboard.stripe.com/connect/view-as/acct_456/test/payouts/po_123")
       end
 
       it "returns a test-mode platform payout url when account_id is not provided" do
