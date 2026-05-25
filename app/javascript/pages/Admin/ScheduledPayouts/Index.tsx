@@ -19,6 +19,7 @@ type ScheduledPayoutUser = {
 type ScheduledPayout = {
   external_id: string;
   action: "refund" | "payout" | "hold";
+  processor: "PAYPAL" | "STRIPE" | null;
   status: "pending" | "executed" | "cancelled" | "flagged" | "held";
   delay_days: number;
   scheduled_at: string;
