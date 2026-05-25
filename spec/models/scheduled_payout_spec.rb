@@ -3,6 +3,15 @@
 require "spec_helper"
 
 describe ScheduledPayout do
+  describe "factory defaults" do
+    it "sets processor only for payout actions" do
+      payout = build(:scheduled_payout, action: "payout")
+      expect(payout.processor).to eq(payout.user.current_payout_processor)
+      expect(build(:scheduled_payout, action: "refund").processor).to be_nil
+      expect(build(:scheduled_payout, action: "hold").processor).to be_nil
+    end
+  end
+
   describe "validations" do
     it "is valid with valid attributes" do
       scheduled_payout = build(:scheduled_payout)
