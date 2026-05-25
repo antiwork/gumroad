@@ -1,0 +1,107 @@
+# Vivero preview runtime for Gumroad.
+#
+# Vivero references this single app-owned Compose service and overlays only
+# preview labels, networking, and dynamic loopback ports. Keep Gumroad runtime
+# images, env contracts, dependency services, volumes, setup, and boot behavior
+# here instead of copying them into vivero.yml.
+
+services:
+  db_test:
+    extends:
+      file: docker-compose-test-and-ci.yml
+      service: db_test
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  redis:
+    extends:
+      file: docker-compose-test-and-ci.yml
+      service: redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo:
+    extends:
+      file: docker-compose-test-and-ci.yml
+      service: mongo
+    healthcheck:
+      test: ["CMD-SHELL", "mongo --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  elasticsearch:
+    extends:
+      file: docker-compose-test-and-ci.yml
+      service: elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+
+  memcached:
+    extends:
+      file: docker-compose-test-and-ci.yml
+      service: memcached
+
+  gumroad-web:
+    image: ${GUMROAD_VIVERO_WEB_IMAGE:-vivero/gumroad-dev-runtime:3.4.3-node22}
+    working_dir: /app
+    command: ./docker/web/vivero_preview.sh
+    environment:
+      APP_DIR: /app
+      BUNDLE_PATH: /bundle_path
+      DATABASE_HOST: db_test
+      DATABASE_NAME: gumroad_development
+      DATABASE_PORT: "3306"
+      DATABASE_USERNAME: root
+      DATABASE_PASSWORD: password
+      DISABLE_SPRING: "1"
+      ELASTICSEARCH_HOST: http://elasticsearch:9200
+      GRPC_RUBY_BUILD_PROCS: "4"
+      IN_DOCKER: "true"
+      MEMCACHE_SERVERS: memcached
+      MONGO_DATABASE_URL: mongo:27017
+      MONGO_SECONDARY_DATABASE_URL: mongo:27017
+      MONGO_DATABASE_NAME: gumroad_log_development
+      MONGO_DATABASE_USERNAME: username
+      MONGO_DATABASE_PASSWORD: password
+      MONGO_REPLICA_SET: empty_replica_set
+      PORT: "3310"
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      RACK_ATTACK_REDIS_HOST: redis:6379/3
+      RACK_ENV: development
+      RAILS_ENV: development
+      REDIS_HOST: redis:6379/0
+      RPUSH_REDIS_HOST: redis:6379/2
+      SIDEKIQ_REDIS_HOST: redis:6379/1
+      SKIP_NATIVE_MYSQL_RECONNECT: "true"
+    volumes:
+      - ..:/app
+      - bundle_path:/bundle_path
+      - node_modules:/app/node_modules
+    depends_on:
+      db_test:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      memcached:
+        condition: service_started
+
+volumes:
+  bundle_path:
+  node_modules:
+  redis_data:
+  mongo_data:
+  minio_data:
