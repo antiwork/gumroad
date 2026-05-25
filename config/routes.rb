@@ -346,6 +346,7 @@ Rails.application.routes.draw do
               post :mark_compliant
               post :suspend_for_fraud
               post :suspend_for_tos_violation
+              post :flag_for_tos_violation
               post :watch
               post :update_watch
               post :unwatch
