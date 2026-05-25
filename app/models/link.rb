@@ -1084,7 +1084,7 @@ class Link < ApplicationRecord
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
     attrs[:price] = [
       customizable_price.present? || variant&.customizable_price.present? ? params[:price].to_i : 0,
-      (recurrence&.price_cents || (attrs[:rental] ? rental_price_cents : price_cents)) +
+      (recurrence&.price_cents || (attrs[:rental] ? rental_price_cents : price_cents) || 0) +
       (attrs[:option]&.fetch(:price_difference_cents) || 0)
     ].max
     attrs[:price] = currency["min_price"] if purchasing_power_parity_enabled? && attrs[:price] != 0 && attrs[:price] < currency["min_price"]
