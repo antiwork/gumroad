@@ -73,6 +73,27 @@ describe Api::Internal::Admin::PayoutsController do
       )
     end
 
+    it "excludes soft-deleted payout notes from payout_note" do
+      stale_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+      current_note = user.add_payout_note(content: "Payout paused due to verification")
+      stale_note.mark_deleted!
+
+      get :index, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["payout_note"]).to eq(current_note.content)
+    end
+
+    it "returns nil payout_note when the only matching note is soft-deleted" do
+      stale_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+      stale_note.mark_deleted!
+
+      get :index, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["payout_note"]).to be_nil
+    end
+
     it "paginates recent payouts with a cursor" do
       newest = create(:payment_completed, user:, created_at: 1.hour.ago)
       middle = create(:payment_completed, user:, created_at: 2.hours.ago)
