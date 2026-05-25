@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 module StripeUrl
+  # Stripe dashboard workspace id for the Gumroad platform account; required as the
+  # first path segment for deep links — Stripe redirects to the dashboard home otherwise.
+  DASHBOARD_WORKSPACE_ID = "9e1RjUNIyYGpA9Cfh3RmQxxTzb1aakpE"
+
   def self.dashboard_url(account_id: nil)
     [base_url(account_id:), "dashboard"].join("/")
   end
@@ -10,7 +14,11 @@ module StripeUrl
   end
 
   def self.transfer_url(transfer_id, account_id: nil)
-    [base_url(account_id:), "transfers", transfer_id].join("/")
+    segments = ["https://dashboard.stripe.com", DASHBOARD_WORKSPACE_ID]
+    segments += ["connect", "view-as", account_id] if account_id
+    segments << "test" unless Rails.env.production?
+    segments += ["payouts", transfer_id]
+    segments.join("/")
   end
 
   def self.charge_url(charge_id)
