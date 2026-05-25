@@ -22,7 +22,13 @@ module Streamable
   end
 
   def transcoding_in_progress?
-    streamable? && transcoded_videos.alive.processing.exists?(original_video_key: s3_key)
+    return false unless streamable?
+
+    if transcoded_videos.loaded?
+      transcoded_videos.any? { |tv| tv.alive? && tv.state == "processing" && tv.original_video_key == s3_key }
+    else
+      transcoded_videos.alive.processing.exists?(original_video_key: s3_key)
+    end
   end
 
   def transcoding_failed
