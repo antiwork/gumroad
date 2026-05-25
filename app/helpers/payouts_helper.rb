@@ -68,7 +68,7 @@ module PayoutsHelper
       payout_period_data[:status] = "not_payable"
     end
 
-    last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
+    last_payout_note = user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
     payout_period_data[:payout_note] = \
       if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
         last_payout_note.content.gsub("via Stripe ", "")

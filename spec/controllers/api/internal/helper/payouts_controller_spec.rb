@@ -82,6 +82,27 @@ describe Api::Internal::Helper::PayoutsController do
         parsed_response = JSON.parse(response.body)
         expect(parsed_response["payout_note"]).to be_nil
       end
+
+      it "excludes soft-deleted payout notes from payout_note" do
+        stale_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+        current_note = user.add_payout_note(content: "Payout paused due to verification")
+        stale_note.mark_deleted!
+
+        get :index, params: { email: user.email }
+
+        parsed_response = JSON.parse(response.body)
+        expect(parsed_response["payout_note"]).to eq(current_note.content)
+      end
+
+      it "returns nil payout_note when the only matching note is soft-deleted" do
+        stale_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+        stale_note.mark_deleted!
+
+        get :index, params: { email: user.email }
+
+        parsed_response = JSON.parse(response.body)
+        expect(parsed_response["payout_note"]).to be_nil
+      end
     end
   end
 
@@ -193,6 +214,18 @@ describe Api::Internal::Helper::PayoutsController do
             parsed_response = JSON.parse(response.body)
             expect(parsed_response["success"]).to be(false)
             expect(parsed_response["message"]).to eq("User is not eligible for payout.")
+          end
+
+          it "does not append a soft-deleted payout note to the error message" do
+            stale_note = user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — We couldn't find the bank for that")
+            stale_note.mark_deleted!
+
+            post :create, params: params
+
+            expect(response.status).to eq(422)
+            parsed_response = JSON.parse(response.body)
+            expect(parsed_response["message"]).to eq("User is not eligible for payout.")
+            expect(parsed_response["message"]).not_to include("Stripe bank sync failed")
           end
         end
 
