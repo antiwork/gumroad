@@ -110,7 +110,7 @@ class Subscription < ApplicationRecord
       product_name: link.name,
       user_id: user.try(:external_id),
       user_email: user.try(:email),
-      purchase_ids: purchases.for_sales_api.map(&:external_id),
+      purchase_ids: purchases_for_sales_api_ids,
       created_at:,
       user_requested_cancellation_at:,
       charge_occurrence_count:,
@@ -927,7 +927,7 @@ class Subscription < ApplicationRecord
   end
 
   def pending_failure?
-    alive? && purchases.order(:created_at).last&.failed?
+    alive? && purchases.load.max_by(&:created_at)&.failed?
   end
 
   def status
@@ -971,6 +971,13 @@ class Subscription < ApplicationRecord
   end
 
   private
+    def purchases_for_sales_api_ids
+      purchases.load.select { |p|
+        p.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT) &&
+          (p.purchase_state != "not_charged" || p.is_free_trial_purchase?)
+      }.map(&:external_id)
+    end
+
     def send_notification_webhook(resource_name:, params: nil)
       args = [5.seconds, nil, nil, resource_name, id]
       args << params.deep_stringify_keys if params.present?

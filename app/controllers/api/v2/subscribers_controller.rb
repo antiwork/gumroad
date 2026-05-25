@@ -8,7 +8,7 @@ class Api::V2::SubscribersController < Api::V2::BaseController
 
   def index
     subscriptions = Subscription.where(link_id: @product.id).active
-    subscriptions = subscriptions.includes(:link, :purchases, last_payment_option: [:price]).order(created_at: :desc, id: :desc)
+    subscriptions = subscriptions.includes(:link, :user, :purchases, :original_purchase, last_payment_option: [:price]).order(created_at: :desc, id: :desc)
     if params[:email].present?
       email = params[:email].strip
       subscriptions = subscriptions.where(purchases: { email: })
