@@ -324,9 +324,10 @@ module StripeMerchantAccountManager
   def self.clear_stale_bank_sync_failure_notes(user)
     user.comments
         .with_type_payout_note
+        .alive
         .where(author_id: GUMROAD_ADMIN_ID)
         .where("content LIKE ?", "Stripe bank sync failed%")
-        .delete_all
+        .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale bank sync failure notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
