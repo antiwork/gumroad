@@ -4,16 +4,29 @@ class RefundUnpaidPurchasesWorker
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
+  def self.lock_args(args)
+    [args.first]
+  end
+
   def self.unpaid_purchases_for(user)
     unpaid_balance_ids = user.balances.unpaid.select(:id)
     user.sales.where(purchase_success_balance_id: unpaid_balance_ids).successful.not_fully_refunded
   end
 
   def self.unpaid_balance_summary_for(user)
-    purchases = unpaid_purchases_for(user).includes(:refunds).to_a
+    refundable_amounts = unpaid_purchases_for(user)
+      .left_joins(:refunds)
+      .group("purchases.id", "purchases.price_cents", "purchases.gumroad_tax_cents")
+      .pluck(Arel.sql(
+               "COALESCE(purchases.price_cents, 0) + " \
+               "COALESCE(purchases.gumroad_tax_cents, 0) - " \
+               "COALESCE(SUM(refunds.amount_cents), 0) - " \
+               "COALESCE(SUM(refunds.gumroad_tax_cents), 0)"
+             ))
+
     {
-      count: purchases.size,
-      total_amount_cents: purchases.sum(&:gross_amount_refundable_cents),
+      count: refundable_amounts.size,
+      total_amount_cents: refundable_amounts.sum,
       currency: Currency::USD
     }
   end
