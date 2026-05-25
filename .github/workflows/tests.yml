@@ -327,7 +327,6 @@ jobs:
         run: |
           mkdir -p ./test-logs
           chmod 777 ./test-logs
-          set +e
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
@@ -348,16 +347,6 @@ jobs:
             -e IN_DOCKER \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
-          TEST_EXIT=$?
-          if [ $TEST_EXIT -ne 0 ]; then
-            echo ""
-            echo "============================================"
-            echo "TESTS FAILED (exit code $TEST_EXIT)"
-            echo "Waiting 60s for other containers to report failures..."
-            echo "============================================"
-            sleep 60
-            exit $TEST_EXIT
-          fi
         env:
           RUBY_YJIT_ENABLE: 1
           KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
