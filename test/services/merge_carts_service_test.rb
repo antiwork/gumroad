@@ -6,6 +6,9 @@ class MergeCartsServiceTest < ActiveSupport::TestCase
   setup do
     @user = users(:named_seller)
     @browser_guid = SecureRandom.uuid
+    # Remove any pre-existing alive cart from fixtures so create! doesn't trip
+    # the "alive cart already exists" uniqueness validation.
+    Cart.where(user: @user).delete_all
   end
 
   test "updates target cart details when source cart is nil" do

@@ -12,6 +12,7 @@ named_seller_wishlist_product:
 basic_user_wishlist_product:
   wishlist_id: <%= ActiveRecord::FixtureSet.identify(:basic_user_wishlist) %>
   product_id: <%= ActiveRecord::FixtureSet.identify(:basic_user_product) %>
+  variant_id: <%= ActiveRecord::FixtureSet.identify(:variant_price_test_standalone_variant) %>
   quantity: 1
   rent: false
   created_at: <%= Time.current %>
