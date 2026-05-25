@@ -89,5 +89,14 @@ describe AngolaBankAccount do
       ba.valid?
       expect(ba.send(:account_number_decrypted)).to eq("AO06004400006729503010102")
     end
+
+    it "updates account_number_last_four to match the normalized value so the masked display is correct" do
+      ba = build(:angola_bank_account,
+                 account_number: "AO06 0044 0000 6729 5030 1010 2",
+                 account_number_last_four: "10 2") # what UpdatePayoutMethod would persist pre-normalization
+      ba.valid?
+      expect(ba.account_number_last_four).to eq("0102")
+      expect(ba.account_number_visual).to eq("AO******0102")
+    end
   end
 end

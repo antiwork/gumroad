@@ -48,7 +48,9 @@ class AngolaBankAccount < BankAccount
       decrypted = account_number_decrypted.to_s
       return if decrypted.empty?
       cleaned = decrypted.strip.gsub(/[ -]/, "")
-      self.account_number = cleaned if cleaned != decrypted
+      return if cleaned == decrypted
+      self.account_number = cleaned
+      self.account_number_last_four = cleaned.last(4)
     end
 
     def validate_bank_code
