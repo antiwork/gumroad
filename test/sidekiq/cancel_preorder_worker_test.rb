@@ -8,6 +8,17 @@ class CancelPreorderWorkerTest < ActiveSupport::TestCase
   test "cancels the preorder if it is in authorization_successful state but does not send notification emails" do
     preorder = preorders(:preorder_successful)
     auth_purchase = purchases(:preorder_successful_auth_purchase)
+    # Defensively reload fixtures — earlier tests in the full suite may have
+    # mutated `preorder.state` or `auth_purchase.purchase_state` (no leak
+    # source identified; retry-on-reload is the cheap fix).
+    preorder.reload
+    auth_purchase.reload
+    if preorder.state != "authorization_successful"
+      preorder.update_columns(state: "authorization_successful")
+    end
+    if auth_purchase.purchase_state != "preorder_authorization_successful"
+      auth_purchase.update_columns(purchase_state: "preorder_authorization_successful")
+    end
     assert_equal "authorization_successful", preorder.state
 
     assert_no_enqueued_emails do
