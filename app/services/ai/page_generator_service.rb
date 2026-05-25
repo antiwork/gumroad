@@ -5,13 +5,20 @@ class Ai::PageGeneratorService
   MAX_TOKENS = 8000
 
   # Generation runs through the Vercel AI Gateway (OpenAI-compatible API),
-  # which lets us swap models with a one-line change to MODEL — the Ruby
-  # OpenAI client interface is preserved end-to-end. Set AI_GATEWAY_URL to
-  # an empty string (or override to direct OpenAI) in dev/test if needed.
+  # which lets us swap models with a one-line env-var change while keeping
+  # the same Ruby OpenAI client interface. Override AI_GATEWAY_URL to point
+  # at direct OpenAI in dev/test if needed; override PAGES_AI_MODEL to
+  # experiment with a different model without redeploying.
   DEFAULT_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1"
-  GATEWAY_URL = ENV["AI_GATEWAY_URL"].presence || DEFAULT_GATEWAY_URL
-  ACCESS_TOKEN = ENV["AI_GATEWAY_API_KEY"].presence || ENV["OPENAI_API_KEY"]
-  MODEL = "anthropic/claude-opus-4-7"
+  DEFAULT_MODEL = "anthropic/claude-opus-4.7"
+  GATEWAY_URL = GlobalConfig.get("AI_GATEWAY_URL").presence || DEFAULT_GATEWAY_URL
+  # AI_GATEWAY_API_KEY is required. Falling back to OPENAI_ACCESS_TOKEN here
+  # would silently hit the Gateway URL with an OpenAI key, producing a
+  # confusing 401 with no indication of the token mismatch. Better to fail
+  # loudly: an unset key surfaces immediately as a missing-auth error from
+  # OpenAI::Client.
+  ACCESS_TOKEN = GlobalConfig.get("AI_GATEWAY_API_KEY")
+  MODEL = GlobalConfig.get("PAGES_AI_MODEL").presence || DEFAULT_MODEL
 
   # Transient errors are re-raised so Sidekiq retries the job. Permanent
   # errors (bad responses, malformed JSON, our own bugs) return a failure
@@ -109,13 +116,12 @@ class Ai::PageGeneratorService
   end
 
   private
+    def build_messages
+      products_context = @seller.products.alive.limit(50).map do |p|
+        "- #{p.name} (#{p.display_price}) [permalink: #{p.unique_permalink}, url: #{p.long_url}]"
+      end.join("\n")
 
-  def build_messages
-    products_context = @seller.products.alive.limit(50).map do |p|
-      "- #{p.name} (#{p.display_price}) [permalink: #{p.unique_permalink}, url: #{p.long_url}]"
-    end.join("\n")
-
-    user_message = <<~MSG
+      user_message = <<~MSG
       Creator: #{@seller.display_name}
 
       Available products:
@@ -124,30 +130,30 @@ class Ai::PageGeneratorService
       #{existing_html_context}
 
       User request: #{@prompt}
-    MSG
+      MSG
 
-    [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: user_message },
-    ]
-  end
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: user_message },
+      ]
+    end
 
-  def existing_html_context
-    if @parent_version
-      <<~CTX
+    def existing_html_context
+      if @parent_version
+        <<~CTX
         Current page HTML (modify this based on the user's request):
         #{@parent_version.html.truncate(20_000)}
-      CTX
-    else
-      ""
+        CTX
+      else
+        ""
+      end
     end
-  end
 
-  def openai_client
-    @openai_client ||= OpenAI::Client.new(
-      access_token: ACCESS_TOKEN,
-      uri_base: GATEWAY_URL,
-      request_timeout: TIMEOUT_IN_SECONDS,
-    )
-  end
+    def openai_client
+      @openai_client ||= OpenAI::Client.new(
+        access_token: ACCESS_TOKEN,
+        uri_base: GATEWAY_URL,
+        request_timeout: TIMEOUT_IN_SECONDS,
+      )
+    end
 end
