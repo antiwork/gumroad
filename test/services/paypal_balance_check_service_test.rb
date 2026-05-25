@@ -5,6 +5,12 @@ require "test_helper"
 class PaypalBalanceCheckServiceTest < ActiveSupport::TestCase
   setup do
     @seller = users(:paypal_seller)
+    # Isolate to the paypal_seller's balances/payments — the global fixture
+    # set contains other paypal payments + unpaid balances (e.g. PayoutEstimates
+    # fixtures, failure_reason_payment) that would otherwise leak into the
+    # service's aggregate queries and inflate payout_amount_cents.
+    Balance.where.not(user_id: @seller.id).delete_all
+    Payment.where.not(user_id: @seller.id).delete_all
   end
 
   # Helper to stub PaypalPayoutProcessor responses for a block.
