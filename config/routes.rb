@@ -339,6 +339,7 @@ Rails.application.routes.draw do
               get :radar_stats
               get :related
               get :suspension
+              get :unpaid_balance
               post :reset_password
               post :update_email
               post :two_factor_authentication
@@ -347,6 +348,7 @@ Rails.application.routes.draw do
               post :suspend_for_fraud
               post :suspend_for_tos_violation
               post :flag_for_tos_violation
+              post :refund_balance
               post :watch
               post :update_watch
               post :unwatch
