@@ -43,4 +43,31 @@ describe AngolaBankAccount do
       expect(build(:angola_bank_account, bank_code: "AAAAAOAOXXXX")).not_to be_valid
     end
   end
+
+  describe "#validate_account_number" do
+    it "allows records that match the required account number regex" do
+      expect(build(:angola_bank_account)).to be_valid
+      expect(build(:angola_bank_account, account_number: "AO06004400006729503010102")).to be_valid
+
+      ao_bank_account = build(:angola_bank_account, account_number: "AO12345")
+      expect(ao_bank_account).not_to be_valid
+      expect(ao_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      ao_bank_account = build(:angola_bank_account, account_number: "DE61109010140000071219812874")
+      expect(ao_bank_account).not_to be_valid
+      expect(ao_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      ao_bank_account = build(:angola_bank_account, account_number: "06004400006729503010102")
+      expect(ao_bank_account).not_to be_valid
+      expect(ao_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
+
+    it "accepts an IBAN with spaces between groups" do
+      expect(build(:angola_bank_account, account_number: "AO06 0044 0000 6729 5030 1010 2")).to be_valid
+    end
+
+    it "accepts an IBAN with dashes between groups" do
+      expect(build(:angola_bank_account, account_number: "AO06-0044-0000-6729-5030-1010-2")).to be_valid
+    end
+  end
 end
