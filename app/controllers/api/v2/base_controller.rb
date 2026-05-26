@@ -13,12 +13,8 @@ class Api::V2::BaseController < ApplicationController
       @product = products.find_by_external_id(params[:link_id]) || products.find_by(unique_permalink: params[:link_id])
       return if @product.present?
 
-      # 403 only when a *visible* product owned by *another* seller matches —
-      # otherwise 404. Scoping both lookups (not just the permalink one) keeps
-      # us from leaking the existence of soft-deleted or hidden products via a
-      # 403/404 difference.
       other_sellers_products = Link.visible.where.not(user_id: current_resource_owner.id)
-      if other_sellers_products.find_by_external_id(params[:link_id]) || other_sellers_products.by_general_permalink(params[:link_id]).exists?
+      if other_sellers_products.find_by_external_id(params[:link_id]) || other_sellers_products.exists?(unique_permalink: params[:link_id])
         render status: :forbidden, json: { success: false, message: "You do not have permission to access this product." }
       else
         error_with_object(:product, nil)

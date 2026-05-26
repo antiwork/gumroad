@@ -451,7 +451,12 @@ class Api::V2::LinksController < Api::V2::BaseController
   # normalization so the dry-run and the real PUT agree on edge cases like
   # input that sanitizes entirely to an empty string.
   def preview_custom_html
-    result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
+    return render_response(false, message: "custom_html is required.") unless params.key?(:custom_html)
+
+    custom_html = params[:custom_html]
+    return render_response(false, message: "custom_html must be a string.") unless custom_html.nil? || custom_html.is_a?(String)
+
+    result = Ai::PageSanitizer.sanitize_with_report(custom_html)
     sanitized = result.html.presence
     candidate_page = Page.new(pageable: @product, custom_html: sanitized)
     candidate_page.validate

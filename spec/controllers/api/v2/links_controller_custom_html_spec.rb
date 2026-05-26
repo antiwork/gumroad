@@ -88,6 +88,15 @@ describe Api::V2::LinksController do
       expect(response).to have_http_status(:forbidden)
     end
 
+    it "returns 404 when the id only matches another seller's custom permalink" do
+      @other_product.update!(custom_permalink: "another-sellers-page")
+
+      put :update, params: { format: :json, access_token: @token.token, id: "another-sellers-page", custom_html: "<section>HTML</section>" }
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "The product was not found." })
+    end
+
     it "rejects HTML over the size limit" do
       oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 
@@ -205,6 +214,20 @@ describe Api::V2::LinksController do
       body = JSON.parse(response.body)
       expect(body["success"]).to be(true)
       expect(body["custom_html"]).to be_nil
+    end
+
+    it "requires the custom_html parameter" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "custom_html is required." })
+    end
+
+    it "rejects non-string custom_html input" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: ["<section>HTML</section>"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "custom_html must be a string." })
     end
 
     it "returns nil when input sanitizes to an empty string" do
