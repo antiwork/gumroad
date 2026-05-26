@@ -24,6 +24,14 @@ describe Order do
       end
     end
 
+    context "when there are no successful purchases" do
+      let(:purchase) { create(:failed_purchase) }
+
+      it "returns false" do
+        expect(order.receipt_for_gift_receiver?).to be(false)
+      end
+    end
+
     context "when there are multiple purchases per order" do
       let(:other_purchase) { create(:purchase) }
 
@@ -53,6 +61,14 @@ describe Order do
 
       it "returns true" do
         expect(order.receipt_for_gift_sender?).to be(true)
+      end
+    end
+
+    context "when there are no successful purchases" do
+      let(:purchase) { create(:failed_purchase) }
+
+      it "returns false" do
+        expect(order.receipt_for_gift_sender?).to be(false)
       end
     end
 
