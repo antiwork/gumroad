@@ -22,6 +22,15 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include("<h1>Live landing page</h1>")
     end
 
+    it "does not prepare the default product page before rendering the wrapper" do
+      expect(controller).not_to receive(:prepare_product_page)
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+    end
+
     it "sandboxes the iframe without top-navigation and mediates checkout via postMessage" do
       get :show, params: { id: product.unique_permalink }
       expect(response.body).to include(%(sandbox="allow-scripts allow-forms"))
@@ -37,6 +46,12 @@ describe LinksController, :vcr, type: :controller do
       # Only our own iframe can trigger checkout — gate on e.source so an
       # embedding page can't drive the navigation.
       expect(response.body).to include("e.source === frame.contentWindow")
+    end
+
+    it "preserves URL offer codes when mediating checkout" do
+      get :show, params: { id: product.unique_permalink, code: "DISCOUNT20" }
+
+      expect(response.body).to include(%(window.location.href = "/l/#{product.unique_permalink}?wanted=true\\u0026code=DISCOUNT20"))
     end
 
     it "escapes the checkout URL for JavaScript string context" do

@@ -27,9 +27,9 @@ class LinksController < ApplicationController
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :check_if_needs_redirect, only: [:show]
-  before_action :prepare_product_page, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
   before_action :render_custom_html_if_present, only: [:show]
+  before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
@@ -914,7 +914,7 @@ class LinksController < ApplicationController
       return if params[:wanted] == "true"
 
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
-      render html: custom_html_wrapper_document(@product, nonce:).html_safe, layout: false
+      render html: custom_html_wrapper_document(@product, nonce:, offer_code: params[:offer_code].presence || params[:code].presence).html_safe, layout: false
     end
 
     def custom_html_document(custom_html)
@@ -948,9 +948,11 @@ class LinksController < ApplicationController
     # tab (that would let a malicious onclick redirect to a phishing site with
     # gumroad.com still in the URL bar). Instead the buy button posts a message
     # to this wrapper, which navigates to the one checkout URL we control here.
-    def custom_html_wrapper_document(product, nonce:)
+    def custom_html_wrapper_document(product, nonce:, offer_code: nil)
       iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
-      checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?wanted=true".to_json)
+      checkout_params = { wanted: true }
+      checkout_params[:code] = offer_code if offer_code.present?
+      checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
       og_image = product.thumbnail&.alive&.url
