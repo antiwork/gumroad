@@ -896,7 +896,15 @@ class LinksController < ApplicationController
       end
     end
 
-    CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
+    CUSTOM_HTML_CSP = [
+      "default-src 'none'",
+      "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
+      "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
+      "img-src data: blob: https://static-2.gumroad.com https://staging-static-2.gumroad.com https://test-static-2.gumroad.com https://files.gumroad.com https://staging-files.gumroad.com",
+      "font-src data: https://fonts.gstatic.com https://fonts.bunny.net",
+      "connect-src 'none'",
+      "form-action 'self'",
+    ].join("; ") + ";"
 
     def render_custom_html_if_present
       return if @product.blank?
@@ -942,10 +950,7 @@ class LinksController < ApplicationController
     # to this wrapper, which navigates to the one checkout URL we control here.
     def custom_html_wrapper_document(product, nonce:)
       iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
-      # JSON-encoded for the JS string context below (not ERB::Util.h, which is
-      # HTML-entity escaping and wrong inside a <script>). to_json emits the
-      # surrounding quotes.
-      checkout_url_js = "/l/#{product.unique_permalink}?wanted=true".to_json
+      checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?wanted=true".to_json)
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
       og_image = product.thumbnail&.alive&.url
@@ -974,10 +979,7 @@ class LinksController < ApplicationController
             <script nonce="#{ERB::Util.h(nonce)}">
               var frame = document.getElementById("gumroad-landing-frame");
               window.addEventListener("message", function (e) {
-                // Only our own iframe can request checkout. Its sandbox has no
-                // allow-same-origin, so e.origin is "null" and can't be matched;
-                // gate on e.source instead so an embedding page can't trigger it.
-                if (e.source === frame.contentWindow && e.data === "gumroad:checkout") {
+                if (e.source === frame.contentWindow && e.origin === "null" && e.data === "gumroad:checkout") {
                   window.location.href = #{checkout_url_js};
                 }
               });

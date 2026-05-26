@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe LinksController, :vcr, type: :controller do
-  CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
+  CUSTOM_HTML_CSP = LinksController::CUSTOM_HTML_CSP
 
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, custom_html: "<section><h1>Live landing page</h1></section>") }
@@ -30,12 +30,22 @@ describe LinksController, :vcr, type: :controller do
       # only sends the "gumroad:checkout" signal.
       expect(response.body).to include(%(window.location.href = "/l/#{product.unique_permalink}?wanted=true"))
       expect(response.body).to include('e.data === "gumroad:checkout"')
+      expect(response.body).to include('e.origin === "null"')
       # Script carries a nonce — script-src has no 'unsafe-inline', so without
       # it the listener would be CSP-blocked in the browser.
       expect(response.body).to match(/<script nonce="[^"]+">/)
       # Only our own iframe can trigger checkout — gate on e.source so an
       # embedding page can't drive the navigation.
       expect(response.body).to include("e.source === frame.contentWindow")
+    end
+
+    it "escapes the checkout URL for JavaScript string context" do
+      allow(product).to receive(:unique_permalink).and_return(%(abc</script><script>alert(1)</script>))
+
+      html = controller.send(:custom_html_wrapper_document, product, nonce: "nonce")
+
+      expect(html).to include("\\u003c/script\\u003e")
+      expect(html).not_to include(%(abc</script><script>alert(1)</script>))
     end
 
     it "falls back to the default product page when custom_html is blank" do

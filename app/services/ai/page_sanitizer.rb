@@ -166,7 +166,11 @@ class Ai::PageSanitizer
   end
 
   def self.allowed_attribute?(name)
-    name.start_with?("data-", "aria-", "on") || ALLOWED_ATTRIBUTES.include?(name)
+    name.start_with?("data-", "aria-") || event_handler_attribute?(name) || ALLOWED_ATTRIBUTES.include?(name)
+  end
+
+  def self.event_handler_attribute?(name)
+    name.match?(/\Aon[a-z][a-z0-9]*\z/)
   end
 
   def self.dangerous_url_attribute?(name, value)
@@ -208,5 +212,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
+  private_class_method :scrub_node, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end

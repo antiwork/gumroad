@@ -95,7 +95,10 @@ class Link < ApplicationRecord
   delegate :custom_html, to: :page, allow_nil: true
 
   def custom_html=(value)
-    return page&.mark_for_destruction if value.blank?
+    if value.blank?
+      page.custom_html = nil if page.present?
+      return
+    end
 
     (page || build_page).custom_html = value
   end
@@ -1345,7 +1348,7 @@ class Link < ApplicationRecord
     def clear_featured_product_sections!
       SellerProfileFeaturedProductSection
         .where(seller_id: user_id)
-        .where(%q{CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?}, id)
+        .where('CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?', id)
         .find_each { |section| section.update!(json_data: section.json_data.except("featured_product_id")) }
     end
 

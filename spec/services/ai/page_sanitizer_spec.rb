@@ -17,6 +17,13 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include(%(onscroll="trackScroll()"))
     end
 
+    it "strips the literal on attribute while preserving real event handlers" do
+      sanitized = described_class.sanitize(%(<button on="notAnEvent()" onclick="openCheckout()">Buy</button>))
+
+      expect(sanitized).to include(%(onclick="openCheckout()"))
+      expect(sanitized).not_to include(%(on="notAnEvent()"))
+    end
+
     it "allows style blocks" do
       sanitized = described_class.sanitize(%(<style>.hero { color: red; }</style><section class="hero">Hi</section>))
 

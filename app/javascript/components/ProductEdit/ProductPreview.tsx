@@ -32,7 +32,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
   } = useProductEditContext();
 
   const url = useProductUrl();
-  const hasLandingPage = product.custom_html?.trim() ? true : false;
+  const hasLandingPage = !!product.custom_html?.trim();
   const [previewMode, setPreviewMode] = React.useState<"default" | "landing">(() =>
     hasLandingPage ? "landing" : "default",
   );
@@ -172,11 +172,11 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     audio_previews_enabled: product.audio_previews_enabled,
   };
 
-  const agentPrompt = `Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it using Gumroad's CLI.
+  const agentPrompt = `Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Save the HTML to landing.html, then publish it using Gumroad's CLI.
 
 Docs: https://gumroad.com/api#custom-html
 Product: https://api.gumroad.com/v2/products/${uniquePermalink}
-API token: <user_api_token>`;
+Command: gumroad products update ${uniquePermalink} --custom-html ./landing.html`;
 
   const copyPrompt = async () => {
     await navigator.clipboard.writeText(agentPrompt);
@@ -191,12 +191,12 @@ API token: <user_api_token>`;
 
     try {
       const response = await request({
-        method: "POST",
+        method: "PUT",
         accept: "json",
         url: Routes.link_path(uniquePermalink),
         data: { custom_html: null },
       });
-      const json = (await response.json()) as { success?: boolean; message?: string };
+      const json: { success?: boolean; message?: string } = await response.json();
       if (!response.ok || json.success === false) throw new ResponseError(json.message);
 
       setIsResetOpen(false);
@@ -204,8 +204,6 @@ API token: <user_api_token>`;
     } catch (e) {
       assertResponseError(e);
       updateProduct({ custom_html: previousCustomHtml });
-      // The landing page is back, so restore the tab too — the effect that
-      // syncs previewMode only forces "default" when there's no landing page.
       setPreviewMode("landing");
       showAlert(e.message, "error");
     } finally {
@@ -213,64 +211,65 @@ API token: <user_api_token>`;
     }
   };
 
-  const defaultPreview = product.native_type === "coffee" ? (
-    <ProfileLayout
-      creatorProfile={{
-        external_id: currentSeller.id,
-        avatar_url: currentSeller.avatarUrl,
-        name: currentSeller.name ?? "",
-        subdomain: currentSeller.subdomain,
-        twitter_handle: "",
-        is_verified: seller.is_verified,
-      }}
-      hideFollowForm
-    >
-      <CoffeeProduct
-        product={{
-          ...serializedProduct,
-          is_published: true,
-          pwyw: {
-            suggested_price_cents: Math.max(
-              ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
+  const defaultPreview =
+    product.native_type === "coffee" ? (
+      <ProfileLayout
+        creatorProfile={{
+          external_id: currentSeller.id,
+          avatar_url: currentSeller.avatarUrl,
+          name: currentSeller.name ?? "",
+          subdomain: currentSeller.subdomain,
+          twitter_handle: "",
+          is_verified: seller.is_verified,
+        }}
+        hideFollowForm
+      >
+        <CoffeeProduct
+          product={{
+            ...serializedProduct,
+            is_published: true,
+            pwyw: {
+              suggested_price_cents: Math.max(
+                ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
+              ),
+            },
+            options: serializedProduct.options.sort(
+              (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
             ),
-          },
-          options: serializedProduct.options.sort(
-            (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
-          ),
-        }}
-        purchase={null}
-        selection={{
-          optionId: null,
-          price: {
-            value:
-              serializedProduct.options.length === 1
-                ? (serializedProduct.options[0]?.price_difference_cents ?? null)
-                : null,
-            error: false,
-          },
-        }}
-      />
-    </ProfileLayout>
-  ) : (
-    <>
-      <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={product.refund_policy} />
-      <Product
-        product={serializedProduct}
-        purchase={null}
-        discountCode={defaultDiscountCode}
-        selection={{
-          quantity: 1,
-          optionId: serializedProduct.options[0]?.id ?? null,
-          recurrence: defaultRecurrence,
-          price: { value: null, error: false },
-          rent: false,
-          callStartTime: null,
-          payInInstallments: false,
-        }}
-        disableAnalytics
-      />
-    </>
-  );
+          }}
+          purchase={null}
+          selection={{
+            optionId: null,
+            price: {
+              value:
+                serializedProduct.options.length === 1
+                  ? (serializedProduct.options[0]?.price_difference_cents ?? null)
+                  : null,
+              error: false,
+            },
+          }}
+        />
+      </ProfileLayout>
+    ) : (
+      <>
+        <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={product.refund_policy} />
+        <Product
+          product={serializedProduct}
+          purchase={null}
+          discountCode={defaultDiscountCode}
+          selection={{
+            quantity: 1,
+            optionId: serializedProduct.options[0]?.id ?? null,
+            recurrence: defaultRecurrence,
+            price: { value: null, error: false },
+            rent: false,
+            callStartTime: null,
+            payInInstallments: false,
+          }}
+          disableAnalytics
+        />
+      </>
+    );
 
   return (
     <>
@@ -319,7 +318,9 @@ API token: <user_api_token>`;
         }
       >
         <div className="grid gap-4">
-          <pre className="whitespace-pre-wrap rounded border border-border bg-background p-4 text-sm">{agentPrompt}</pre>
+          <pre className="rounded border border-border bg-background p-4 text-sm whitespace-pre-wrap">
+            {agentPrompt}
+          </pre>
           <p className="text-sm text-muted">
             Your HTML runs in a sandboxed iframe - JS for animations and scroll effects works, but no auth access or
             external network calls.

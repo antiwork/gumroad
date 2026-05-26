@@ -21,6 +21,23 @@ describe Link, :vcr do
     expect(subject.send(:single_unit_currency?)).to be(false)
   end
 
+  describe "#custom_html=" do
+    it "clears the page HTML without marking the associated page for destruction" do
+      link.update!(custom_html: "<section>Live landing page</section>")
+      page = link.reload.page
+
+      link.custom_html = nil
+
+      expect(link.page).to eq(page)
+      expect(link.page).not_to be_marked_for_destruction
+
+      link.save!
+
+      expect(link.reload.page).to eq(page)
+      expect(link.custom_html).to be_nil
+    end
+  end
+
   describe "max_purchase_count validations" do
     it "can be set on new records with no purchases" do
       expect(build(:product, max_purchase_count: nil).valid?).to eq(true)

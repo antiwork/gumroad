@@ -413,13 +413,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "One or more numeric values are out of range.")
     end
 
-    extras = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
+    additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
     offer_code_warning = check_offer_code_validity
-    if offer_code_warning
-      success_with_object(:product, @product, warning: offer_code_warning, **extras)
-    else
-      success_with_object(:product, @product, **extras)
-    end
+    additional_info[:warning] = offer_code_warning if offer_code_warning
+    success_with_object(:product, @product, additional_info)
   end
 
   def disable
