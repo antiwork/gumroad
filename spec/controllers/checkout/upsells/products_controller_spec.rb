@@ -183,24 +183,41 @@ describe Checkout::Upsells::ProductsController do
       expect(response.parsed_body).to eq([])
     end
 
-    it "eager-loads associations needed by the presenter" do
+    it "eager-loads associations needed by the presenter (no N+1)" do
+      # Pre-warm Rails internals so we count only product-related queries.
       sign_in seller
-
       get :index
-
       expect(response).to have_http_status(:ok)
 
-      products = seller.products
-        .eligible_for_content_upsells
-        .includes(*Checkout::Upsells::ProductsController::PRODUCT_INCLUDES)
-        .order(created_at: :desc, id: :desc)
-        .limit(Checkout::Upsells::ProductsController::MAX_PRODUCTS)
-        .to_a
+      # Capture every SQL SELECT fired by the controller action itself.
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+        next if payload[:name] == "SCHEMA"
+        next if payload[:cached]
+        sql = payload[:sql]
+        next unless sql.start_with?("SELECT")
+        queries << sql
+      end
 
-      products.each do |product|
-        expect(product.association(:alive_prices)).to be_loaded
-        expect(product.association(:thumbnail_alive)).to be_loaded
-        expect(product.association(:display_asset_previews)).to be_loaded
+      begin
+        get :index
+        expect(response).to have_http_status(:ok)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      # 5 products in setup, MAX_PRODUCTS = 25, so all are loaded.
+      # If PRODUCT_INCLUDES drops :alive_prices or the variant_records chain,
+      # we'll see per-product SELECTs against `prices`,
+      # `active_storage_attachments`, `active_storage_blobs`, or
+      # `active_storage_variant_records` — fail the spec.
+      [
+        /SELECT.*FROM `prices`.*WHERE `prices`\.`link_id` = /,
+        /SELECT.*FROM `active_storage_variant_records`.*WHERE `active_storage_variant_records`\.`blob_id` = \d+\b/,
+      ].each do |per_row_pattern|
+        per_row = queries.grep(per_row_pattern)
+        expect(per_row).to be_empty,
+          "Expected no per-row queries matching #{per_row_pattern.inspect}, got #{per_row.size}:\n#{per_row.join("\n")}"
       end
     end
   end

@@ -220,6 +220,7 @@ RSpec.configure do |config|
   config.include ErrorResponses
   config.mock_with :rspec
   config.file_fixture_path = "#{::Rails.root}/spec/support/fixtures"
+  config.fixture_paths = ["#{::Rails.root}/spec/fixtures"]
   config.infer_base_class_for_anonymous_controllers = false
   config.infer_spec_type_from_file_location!
   config.include Devise::Test::ControllerHelpers, type: :controller
