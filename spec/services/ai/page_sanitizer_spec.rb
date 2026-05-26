@@ -50,6 +50,13 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include("javascript:")
     end
 
+    it "strips deeply encoded javascript URLs from links" do
+      sanitized = described_class.sanitize(%(<a href="java%25252573cript:alert(1)">Click</a>))
+
+      expect(sanitized).to include("<a>Click</a>")
+      expect(sanitized).not_to include("href=")
+    end
+
     it "strips meta refresh tags" do
       sanitized = described_class.sanitize(%(<meta http-equiv="refresh" content="0;url=https://evil.com"><p>Stay</p>))
 

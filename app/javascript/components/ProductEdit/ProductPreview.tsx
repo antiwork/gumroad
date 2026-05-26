@@ -13,6 +13,7 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {

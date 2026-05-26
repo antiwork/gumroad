@@ -227,8 +227,11 @@ class Ai::PageSanitizer
 
   def self.normalize_url(value)
     decoded = CGI.unescapeHTML(value.to_s)
-    3.times do
-      decoded = Addressable::URI.unencode_component(decoded)
+    10.times do
+      next_decoded = Addressable::URI.unencode_component(decoded)
+      break if next_decoded == decoded
+
+      decoded = next_decoded
     rescue Addressable::URI::InvalidURIError
       break
     end
