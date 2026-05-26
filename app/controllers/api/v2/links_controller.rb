@@ -20,10 +20,10 @@ class Api::V2::LinksController < Api::V2::BaseController
   ]).freeze
 
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
-  before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
 
   def index
     products = current_resource_owner.products.visible.includes(
@@ -430,6 +430,22 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   def destroy
     success_with_product if @product.delete!
+  end
+
+  # Dry-run sanitize: returns what `custom_html` would look like after the
+  # sanitizer runs, without writing. Lets agents iterate on prompts without
+  # rewriting the live page every attempt.
+  def preview_custom_html
+    sanitized = params[:custom_html].blank? ? nil : Ai::PageSanitizer.sanitize(params[:custom_html])
+    @product.custom_html = sanitized
+    @product.validate
+    errors = @product.errors.where(:custom_html)
+
+    if errors.any?
+      render_response(false, message: errors.map(&:full_message).to_sentence)
+    else
+      render_response(true, custom_html: sanitized)
+    end
   end
 
   private

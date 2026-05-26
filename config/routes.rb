@@ -72,6 +72,7 @@ Rails.application.routes.draw do
         member do
           put "disable"
           put "enable"
+          post "preview_custom_html"
         end
       end
       post "sales/exports", to: "sales#export"

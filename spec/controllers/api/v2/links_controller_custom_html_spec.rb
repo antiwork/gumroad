@@ -72,4 +72,55 @@ describe Api::V2::LinksController do
       expect(@product.reload.custom_html).to be_nil
     end
   end
+
+  describe "POST 'preview_custom_html'" do
+    it "returns the sanitized HTML without writing to the product" do
+      input = <<~HTML
+        <section>
+          <script src="https://evil.com/x.js"></script>
+          <a href="javascript:alert(1)">Click</a>
+          <h1>Hello</h1>
+        </section>
+      HTML
+
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: input }
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["custom_html"]).to include("<h1>Hello</h1>")
+      expect(body["custom_html"]).not_to include("evil.com")
+      expect(body["custom_html"]).not_to include("javascript:")
+      expect(@product.reload.custom_html).to be_nil
+    end
+
+    it "reports validation errors without writing" do
+      oversized = "<section>#{"a" * Product::Validations::MAX_CUSTOM_HTML_LENGTH}</section>"
+
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(false)
+      expect(body["message"]).to match(/too long/i)
+      expect(@product.reload.custom_html).to be_nil
+    end
+
+    it "returns success with nil custom_html when input is blank" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["custom_html"]).to be_nil
+    end
+
+    it "returns 401 without a token" do
+      post :preview_custom_html, params: { format: :json, id: @product.external_id, custom_html: "<section>HTML</section>" }
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "returns 403 when previewing for another seller's product" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @other_product.external_id, custom_html: "<section>HTML</section>" }
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
 end
