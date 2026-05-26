@@ -71,6 +71,14 @@ describe Api::V2::LinksController do
       expect(body["message"]).to match(/too long/i)
       expect(@product.reload.custom_html).to be_nil
     end
+
+    it "includes landing_url in the response so the agent can echo where the page is now live" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>HTML</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body.dig("product", "landing_url")).to eq(@product.long_url)
+    end
   end
 
   describe "POST 'preview_custom_html'" do

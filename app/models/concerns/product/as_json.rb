@@ -87,6 +87,7 @@ module Product::AsJson
         "price" => cached_default_price_cents,
         "currency" => price_currency_type,
         "short_url" => long_url,
+        "landing_url" => long_url,
         "thumbnail_url" => thumbnail&.alive&.url.presence,
         "tags" => tags.pluck(:name),
         "formatted_price" => price_formatted_verbose,
