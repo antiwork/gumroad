@@ -34,13 +34,18 @@ module CurrencyHelper
   end
 
   def query_rate(currency_type)
-    JSON.parse(URI.open(CURRENCY_SOURCE).read)["rates"][currency_type]
-  rescue StandardError
-    currency_namespace.get(currency_type.to_s)
+    formatted_currency = currency_type.to_s.upcase
+    return backup_rate(formatted_currency) unless use_stripe_fx_quotes?
+    return backup_rate(formatted_currency) unless stripe_fx_supported_currency_choice?(formatted_currency)
+
+    stripe_fx_rates([formatted_currency])[formatted_currency] || backup_rate(formatted_currency)
+  rescue Stripe::StripeError => e
+    notify_stripe_fx_quote_error(e, currencies: [formatted_currency])
+    backup_rate(formatted_currency)
   end
 
   def get_rate(currency_type)
-    return "1.0" if currency_type.to_s == "usd" # Getting around an open exchange jankiness
+    return "1.0" if currency_type.to_s == "usd"
     formatted_currency = currency_type.to_s.upcase
     rate = currency_namespace.get(formatted_currency.to_s)
     if rate && rate.to_f > 0
@@ -52,8 +57,63 @@ module CurrencyHelper
     end
   end
 
+  def backup_currency_rates
+    JSON.parse(File.read(BACKUP_CURRENCY_RATES_PATH))["rates"]
+  end
+
+  def backup_rate(currency_type)
+    backup_currency_rates[currency_type.to_s.upcase]
+  end
+
+  def use_stripe_fx_quotes?
+    !Rails.env.development? && !Rails.env.test?
+  end
+
+  def stripe_fx_supported_currency_choice?(currency_type)
+    STRIPE_FX_CURRENCY_CHOICES.include?(currency_type.to_s.upcase)
+  end
+
+  def stripe_fx_rates(currency_types)
+    currencies = Array(currency_types).map { _1.to_s.upcase }.uniq
+    supported_currencies = (currencies & STRIPE_FX_CURRENCY_CHOICES) - ["USD"]
+    return {} if supported_currencies.empty?
+
+    quote = Stripe::FxQuote.create(
+      to_currency: "usd",
+      from_currencies: supported_currencies.map(&:downcase),
+      lock_duration: "none"
+    )
+
+    supported_currencies.index_with { stripe_fx_rate_from_quote(quote, _1) }.compact
+  end
+
+  def stripe_fx_rate_from_quote(quote, currency_type)
+    rate = stripe_fx_quote_rates(quote)&.[](currency_type.to_s.downcase)
+    exchange_rate = stripe_fx_attribute(rate, "exchange_rate")
+    return if exchange_rate.blank? || BigDecimal(exchange_rate.to_s) <= 0
+
+    (1 / BigDecimal(exchange_rate.to_s)).to_f
+  end
+
+  def stripe_fx_quote_rates(quote)
+    stripe_fx_attribute(quote, "rates")
+  end
+
+  def stripe_fx_attribute(object, key)
+    return if object.blank?
+    return object[key] if object.respond_to?(:[]) && object[key].present?
+    return object[key.to_sym] if object.respond_to?(:[]) && object[key.to_sym].present?
+
+    object.public_send(key) if object.respond_to?(key)
+  end
+
+  def notify_stripe_fx_quote_error(error, currencies:)
+    Rails.logger.warn("Stripe FX Quotes API failed for #{currencies.join(', ')}: #{error.class} - #{error.message}")
+    ErrorNotifier.notify(error, currencies:) { |report| report.severity = "warning" }
+  end
+
   def get_usd_cents(currency_type, quantity, rate: nil)
-    return quantity if currency_type.to_s == "usd" # Getting around an open exchange jankiness
+    return quantity if currency_type.to_s == "usd"
     rate = get_rate(currency_type) if rate.nil?
     converted = BigDecimal(quantity) / rate.to_f
     if is_currency_type_single_unit?(currency_type)
@@ -69,7 +129,7 @@ module CurrencyHelper
   # quantity - amount in USD cents
   # rate - optional. Uses this as the conversion rate instead of looking up by currency_type if present.
   def usd_cents_to_currency(currency_type, quantity, rate = nil)
-    return quantity if currency_type.to_s == "usd" # Getting around an open exchange jankiness
+    return quantity if currency_type.to_s == "usd"
     conversion_rate = rate.present? ? rate.to_f : get_rate(currency_type).to_f
     converted = BigDecimal(quantity) * conversion_rate
     if is_currency_type_single_unit?(currency_type)

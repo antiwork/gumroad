@@ -4,9 +4,49 @@ require "spec_helper"
 
 describe CurrencyHelper do
   describe "#get_rate" do
+    def enable_stripe_fx_quotes
+      allow(Rails.env).to receive(:development?).and_return(false)
+      allow(Rails.env).to receive(:test?).and_return(false)
+    end
+
     it "returns the correct value" do
       expect(get_rate("JPY")).to eq "78.3932"
       expect(get_rate("GBP")).to eq "0.652571"
+    end
+
+    it "returns the cached value when present" do
+      currency_namespace.set("JPY", "149.25")
+
+      expect(Stripe::FxQuote).not_to receive(:create)
+      expect(get_rate("JPY")).to eq "149.25"
+    end
+
+    it "fetches a Stripe FX quote and caches it when Redis is empty" do
+      enable_stripe_fx_quotes
+      quote = { "rates" => { "eur" => { "exchange_rate" => 1.25 } } }
+
+      expect(Stripe::FxQuote).to receive(:create).with(
+        to_currency: "usd",
+        from_currencies: ["eur"],
+        lock_duration: "none"
+      ).and_return(quote)
+
+      expect(get_rate("EUR")).to eq "0.8"
+      expect(currency_namespace.get("EUR")).to eq "0.8"
+    end
+
+    it "returns the backup rate when Stripe FX quotes fail" do
+      enable_stripe_fx_quotes
+      error = Stripe::APIError.new("Stripe is down")
+      report = instance_double(ErrorNotifier::SentryReportAdapter)
+
+      allow(Stripe::FxQuote).to receive(:create).and_raise(error)
+      expect(Rails.logger).to receive(:warn).with(/Stripe FX Quotes API failed/)
+      expect(report).to receive(:severity=).with("warning")
+      expect(ErrorNotifier).to receive(:notify).with(error, currencies: ["EUR"]).and_yield(report)
+
+      expect(get_rate("EUR")).to eq "0.81127"
+      expect(currency_namespace.get("EUR")).to eq "0.81127"
     end
   end
 
