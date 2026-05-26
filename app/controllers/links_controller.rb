@@ -188,6 +188,12 @@ class LinksController < ApplicationController
   def landing_iframe_content
     return head :not_found if @product.blank? || @product.custom_html.blank?
 
+    # Opt out of SecureHeaders' default CSP so the strict, seller-scoped CSP we
+    # set below survives. Without this, the middleware overwrites our header
+    # with the app default (no 'unsafe-inline'), silently blocking the seller's
+    # inline scripts. X-Frame-Options and Referrer-Policy aren't managed by
+    # SecureHeaders here, so setting those directly is fine.
+    SecureHeaders.opt_out_of_header(request, :csp)
     response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
     response.set_header("X-Frame-Options", "SAMEORIGIN")
     response.set_header("Referrer-Policy", "no-referrer")
