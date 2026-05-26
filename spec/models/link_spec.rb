@@ -645,8 +645,15 @@ describe Link, :vcr do
         expect(product.rental).to eq(price_cents: 200, rent_only: false)
       end
 
-      it "returns nil for a rentable product with no rental price" do
+      it "returns nil for a buy-and-rent product with no rental price" do
         product = create(:product, purchase_type: :buy_and_rent, rental_price_cents: 200)
+        product.prices.alive.is_rental.each(&:mark_deleted!)
+
+        expect(product.reload.rental).to be_nil
+      end
+
+      it "returns nil for a rent-only product with no rental price" do
+        product = create(:product, purchase_type: :rent_only, rental_price_cents: 300)
         product.prices.alive.is_rental.each(&:mark_deleted!)
 
         expect(product.reload.rental).to be_nil
