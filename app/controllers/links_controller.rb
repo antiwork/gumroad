@@ -935,7 +935,7 @@ class LinksController < ApplicationController
     # gumroad.com still in the URL bar). Instead the buy button posts a message
     # to this wrapper, which navigates to the one checkout URL we control here.
     def custom_html_wrapper_document(product, nonce:)
-      iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing")
+      iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
       # JSON-encoded for the JS string context below (not ERB::Util.h, which is
       # HTML-entity escaping and wrong inside a <script>). to_json emits the
       # surrounding quotes.

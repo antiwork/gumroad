@@ -18,7 +18,7 @@ describe LinksController, :vcr, type: :controller do
       expect(response).to be_successful
       expect(response.body).to include("<title>#{product.name}</title>")
       expect(response.body).to include(%(property="og:title"))
-      expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing"))
+      expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
       expect(response.body).not_to include("<h1>Live landing page</h1>")
     end
 
@@ -39,14 +39,14 @@ describe LinksController, :vcr, type: :controller do
       product.update!(custom_html: nil)
       get :show, params: { id: product.unique_permalink }
       expect(response.body).not_to include("<h1>Live landing page</h1>")
-      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing"))
+      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
 
     it "skips the wrapper when ?wanted=true and lets the checkout redirect fire" do
       get :show, params: { id: product.unique_permalink, wanted: "true" }
       expect(response).to be_redirect
       expect(response.location).to include("/checkout")
-      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing"))
+      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
   end
 

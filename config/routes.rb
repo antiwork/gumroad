@@ -861,10 +861,10 @@ Rails.application.routes.draw do
     get "/products", to: "links#index", as: :products
 
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
-    # Iframe content endpoint for products with custom_html. Must appear
-    # before the :code route below so "landing" doesn't get interpreted as
-    # an offer code by short_link_offer_code.
-    get "/l/:id/landing", to: "links#landing_iframe_content", as: :short_link_landing
+    # Iframe content endpoint for products with custom_html. The two-segment
+    # path can't collide with the single-segment offer-code route below, so a
+    # seller's "landing" offer code keeps working.
+    get "/l/:id/landing/embed", to: "links#landing_iframe_content", as: :short_link_landing
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code
     get "/cart_items_count", to: "links#cart_items_count"
 
@@ -1158,6 +1158,7 @@ Rails.application.routes.draw do
 
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
+    get "/l/:id/landing/embed", to: "links#landing_iframe_content"
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
     get "/:code", to: "links#show", defaults: { format: "html" }
   end
@@ -1182,6 +1183,7 @@ Rails.application.routes.draw do
     post "/affiliate_requests", to: "affiliate_requests#create", as: :custom_domain_create_affiliate_request
     get "/updates", to: redirect("/posts")
     get "/l/:id", to: "links#show", defaults: { format: "html" }
+    get "/l/:id/landing/embed", to: "links#landing_iframe_content"
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
     get "/subscribe", to: "users#subscribe", as: :custom_domain_subscribe
     get "/follow", to: redirect("/subscribe")
