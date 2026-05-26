@@ -47,6 +47,21 @@ describe Admin::UserPresenter::Card do
       end
     end
 
+    describe "email fields when user has no email" do
+      let(:user) do
+        user = create(:user, provider: :twitter, twitter_user_id: "123", twitter_handle: "throwaway")
+        user.update_columns(email: nil, unconfirmed_email: nil)
+        user.reload
+      end
+
+      it "returns nil for email-derived fields without raising" do
+        expect(props[:email]).to be_nil
+        expect(props[:form_email]).to be_nil
+        expect(props[:form_email_domain]).to be_nil
+        expect(props[:support_email]).to be_nil
+      end
+    end
+
     describe "blocking information" do
       context "when user is not blocked by form_email" do
         it "returns nil for blocked_by_form_email_object" do

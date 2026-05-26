@@ -115,6 +115,10 @@ export default function SettingsPage() {
               <Input
                 id={`${uid}-username`}
                 type="text"
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-form-type="other"
                 disabled={!loggedInUser?.policies.settings_profile.update_username}
                 value={profileSettings.username}
                 onChange={(evt) =>
