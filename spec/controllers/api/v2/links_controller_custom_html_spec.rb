@@ -113,6 +113,24 @@ describe Api::V2::LinksController do
       expect(body["custom_html"]).to be_nil
     end
 
+    it "returns nil when input sanitizes to an empty string" do
+      input = %(<link rel="stylesheet" href="https://example.com/style.css">)
+
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: input }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["custom_html"]).to be_nil
+    end
+
+    it "agrees with PUT update on input that sanitizes to empty" do
+      input = %(<link rel="stylesheet" href="https://example.com/style.css">)
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: input }
+
+      expect(@product.reload.custom_html).to be_nil
+    end
+
     it "returns 401 without a token" do
       post :preview_custom_html, params: { format: :json, id: @product.external_id, custom_html: "<section>HTML</section>" }
       expect(response).to have_http_status(:unauthorized)

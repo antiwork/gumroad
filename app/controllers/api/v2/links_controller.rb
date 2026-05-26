@@ -434,9 +434,11 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   # Dry-run sanitize: returns what `custom_html` would look like after the
   # sanitizer runs, without writing. Lets agents iterate on prompts without
-  # rewriting the live page every attempt.
+  # rewriting the live page every attempt. Mirrors `update`'s blank-to-nil
+  # normalization so the dry-run and the real PUT agree on edge cases like
+  # input that sanitizes entirely to an empty string.
   def preview_custom_html
-    sanitized = params[:custom_html].blank? ? nil : Ai::PageSanitizer.sanitize(params[:custom_html])
+    sanitized = Ai::PageSanitizer.sanitize(params[:custom_html]).presence
     @product.custom_html = sanitized
     @product.validate
     errors = @product.errors.where(:custom_html)
