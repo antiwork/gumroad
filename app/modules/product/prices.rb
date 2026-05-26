@@ -320,7 +320,14 @@ module Product::Prices
 
     def lowest_variant_price_difference_cents
       return if is_tiered_membership?
-      variant_categories_alive.flat_map(&:alive_variants).min_by { |v| v.price_difference_cents.to_i }&.price_difference_cents
+      # Mirrors `current_base_variants`: SKUs attached directly to the link
+      # (default SKU has price_difference_cents: 0 for physical products) plus
+      # alive variants under each alive variant category. Walks preloaded
+      # associations to avoid N+1; presenters that need this performance must
+      # `includes(:skus, variant_categories_alive: :alive_variants)`.
+      candidates = skus.select(&:alive?) +
+                   variant_categories_alive.flat_map(&:alive_variants)
+      candidates.min_by { |v| v.price_difference_cents.to_i }&.price_difference_cents
     end
 
     def display_recurrence
