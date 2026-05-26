@@ -60,5 +60,16 @@ describe Api::V2::LinksController do
       put :update, params: { format: :json, access_token: @token.token, id: @other_product.external_id, custom_html: "<section>HTML</section>" }
       expect(response).to have_http_status(:forbidden)
     end
+
+    it "rejects HTML over the size limit" do
+      oversized = "<section>#{"a" * Product::Validations::MAX_CUSTOM_HTML_LENGTH}</section>"
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(false)
+      expect(body["message"]).to match(/too long/i)
+      expect(@product.reload.custom_html).to be_nil
+    end
   end
 end

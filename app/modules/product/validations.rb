@@ -5,6 +5,7 @@ module Product::Validations
 
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
   MAX_CUSTOM_RECEIPT_TEXT_LENGTH = 500
+  MAX_CUSTOM_HTML_LENGTH = 500_000
 
   private
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
