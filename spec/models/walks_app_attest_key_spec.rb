@@ -54,4 +54,31 @@ describe WalksFreeTrial do
       expect(described_class.where(walks_app_attest_key_id: key.id).count).to eq(1)
     end
   end
+
+  describe "#consume_synthesis_attempt" do
+    let(:trial) { create(:walks_free_trial) }
+
+    it "returns true and increments the counter for each call under the cap" do
+      WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS.times do |i|
+        expect(trial.consume_synthesis_attempt).to be(true)
+        expect(trial.reload.synthesis_attempts).to eq(i + 1)
+      end
+    end
+
+    it "returns false once the cap is reached and leaves the counter pinned" do
+      WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS.times { trial.consume_synthesis_attempt }
+      expect(trial.consume_synthesis_attempt).to be(false)
+      expect(trial.reload.synthesis_attempts).to eq(WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS)
+    end
+
+    it "is race-safe: two parallel attempts at the cap can't both succeed" do
+      trial.update!(synthesis_attempts: WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS - 1)
+      a = WalksFreeTrial.find(trial.id)
+      b = WalksFreeTrial.find(trial.id)
+      results = [a.consume_synthesis_attempt, b.consume_synthesis_attempt]
+      expect(results.count(true)).to eq(1)
+      expect(results.count(false)).to eq(1)
+      expect(trial.reload.synthesis_attempts).to eq(WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS)
+    end
+  end
 end

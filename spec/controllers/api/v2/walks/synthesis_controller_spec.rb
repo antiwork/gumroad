@@ -215,5 +215,34 @@ describe Api::V2::Walks::SynthesisController do
 
       expect(response).to have_http_status(:payment_required)
     end
+
+    it "caps free-tier synthesis at MAX_SYNTHESIS_ATTEMPTS calls per walk" do
+      # The default `before` block creates the WalksFreeTrial row at
+      # synthesis_attempts=0. After MAX calls succeed, the next one must 402.
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS.times do
+        post :create, params: { topic: "x", exchanges: exchanges }
+        expect(response).to have_http_status(:ok)
+      end
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+      expect(response).to have_http_status(:payment_required)
+      expect(response.parsed_body["reason"]).to eq("subscription_required")
+    end
+
+    it "does not increment synthesis_attempts when a valid JWS short-circuits the device path" do
+      trial = WalksFreeTrial.find_by(walks_app_attest_key: app_attest_key)
+      allow(AppStoreWalksJwsVerifier).to receive(:verify)
+        .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
+      request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      expect {
+        post :create, params: { topic: "x", exchanges: exchanges }
+      }.not_to change { trial.reload.synthesis_attempts }
+    end
   end
 end

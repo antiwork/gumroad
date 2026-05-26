@@ -14,8 +14,10 @@
 #    Secure-Enclave key Apple attested for us during onboarding. The verifier
 #    enforces signature, challenge freshness, and counter advance.
 #    `realtime_tokens` *consumes* the free-trial slot (one-shot per keyId);
-#    `synthesis` only *checks* that the slot was already consumed, so the
-#    iOS app can retry synthesis without burning another walk.
+#    `synthesis` consumes one of up to `WalksFreeTrial::MAX_SYNTHESIS_ATTEMPTS`
+#    retry slots tied to that same free walk, so transient Anthropic failures
+#    can be retried without the slot becoming a permanent "may call Claude"
+#    flag.
 #
 # Anything else → 402. The 402 body carries a `reason` symbol so the iOS app
 # can distinguish "you need to attest first" from "you need to subscribe."
@@ -33,8 +35,8 @@ module WalksEntitlement
 
       if consumes_free_trial
         return if WalksFreeTrial.consume(walks_app_attest_key: @walks_app_attest_key)
-      elsif @walks_app_attest_key.free_trial_consumed?
-        return
+      else
+        return if @walks_app_attest_key.walks_free_trial&.consume_synthesis_attempt
       end
 
       render_payment_required("subscription_required")
