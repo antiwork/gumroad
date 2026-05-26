@@ -2,7 +2,7 @@
 
 class Api::V2::LinksController < Api::V2::BaseController
   BASE_PRODUCT_ASSOCIATIONS = [
-    :preorder_link, :tags, :taxonomy,
+    :page, :preorder_link, :tags, :taxonomy,
     { display_asset_previews: [:file_attachment, :file_blob] },
     { bundle_products: [:product, :variant] },
   ].freeze
@@ -297,6 +297,11 @@ class Api::V2::LinksController < Api::V2::BaseController
     sanitization_report = nil
     begin
       ActiveRecord::Base.transaction do
+        # Lock the product row so concurrent custom_html PUTs serialize their
+        # build_page calls — otherwise they race against the pages unique
+        # index. Must precede assign_attributes — lock! raises on a dirty record.
+        @product.lock! if params.key?(:custom_html)
+
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
@@ -450,9 +455,9 @@ class Api::V2::LinksController < Api::V2::BaseController
   def preview_custom_html
     result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
     sanitized = result.html.presence
-    @product.custom_html = sanitized
-    @product.validate
-    errors = @product.errors.where(:custom_html)
+    candidate_page = Page.new(pageable: @product, custom_html: sanitized)
+    candidate_page.validate
+    errors = candidate_page.errors.where(:custom_html)
 
     if errors.any?
       render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)

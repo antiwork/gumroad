@@ -91,6 +91,14 @@ class Link < ApplicationRecord
   has_many :prices
   has_many :alive_prices, -> { alive }, class_name: "Price"
   has_one :installment_plan, -> { alive }, class_name: "ProductInstallmentPlan"
+  has_one :page, as: :pageable, dependent: :destroy, autosave: true
+  delegate :custom_html, to: :page, allow_nil: true
+
+  def custom_html=(value)
+    return page&.mark_for_destruction if value.blank?
+
+    (page || build_page).custom_html = value
+  end
   has_many :sales, class_name: "Purchase"
   has_many :orders, through: :sales, source: :order
   has_many :sold_calls, through: :sales, source: :call
@@ -199,7 +207,6 @@ class Link < ApplicationRecord
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
   validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
-  validates :custom_html, length: { maximum: Product::Validations::MAX_CUSTOM_HTML_LENGTH }
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?

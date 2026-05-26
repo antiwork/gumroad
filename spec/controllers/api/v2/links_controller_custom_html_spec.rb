@@ -62,7 +62,7 @@ describe Api::V2::LinksController do
     end
 
     it "rejects HTML over the size limit" do
-      oversized = "<section>#{"a" * Product::Validations::MAX_CUSTOM_HTML_LENGTH}</section>"
+      oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 
       put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }
 
@@ -128,6 +128,16 @@ describe Api::V2::LinksController do
       expect(report["removed_tags"]).to include(a_hash_including("tag" => "script", "reason" => "script src host not allowed"))
       expect(report["removed_attributes"]).to include(a_hash_including("attribute" => "href", "reason" => "javascript: URL blocked"))
     end
+
+    it "applies custom_html alongside other attribute changes without choking on the row lock" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, name: "Renamed", custom_html: "<section>Combined update</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      @product.reload
+      expect(@product.name).to eq("Renamed")
+      expect(@product.custom_html).to include("Combined update")
+    end
   end
 
   describe "POST 'preview_custom_html'" do
@@ -152,7 +162,7 @@ describe Api::V2::LinksController do
     end
 
     it "reports validation errors without writing" do
-      oversized = "<section>#{"a" * Product::Validations::MAX_CUSTOM_HTML_LENGTH}</section>"
+      oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 
       post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }
 

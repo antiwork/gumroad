@@ -74,7 +74,7 @@ module Product::AsJson
       keep = %w[
         name description require_shipping preview_url
         custom_receipt customizable_price custom_permalink
-        subscription_duration custom_html
+        subscription_duration
       ]
       cached_default_price_cents = default_price_cents
 
@@ -88,6 +88,7 @@ module Product::AsJson
         "currency" => price_currency_type,
         "short_url" => long_url,
         "landing_url" => long_url,
+        "custom_html" => custom_html,
         "thumbnail_url" => thumbnail&.alive&.url.presence,
         "tags" => tags.pluck(:name),
         "formatted_price" => price_formatted_verbose,
