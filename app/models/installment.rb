@@ -823,7 +823,7 @@ class Installment < ApplicationRecord
     end.reverse
   end
 
-  def has_been_blasted? = blasts.exists?
+  def has_been_blasted? = blasts.loaded? ? blasts.any? : blasts.exists?
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
   def featured_image_url

@@ -15,9 +15,12 @@ class PaginatedInstallmentsPresenter
     raise ArgumentError, "Invalid type" unless type.in? [Installment::PUBLISHED, Installment::SCHEDULED, Installment::DRAFT]
   end
 
+  PRELOAD_ASSOCIATIONS = [:installment_rule, :seller, :link, :base_variant, :product_files, :blasts].freeze
+  private_constant :PRELOAD_ASSOCIATIONS
+
   def props
     if query.blank?
-      installments = Installment.includes(:installment_rule).all
+      installments = Installment.includes(*PRELOAD_ASSOCIATIONS).all
       installments = installments.ordered_updates(seller, type).public_send(type)
       installments = installments.unscope(:order).order("installment_rules.to_be_published_at ASC") if type == Installment::SCHEDULED
       pagination, installments = pagy(installments, page:, limit: PER_PAGE, overflow: :empty_page)
@@ -36,7 +39,7 @@ class PaginatedInstallmentsPresenter
         sort: [:_score, { created_at: :desc }, { id: :desc }]
       }
       es_search = InstallmentSearchService.search(search_options)
-      installments = es_search.records.load
+      installments = es_search.records.includes(*PRELOAD_ASSOCIATIONS).load
       can_paginate_further = es_search.results.total > (offset + PER_PAGE)
       pagiation_metadata = { count: es_search.results.total, next: can_paginate_further ? page + 1 : nil }
     end
