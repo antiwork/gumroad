@@ -294,6 +294,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     previous_custom_html = nil
+    sanitization_report = nil
     begin
       ActiveRecord::Base.transaction do
         attrs = {}
@@ -329,8 +330,14 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         if params.key?(:custom_html)
           previous_custom_html = @product.custom_html
-          @product.custom_html = params[:custom_html].blank? ? nil : Ai::PageSanitizer.sanitize(params[:custom_html])
-          @product.custom_html = nil if @product.custom_html.blank?
+          if params[:custom_html].blank?
+            @product.custom_html = nil
+            sanitization_report = Ai::PageSanitizer.empty_report
+          else
+            result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
+            @product.custom_html = result.html.presence
+            sanitization_report = result.report
+          end
         end
 
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
@@ -401,7 +408,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "One or more numeric values are out of range.")
     end
 
-    extras = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html } : {}
+    extras = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
     offer_code_warning = check_offer_code_validity
     if offer_code_warning
       success_with_object(:product, @product, warning: offer_code_warning, **extras)
@@ -441,15 +448,16 @@ class Api::V2::LinksController < Api::V2::BaseController
   # normalization so the dry-run and the real PUT agree on edge cases like
   # input that sanitizes entirely to an empty string.
   def preview_custom_html
-    sanitized = Ai::PageSanitizer.sanitize(params[:custom_html]).presence
+    result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
+    sanitized = result.html.presence
     @product.custom_html = sanitized
     @product.validate
     errors = @product.errors.where(:custom_html)
 
     if errors.any?
-      render_response(false, message: errors.map(&:full_message).to_sentence)
+      render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)
     else
-      render_response(true, custom_html: sanitized)
+      render_response(true, custom_html: sanitized, sanitization_report: result.report)
     end
   end
 

@@ -118,6 +118,16 @@ describe Api::V2::LinksController do
       expect(body["success"]).to be(true)
       expect(body).not_to have_key("previous_custom_html")
     end
+
+    it "returns a sanitization_report listing what was stripped" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: %(<section><script src="https://evil.com/x.js"></script><a href="javascript:alert(1)">x</a></section>) }
+
+      body = JSON.parse(response.body)
+      report = body["sanitization_report"]
+      expect(report["total_removed"]).to eq(2)
+      expect(report["removed_tags"]).to include(a_hash_including("tag" => "script", "reason" => "script src host not allowed"))
+      expect(report["removed_attributes"]).to include(a_hash_including("attribute" => "href", "reason" => "javascript: URL blocked"))
+    end
   end
 
   describe "POST 'preview_custom_html'" do
@@ -186,6 +196,16 @@ describe Api::V2::LinksController do
     it "returns 403 when previewing for another seller's product" do
       post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @other_product.external_id, custom_html: "<section>HTML</section>" }
       expect(response).to have_http_status(:forbidden)
+    end
+
+    it "returns a sanitization_report alongside the sanitized HTML" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: %(<section><script src="https://evil.com/x.js"></script><h1>Keep</h1></section>) }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["custom_html"]).to include("<h1>Keep</h1>")
+      expect(body["sanitization_report"]["total_removed"]).to eq(1)
+      expect(body["sanitization_report"]["removed_tags"].first["reason"]).to eq("script src host not allowed")
     end
   end
 end

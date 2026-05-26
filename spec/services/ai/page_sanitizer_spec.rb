@@ -153,4 +153,77 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include("fonts.googleapis.com")
     end
   end
+
+  describe ".sanitize_with_report" do
+    it "reports stripped tags with attrs and reason" do
+      result = described_class.sanitize_with_report(%(<script src="https://evil.com/x.js"></script>))
+
+      expect(result.html).not_to include("evil.com")
+      expect(result.report[:removed_tags]).to contain_exactly(
+        hash_including(tag: "script", reason: "script src host not allowed")
+      )
+      expect(result.report[:removed_tags].first[:attrs]["src"]).to eq("https://evil.com/x.js")
+      expect(result.report[:total_removed]).to eq(1)
+      expect(result.report[:truncated]).to be(false)
+    end
+
+    it "reports stripped attributes with the dangerous-URL reason" do
+      result = described_class.sanitize_with_report(%(<a href="javascript:alert(1)">Click</a>))
+
+      expect(result.report[:removed_attributes]).to contain_exactly(
+        hash_including(tag: "a", attribute: "href", value: "javascript:alert(1)", reason: "javascript: URL blocked")
+      )
+    end
+
+    it "reports form action removal" do
+      result = described_class.sanitize_with_report(%(<form action="https://evil.com"><input></form>))
+
+      expect(result.report[:removed_attributes]).to include(
+        hash_including(tag: "form", attribute: "action", reason: "form action removed")
+      )
+    end
+
+    it "reports the meta-refresh-blocked reason distinctly" do
+      result = described_class.sanitize_with_report(%(<meta http-equiv="refresh" content="0;url=https://evil.com">))
+
+      expect(result.report[:removed_tags].first[:reason]).to eq("meta refresh blocked")
+    end
+
+    it "caps the report at MAX_REPORT_ENTRIES but still tracks total_removed" do
+      cap = Ai::PageSanitizer::MAX_REPORT_ENTRIES
+      html = "<script src=\"https://evil.com/x.js\"></script>" * (cap + 25)
+
+      result = described_class.sanitize_with_report(html)
+
+      expect(result.report[:removed_tags].size + result.report[:removed_attributes].size).to eq(cap)
+      expect(result.report[:total_removed]).to eq(cap + 25)
+      expect(result.report[:truncated]).to be(true)
+    end
+
+    it "strips control characters from captured values (no ANSI escape leakage)" do
+      input = %(<script src="https://evil.com/\e[31mred\e[0m\x07.js"></script>)
+      result = described_class.sanitize_with_report(input)
+
+      captured_src = result.report[:removed_tags].first[:attrs]["src"]
+      expect(captured_src).not_to include("\e")
+      expect(captured_src).not_to include("\x07")
+      expect(captured_src).to include("evil.com")
+    end
+
+    it "returns an empty report for clean input" do
+      result = described_class.sanitize_with_report("<h1>Hello</h1>")
+
+      expect(result.html).to include("<h1>Hello</h1>")
+      expect(result.report[:total_removed]).to eq(0)
+      expect(result.report[:removed_tags]).to be_empty
+      expect(result.report[:removed_attributes]).to be_empty
+    end
+
+    it "returns an empty report for blank input" do
+      result = described_class.sanitize_with_report("")
+
+      expect(result.html).to eq("")
+      expect(result.report).to eq(described_class.empty_report)
+    end
+  end
 end

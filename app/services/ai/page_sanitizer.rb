@@ -34,17 +34,34 @@ class Ai::PageSanitizer
 
   URL_ATTRIBUTES = %w[action href poster src xlink:href].freeze
   WRAPPER_TAGS = %w[html head body].freeze
+  MAX_REPORT_ENTRIES = 100
+
+  Result = Struct.new(:html, :report, keyword_init: true)
 
   def self.sanitize(html)
-    return "" if html.blank?
-
-    fragment = Loofah.fragment(html)
-    scrub_node(fragment)
-    fragment.to_html
+    sanitize_with_report(html).html
   end
 
-  def self.scrub_node(node)
-    node.children.to_a.each { |child| scrub_node(child) }
+  def self.sanitize_with_report(html)
+    return Result.new(html: "", report: empty_report) if html.blank?
+
+    fragment = Loofah.fragment(html)
+    report = empty_report
+    scrub_node(fragment, report)
+    Result.new(html: fragment.to_html, report: finalize_report(report))
+  end
+
+  def self.empty_report
+    { removed_tags: [], removed_attributes: [], total_removed: 0, truncated: false }
+  end
+
+  def self.finalize_report(report)
+    report[:truncated] = report[:total_removed] > (report[:removed_tags].size + report[:removed_attributes].size)
+    report
+  end
+
+  def self.scrub_node(node, report)
+    node.children.to_a.each { |child| scrub_node(child, report) }
     return unless node.element?
 
     if WRAPPER_TAGS.include?(node.name)
@@ -53,34 +70,84 @@ class Ai::PageSanitizer
     end
 
     if node.name == "meta" && node["http-equiv"].to_s.casecmp("refresh").zero?
+      record_removed_tag(report, node, "meta refresh blocked")
       node.remove
       return
     end
 
     unless ALLOWED_TAGS.include?(node.name)
+      record_removed_tag(report, node, "tag not in allowlist")
       node.remove
       return
     end
 
     if node.name == "script" && node["src"].present? && !allowed_script_src?(node["src"])
+      record_removed_tag(report, node, "script src host not allowed")
       node.remove
       return
     end
 
     if node.name == "link" && !allowed_stylesheet_link?(node)
+      record_removed_tag(report, node, "link must be rel=stylesheet on an allowed host")
       node.remove
       return
     end
 
     node["sandbox"] = "allow-scripts" if node.name == "iframe" && node["sandbox"].blank?
-    node.remove_attribute("action") if node.name == "form"
+    if node.name == "form" && node["action"].present?
+      record_removed_attribute(report, node, "action", node["action"], "form action removed")
+      node.remove_attribute("action")
+    end
 
     node.attribute_nodes.each do |attribute|
-      name = attribute.name
-      next if allowed_attribute?(name) && !dangerous_url_attribute?(name, attribute.value)
+      reason = attribute_removal_reason(attribute.name, attribute.value)
+      next unless reason
 
-      node.remove_attribute(name)
+      record_removed_attribute(report, node, attribute.name, attribute.value, reason)
+      node.remove_attribute(attribute.name)
     end
+  end
+
+  def self.attribute_removal_reason(name, value)
+    return "attribute not in allowlist" unless allowed_attribute?(name)
+    return dangerous_url_reason(value) if dangerous_url_attribute?(name, value)
+
+    nil
+  end
+
+  def self.record_removed_tag(report, node, reason)
+    report[:total_removed] += 1
+    return if report_cap_reached?(report)
+
+    report[:removed_tags] << {
+      tag: node.name,
+      attrs: node.attribute_nodes.to_h { |a| [a.name, strip_control_chars(a.value)] },
+      reason: reason
+    }
+  end
+
+  def self.record_removed_attribute(report, node, name, value, reason)
+    report[:total_removed] += 1
+    return if report_cap_reached?(report)
+
+    report[:removed_attributes] << {
+      tag: node.name,
+      attribute: name,
+      value: strip_control_chars(value),
+      reason: reason
+    }
+  end
+
+  def self.report_cap_reached?(report)
+    report[:removed_tags].size + report[:removed_attributes].size >= MAX_REPORT_ENTRIES
+  end
+
+  def self.dangerous_url_reason(value)
+    normalize_url(value).start_with?("javascript:") ? "javascript: URL blocked" : "data: HTML URL blocked"
+  end
+
+  def self.strip_control_chars(value)
+    value.to_s.gsub(/[[:cntrl:]]/, "")
   end
 
   def self.allowed_attribute?(name)
@@ -123,5 +190,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url
+  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end
