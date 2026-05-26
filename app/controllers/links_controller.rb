@@ -918,10 +918,8 @@ class LinksController < ApplicationController
       HTML
     end
 
-    # Read the Tailwind kitchen-sink CSS once per process. The file is part of
-    # the deployed artifact (shipped via `public/`) and only changes on deploy,
-    # which restarts the process. Skipping the per-request disk read also
-    # skips re-reading 500 KB into a heredoc on every iframe render.
+    # Memoized per process — the file ships with the deployed artifact and
+    # only changes on deploy, which restarts the process.
     def self.pages_tailwind_inline
       @pages_tailwind_inline ||= begin
         path = Rails.root.join("public/pages-tailwind.css")
