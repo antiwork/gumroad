@@ -20,7 +20,7 @@ class ConfirmationsController < Devise::ConfirmationsController
       sign_in @user
       logged_in_user.reload
 
-      invalidate_active_sessions_except_the_current_session!
+      invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: false)
 
       flash[:notice] = "Your account has been successfully confirmed!"
       redirect_to after_confirmation_path_for(:user, @user)

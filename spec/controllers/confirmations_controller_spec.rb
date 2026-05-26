@@ -72,6 +72,17 @@ describe ConfirmationsController do
         end
       end
 
+      it "does not revoke the user's mobile OAuth tokens on confirmation" do
+        application = create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
+        mobile_token = create("doorkeeper/access_token", application:, resource_owner_id: @user.id, scopes: "mobile_api creator_api account")
+
+        expect do
+          get :show, params: { confirmation_token: @user.confirmation_token }
+        end.not_to change { mobile_token.reload.revoked_at }
+
+        expect(mobile_token.reload.revoked?).to eq(false)
+      end
+
       context "when the user has requested password reset instructions" do
         before do
           @user.send_reset_password_instructions

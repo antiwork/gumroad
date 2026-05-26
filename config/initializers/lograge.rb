@@ -24,5 +24,9 @@ Rails.application.config.lograge.custom_options = lambda do |event|
     end
   end
 
+  %i[has_auth has_mobile_token auth_user_id auth_token_id].each do |key|
+    params[key] = event.payload[key] if event.payload.key?(key)
+  end
+
   { "params" => params, "headers" => headers, "uuid" => uuid }
 end

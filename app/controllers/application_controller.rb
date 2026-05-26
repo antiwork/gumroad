@@ -372,10 +372,14 @@ class ApplicationController < ActionController::Base
       Affiliate.valid_for_product(product).find_by_external_id_numeric(affiliate_id)
     end
 
-    def invalidate_active_sessions_except_the_current_session!
+    def invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: true)
       return unless user_signed_in?
 
-      logged_in_user.invalidate_active_sessions!
+      if revoke_mobile_tokens
+        logged_in_user.invalidate_active_sessions!
+      else
+        logged_in_user.invalidate_browser_sessions!
+      end
 
       # NOTE: To keep the current session active, we reset the
       # "last_sign_in_at" value persisted in the current session with
