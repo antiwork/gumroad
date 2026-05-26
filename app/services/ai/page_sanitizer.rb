@@ -111,7 +111,10 @@ class Ai::PageSanitizer
       node.remove_attribute("action")
     end
 
-    node.attribute_nodes.each do |attribute|
+    # Snapshot with to_a — remove_attribute mutates the node's attribute list,
+    # which would skip the next entry if we iterated it live (same reason the
+    # children traversal above snapshots).
+    node.attribute_nodes.to_a.each do |attribute|
       reason = attribute_removal_reason(attribute.name, attribute.value)
       next unless reason
 
