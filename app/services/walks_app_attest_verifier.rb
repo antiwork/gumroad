@@ -125,9 +125,15 @@ class WalksAppAttestVerifier
       return fail_result(:bad_assertion) unless signature.is_a?(String) && authenticator_data.is_a?(String)
 
       client_data_hash = OpenSSL::Digest::SHA256.digest(challenge.to_s + request_body.to_s)
+      # Apple signs with kSecKeyAlgorithmECDSASignatureMessageX962SHA256, which
+      # hashes the input internally before ECDSA. The "input" given to the
+      # Secure Enclave is `authenticatorData || clientDataHash`, so the signed
+      # digest is exactly `nonce = SHA256(authenticatorData || clientDataHash)`.
+      # Ruby's `dsa_verify_asn1(digest, sig)` is raw ECDSA verify (no further
+      # hashing), so we pass `nonce` directly — NOT `SHA256(nonce)`. Apple's
+      # CryptoKit reference does the same: `publicKey.isValidSignature(sig, for: nonce)`.
       nonce = OpenSSL::Digest::SHA256.digest(authenticator_data + client_data_hash)
-      digest = OpenSSL::Digest::SHA256.digest(nonce)
-      return fail_result(:bad_signature) unless key.public_key_ec.dsa_verify_asn1(digest, signature)
+      return fail_result(:bad_signature) unless key.public_key_ec.dsa_verify_asn1(nonce, signature)
 
       parsed = parse_auth_data(authenticator_data, expect_attestation: false)
       return fail_result(:bad_auth_data) unless parsed
