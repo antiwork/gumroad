@@ -26,10 +26,10 @@ class LinksController < ApplicationController
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :ensure_seller_is_not_deleted, only: [:show]
-  before_action :render_custom_html_if_present, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
+  before_action :render_custom_html_if_present, only: [:show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
@@ -653,7 +653,7 @@ class LinksController < ApplicationController
                                    :should_include_last_post, :should_show_all_posts, :should_show_sales_count, :duration_in_months,
                                    :free_trial_enabled, :free_trial_duration_amount, :free_trial_duration_unit,
                                    :is_adult, :is_epublication, :product_refund_policy_enabled, :seller_refund_policy_enabled,
-                                   :refund_policy, :taxonomy_id)
+                                   :refund_policy, :taxonomy_id, :custom_html)
     end
 
     def products_page_presenter

@@ -21,13 +21,13 @@ class Ai::PageSanitizer
   ALLOWED_ATTRIBUTES = %w[
     accept accept-charset action alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
     charset cols colspan content contenteditable controls coords crossorigin data-gumroad-action data-gumroad-field data-gumroad-ref datetime defer dir disabled download draggable enctype
-    fill for form formaction height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
+    fill for form height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
     preserveAspectRatio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
     value viewBox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule points transform offset stop-color
     stop-opacity
   ].freeze
 
-  URL_ATTRIBUTES = %w[action formaction href poster src xlink:href].freeze
+  URL_ATTRIBUTES = %w[action href poster src xlink:href].freeze
   WRAPPER_TAGS = %w[html head body].freeze
 
   def self.sanitize(html)

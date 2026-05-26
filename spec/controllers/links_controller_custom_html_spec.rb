@@ -8,6 +8,10 @@ describe LinksController, :vcr, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, custom_html: "<section><h1>Live landing page</h1></section>") }
 
+  before do
+    @request.host = URI.parse(seller.subdomain_with_protocol).host
+  end
+
   describe "GET show with custom_html" do
     it "renders the product's custom HTML when present" do
       get :show, params: { id: product.unique_permalink }

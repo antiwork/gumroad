@@ -63,6 +63,12 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include("action=")
     end
 
+    it "removes formaction on buttons and inputs" do
+      sanitized = described_class.sanitize(%(<form><button formaction="https://evil.com">x</button><input formaction="https://evil.com" type="submit"></form>))
+
+      expect(sanitized).not_to include("formaction=")
+    end
+
     it "preserves data image URLs" do
       sanitized = described_class.sanitize(%(<img src="data:image/png;base64,abcd" alt="Preview">))
 

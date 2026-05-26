@@ -191,10 +191,10 @@ API token: <user_api_token>`;
 
     try {
       const response = await request({
-        method: "PUT",
+        method: "POST",
         accept: "json",
-        url: `/api/v2/products/${encodeURIComponent(uniquePermalink)}`,
-        data: { custom_html: null },
+        url: Routes.link_path(uniquePermalink),
+        data: { link: { custom_html: null } },
       });
       const json = (await response.json()) as { success?: boolean; message?: string };
       if (!response.ok || json.success === false) throw new ResponseError(json.message);
