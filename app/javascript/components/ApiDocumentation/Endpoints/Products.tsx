@@ -58,7 +58,7 @@ const CustomHtmlDocumentation = () => (
     <h4>Custom HTML</h4>
     <p>
       Products can store one live custom HTML landing page in the <code>custom_html</code> field.{" "}
-      <code>GET /v2/products/:id</code> returns the field and <code>custom_html_url</code>.{" "}
+      <code>GET /v2/products/:id</code> returns the field.{" "}
       <code>PUT /v2/products/:id</code> overwrites it, and sending <code>null</code> or an empty string clears it.
       Authenticate with a Bearer token that has the <code>edit_products</code> scope.
     </p>
@@ -194,7 +194,6 @@ export const GetProduct = () => (
     "custom_receipt": null,
     "custom_summary": "You'll get one PSD file.",
     "custom_html": null,
-    "custom_html_url": "https://sahil.gumroad.com/l/pencil/custom",
     "custom_fields": [],
     "customizable_price": null,
     "description": "I made this for fun.",

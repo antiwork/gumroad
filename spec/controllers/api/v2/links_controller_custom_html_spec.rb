@@ -32,7 +32,7 @@ describe Api::V2::LinksController do
       expect(stored_html).not_to include("javascript:")
     end
 
-    it "returns custom HTML and its public URL from GET" do
+    it "returns custom HTML from GET" do
       @product.update!(custom_html: "<section>Published HTML</section>")
 
       get :show, params: { format: :json, access_token: @token.token, id: @product.external_id }
@@ -40,7 +40,6 @@ describe Api::V2::LinksController do
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
       expect(body.dig("product", "custom_html")).to eq("<section>Published HTML</section>")
-      expect(body.dig("product", "custom_html_url")).to include("/l/#{@product.unique_permalink}")
     end
 
     it "clears custom HTML when passed nil" do
