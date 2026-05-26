@@ -5,6 +5,7 @@ class LargeSellersUpdateUserBalanceStatsCacheWorker
   sidekiq_options retry: 1, queue: :low
 
   STAGGER_WINDOW = 1.hour
+  PUSH_BULK_BATCH_SIZE = 1_000
 
   def perform
     user_ids = UserBalanceStatsService.cacheable_users.pluck(:id)
@@ -13,10 +14,13 @@ class LargeSellersUpdateUserBalanceStatsCacheWorker
     delay_step = STAGGER_WINDOW.to_f / user_ids.size
     base_time = Time.current.to_f
 
-    Sidekiq::Client.push_bulk(
-      "class" => UpdateUserBalanceStatsCacheWorker,
-      "args" => user_ids.map { |id| [id] },
-      "at" => user_ids.each_index.map { |i| base_time + (i * delay_step) },
-    )
+    user_ids.each_slice(PUSH_BULK_BATCH_SIZE).with_index do |slice, chunk_index|
+      offset = chunk_index * PUSH_BULK_BATCH_SIZE
+      Sidekiq::Client.push_bulk(
+        "class" => UpdateUserBalanceStatsCacheWorker,
+        "args" => slice.map { |id| [id] },
+        "at" => slice.each_index.map { |i| base_time + ((offset + i) * delay_step) },
+      )
+    end
   end
 end
