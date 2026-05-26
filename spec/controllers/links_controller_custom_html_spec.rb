@@ -30,8 +30,10 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing"))
     end
 
-    it "skips the wrapper when ?wanted=true (checkout flow)" do
+    it "skips the wrapper when ?wanted=true and lets the checkout redirect fire" do
       get :show, params: { id: product.unique_permalink, wanted: "true" }
+      expect(response).to be_redirect
+      expect(response.location).to include("/checkout")
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing"))
     end
   end
@@ -49,6 +51,8 @@ describe LinksController, :vcr, type: :controller do
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
       expect(response.headers["X-Frame-Options"]).to eq("SAMEORIGIN")
       expect(response.headers["Referrer-Policy"]).to eq("no-referrer")
+      expect(response.headers["Content-Type"]).to include("text/html")
+      expect(response.headers["Content-Type"]).to include("charset=utf-8")
     end
 
     it "404s when the product has no custom_html" do

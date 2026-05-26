@@ -174,7 +174,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
 
   const agentPrompt = `Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it using Gumroad's CLI.
 
-Docs: https://gumroad.com/docs/cli/pages
+Docs: https://gumroad.com/api#custom-html
 Product: https://api.gumroad.com/v2/products/${uniquePermalink}
 API token: <user_api_token>`;
 
@@ -306,8 +306,8 @@ API token: <user_api_token>`;
         title="Build with your agent"
         footer={
           <>
-            <NavigationButton href="/docs/cli/pages" target="_blank" rel="noreferrer">
-              View CLI docs
+            <NavigationButton href="/api#custom-html" target="_blank" rel="noreferrer">
+              View API docs
             </NavigationButton>
             <Button color="primary" onClick={() => void copyPrompt()}>
               Copy prompt

@@ -895,27 +895,38 @@ class LinksController < ApplicationController
     def render_custom_html_if_present
       return if @product.blank?
       return if @product.custom_html.blank?
+      # Buyer clicked Buy — fall through to the show action's checkout-bearing
+      # product page so the existing ?wanted=true flow handles the redirect.
       return if params[:wanted] == "true"
 
       render html: custom_html_wrapper_document(@product).html_safe, layout: false
     end
 
     def custom_html_document(custom_html)
-      tailwind_path = Rails.root.join("public/pages-tailwind.css")
-      tailwind = File.exist?(tailwind_path) ? "<style>#{File.read(tailwind_path)}</style>" : ""
       <<~HTML
         <!doctype html>
         <html>
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            #{tailwind}
+            #{self.class.pages_tailwind_inline}
           </head>
           <body>
             #{custom_html}
           </body>
         </html>
       HTML
+    end
+
+    # Read the Tailwind kitchen-sink CSS once per process. The file is part of
+    # the deployed artifact (shipped via `public/`) and only changes on deploy,
+    # which restarts the process. Skipping the per-request disk read also
+    # skips re-reading 500 KB into a heredoc on every iframe render.
+    def self.pages_tailwind_inline
+      @pages_tailwind_inline ||= begin
+        path = Rails.root.join("public/pages-tailwind.css")
+        File.exist?(path) ? "<style>#{File.read(path)}</style>" : ""
+      end
     end
 
     # Omitting `allow-same-origin` from the iframe sandbox keeps the seller's
