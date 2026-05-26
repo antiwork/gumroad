@@ -18,6 +18,10 @@ class AppStoreWalksJwsVerifier
       return Result.new(valid?: false, error: "malformed") if parts.length != 3
 
       header = JSON.parse(Base64.urlsafe_decode64(pad(parts[0])))
+      # JSON.parse can return nil/Array/String/Numeric for the corresponding
+      # JSON tokens. `nil["x5c"]` and `Array["x5c"]` both raise outside the
+      # rescue list and surface as 500s; reject anything that isn't an object.
+      return Result.new(valid?: false, error: "malformed") unless header.is_a?(Hash)
       x5c = header["x5c"]
       return Result.new(valid?: false, error: "no_x5c") unless x5c.is_a?(Array) && x5c.length >= 2
       # Element-level type check: a JSON header `{"x5c":[null,"…"]}` would
@@ -30,6 +34,11 @@ class AppStoreWalksJwsVerifier
       return Result.new(valid?: false, error: "chain") unless chain_valid?(leaf, certs[1..])
 
       payload, _alg = JWT.decode(jws_string, leaf.public_key, true, algorithm: "ES256")
+      # Same defense as the header check above. In practice Apple's signed
+      # payloads are always JSON objects, but if the JWT lib ever returned
+      # a non-Hash payload (or someone managed to anchor a null-payload
+      # JWS at Apple's root) the indexing below would 500 instead of 402.
+      return Result.new(valid?: false, error: "malformed") unless payload.is_a?(Hash)
       expires_at = ms_to_time(payload["expiresDate"])
       revoked = payload["revocationDate"].present?
       product_id = payload["productId"]

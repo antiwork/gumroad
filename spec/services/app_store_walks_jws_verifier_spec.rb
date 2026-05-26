@@ -27,6 +27,30 @@ describe AppStoreWalksJwsVerifier do
       expect(result.error).to eq("malformed")
     end
 
+    it "rejects a JWS whose header decodes to JSON null (was 500 before guard)" do
+      header = Base64.urlsafe_encode64("null", padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("malformed")
+    end
+
+    it "rejects a JWS whose header decodes to a JSON array" do
+      header = Base64.urlsafe_encode64("[]", padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("malformed")
+    end
+
+    it "rejects a JWS whose header decodes to a JSON number" do
+      header = Base64.urlsafe_encode64("123", padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("malformed")
+    end
+
     it "rejects a JWS whose header has no x5c chain" do
       header = Base64.urlsafe_encode64({ alg: "ES256" }.to_json, padding: false)
       jws = [header, "payload", "signature"].join(".")
