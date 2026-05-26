@@ -45,7 +45,7 @@ module PushNotificationService
         notification.notification = notification_args
 
         if consumer_app?
-          notification.data = data.merge(tag:, message: title)
+          notification.data = data.merge("tag" => tag, "message" => title)
         end
 
         notification.save!

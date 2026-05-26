@@ -29,7 +29,7 @@ describe PushNotificationService::Android do
         expect(notification).to receive(:notification=).with(
           { title: title, body: body, icon: "notification_icon", tag: "abcd1234", channel_id: "Purchases" }
         )
-        expect(notification).to receive(:data=).with({ "purchase_id" => "abcd1234", tag: "abcd1234", message: title })
+        expect(notification).to receive(:data=).with({ "purchase_id" => "abcd1234", "tag" => "abcd1234", "message" => title })
         expect(notification).to receive(:save!)
 
         PushNotificationService::Android.new(device_token: device_token, title: title, body: body, data: data, app_type: Device::APP_TYPES[:consumer], sound: sound).process
@@ -55,7 +55,7 @@ describe PushNotificationService::Android do
         expect(notification).to receive(:notification=).with(
           { title: title, body: body, icon: "notification_icon", tag: "post-xyz", channel_id: "default" }
         )
-        expect(notification).to receive(:data=).with({ "installment_id" => "post-xyz", tag: "post-xyz", message: title })
+        expect(notification).to receive(:data=).with({ "installment_id" => "post-xyz", "tag" => "post-xyz", "message" => title })
         expect(notification).to receive(:save!)
 
         PushNotificationService::Android.new(device_token: device_token, title: title, body: body, data: data, app_type: Device::APP_TYPES[:consumer]).process
@@ -91,27 +91,27 @@ describe PushNotificationService::Android do
       it "prefers an explicit data['tag']" do
         payload = capture_payload(data: { "tag" => "explicit", "installment_id" => "fallback" })
         expect(payload[:notification][:tag]).to eq("explicit")
-        expect(payload[:data][:tag]).to eq("explicit")
+        expect(payload[:data]["tag"]).to eq("explicit")
       end
 
       it "uses installment_id when no explicit tag is set" do
         payload = capture_payload(data: { "installment_id" => "post-1", "purchase_id" => "buy-1" })
         expect(payload[:notification][:tag]).to eq("post-1")
-        expect(payload[:data][:tag]).to eq("post-1")
+        expect(payload[:data]["tag"]).to eq("post-1")
       end
 
       it "falls back through purchase_id, subscription_id, follower_id" do
-        expect(capture_payload(data: { "purchase_id" => "p1" })[:data][:tag]).to eq("p1")
-        expect(capture_payload(data: { "subscription_id" => "s1" })[:data][:tag]).to eq("s1")
-        expect(capture_payload(data: { "follower_id" => "f1" })[:data][:tag]).to eq("f1")
+        expect(capture_payload(data: { "purchase_id" => "p1" })[:data]["tag"]).to eq("p1")
+        expect(capture_payload(data: { "subscription_id" => "s1" })[:data]["tag"]).to eq("s1")
+        expect(capture_payload(data: { "follower_id" => "f1" })[:data]["tag"]).to eq("f1")
       end
 
       it "generates unique tags per message when no identifier is provided" do
         first = capture_payload(data: {})
         second = capture_payload(data: {})
-        expect(first[:data][:tag]).to be_present
-        expect(second[:data][:tag]).to be_present
-        expect(first[:data][:tag]).not_to eq(second[:data][:tag])
+        expect(first[:data]["tag"]).to be_present
+        expect(second[:data]["tag"]).to be_present
+        expect(first[:data]["tag"]).not_to eq(second[:data]["tag"])
       end
 
       it "emits distinct tags for two news-update pushes about different installments" do
@@ -119,7 +119,7 @@ describe PushNotificationService::Android do
         second = capture_payload(data: { "installment_id" => "post-b" })
         expect(first[:notification][:tag]).to eq("post-a")
         expect(second[:notification][:tag]).to eq("post-b")
-        expect(first[:data][:tag]).not_to eq(second[:data][:tag])
+        expect(first[:data]["tag"]).not_to eq(second[:data]["tag"])
       end
     end
   end
