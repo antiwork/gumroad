@@ -30,7 +30,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
     recommended_products = fetch_recommended_products(for_seller_ids: affiliated_users.present? ? nil : cart_seller_ids)
     recommended_products = recommended_products.includes(:direct_affiliates) if affiliated_users.present?
     recommended_products = recommended_products.includes(:taxonomy, user: [:alive_bank_accounts]) if global_affiliate.present?
-    recommended_products = recommended_products.alive.not_archived
+    recommended_products = recommended_products.alive.not_archived.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
     recommended_products = recommended_products.reject(&:rated_as_adult?) if affiliated_users.present? && Link.includes(:user).where(id: cart_product_ids).none?(&:rated_as_adult?)
 
     product_infos = recommended_products.filter_map do |product|
