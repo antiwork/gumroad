@@ -35,6 +35,30 @@ describe AppStoreWalksJwsVerifier do
       expect(result.error).to eq("no_x5c")
     end
 
+    it "rejects a JWS whose x5c contains a null element (was 500 before guard)" do
+      header = Base64.urlsafe_encode64({ alg: "ES256", x5c: [nil, "abc"] }.to_json, padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("no_x5c")
+    end
+
+    it "rejects a JWS whose x5c contains a non-string element" do
+      header = Base64.urlsafe_encode64({ alg: "ES256", x5c: [123, "abc"] }.to_json, padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("no_x5c")
+    end
+
+    it "rejects a JWS whose x5c contains an empty string" do
+      header = Base64.urlsafe_encode64({ alg: "ES256", x5c: ["", "abc"] }.to_json, padding: false)
+      jws = [header, "payload", "signature"].join(".")
+      result = described_class.verify(jws)
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq("no_x5c")
+    end
+
     context "with a JWS whose cert chain doesn't anchor at Apple's root" do
       it "rejects with chain error" do
         # Synthesize an x5c chain from a self-signed cert. Apple Root CA G3

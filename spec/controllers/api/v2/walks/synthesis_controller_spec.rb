@@ -157,6 +157,46 @@ describe Api::V2::Walks::SynthesisController do
       expect(response.parsed_body["error"]).to match(/parse/i)
     end
 
+    it "returns 502 when Anthropic returns 200 with a JSON null body" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: "null", headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:bad_gateway)
+    end
+
+    it "returns 502 when Anthropic returns 200 with a JSON array envelope" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: "[]", headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:bad_gateway)
+    end
+
+    it "returns 502 when Anthropic content is not an array" do
+      anthropic_body = { "content" => "just a string, not the typed blocks we expect" }
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:bad_gateway)
+    end
+
+    it "returns 502 when Anthropic content array has null entries" do
+      anthropic_body = { "content" => [nil, { "type" => "text", "text" => "{}" }] }
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: anthropic_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      # null block is skipped, the {} block parses → OK.
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["model"]).to eq("claude-opus-4-7")
+    end
+
     it "returns 502 when Anthropic times out" do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_raise(HTTP::TimeoutError.new("execution expired"))

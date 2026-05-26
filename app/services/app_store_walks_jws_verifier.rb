@@ -20,6 +20,10 @@ class AppStoreWalksJwsVerifier
       header = JSON.parse(Base64.urlsafe_decode64(pad(parts[0])))
       x5c = header["x5c"]
       return Result.new(valid?: false, error: "no_x5c") unless x5c.is_a?(Array) && x5c.length >= 2
+      # Element-level type check: a JSON header `{"x5c":[null,"…"]}` would
+      # otherwise reach Base64.decode64(nil) → TypeError, which isn't in
+      # the rescue list and surfaces as a 500.
+      return Result.new(valid?: false, error: "no_x5c") unless x5c.all? { |c| c.is_a?(String) && !c.empty? }
 
       certs = x5c.map { |b64| OpenSSL::X509::Certificate.new(Base64.decode64(b64)) }
       leaf = certs.first

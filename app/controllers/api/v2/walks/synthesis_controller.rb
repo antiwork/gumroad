@@ -111,10 +111,16 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
 
     # Claude returns content as an array of typed blocks; we asked for plain
     # text + no code fences but strip them defensively in case the model
-    # decided to be helpful.
+    # decided to be helpful. Each layer is type-guarded — a misconfigured
+    # upstream proxy can return valid JSON of the wrong shape (e.g., a
+    # bare array or null) and `body.dig`/`blocks.filter_map`/`b["text"]`
+    # would otherwise raise NoMethodError/TypeError outside our rescue
+    # list and surface as a 500 instead of a 502.
     def extract_json_from_anthropic_response(body)
-      blocks = body.dig("content") || []
-      text = blocks.filter_map { |b| b["text"].to_s if b["type"] == "text" }.join
+      return nil unless body.is_a?(Hash)
+      blocks = body["content"]
+      return nil unless blocks.is_a?(Array)
+      text = blocks.filter_map { |b| b["text"].to_s if b.is_a?(Hash) && b["type"] == "text" }.join
       cleaned = text.strip.delete_prefix("```json").delete_prefix("```").delete_suffix("```").strip
       JSON.parse(cleaned)
     rescue JSON::ParserError => e
