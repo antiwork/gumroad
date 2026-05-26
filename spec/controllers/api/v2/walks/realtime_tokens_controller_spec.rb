@@ -7,7 +7,7 @@ describe Api::V2::Walks::RealtimeTokensController do
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("OPENAI_API_KEY").and_return("sk-test-openai")
+    allow(GlobalConfig).to receive(:get).with("WALKS_OPENAI_API_KEY").and_return("sk-test-openai")
     allow(GlobalConfig).to receive(:get).with("WALKS_DEV_BYPASS_TOKEN").and_return(nil)
 
     # Default: every test sends a valid App Attest assertion. JWS is *not*

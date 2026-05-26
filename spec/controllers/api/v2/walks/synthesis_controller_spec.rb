@@ -8,7 +8,7 @@ describe Api::V2::Walks::SynthesisController do
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
+    allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return("sk-ant-test")
     allow(GlobalConfig).to receive(:get).with("WALKS_DEV_BYPASS_TOKEN").and_return(nil)
 
     # Synthesis allows the device path only when the free trial slot was

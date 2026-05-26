@@ -33,7 +33,7 @@ class Api::V2::Walks::RealtimeTokensController < Api::V2::BaseController
     topic = params[:topic].to_s
 
     upstream = HTTP.timeout(30)
-      .auth("Bearer #{GlobalConfig.get('OPENAI_API_KEY')}")
+      .auth("Bearer #{GlobalConfig.get('WALKS_OPENAI_API_KEY')}")
       .post(
         "https://api.openai.com/v1/realtime/client_secrets",
         json: { session: session_config(topic) }

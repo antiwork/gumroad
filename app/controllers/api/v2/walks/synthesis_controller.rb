@@ -54,7 +54,7 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
 
     upstream = HTTP.timeout(120)
       .headers(
-        "x-api-key" => GlobalConfig.get("ANTHROPIC_API_KEY"),
+        "x-api-key" => GlobalConfig.get("WALKS_ANTHROPIC_API_KEY"),
         "anthropic-version" => "2023-06-01",
       )
       .post(
