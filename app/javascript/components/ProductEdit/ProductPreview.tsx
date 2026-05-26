@@ -204,6 +204,9 @@ API token: <user_api_token>`;
     } catch (e) {
       assertResponseError(e);
       updateProduct({ custom_html: previousCustomHtml });
+      // The landing page is back, so restore the tab too — the effect that
+      // syncs previewMode only forces "default" when there's no landing page.
+      setPreviewMode("landing");
       showAlert(e.message, "error");
     } finally {
       setIsResetting(false);
