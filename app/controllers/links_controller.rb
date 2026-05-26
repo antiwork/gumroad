@@ -191,7 +191,8 @@ class LinksController < ApplicationController
     response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
     response.set_header("X-Frame-Options", "SAMEORIGIN")
     response.set_header("Referrer-Policy", "no-referrer")
-    render html: custom_html_document(@product.custom_html).html_safe, layout: false
+    interpolated = Pages::Interpolator.interpolate(@product.custom_html, product: @product)
+    render html: custom_html_document(interpolated).html_safe, layout: false
   end
 
   def search

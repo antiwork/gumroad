@@ -56,5 +56,15 @@ describe LinksController, :vcr, type: :controller do
       get :landing_iframe_content, params: { id: product.unique_permalink }
       expect(response).to have_http_status(:not_found)
     end
+
+    it "interpolates data-gumroad-field markers with live product values" do
+      product.update!(custom_html: %(<h1 data-gumroad-field="name">placeholder</h1><a data-gumroad-action="buy" href="#">Buy</a>))
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response.body).to include(">#{product.name}<")
+      expect(response.body).not_to include(">placeholder<")
+      expect(response.body).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
+    end
   end
 end
