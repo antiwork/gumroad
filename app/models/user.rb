@@ -838,10 +838,11 @@ class User < ApplicationRecord
     true
   end
 
-  def invalidate_active_sessions!
+  def invalidate_active_sessions!(revoke_mobile_tokens: true)
     update!(last_active_sessions_invalidated_at: DateTime.current)
 
-    # Also, revoke all active tokens assigned to the mobile application
+    return unless revoke_mobile_tokens
+
     application = OauthApplication.find_by(uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
     if application.present?
       Doorkeeper::AccessToken.revoke_all_for(application.id, self)

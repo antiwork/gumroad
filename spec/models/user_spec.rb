@@ -2771,6 +2771,16 @@ describe User, :vcr do
         expect(active_access_token_of_another_user.reload.revoked_at).to be_nil
       end
     end
+
+    it "skips mobile token revocation when revoke_mobile_tokens is false" do
+      travel_to(DateTime.current) do
+        expect do
+          user.invalidate_active_sessions!(revoke_mobile_tokens: false)
+        end.to change { user.reload.last_active_sessions_invalidated_at }.from(nil).to(DateTime.current)
+         .and not_change { active_access_token_one.reload.revoked_at }
+         .and not_change { active_access_token_two.reload.revoked_at }
+      end
+    end
   end
 
   describe "#init_default_notification_settings" do
