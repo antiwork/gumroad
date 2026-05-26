@@ -71,4 +71,26 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
     end
   end
+
+  describe "PUT update (internal dashboard, session-authed Reset flow)" do
+    before { sign_in seller }
+
+    it "clears the landing page via the Reset button (custom_html: null)" do
+      expect(product.reload.custom_html).to be_present
+
+      put :update, params: { id: product.unique_permalink, custom_html: nil }
+
+      expect(response).to be_successful
+      expect(product.reload.custom_html).to be_nil
+    end
+
+    it "sanitizes seller-supplied custom_html on the internal update path" do
+      put :update, params: { id: product.unique_permalink, custom_html: %(<section><script src="https://evil.com/x.js"></script><h1>Hi</h1></section>) }
+
+      expect(response).to be_successful
+      stored = product.reload.custom_html
+      expect(stored).to include("<h1>Hi</h1>")
+      expect(stored).not_to include("evil.com")
+    end
+  end
 end

@@ -194,7 +194,7 @@ API token: <user_api_token>`;
         method: "POST",
         accept: "json",
         url: Routes.link_path(uniquePermalink),
-        data: { link: { custom_html: null } },
+        data: { custom_html: null },
       });
       const json = (await response.json()) as { success?: boolean; message?: string };
       if (!response.ok || json.success === false) throw new ResponseError(json.message);

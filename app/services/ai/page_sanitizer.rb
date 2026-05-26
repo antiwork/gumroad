@@ -24,7 +24,7 @@ class Ai::PageSanitizer
   ].freeze
 
   ALLOWED_ATTRIBUTES = %w[
-    accept accept-charset action alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
+    accept accept-charset alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
     charset cols colspan content contenteditable controls coords crossorigin data-gumroad-action data-gumroad-field datetime defer dir disabled download draggable enctype
     fill for form height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
     preserveAspectRatio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
@@ -93,7 +93,9 @@ class Ai::PageSanitizer
       return
     end
 
-    node["sandbox"] = "allow-scripts" if node.name == "iframe" && node["sandbox"].blank?
+    # Overwrite unconditionally — a seller-supplied permissive value
+    # (e.g. `allow-same-origin`) should not survive the sanitizer.
+    node["sandbox"] = "allow-scripts" if node.name == "iframe"
     if node.name == "form" && node["action"].present?
       record_removed_attribute(report, node, "action", node["action"], "form action removed")
       node.remove_attribute("action")

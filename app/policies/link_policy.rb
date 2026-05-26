@@ -63,6 +63,7 @@ class LinkPolicy < ApplicationPolicy
   def product_permitted_attributes
     attributes = [
       :name,
+      :custom_html,
       :description,
       :custom_permalink,
       :price_currency_type,

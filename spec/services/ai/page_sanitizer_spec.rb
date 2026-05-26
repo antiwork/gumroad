@@ -56,6 +56,14 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include(%(sandbox="allow-scripts"))
     end
 
+    it "overwrites permissive iframe sandbox attributes (seller can't widen the policy)" do
+      sanitized = described_class.sanitize(%(<iframe src="https://example.com" sandbox="allow-scripts allow-same-origin allow-top-navigation"></iframe>))
+
+      expect(sanitized).to include(%(sandbox="allow-scripts"))
+      expect(sanitized).not_to include("allow-same-origin")
+      expect(sanitized).not_to include("allow-top-navigation")
+    end
+
     it "removes form action attributes" do
       sanitized = described_class.sanitize(%(<form action="https://evil.com"><button>Send</button></form>))
 
