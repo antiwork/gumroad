@@ -33,6 +33,9 @@ describe LinksController, :vcr, type: :controller do
       # Script carries a nonce — script-src has no 'unsafe-inline', so without
       # it the listener would be CSP-blocked in the browser.
       expect(response.body).to match(/<script nonce="[^"]+">/)
+      # Only our own iframe can trigger checkout — gate on e.source so an
+      # embedding page can't drive the navigation.
+      expect(response.body).to include("e.source === frame.contentWindow")
     end
 
     it "falls back to the default product page when custom_html is blank" do

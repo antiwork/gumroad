@@ -966,13 +966,20 @@ class LinksController < ApplicationController
           </head>
           <body>
             <iframe
+              id="gumroad-landing-frame"
               src="#{iframe_src}"
               title="#{title}"
               sandbox="allow-scripts allow-forms"
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}">
+              var frame = document.getElementById("gumroad-landing-frame");
               window.addEventListener("message", function (e) {
-                if (e.data === "gumroad:checkout") window.location.href = #{checkout_url_js};
+                // Only our own iframe can request checkout. Its sandbox has no
+                // allow-same-origin, so e.origin is "null" and can't be matched;
+                // gate on e.source instead so an embedding page can't trigger it.
+                if (e.source === frame.contentWindow && e.data === "gumroad:checkout") {
+                  window.location.href = #{checkout_url_js};
+                }
               });
             </script>
           </body>
