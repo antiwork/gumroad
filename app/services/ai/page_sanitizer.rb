@@ -10,10 +10,15 @@ class Ai::PageSanitizer
     unpkg.com
   ].freeze
 
+  ALLOWED_STYLESHEET_HOSTS = %w[
+    fonts.googleapis.com
+    fonts.bunny.net
+  ].freeze
+
   ALLOWED_TAGS = %w[
     a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em
     head html
-    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li main map mark menu meter nav ol optgroup option
+    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li link main map mark menu meter nav ol optgroup option
     output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup svg table tbody td template textarea
     tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs linearGradient radialGradient stop clipPath
   ].freeze
@@ -62,6 +67,11 @@ class Ai::PageSanitizer
       return
     end
 
+    if node.name == "link" && !allowed_stylesheet_link?(node)
+      node.remove
+      return
+    end
+
     node["sandbox"] = "allow-scripts" if node.name == "iframe" && node["sandbox"].blank?
     node.remove_attribute("action") if node.name == "form"
 
@@ -85,8 +95,20 @@ class Ai::PageSanitizer
   end
 
   def self.allowed_script_src?(src)
-    uri = URI.parse(src)
-    uri.scheme == "https" && ALLOWED_SCRIPT_HOSTS.include?(uri.host)
+    https_host_in?(src, ALLOWED_SCRIPT_HOSTS)
+  end
+
+  def self.allowed_stylesheet_link?(node)
+    return false unless node["rel"].to_s.downcase.split(/\s+/).include?("stylesheet")
+
+    https_host_in?(node["href"], ALLOWED_STYLESHEET_HOSTS)
+  end
+
+  def self.https_host_in?(url, hosts)
+    return false if url.blank?
+
+    uri = URI.parse(url)
+    uri.scheme == "https" && hosts.include?(uri.host)
   rescue URI::InvalidURIError
     false
   end
@@ -101,5 +123,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :normalize_url
+  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url
 end

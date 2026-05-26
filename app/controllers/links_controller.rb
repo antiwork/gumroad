@@ -890,7 +890,7 @@ class LinksController < ApplicationController
       end
     end
 
-    CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
+    CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
 
     def render_custom_html_if_present
       return if @product.blank?

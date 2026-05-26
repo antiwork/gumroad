@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe LinksController, :vcr, type: :controller do
-  CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
+  CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
 
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, custom_html: "<section><h1>Live landing page</h1></section>") }

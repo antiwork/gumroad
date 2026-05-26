@@ -81,5 +81,76 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include("<a>Open</a>")
       expect(sanitized).not_to include("data:text/html")
     end
+
+    it "allows stylesheet link tags from approved font hosts" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">))
+
+      expect(sanitized).to include("fonts.googleapis.com/css2?family=Inter")
+      expect(sanitized).to include(%(rel="stylesheet"))
+    end
+
+    it "allows stylesheet link tags from fonts.bunny.net" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter">))
+
+      expect(sanitized).to include("fonts.bunny.net")
+    end
+
+    it "strips stylesheet link tags from unapproved hosts" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://evil.com/styles.css"><p>Safe</p>))
+
+      expect(sanitized).not_to include("evil.com")
+      expect(sanitized).to include("<p>Safe</p>")
+    end
+
+    it "strips link tags with rel other than stylesheet" do
+      sanitized = described_class.sanitize(%(<link rel="icon" href="https://fonts.googleapis.com/favicon.ico"><p>Safe</p>))
+
+      expect(sanitized).not_to include(%(rel="icon"))
+      expect(sanitized).to include("<p>Safe</p>")
+    end
+
+    it "strips link tags without rel" do
+      sanitized = described_class.sanitize(%(<link href="https://fonts.googleapis.com/css2?family=Inter"><p>Safe</p>))
+
+      expect(sanitized).not_to include("fonts.googleapis.com")
+      expect(sanitized).to include("<p>Safe</p>")
+    end
+
+    it "strips http stylesheet link tags (https required)" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Inter">))
+
+      expect(sanitized).not_to include("fonts.googleapis.com")
+    end
+
+    it "strips protocol-relative stylesheet hrefs (must be explicit https)" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Inter">))
+
+      expect(sanitized).not_to include("fonts.googleapis.com")
+    end
+
+    it "strips userinfo-spoofed stylesheet hrefs (host is what comes after @)" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://fonts.googleapis.com@evil.com/styles.css">))
+
+      expect(sanitized).not_to include("evil.com")
+      expect(sanitized).not_to include("fonts.googleapis.com")
+    end
+
+    it "accepts rel attribute case-insensitively" do
+      sanitized = described_class.sanitize(%(<link rel="STYLESHEET" href="https://fonts.googleapis.com/css2?family=Inter">))
+
+      expect(sanitized).to include("fonts.googleapis.com")
+    end
+
+    it "accepts rel with multiple space-separated values including stylesheet" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet preload" href="https://fonts.googleapis.com/css2?family=Inter">))
+
+      expect(sanitized).to include("fonts.googleapis.com")
+    end
+
+    it "rejects rel with comma-separated values (HTML spec requires whitespace)" do
+      sanitized = described_class.sanitize(%(<link rel="stylesheet,preload" href="https://fonts.googleapis.com/css2?family=Inter">))
+
+      expect(sanitized).not_to include("fonts.googleapis.com")
+    end
   end
 end
