@@ -15,9 +15,11 @@ class Ai::PageSanitizer
     fonts.bunny.net
   ].freeze
 
+  # `html`/`head`/`body` are intentionally absent — they're handled first by
+  # the WRAPPER_TAGS unwrap in scrub_node, so listing them here would be dead,
+  # misleading allowlist entries.
   ALLOWED_TAGS = %w[
     a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em
-    head html
     fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li link main map mark menu meter nav ol optgroup option
     output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup svg table tbody td template textarea
     tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs linearGradient radialGradient stop clipPath
@@ -33,6 +35,14 @@ class Ai::PageSanitizer
   ].freeze
 
   URL_ATTRIBUTES = %w[action href poster src xlink:href].freeze
+  # Navigating to a URL runs whatever document it resolves to. A `data:` URL
+  # in these attributes loads a document with no CSP, so its scripts escape
+  # `connect-src 'none'` — block `data:` here outright.
+  NAVIGABLE_URL_ATTRIBUTES = %w[action href xlink:href].freeze
+  # `src`/`poster` load a resource, not a document. `data:` is fine for inline
+  # media (images render without executing embedded SVG script) but not for
+  # document MIME types that a browser would parse and script.
+  SAFE_DATA_URI_PREFIXES = %w[data:image/ data:video/ data:audio/ data:font/].freeze
   WRAPPER_TAGS = %w[html head body].freeze
   MAX_REPORT_ENTRIES = 100
 
@@ -145,7 +155,7 @@ class Ai::PageSanitizer
   end
 
   def self.dangerous_url_reason(value)
-    normalize_url(value).start_with?("javascript:") ? "javascript: URL blocked" : "data: HTML URL blocked"
+    normalize_url(value).start_with?("javascript:") ? "javascript: URL blocked" : "data: URL blocked"
   end
 
   def self.strip_control_chars(value)
@@ -160,7 +170,10 @@ class Ai::PageSanitizer
     return false unless URL_ATTRIBUTES.include?(name)
 
     normalized = normalize_url(value)
-    normalized.start_with?("javascript:") || normalized.start_with?("data:text/html")
+    return true if normalized.start_with?("javascript:")
+    return false unless normalized.start_with?("data:")
+
+    NAVIGABLE_URL_ATTRIBUTES.include?(name) || SAFE_DATA_URI_PREFIXES.none? { |prefix| normalized.start_with?(prefix) }
   end
 
   def self.allowed_script_src?(src)

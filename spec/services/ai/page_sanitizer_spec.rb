@@ -90,6 +90,31 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include("data:text/html")
     end
 
+    it "strips any data: URL from navigable attributes, not just text/html" do
+      sanitized = described_class.sanitize(%(<a href="data:application/xhtml+xml,<html><script>fetch('https://evil.com')</script></html>">Open</a>))
+
+      expect(sanitized).to include("<a>Open</a>")
+      expect(sanitized).not_to include("data:")
+    end
+
+    it "strips data: image URLs from navigable attributes (you don't navigate to an image)" do
+      sanitized = described_class.sanitize(%(<a href="data:image/png;base64,abcd">Open</a>))
+
+      expect(sanitized).not_to include("data:image/png")
+    end
+
+    it "strips executable data: document types from src" do
+      sanitized = described_class.sanitize(%(<img src="data:text/html,<script>alert(1)</script>">))
+
+      expect(sanitized).not_to include("data:text/html")
+    end
+
+    it "preserves data: SVG images in src (img context does not execute SVG script)" do
+      sanitized = described_class.sanitize(%(<img src="data:image/svg+xml;base64,abcd">))
+
+      expect(sanitized).to include("data:image/svg+xml")
+    end
+
     it "allows stylesheet link tags from approved font hosts" do
       sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">))
 

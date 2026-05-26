@@ -936,7 +936,10 @@ class LinksController < ApplicationController
     # to this wrapper, which navigates to the one checkout URL we control here.
     def custom_html_wrapper_document(product, nonce:)
       iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing")
-      checkout_url = ERB::Util.h("/l/#{product.unique_permalink}?wanted=true")
+      # JSON-encoded for the JS string context below (not ERB::Util.h, which is
+      # HTML-entity escaping and wrong inside a <script>). to_json emits the
+      # surrounding quotes.
+      checkout_url_js = "/l/#{product.unique_permalink}?wanted=true".to_json
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
       og_image = product.thumbnail&.alive&.url
@@ -963,7 +966,7 @@ class LinksController < ApplicationController
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}">
               window.addEventListener("message", function (e) {
-                if (e.data === "gumroad:checkout") window.location.href = "#{checkout_url}";
+                if (e.data === "gumroad:checkout") window.location.href = #{checkout_url_js};
               });
             </script>
           </body>

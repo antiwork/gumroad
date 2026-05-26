@@ -88,7 +88,6 @@ module Product::AsJson
         "currency" => price_currency_type,
         "short_url" => long_url,
         "landing_url" => long_url,
-        "custom_html" => custom_html,
         "thumbnail_url" => thumbnail&.alive&.url.presence,
         "tags" => tags.pluck(:name),
         "formatted_price" => price_formatted_verbose,
@@ -138,6 +137,7 @@ module Product::AsJson
 
       unless slim
         json.merge!(
+          "custom_html" => custom_html,
           "rich_content" => rich_content_json,
           "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
           "files" => ordered_alive_product_files.filter_map do |f|

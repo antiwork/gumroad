@@ -42,6 +42,16 @@ describe Api::V2::LinksController do
       expect(body.dig("product", "custom_html")).to eq("<section>Published HTML</section>")
     end
 
+    it "omits custom_html from the slim list endpoint to avoid bloating responses" do
+      @product.update!(custom_html: "<section>Published HTML</section>")
+
+      get :index, params: { format: :json, access_token: @token.token }
+
+      expect(response).to have_http_status(:ok)
+      product_json = JSON.parse(response.body)["products"].find { |p| p["id"] == @product.external_id }
+      expect(product_json).not_to have_key("custom_html")
+    end
+
     it "clears custom HTML when passed nil" do
       @product.update!(custom_html: "<section>Published HTML</section>")
 
