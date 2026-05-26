@@ -22,19 +22,20 @@ class Ai::PageSanitizer
     a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em
     fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li link main map mark menu meter nav ol optgroup option
     output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup svg table tbody td template textarea
-    tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs linearGradient radialGradient stop clipPath
+    tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs lineargradient radialgradient stop clippath
   ].freeze
 
   ALLOWED_ATTRIBUTES = %w[
     accept accept-charset alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
     charset cols colspan content contenteditable controls coords crossorigin data-gumroad-action data-gumroad-field datetime defer dir disabled download draggable enctype
     fill for form height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
-    preserveAspectRatio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
-    value viewBox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule points transform offset stop-color
+    preserveaspectratio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
+    value viewbox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule clip-path points transform offset stop-color
     stop-opacity
   ].freeze
 
   URL_ATTRIBUTES = %w[action href poster src xlink:href].freeze
+  SRCSET_ATTRIBUTES = %w[srcset].freeze
   # Navigating to a URL runs whatever document it resolves to. A `data:` URL
   # in these attributes loads a document with no CSP, so its scripts escape
   # `connect-src 'none'` — block `data:` here outright.
@@ -85,7 +86,7 @@ class Ai::PageSanitizer
       return
     end
 
-    unless ALLOWED_TAGS.include?(node.name)
+    unless allowed_tag?(node.name)
       record_removed_tag(report, node, "tag not in allowlist")
       node.remove
       return
@@ -125,6 +126,7 @@ class Ai::PageSanitizer
 
   def self.attribute_removal_reason(name, value)
     return "attribute not in allowlist" unless allowed_attribute?(name)
+    return srcset_url_removal_reason(value) if SRCSET_ATTRIBUTES.include?(name.downcase)
     return dangerous_url_reason(value) if dangerous_url_attribute?(name, value)
 
     nil
@@ -166,7 +168,12 @@ class Ai::PageSanitizer
   end
 
   def self.allowed_attribute?(name)
-    name.start_with?("data-", "aria-") || event_handler_attribute?(name) || ALLOWED_ATTRIBUTES.include?(name)
+    normalized_name = name.downcase
+    normalized_name.start_with?("data-", "aria-") || event_handler_attribute?(normalized_name) || ALLOWED_ATTRIBUTES.include?(normalized_name)
+  end
+
+  def self.allowed_tag?(name)
+    ALLOWED_TAGS.include?(name.downcase)
   end
 
   def self.event_handler_attribute?(name)
@@ -174,13 +181,29 @@ class Ai::PageSanitizer
   end
 
   def self.dangerous_url_attribute?(name, value)
-    return false unless URL_ATTRIBUTES.include?(name)
+    normalized_name = name.downcase
+    return false unless URL_ATTRIBUTES.include?(normalized_name)
 
     normalized = normalize_url(value)
     return true if normalized.start_with?("javascript:")
     return false unless normalized.start_with?("data:")
 
-    NAVIGABLE_URL_ATTRIBUTES.include?(name) || SAFE_DATA_URI_PREFIXES.none? { |prefix| normalized.start_with?(prefix) }
+    NAVIGABLE_URL_ATTRIBUTES.include?(normalized_name) || SAFE_DATA_URI_PREFIXES.none? { |prefix| normalized.start_with?(prefix) }
+  end
+
+  def self.srcset_url_removal_reason(value)
+    normalized_urls = srcset_urls(value).map { |url| normalize_url(url) }
+    return "javascript: URL blocked" if normalized_urls.any? { |url| url.start_with?("javascript:") }
+    return "data: URL blocked" if normalized_urls.any? { |url| url.start_with?("data:") && SAFE_DATA_URI_PREFIXES.none? { |prefix| url.start_with?(prefix) } }
+
+    nil
+  end
+
+  def self.srcset_urls(value)
+    value.to_s.split(/\s*,\s*/).filter_map do |candidate|
+      url = candidate.strip.split(/\s+/, 2).first
+      url if url.present?
+    end
   end
 
   def self.allowed_script_src?(src)
@@ -212,5 +235,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
+  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end

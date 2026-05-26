@@ -122,6 +122,22 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include("data:image/svg+xml")
     end
 
+    it "preserves SVG tags and attributes lowercased by the HTML parser" do
+      sanitized = described_class.sanitize(<<~HTML)
+        <svg viewBox="0 0 10 10" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="gradient"><stop offset="0%" stop-color="#fff"></stop></linearGradient>
+            <clipPath id="clip"><rect width="10" height="10"></rect></clipPath>
+          </defs>
+        </svg>
+      HTML
+
+      expect(sanitized).to include("<lineargradient")
+      expect(sanitized).to include("<clippath")
+      expect(sanitized).to include(%(viewbox="0 0 10 10"))
+      expect(sanitized).to include(%(preserveaspectratio="xMidYMid meet"))
+    end
+
     it "allows stylesheet link tags from approved font hosts" do
       sanitized = described_class.sanitize(%(<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">))
 
@@ -191,6 +207,26 @@ describe Ai::PageSanitizer do
       sanitized = described_class.sanitize(%(<link rel="stylesheet,preload" href="https://fonts.googleapis.com/css2?family=Inter">))
 
       expect(sanitized).not_to include("fonts.googleapis.com")
+    end
+
+    it "preserves safe srcset URLs" do
+      sanitized = described_class.sanitize(%(<img srcset="https://static-2.gumroad.com/a.png 1x, https://files.gumroad.com/a.png 2x" alt="Preview">))
+
+      expect(sanitized).to include(%(srcset="https://static-2.gumroad.com/a.png 1x, https://files.gumroad.com/a.png 2x"))
+    end
+
+    it "strips javascript URLs from srcset" do
+      sanitized = described_class.sanitize(%(<img srcset="https://static-2.gumroad.com/a.png 1x, javascript:alert(1) 2x" alt="Preview">))
+
+      expect(sanitized).not_to include("srcset=")
+      expect(sanitized).not_to include("javascript:")
+    end
+
+    it "strips executable data document URLs from srcset" do
+      sanitized = described_class.sanitize(%(<img srcset="data:text/html,<script>alert(1)</script> 1x" alt="Preview">))
+
+      expect(sanitized).not_to include("srcset=")
+      expect(sanitized).not_to include("data:text/html")
     end
   end
 
