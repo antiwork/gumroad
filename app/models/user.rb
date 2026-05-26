@@ -838,15 +838,17 @@ class User < ApplicationRecord
     true
   end
 
-  def invalidate_active_sessions!(revoke_mobile_tokens: true)
+  def invalidate_active_sessions!
     update!(last_active_sessions_invalidated_at: DateTime.current)
-
-    return unless revoke_mobile_tokens
 
     application = OauthApplication.find_by(uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
     if application.present?
       Doorkeeper::AccessToken.revoke_all_for(application.id, self)
     end
+  end
+
+  def invalidate_browser_sessions!
+    update!(last_active_sessions_invalidated_at: DateTime.current)
   end
 
   def subdomain

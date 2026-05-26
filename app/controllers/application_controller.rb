@@ -375,7 +375,11 @@ class ApplicationController < ActionController::Base
     def invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: true)
       return unless user_signed_in?
 
-      logged_in_user.invalidate_active_sessions!(revoke_mobile_tokens:)
+      if revoke_mobile_tokens
+        logged_in_user.invalidate_active_sessions!
+      else
+        logged_in_user.invalidate_browser_sessions!
+      end
 
       # NOTE: To keep the current session active, we reset the
       # "last_sign_in_at" value persisted in the current session with
