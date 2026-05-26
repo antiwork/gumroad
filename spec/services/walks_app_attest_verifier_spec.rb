@@ -100,8 +100,8 @@ describe WalksAppAttestVerifier do
       )
     end
 
-    def build_assertion(counter:, challenge:, body: request_body)
-      auth_data = app_id_hash + [0].pack("C") + [counter].pack("N")
+    def build_assertion(counter:, challenge:, body: request_body, rp_id_hash: app_id_hash)
+      auth_data = rp_id_hash + [0].pack("C") + [counter].pack("N")
       client_data_hash = OpenSSL::Digest::SHA256.digest(challenge + body)
       # Mirror Apple's kSecKeyAlgorithmECDSASignatureMessageX962SHA256: the
       # Secure Enclave hashes the input internally, so it signs over `nonce`
@@ -208,20 +208,20 @@ describe WalksAppAttestVerifier do
 
     it "rejects when the rpId in authenticatorData doesn't match the App ID" do
       challenge = WalksAppAttestChallenge.issue!
-      # build_assertion uses team_id.bundle_id; flip the team_id to a wrong one
-      allow(GlobalConfig).to receive(:get).with("APPLE_WEB_TEAM_ID").and_return("WRONGTEAM")
-      assertion = build_assertion(counter: 1, challenge: challenge)
-      allow(GlobalConfig).to receive(:get).with("APPLE_WEB_TEAM_ID").and_return(team_id)
+      # Build the assertion with a deliberately wrong rpId hash. The signature
+      # is internally consistent (signed over the nonce that includes this
+      # wrong authData), so it verifies — the verifier then rejects on the
+      # rpId check specifically.
+      wrong_rp_id_hash = OpenSSL::Digest::SHA256.digest("WRONGTEAM.#{bundle_id}")
+      assertion = build_assertion(counter: 1, challenge: challenge, rp_id_hash: wrong_rp_id_hash)
 
       result = described_class.assert(
         key_id: key_id_b64, assertion_b64: assertion,
         challenge: challenge, request_body: request_body,
       )
 
-      # Wrong rpId means signature won't verify (signed over a different nonce);
-      # the verifier reports the first failing check it hits.
       expect(result.valid?).to be(false)
-      expect(result.error).to be_in(%i[bad_signature rp_id_mismatch])
+      expect(result.error).to eq(:rp_id_mismatch)
     end
 
     it "rejects when assertion CBOR is malformed" do
