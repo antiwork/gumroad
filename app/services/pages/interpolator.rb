@@ -20,8 +20,13 @@ class Pages::Interpolator
       node.inner_html = ERB::Util.h(handler.call(product)) if handler
     end
 
+    # The iframe sandbox omits top-navigation, so the buy button can't
+    # navigate the buyer's tab itself. It messages the wrapper, which owns the
+    # one checkout URL it will navigate to. `return false` stops the anchor
+    # from navigating the iframe to a dead checkout-in-iframe.
     fragment.css('a[data-gumroad-action="buy"]').each do |a|
       a["href"] = "/l/#{product.unique_permalink}?wanted=true"
+      a["onclick"] = "parent.postMessage('gumroad:checkout','*');return false;"
     end
 
     fragment.to_html

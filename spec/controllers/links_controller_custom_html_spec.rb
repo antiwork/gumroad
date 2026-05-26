@@ -19,8 +19,20 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include("<title>#{product.name}</title>")
       expect(response.body).to include(%(property="og:title"))
       expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing"))
-      expect(response.body).to include("allow-top-navigation-by-user-activation")
       expect(response.body).not_to include("<h1>Live landing page</h1>")
+    end
+
+    it "sandboxes the iframe without top-navigation and mediates checkout via postMessage" do
+      get :show, params: { id: product.unique_permalink }
+      expect(response.body).to include(%(sandbox="allow-scripts allow-forms"))
+      expect(response.body).not_to include("allow-top-navigation")
+      # The wrapper owns the one checkout URL it will navigate to; seller HTML
+      # only sends the "gumroad:checkout" signal.
+      expect(response.body).to include(%(window.location.href = "/l/#{product.unique_permalink}?wanted=true"))
+      expect(response.body).to include('e.data === "gumroad:checkout"')
+      # Script carries a nonce — script-src has no 'unsafe-inline', so without
+      # it the listener would be CSP-blocked in the browser.
+      expect(response.body).to match(/<script nonce="[^"]+">/)
     end
 
     it "falls back to the default product page when custom_html is blank" do

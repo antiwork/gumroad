@@ -32,12 +32,14 @@ describe Pages::Interpolator do
       expect(result).not_to include("<strong>")
     end
 
-    it "sets href on <a data-gumroad-action='buy'> to the checkout URL" do
+    it "wires <a data-gumroad-action='buy'> to message the wrapper instead of navigating itself" do
       html = %(<a data-gumroad-action="buy" href="#">Buy</a>)
 
       result = described_class.interpolate(html, product: product)
 
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
+      expect(result).to include("parent.postMessage('gumroad:checkout','*')")
+      expect(result).to include("return false")
     end
 
     it "leaves unknown field markers untouched (graceful fallback)" do

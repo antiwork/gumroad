@@ -899,7 +899,8 @@ class LinksController < ApplicationController
       # product page so the existing ?wanted=true flow handles the redirect.
       return if params[:wanted] == "true"
 
-      render html: custom_html_wrapper_document(@product).html_safe, layout: false
+      nonce = SecureHeaders.content_security_policy_script_nonce(request)
+      render html: custom_html_wrapper_document(@product, nonce:).html_safe, layout: false
     end
 
     def custom_html_document(custom_html)
@@ -927,12 +928,15 @@ class LinksController < ApplicationController
       end
     end
 
-    # Omitting `allow-same-origin` from the iframe sandbox keeps the seller's
-    # HTML on an opaque origin — no access to gumroad.com cookies or parent DOM.
-    # `allow-top-navigation-by-user-activation` is required so buy buttons can
-    # navigate to checkout on click.
-    def custom_html_wrapper_document(product)
+    # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin
+    # — no access to gumroad.com cookies or parent DOM. We also omit
+    # `allow-top-navigation`: the seller's HTML must never navigate the buyer's
+    # tab (that would let a malicious onclick redirect to a phishing site with
+    # gumroad.com still in the URL bar). Instead the buy button posts a message
+    # to this wrapper, which navigates to the one checkout URL we control here.
+    def custom_html_wrapper_document(product, nonce:)
       iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing")
+      checkout_url = ERB::Util.h("/l/#{product.unique_permalink}?wanted=true")
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
       og_image = product.thumbnail&.alive&.url
@@ -955,8 +959,13 @@ class LinksController < ApplicationController
             <iframe
               src="#{iframe_src}"
               title="#{title}"
-              sandbox="allow-scripts allow-forms allow-top-navigation-by-user-activation"
+              sandbox="allow-scripts allow-forms"
             ></iframe>
+            <script nonce="#{ERB::Util.h(nonce)}">
+              window.addEventListener("message", function (e) {
+                if (e.data === "gumroad:checkout") window.location.href = "#{checkout_url}";
+              });
+            </script>
           </body>
         </html>
       HTML
