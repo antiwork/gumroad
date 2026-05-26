@@ -293,6 +293,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "rich_content must be an array of content page objects.")
     end
 
+    previous_custom_html = nil
     begin
       ActiveRecord::Base.transaction do
         attrs = {}
@@ -327,6 +328,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         end
 
         if params.key?(:custom_html)
+          previous_custom_html = @product.custom_html
           @product.custom_html = params[:custom_html].blank? ? nil : Ai::PageSanitizer.sanitize(params[:custom_html])
           @product.custom_html = nil if @product.custom_html.blank?
         end
@@ -399,11 +401,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "One or more numeric values are out of range.")
     end
 
+    extras = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html } : {}
     offer_code_warning = check_offer_code_validity
     if offer_code_warning
-      success_with_object(:product, @product, warning: offer_code_warning)
+      success_with_object(:product, @product, warning: offer_code_warning, **extras)
     else
-      success_with_product(@product)
+      success_with_object(:product, @product, **extras)
     end
   end
 

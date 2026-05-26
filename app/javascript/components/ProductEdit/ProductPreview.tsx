@@ -340,7 +340,8 @@ API token: <user_api_token>`;
             </>
           }
         >
-          This clears the live landing page and switches the preview back to the default product page.
+          Clears your live landing page. This action cannot be undone — save your HTML locally first if you want to
+          restore it.
         </Modal>
       ) : null}
     </>

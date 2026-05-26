@@ -60,7 +60,8 @@ const CustomHtmlDocumentation = () => (
       Products can store one live custom HTML landing page in the <code>custom_html</code> field.{" "}
       <code>GET /v2/products/:id</code> returns the field.{" "}
       <code>PUT /v2/products/:id</code> overwrites it, and sending <code>null</code> or an empty string clears it.
-      Authenticate with a Bearer token that has the <code>edit_products</code> scope.
+      Gumroad keeps only the most recent push — no version history. Keep your source HTML under version control if you
+      want to roll back. Authenticate with a Bearer token that has the <code>edit_products</code> scope.
     </p>
     <CodeSnippet caption="Agent prompt">
       {`Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it by \`PUT\`ting the HTML to my product's \`custom_html\` field via the Gumroad API.

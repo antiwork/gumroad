@@ -79,6 +79,45 @@ describe Api::V2::LinksController do
       expect(body["success"]).to be(true)
       expect(body.dig("product", "landing_url")).to eq(@product.long_url)
     end
+
+    it "returns previous_custom_html so the agent has one-shot recovery from an overwrite" do
+      @product.update!(custom_html: "<section>Old HTML</section>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>New HTML</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["previous_custom_html"]).to eq("<section>Old HTML</section>")
+    end
+
+    it "returns previous_custom_html as null on the first push (nothing to recover)" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>First HTML</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body).to have_key("previous_custom_html")
+      expect(body["previous_custom_html"]).to be_nil
+    end
+
+    it "returns previous_custom_html when clearing custom_html (the recover-after-reset case)" do
+      @product.update!(custom_html: "<section>About to be cleared</section>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: nil }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["previous_custom_html"]).to eq("<section>About to be cleared</section>")
+    end
+
+    it "omits previous_custom_html when the request doesn't touch custom_html" do
+      @product.update!(custom_html: "<section>Existing</section>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, name: "Renamed product" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body).not_to have_key("previous_custom_html")
+    end
   end
 
   describe "POST 'preview_custom_html'" do
