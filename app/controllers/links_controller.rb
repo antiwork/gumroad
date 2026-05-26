@@ -13,19 +13,19 @@ class LinksController < ApplicationController
 
 
 
-  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
+  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count landing_iframe_content].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
-  before_action :fetch_product_for_show, only: :show
-  before_action :check_banned, only: :show
+  before_action :fetch_product_for_show, only: %i[show landing_iframe_content]
+  before_action :check_banned, only: %i[show landing_iframe_content]
+  before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content]
   before_action :set_x_robots_tag_header, only: :show
   before_action :check_payment_details, only: :index
 
   before_action :set_affiliate_cookie, only: [:show]
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
-  before_action :ensure_seller_is_not_deleted, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
@@ -183,6 +183,15 @@ class LinksController < ApplicationController
     render inertia: "Products/CartItemsCount", props: {
       cart_items_count: cart&.cart_products&.alive&.count || 0
     }
+  end
+
+  def landing_iframe_content
+    return head :not_found if @product.blank? || @product.custom_html.blank?
+
+    response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
+    response.set_header("X-Frame-Options", "SAMEORIGIN")
+    response.set_header("Referrer-Policy", "no-referrer")
+    render html: custom_html_document(@product.custom_html).html_safe, layout: false
   end
 
   def search
@@ -887,10 +896,7 @@ class LinksController < ApplicationController
       return if @product.custom_html.blank?
       return if params[:wanted] == "true"
 
-      response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
-      response.set_header("X-Frame-Options", "SAMEORIGIN")
-      response.set_header("Referrer-Policy", "no-referrer")
-      render html: custom_html_document(@product.custom_html).html_safe, layout: false
+      render html: custom_html_wrapper_document(@product).html_safe, layout: false
     end
 
     def custom_html_document(custom_html)
@@ -906,6 +912,41 @@ class LinksController < ApplicationController
           </head>
           <body>
             #{custom_html}
+          </body>
+        </html>
+      HTML
+    end
+
+    # Omitting `allow-same-origin` from the iframe sandbox keeps the seller's
+    # HTML on an opaque origin — no access to gumroad.com cookies or parent DOM.
+    # `allow-top-navigation-by-user-activation` is required so buy buttons can
+    # navigate to checkout on click.
+    def custom_html_wrapper_document(product)
+      iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing")
+      title = ERB::Util.h(product.name.to_s)
+      canonical = ERB::Util.h(product.long_url.to_s)
+      og_image = product.thumbnail&.alive&.url
+      og_image_tag = og_image ? %(<meta property="og:image" content="#{ERB::Util.h(og_image)}">) : ""
+      <<~HTML
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>#{title}</title>
+            <link rel="canonical" href="#{canonical}">
+            <meta property="og:title" content="#{title}">
+            <meta property="og:type" content="product">
+            <meta property="og:url" content="#{canonical}">
+            #{og_image_tag}
+            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
+          </head>
+          <body>
+            <iframe
+              src="#{iframe_src}"
+              title="#{title}"
+              sandbox="allow-scripts allow-forms allow-top-navigation-by-user-activation"
+            ></iframe>
           </body>
         </html>
       HTML

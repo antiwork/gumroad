@@ -860,6 +860,10 @@ Rails.application.routes.draw do
     get "/products", to: "links#index", as: :products
 
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
+    # Iframe content endpoint for products with custom_html. Must appear
+    # before the :code route below so "landing" doesn't get interpreted as
+    # an offer code by short_link_offer_code.
+    get "/l/:id/landing", to: "links#landing_iframe_content", as: :short_link_landing
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code
     get "/cart_items_count", to: "links#cart_items_count"
 
