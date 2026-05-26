@@ -143,6 +143,20 @@ describe Api::V2::Walks::SynthesisController do
       expect(response).to have_http_status(:bad_gateway)
     end
 
+    it "returns 502 when Anthropic returns 200 with a non-JSON envelope" do
+      # e.g. a CDN error page that echoes Content-Type: application/json.
+      # upstream.parse raises JSON::ParserError before extract_json sees the
+      # body, so the inner JSON::ParserError rescue in extract_json wouldn't
+      # catch it — the controller needs its own rescue.
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: "<html>upstream proxy error</html>", headers: { "Content-Type" => "application/json" })
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(response.parsed_body["error"]).to match(/parse/i)
+    end
+
     it "returns 502 when Anthropic times out" do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_raise(HTTP::TimeoutError.new("execution expired"))

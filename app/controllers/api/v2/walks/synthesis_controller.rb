@@ -82,6 +82,9 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
   rescue HTTP::Error => e
     Rails.logger.warn("Anthropic synthesis network error: #{e.class} #{e.message}")
     render json: { error: "Could not reach synthesis service." }, status: :bad_gateway
+  rescue JSON::ParserError => e
+    Rails.logger.warn("Anthropic synthesis returned non-JSON envelope: #{e.class} #{e.message}")
+    render json: { error: "Could not parse synthesis response." }, status: :bad_gateway
   end
 
   private

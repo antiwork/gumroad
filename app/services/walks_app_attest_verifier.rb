@@ -54,8 +54,13 @@ class WalksAppAttestVerifier
       return fail_result(:bad_att_stmt) unless att_stmt.is_a?(Hash)
       return fail_result(:bad_auth_data) unless auth_data.is_a?(String)
 
-      certs = Array(att_stmt["x5c"]).map { |der| OpenSSL::X509::Certificate.new(der) }
-      return fail_result(:no_certs) if certs.empty?
+      # Validate x5c is an array of DER bytes before handing to OpenSSL — a
+      # CBOR null inside the array would otherwise raise TypeError out of
+      # OpenSSL::X509::Certificate.new(nil), which isn't in our rescue list.
+      x5c = att_stmt["x5c"]
+      return fail_result(:no_certs) unless x5c.is_a?(Array) && x5c.any?
+      return fail_result(:no_certs) unless x5c.all? { |der| der.is_a?(String) && !der.empty? }
+      certs = x5c.map { |der| OpenSSL::X509::Certificate.new(der) }
       return fail_result(:bad_chain) unless chain_valid?(certs.first, certs[1..])
 
       cred_cert = certs.first
@@ -98,10 +103,19 @@ class WalksAppAttestVerifier
     def assert(key_id:, assertion_b64:, challenge:, request_body:)
       return fail_result(:missing_key_id) if key_id.blank?
       return fail_result(:missing_assertion) if assertion_b64.blank?
-      return fail_result(:invalid_challenge) unless WalksAppAttestChallenge.consume!(challenge)
+      return fail_result(:missing_challenge) if challenge.blank?
 
       key = WalksAppAttestKey.find_by(key_id: key_id)
       return fail_result(:unknown_key) unless key
+
+      # Consume the challenge only after the keyId is known to be real.
+      # A scraper hitting the endpoint with a random keyId would otherwise
+      # be able to burn challenges issued to legitimate devices (single-use
+      # Redis nonces). Since keyIds are SHA256(pubkey) — unguessable —
+      # gating consume on `find_by` closes the DoS without changing the
+      # replay-safety property: a real device's request still consumes
+      # its own challenge exactly once.
+      return fail_result(:invalid_challenge) unless WalksAppAttestChallenge.consume!(challenge)
 
       cbor = decode_cbor(Base64.decode64(assertion_b64))
       return fail_result(:bad_cbor) unless cbor.is_a?(Hash)
@@ -180,20 +194,31 @@ class WalksAppAttestVerifier
       #   credPubKey     (CBOR)  -- App Attest specifically does NOT include this;
       #                            the credentialId IS the SHA256(pubkey octets).
       def parse_auth_data(bytes, expect_attestation: true)
-        return nil if bytes.bytesize < 37
+        return nil unless bytes.is_a?(String) && bytes.bytesize >= 37
         io = StringIO.new(bytes)
         io.binmode
+        rp_id_hash = io.read(32)
+        flags_byte = io.read(1)
+        counter_bytes = io.read(4)
+        return nil unless rp_id_hash && flags_byte && counter_bytes
         out = {
-          rp_id_hash: io.read(32),
-          flags: io.read(1).unpack1("C"),
-          counter: io.read(4).unpack1("N"),
+          rp_id_hash: rp_id_hash,
+          flags: flags_byte.unpack1("C"),
+          counter: counter_bytes.unpack1("N"),
         }
         if expect_attestation
-          return nil if io.eof?
-          out[:aaguid] = io.read(16)
-          cred_id_len = io.read(2).unpack1("n")
-          return nil if cred_id_len.nil? || cred_id_len > 64
-          out[:credential_id] = io.read(cred_id_len)
+          # Each io.read can return nil at EOF on a truncated blob; without
+          # these guards `nil.unpack1` raises NoMethodError outside our
+          # rescue list and surfaces as a 500 instead of a 422.
+          aaguid = io.read(16)
+          cred_id_len_bytes = io.read(2)
+          return nil unless aaguid && aaguid.bytesize == 16 && cred_id_len_bytes && cred_id_len_bytes.bytesize == 2
+          cred_id_len = cred_id_len_bytes.unpack1("n")
+          return nil if cred_id_len > 64
+          cred_id = io.read(cred_id_len)
+          return nil unless cred_id && cred_id.bytesize == cred_id_len
+          out[:aaguid] = aaguid
+          out[:credential_id] = cred_id
         end
         out
       end
