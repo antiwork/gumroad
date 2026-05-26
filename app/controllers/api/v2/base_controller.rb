@@ -10,7 +10,14 @@ class Api::V2::BaseController < ApplicationController
 
     def fetch_product
       products = current_resource_owner.links
-      @product = products.find_by_external_id(params[:link_id]) || products.find_by(unique_permalink: params[:link_id]) || error_with_object(:product, nil)
+      @product = products.find_by_external_id(params[:link_id]) || products.find_by(unique_permalink: params[:link_id])
+      return if @product.present?
+
+      if Link.find_by_external_id(params[:link_id]) || Link.visible.by_general_permalink(params[:link_id]).where.not(user_id: current_resource_owner.id).exists?
+        render status: :forbidden, json: { success: false, message: "You do not have permission to access this product." }
+      else
+        error_with_object(:product, nil)
+      end
     end
 
     def render_response(success, result = {})

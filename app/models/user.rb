@@ -43,7 +43,6 @@ class User < ApplicationRecord
   has_many :self_service_affiliate_products, foreign_key: :seller_id
   has_many :links
   has_many :products, class_name: "Link"
-  has_many :pages
   has_many :dropbox_files
   has_many :subscriptions
   has_many :oauth_applications,

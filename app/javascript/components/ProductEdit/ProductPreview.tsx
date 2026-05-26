@@ -1,14 +1,19 @@
 import * as React from "react";
 
 import { recurrenceIds } from "$app/utils/recurringPricing";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
+import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { Modal } from "$app/components/Modal";
 import { Product, ProductDiscount } from "$app/components/Product";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
+import { LandingPagePreview } from "$app/components/ProductEdit/LandingPagePreview";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
   const currentSeller = useCurrentSeller();
@@ -23,9 +28,21 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     seller_refund_policy_enabled,
     seller_refund_policy,
     seller,
+    updateProduct,
   } = useProductEditContext();
 
   const url = useProductUrl();
+  const hasLandingPage = product.custom_html?.trim() ? true : false;
+  const [previewMode, setPreviewMode] = React.useState<"default" | "landing">(() =>
+    hasLandingPage ? "landing" : "default",
+  );
+  const [isPromptOpen, setIsPromptOpen] = React.useState(false);
+  const [isResetOpen, setIsResetOpen] = React.useState(false);
+  const [isResetting, setIsResetting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!hasLandingPage) setPreviewMode("default");
+  }, [hasLandingPage]);
 
   if (!currentSeller) return null;
 
@@ -155,7 +172,45 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     audio_previews_enabled: product.audio_previews_enabled,
   };
 
-  return product.native_type === "coffee" ? (
+  const agentPrompt = `Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it using Gumroad's CLI.
+
+Docs: https://gumroad.com/docs/cli/pages
+Product: https://api.gumroad.com/v2/products/${uniquePermalink}
+API token: <user_api_token>`;
+
+  const copyPrompt = async () => {
+    await navigator.clipboard.writeText(agentPrompt);
+    showAlert("Prompt copied!", "success");
+  };
+
+  const resetLandingPage = async () => {
+    const previousCustomHtml = product.custom_html;
+    setIsResetting(true);
+    updateProduct({ custom_html: null });
+    setPreviewMode("default");
+
+    try {
+      const response = await request({
+        method: "PUT",
+        accept: "json",
+        url: `/api/v2/products/${encodeURIComponent(uniquePermalink)}`,
+        data: { custom_html: null },
+      });
+      const json = (await response.json()) as { success?: boolean; message?: string };
+      if (!response.ok || json.success === false) throw new ResponseError(json.message);
+
+      setIsResetOpen(false);
+      showAlert("Landing page reset.", "success");
+    } catch (e) {
+      assertResponseError(e);
+      updateProduct({ custom_html: previousCustomHtml });
+      showAlert(e.message, "error");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const defaultPreview = product.native_type === "coffee" ? (
     <ProfileLayout
       creatorProfile={{
         external_id: currentSeller.id,
@@ -211,6 +266,83 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         }}
         disableAnalytics
       />
+    </>
+  );
+
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
+        <Tabs variant="pills" className="min-w-0">
+          <Tab asChild isSelected={previewMode === "default"}>
+            <button type="button" onClick={() => setPreviewMode("default")}>
+              Default page
+            </button>
+          </Tab>
+          {hasLandingPage ? (
+            <Tab asChild isSelected={previewMode === "landing"}>
+              <button type="button" onClick={() => setPreviewMode("landing")}>
+                Landing page (live)
+              </button>
+            </Tab>
+          ) : null}
+        </Tabs>
+        <div className="flex flex-wrap gap-3">
+          <Button size="sm" onClick={() => setIsPromptOpen(true)}>
+            Build with your agent
+          </Button>
+          <Button size="sm" disabled={!hasLandingPage} onClick={() => setIsResetOpen(true)}>
+            Reset
+          </Button>
+        </div>
+      </div>
+      {previewMode === "landing" && hasLandingPage ? (
+        <LandingPagePreview uniquePermalink={uniquePermalink} />
+      ) : (
+        defaultPreview
+      )}
+      <Modal
+        open={isPromptOpen}
+        onClose={() => setIsPromptOpen(false)}
+        title="Build with your agent"
+        footer={
+          <>
+            <NavigationButton href="/docs/cli/pages" target="_blank" rel="noreferrer">
+              View CLI docs
+            </NavigationButton>
+            <Button color="primary" onClick={() => void copyPrompt()}>
+              Copy prompt
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-4">
+          <pre className="whitespace-pre-wrap rounded border border-border bg-background p-4 text-sm">{agentPrompt}</pre>
+          <p className="text-sm text-muted">
+            Your HTML runs in a sandboxed iframe - JS for animations and scroll effects works, but no auth access or
+            external network calls.
+          </p>
+        </div>
+      </Modal>
+      {isResetOpen ? (
+        <Modal
+          open
+          allowClose={!isResetting}
+          onClose={() => setIsResetOpen(false)}
+          title="Reset landing page?"
+          footer={
+            <>
+              <Button disabled={isResetting} onClick={() => setIsResetOpen(false)}>
+                Cancel
+              </Button>
+              <Button color="danger" disabled={isResetting} onClick={() => void resetLandingPage()}>
+                {isResetting ? "Resetting..." : "Reset"}
+              </Button>
+            </>
+          }
+        >
+          This clears the live landing page and switches the preview back to the default product page.
+        </Modal>
+      ) : null}
     </>
   );
 };

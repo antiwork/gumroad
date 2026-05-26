@@ -53,6 +53,48 @@ const UpdateProductResponseFields = () => (
   </ApiResponseFields>
 );
 
+const CustomHtmlDocumentation = () => (
+  <div id="custom-html" className="grid gap-4">
+    <h4>Custom HTML</h4>
+    <p>
+      Products can store one live custom HTML landing page in the <code>custom_html</code> field.{" "}
+      <code>GET /v2/products/:id</code> returns the field and <code>custom_html_url</code>.{" "}
+      <code>PUT /v2/products/:id</code> overwrites it, and sending <code>null</code> or an empty string clears it.
+      Authenticate with a Bearer token that has the <code>edit_products</code> scope.
+    </p>
+    <CodeSnippet caption="Agent prompt">
+      {`Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it by \`PUT\`ting the HTML to my product's \`custom_html\` field via the Gumroad API.
+
+Product: https://api.gumroad.com/v2/products/<permalink>
+API token: <user_api_token>
+Docs: https://gumroad.com/api#custom-html`}
+    </CodeSnippet>
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/products/<permalink> \\
+  -X PUT \\
+  -H "Authorization: Bearer <user_api_token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"custom_html":"<main><h1>My landing page</h1></main>"}'`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">{`gumroad products update <permalink> --custom-html ./landing.html`}</CodeSnippet>
+    <p>Security model:</p>
+    <ul>
+      <li>
+        Your HTML is served inside a sandboxed iframe (<code>sandbox="allow-scripts allow-forms"</code>).
+      </li>
+      <li>Inline JS for animations, scroll effects, sticky headers, and modals can run in-page.</li>
+      <li>
+        It cannot access cookies or auth, fetch external URLs because CSP sets <code>connect-src 'none'</code>,
+        navigate the parent window, open popups, or auto-redirect.
+      </li>
+      <li>External scripts are allowed only from Tailwind, jsDelivr, and unpkg CDNs.</li>
+      <li>
+        Forms work in-page via JS. <code>action=</code> attributes to external URLs are stripped.
+      </li>
+    </ul>
+  </div>
+);
+
 export const GetProducts = () => (
   <ApiEndpoint
     method="get"
@@ -143,7 +185,7 @@ export const GetProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad products view A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad products show A-m3CDDC5dlrSdKZp0RFhA==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -151,6 +193,8 @@ export const GetProduct = () => (
     "custom_permalink": null,
     "custom_receipt": null,
     "custom_summary": "You'll get one PSD file.",
+    "custom_html": null,
+    "custom_html_url": "https://sahil.gumroad.com/l/pencil/custom",
     "custom_fields": [],
     "customizable_price": null,
     "description": "I made this for fun.",
@@ -332,6 +376,7 @@ export const UpdateProduct = () => (
       <ApiParameter name="tags" description="(optional) array of tag strings; full replacement" />
       <ApiParameter name="custom_receipt" description="(optional)" />
       <ApiParameter name="custom_summary" description="(optional)" />
+      <ApiParameter name="custom_html" description="(optional) custom landing page HTML; null or empty string clears it" />
       <ApiParameter name="cover_ids" description="(optional) array of cover GUIDs in display order" />
       <ApiParameter name="rich_content" description="(optional) array of pages; full replacement" />
       <ApiParameter
@@ -382,6 +427,7 @@ export const UpdateProduct = () => (
   }
 }`}
     </CodeSnippet>
+    <CustomHtmlDocumentation />
   </ApiEndpoint>
 );
 

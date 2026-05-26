@@ -46,7 +46,6 @@ class UserPresenter
       profile_background_color: user.seller_profile.background_color,
       profile_highlight_color: user.seller_profile.highlight_color,
       profile_font: user.seller_profile.font,
-      pages_enabled: user.pages_enabled?,
     }
   end
 

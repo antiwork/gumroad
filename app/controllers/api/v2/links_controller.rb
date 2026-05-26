@@ -326,6 +326,11 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
+        if params.key?(:custom_html)
+          @product.custom_html = params[:custom_html].blank? ? nil : Ai::PageSanitizer.sanitize(params[:custom_html])
+          @product.custom_html = nil if @product.custom_html.blank?
+        end
+
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?

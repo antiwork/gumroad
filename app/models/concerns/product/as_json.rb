@@ -74,7 +74,7 @@ module Product::AsJson
       keep = %w[
         name description require_shipping preview_url
         custom_receipt customizable_price custom_permalink
-        subscription_duration
+        subscription_duration custom_html
       ]
       cached_default_price_cents = default_price_cents
 
@@ -96,6 +96,7 @@ module Product::AsJson
         "deleted" => deleted_at.present?,
         "custom_fields" => custom_field_descriptors.as_json,
         "custom_summary" => custom_summary,
+        "custom_html_url" => custom_html.present? ? long_url : nil,
         "is_tiered_membership" => is_tiered_membership?,
         "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
         "covers" => display_asset_previews.as_json,

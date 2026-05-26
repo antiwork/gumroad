@@ -12,10 +12,8 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { CreatePagePromptButton, useCreatePagePrompt } from "$app/components/Pages/CreatePagePrompt";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Profile, Props as ProfileProps } from "$app/components/Profile";
@@ -50,7 +48,6 @@ export default function SettingsPage() {
   );
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
-  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
@@ -165,7 +162,6 @@ export default function SettingsPage() {
               }}
               disabled={!canUpdate}
             />
-            {currentSeller?.pagesEnabled ? <CustomizeProfilePageSection /> : null}
             {loggedInUser?.policies.settings_profile.manage_social_connections ? (
               <Fieldset>
                 <FieldsetTitle>Social links</FieldsetTitle>
@@ -295,21 +291,3 @@ export default function SettingsPage() {
     </SettingsLayout>
   );
 }
-
-const CustomizeProfilePageSection = () => {
-  const state = useCreatePagePrompt({
-    existsQuery: "is_profile=true",
-    createBody: { is_profile: true },
-  });
-
-  return (
-    <Fieldset>
-      <FieldsetTitle>Custom profile page</FieldsetTitle>
-      <FieldsetDescription>
-        Use the standard Gumroad profile, or let AI build a custom one for you. The editor is a full-screen chat —
-        describe what you want and iterate.
-      </FieldsetDescription>
-      <CreatePagePromptButton state={state} />
-    </Fieldset>
-  );
-};

@@ -26,7 +26,9 @@ class ContentModeration::Strategies::BlocklistStrategy
   end
 
   def self.yaml_words
-    @yaml_words ||= File.exist?(YAML_PATH) ? Array(YAML.load_file(YAML_PATH).fetch("blocklist", [])) : []
+    @yaml_words ||= begin
+      File.exist?(YAML_PATH) ? Array(YAML.load_file(YAML_PATH).fetch("blocklist", [])) : []
+    end
   end
 
   def self.reset_yaml_cache!

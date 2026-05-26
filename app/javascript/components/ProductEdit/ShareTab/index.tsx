@@ -1,4 +1,5 @@
 import { Link } from "@boxicons/react";
+import hands from "$assets/images/illustrations/hands.png";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -6,7 +7,6 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { CreatePagePromptButton, useCreatePagePrompt } from "$app/components/Pages/CreatePagePrompt";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
@@ -19,13 +19,10 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-import hands from "$assets/images/illustrations/hands.png";
-
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover, uniquePermalink } =
-    useProductEditContext();
+  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
 
   const url = useProductUrl();
   const discoverUrl = useDiscoverUrl();
@@ -54,9 +51,6 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </div>
           </section>
-          {currentSeller.pagesEnabled ? (
-            <LandingPageSplash productPermalink={uniquePermalink} productName={product.name} />
-          ) : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
@@ -155,36 +149,5 @@ const DiscoverEligibilityPromo = () => {
         </div>
       </div>
     </Alert>
-  );
-};
-
-const LandingPageSplash = ({
-  productPermalink,
-  productName,
-}: {
-  productPermalink: string;
-  productName: string;
-}) => {
-  // Pass the product name as the title so the page is created with the
-  // creator-facing label they already recognize, rather than relying on
-  // the server's fallback to derive one. The server still defaults if we
-  // somehow ship an empty string (the controller treats blank as "use the
-  // link name"), so this is belt-and-suspenders rather than required.
-  const state = useCreatePagePrompt({
-    existsQuery: `product_id=${encodeURIComponent(productPermalink)}`,
-    createBody: { product_permalink: productPermalink, title: productName },
-  });
-
-  return (
-    <section className="grid gap-4 border-t border-border p-4 md:p-8">
-      <header>
-        <h2>Landing page</h2>
-        <p className="text-sm text-muted">
-          Use the basic Gumroad product page, or let AI build a custom one tailored to this product. The editor is a
-          full-screen chat — describe what you want and iterate.
-        </p>
-      </header>
-      <CreatePagePromptButton state={state} />
-    </section>
   );
 };

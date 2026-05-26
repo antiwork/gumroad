@@ -79,6 +79,8 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
   { name: "custom_permalink", type: "string | null", description: "Custom URL slug for the product" },
   { name: "custom_receipt", type: "string | null", description: "Custom receipt text" },
   { name: "custom_summary", type: "string | null", description: "Custom summary shown to buyers" },
+  { name: "custom_html", type: "string | null", description: "Custom landing page HTML served at custom_html_url" },
+  { name: "custom_html_url", type: "string", description: "Public URL for the product's custom landing page HTML" },
   {
     name: "custom_fields",
     type: "array",

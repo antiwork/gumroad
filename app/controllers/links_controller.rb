@@ -26,6 +26,7 @@ class LinksController < ApplicationController
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :ensure_seller_is_not_deleted, only: [:show]
+  before_action :render_custom_html_if_present, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
@@ -877,5 +878,36 @@ class LinksController < ApplicationController
       rescue => e
         ErrorNotifier.notify(e)
       end
+    end
+
+    CUSTOM_HTML_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; img-src * data:; font-src * data:; connect-src 'none'; form-action 'self';"
+
+    def render_custom_html_if_present
+      return if @product.blank?
+      return if @product.custom_html.blank?
+      return if params[:wanted] == "true"
+
+      response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
+      response.set_header("X-Frame-Options", "SAMEORIGIN")
+      response.set_header("Referrer-Policy", "no-referrer")
+      render html: custom_html_document(@product.custom_html).html_safe, layout: false
+    end
+
+    def custom_html_document(custom_html)
+      tailwind_path = Rails.root.join("public/pages-tailwind.css")
+      tailwind = File.exist?(tailwind_path) ? "<style>#{File.read(tailwind_path)}</style>" : ""
+      <<~HTML
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            #{tailwind}
+          </head>
+          <body>
+            #{custom_html}
+          </body>
+        </html>
+      HTML
     end
 end

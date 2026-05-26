@@ -167,27 +167,5 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         described_class.check(post, :post)
       end
     end
-
-    # PagesController#moderate_prompt passes a transient (unpersisted) Page
-    # whose id is nil so ContentExtractor can read the prompt without
-    # mutating the persisted page. Without this guard the admin note would
-    # render as "Page # ()" — useless noise on the seller's record.
-    context "for a transient (unpersisted) record" do
-      let(:transient_page) { Page.new(user: seller, title: "Draft", html_content: "anything") }
-
-      before do
-        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
-          instance_double(ContentModeration::Strategies::BlocklistStrategy,
-                          perform: strategy_result.new(status: "flagged", reasoning: ["Matched blocked word: banned"]))
-        )
-      end
-
-      it "does not write an admin comment when the record has no id" do
-        expect do
-          result = described_class.check(transient_page, :page)
-          expect(result.passed).to eq(false)
-        end.not_to change { seller.reload.comments.count }
-      end
-    end
   end
 end

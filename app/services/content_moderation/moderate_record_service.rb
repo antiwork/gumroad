@@ -60,7 +60,6 @@ class ContentModeration::ModerateRecordService
       case entity_type
       when :product then extractor.extract_from_product(record)
       when :post then extractor.extract_from_post(record)
-      when :page then extractor.extract_from_page(record)
       end
     end
 
@@ -83,16 +82,10 @@ class ContentModeration::ModerateRecordService
 
     def leave_admin_comment(reasons)
       return if user.blank?
-      # Transient proxies (e.g. the prompt-moderation Page used by
-      # PagesController#moderate_prompt) have no id, which would render as
-      # "Page # ()" in the admin comment. Skip logging for those; the
-      # caller decides whether to surface the rejection elsewhere.
-      return if record.id.nil?
 
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
                      when :post then "Post ##{record.id} (#{record.name})"
-                     when :page then "Page ##{record.id} (#{record.title})"
       end
 
       content = "Content moderation blocked publish of #{record_label}: #{reasons.join("; ")}"
@@ -115,7 +108,6 @@ class ContentModeration::ModerateRecordService
       @user ||= case entity_type
                 when :product then record.user
                 when :post then record.user
-                when :page then record.user
       end
     end
 end

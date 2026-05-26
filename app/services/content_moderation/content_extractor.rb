@@ -21,13 +21,6 @@ class ContentModeration::ContentExtractor
     Result.new(text: text, image_urls: image_urls)
   end
 
-  def extract_from_page(page)
-    parsed = Nokogiri::HTML(page.html_content.to_s)
-    text = "Title: #{page.title} Content: #{parsed.text}"
-    image_urls = parsed.css("img").filter_map { |img| img["src"] }.reject(&:empty?)
-    Result.new(text: text, image_urls: image_urls)
-  end
-
   private
     def product_image_urls(product)
       cover_image_urls = product.display_asset_previews.joins(file_attachment: :blob)
