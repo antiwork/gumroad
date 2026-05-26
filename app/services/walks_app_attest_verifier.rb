@@ -202,11 +202,14 @@ class WalksAppAttestVerifier
         Rails.env.production? ? environment == "production" : true
       end
 
-      # rpId in App Attest is the App ID — `<teamId>.<bundleId>`. Computed
-      # lazily so tests can stub `GlobalConfig.get('APPLE_TEAM_ID')` and so
-      # we don't bake a missing env var into a frozen constant.
+      # rpId in App Attest is the App ID — `<teamId>.<bundleId>`. Reuses the
+      # same APPLE_WEB_TEAM_ID env var that config/initializers/005_apple.rb
+      # already reads for Sign in with Apple — the Team ID is the same value
+      # regardless of which Apple service you're authenticating against.
+      # Computed lazily so tests can stub it and so we don't bake a missing
+      # env var into a frozen constant.
       def app_id_hash
-        team_id = GlobalConfig.get("APPLE_TEAM_ID").to_s
+        team_id = GlobalConfig.get("APPLE_WEB_TEAM_ID").to_s
         OpenSSL::Digest::SHA256.digest("#{team_id}.#{BUNDLE_ID}")
       end
   end

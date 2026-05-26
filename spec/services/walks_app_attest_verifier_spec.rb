@@ -14,7 +14,7 @@ describe WalksAppAttestVerifier do
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return(team_id)
+    allow(GlobalConfig).to receive(:get).with("APPLE_WEB_TEAM_ID").and_return(team_id)
   end
 
   describe ".attest" do
@@ -158,9 +158,9 @@ describe WalksAppAttestVerifier do
     it "rejects when the rpId in authenticatorData doesn't match the App ID" do
       challenge = WalksAppAttestChallenge.issue!
       # build_assertion uses team_id.bundle_id; flip the team_id to a wrong one
-      allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return("WRONGTEAM")
+      allow(GlobalConfig).to receive(:get).with("APPLE_WEB_TEAM_ID").and_return("WRONGTEAM")
       assertion = build_assertion(counter: 1, challenge: challenge)
-      allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return(team_id)
+      allow(GlobalConfig).to receive(:get).with("APPLE_WEB_TEAM_ID").and_return(team_id)
 
       result = described_class.assert(
         key_id: key_id_b64, assertion_b64: assertion,
