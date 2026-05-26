@@ -2,7 +2,7 @@
 
 class Api::V2::LinksController < Api::V2::BaseController
   BASE_PRODUCT_ASSOCIATIONS = [
-    :page, :preorder_link, :tags, :taxonomy,
+    :preorder_link, :tags, :taxonomy,
     { display_asset_previews: [:file_attachment, :file_blob] },
     { bundle_products: [:product, :variant] },
   ].freeze
@@ -14,6 +14,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   RESULTS_PER_PAGE = 10
 
   SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
+    :page,
     :ordered_alive_product_files,
     :alive_rich_contents,
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },

@@ -52,6 +52,23 @@ describe Api::V2::LinksController do
       expect(product_json).not_to have_key("custom_html")
     end
 
+    it "does not load custom HTML pages for the slim list endpoint" do
+      @product.update!(custom_html: "<section>Published HTML</section>")
+      page_queries = []
+
+      counter = lambda do |*, payload|
+        sql = payload[:sql]
+        page_queries << sql if sql.match?(/\bFROM\s+[`"]?pages[`"]?\b/i)
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :index, params: { format: :json, access_token: @token.token }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(page_queries).to be_empty
+    end
+
     it "clears custom HTML when passed nil" do
       @product.update!(custom_html: "<section>Published HTML</section>")
 
