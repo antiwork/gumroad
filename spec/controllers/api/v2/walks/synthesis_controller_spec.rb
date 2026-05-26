@@ -3,19 +3,23 @@
 require "spec_helper"
 
 describe Api::V2::Walks::SynthesisController do
+  let(:app_attest_key) { create(:walks_app_attest_key) }
+  let(:exchanges) { (1..6).map { |i| { question: "Q#{i}", answer: "A#{i}" } } }
+
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
+    allow(GlobalConfig).to receive(:get).with("WALKS_DEV_BYPASS_TOKEN").and_return(nil)
 
-    # See RealtimeTokensController spec: every request needs a valid JWS;
-    # the JWS-failure cases below override these.
-    allow(AppStoreWalksJwsVerifier).to receive(:verify)
-      .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
-    request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
-  end
-
-  let(:exchanges) do
-    (1..6).map { |i| { question: "Q#{i}", answer: "A#{i}" } }
+    # Synthesis allows the device path only when the free trial slot was
+    # already consumed by an earlier realtime_tokens call — so default the
+    # test setup that way. The JWS-path tests will override.
+    allow(WalksAppAttestVerifier).to receive(:assert)
+      .and_return(WalksAppAttestVerifier::Result.new(valid?: true, key: app_attest_key))
+    create(:walks_free_trial, walks_app_attest_key: app_attest_key)
+    request.headers["X-App-Attest-KeyId"] = app_attest_key.key_id
+    request.headers["X-App-Attest-Assertion"] = "stub.assertion"
+    request.headers["X-App-Attest-Challenge"] = "stub-challenge"
   end
 
   describe "POST create" do
@@ -149,25 +153,51 @@ describe Api::V2::Walks::SynthesisController do
       expect(response.parsed_body["error"]).to match(/reach/i)
     end
 
-    it "returns 402 when the X-Apple-Transaction-JWS header is missing" do
+    it "returns 402 when the device hasn't consumed its free trial yet and there's no JWS" do
+      WalksFreeTrial.destroy_all
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
-      request.headers["X-Apple-Transaction-JWS"] = nil
 
       post :create, params: { topic: "x", exchanges: exchanges }
 
       expect(response).to have_http_status(:payment_required)
+      expect(response.parsed_body["reason"]).to eq("subscription_required")
       expect(WebMock).not_to have_requested(:post, "https://api.anthropic.com/v1/messages")
     end
 
-    it "returns 402 when an X-Apple-Transaction-JWS header is present but invalid" do
+    it "allows synthesis with a valid JWS even when no free trial has been consumed" do
+      WalksFreeTrial.destroy_all
+      allow(AppStoreWalksJwsVerifier).to receive(:verify)
+        .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: true, product_id: "ProSub"))
+      request.headers["X-Apple-Transaction-JWS"] = "valid.jws.payload"
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
-      allow(AppStoreWalksJwsVerifier).to receive(:verify)
-        .and_return(AppStoreWalksJwsVerifier::Result.new(valid?: false, error: "chain"))
 
-      request.headers["X-Apple-Transaction-JWS"] = "header.payload.sig"
       post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "returns 402 when the App Attest assertion is invalid" do
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+      allow(WalksAppAttestVerifier).to receive(:assert)
+        .and_return(WalksAppAttestVerifier::Result.new(valid?: false, error: :bad_signature))
+
+      post :create, params: { topic: "x", exchanges: exchanges }
+
+      expect(response).to have_http_status(:payment_required)
+      expect(response.parsed_body["reason"]).to eq("invalid_assertion")
+    end
+
+    it "does NOT consume a fresh free trial on synthesis" do
+      WalksFreeTrial.destroy_all
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
+
+      expect {
+        post :create, params: { topic: "x", exchanges: exchanges }
+      }.not_to change(WalksFreeTrial, :count)
 
       expect(response).to have_http_status(:payment_required)
     end

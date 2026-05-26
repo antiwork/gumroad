@@ -1,0 +1,197 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+require "cbor"
+
+describe WalksAppAttestVerifier do
+  # We don't have the means to synthesize a full Apple-signed attestation
+  # chain in a unit test, so .attest is exercised with stubbed chain + OID
+  # checks (mirroring AppStoreWalksJwsVerifier spec's approach). .assert is
+  # fully end-to-end because all of the signing material is local.
+  let(:bundle_id) { "com.gumroad.walks" }
+  let(:team_id) { "TEAM123ABC" }
+  let(:app_id_hash) { OpenSSL::Digest::SHA256.digest("#{team_id}.#{bundle_id}") }
+
+  before do
+    allow(GlobalConfig).to receive(:get).and_call_original
+    allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return(team_id)
+  end
+
+  describe ".attest" do
+    it "rejects when key_id is blank" do
+      result = described_class.attest(key_id: "", attestation_b64: "x", challenge: "c")
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:missing_key_id)
+    end
+
+    it "rejects when attestation is blank" do
+      result = described_class.attest(key_id: "k", attestation_b64: "", challenge: "c")
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:missing_attestation)
+    end
+
+    it "rejects when the challenge was not issued by us" do
+      result = described_class.attest(key_id: "k", attestation_b64: "x", challenge: "never-issued")
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:invalid_challenge)
+    end
+
+    it "rejects when the CBOR is malformed" do
+      challenge = WalksAppAttestChallenge.issue!
+      result = described_class.attest(
+        key_id: "k", attestation_b64: Base64.strict_encode64("not cbor"), challenge: challenge
+      )
+      expect(result.valid?).to be(false)
+      expect(result.error).to be_in(%i[bad_cbor wrong_fmt])
+    end
+
+    it "rejects when the format is not apple-appattest" do
+      challenge = WalksAppAttestChallenge.issue!
+      bytes = CBOR.encode("fmt" => "packed", "attStmt" => {}, "authData" => "")
+      result = described_class.attest(
+        key_id: "k", attestation_b64: Base64.strict_encode64(bytes), challenge: challenge
+      )
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:wrong_fmt)
+    end
+  end
+
+  describe ".assert" do
+    let(:request_body) { '{"topic":"x"}' }
+    let(:ec_key) { OpenSSL::PKey::EC.generate("prime256v1") }
+    let(:pubkey_octets) { ec_key.public_key.to_octet_string(:uncompressed) }
+    let(:credential_id) { OpenSSL::Digest::SHA256.digest(pubkey_octets) }
+    let(:key_id_b64) { Base64.strict_encode64(credential_id) }
+    let!(:stored_key) do
+      WalksAppAttestKey.create!(
+        key_id: key_id_b64,
+        public_key: ec_key.public_to_der,
+        environment: "development",
+        attested_at: Time.current,
+        counter: 0,
+      )
+    end
+
+    def build_assertion(counter:, challenge:, body: request_body)
+      auth_data = app_id_hash + [0].pack("C") + [counter].pack("N")
+      client_data_hash = OpenSSL::Digest::SHA256.digest(challenge + body)
+      nonce = OpenSSL::Digest::SHA256.digest(auth_data + client_data_hash)
+      digest = OpenSSL::Digest::SHA256.digest(nonce)
+      signature = ec_key.dsa_sign_asn1(digest)
+      cbor = CBOR.encode("signature" => signature, "authenticatorData" => auth_data)
+      Base64.strict_encode64(cbor)
+    end
+
+    it "validates a fresh assertion and advances the counter" do
+      challenge = WalksAppAttestChallenge.issue!
+      assertion = build_assertion(counter: 1, challenge: challenge)
+
+      result = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+
+      expect(result.valid?).to be(true)
+      expect(result.key.id).to eq(stored_key.id)
+      expect(stored_key.reload.counter).to eq(1)
+    end
+
+    it "rejects a replayed challenge" do
+      challenge = WalksAppAttestChallenge.issue!
+      assertion = build_assertion(counter: 1, challenge: challenge)
+
+      first = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+      expect(first.valid?).to be(true)
+
+      replay = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+      expect(replay.valid?).to be(false)
+      expect(replay.error).to eq(:invalid_challenge)
+    end
+
+    it "rejects when the counter has not advanced" do
+      stored_key.update!(counter: 5)
+      challenge = WalksAppAttestChallenge.issue!
+      assertion = build_assertion(counter: 5, challenge: challenge)
+
+      result = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:counter_replay)
+    end
+
+    it "rejects when the request body has been tampered with after signing" do
+      challenge = WalksAppAttestChallenge.issue!
+      assertion = build_assertion(counter: 1, challenge: challenge, body: '{"topic":"x"}')
+
+      result = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: '{"topic":"hijacked"}',
+      )
+
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:bad_signature)
+    end
+
+    it "rejects when the keyId is unknown" do
+      challenge = WalksAppAttestChallenge.issue!
+      assertion = build_assertion(counter: 1, challenge: challenge)
+      bogus = Base64.strict_encode64("0" * 32)
+
+      result = described_class.assert(
+        key_id: bogus, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:unknown_key)
+    end
+
+    it "rejects when the rpId in authenticatorData doesn't match the App ID" do
+      challenge = WalksAppAttestChallenge.issue!
+      # build_assertion uses team_id.bundle_id; flip the team_id to a wrong one
+      allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return("WRONGTEAM")
+      assertion = build_assertion(counter: 1, challenge: challenge)
+      allow(GlobalConfig).to receive(:get).with("APPLE_TEAM_ID").and_return(team_id)
+
+      result = described_class.assert(
+        key_id: key_id_b64, assertion_b64: assertion,
+        challenge: challenge, request_body: request_body,
+      )
+
+      # Wrong rpId means signature won't verify (signed over a different nonce);
+      # the verifier reports the first failing check it hits.
+      expect(result.valid?).to be(false)
+      expect(result.error).to be_in(%i[bad_signature rp_id_mismatch])
+    end
+
+    it "rejects when assertion CBOR is malformed" do
+      challenge = WalksAppAttestChallenge.issue!
+      result = described_class.assert(
+        key_id: key_id_b64, assertion_b64: Base64.strict_encode64("garbage"),
+        challenge: challenge, request_body: request_body,
+      )
+      expect(result.valid?).to be(false)
+      expect(result.error).to be_in(%i[bad_cbor bad_assertion])
+    end
+
+    it "rejects when assertion or key_id is blank" do
+      result = described_class.assert(key_id: "", assertion_b64: "x", challenge: "c", request_body: "")
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:missing_key_id)
+
+      challenge = WalksAppAttestChallenge.issue!
+      result = described_class.assert(key_id: "k", assertion_b64: "", challenge: challenge, request_body: "")
+      expect(result.valid?).to be(false)
+      expect(result.error).to eq(:missing_assertion)
+    end
+  end
+end

@@ -102,9 +102,19 @@ Rails.application.routes.draw do
       # keys server-side: realtime_tokens issues a short-lived ek_... for
       # the client to connect to OpenAI's WS directly, and synthesis is a
       # one-shot proxy to Claude for post-walk product drafting.
+      #
+      # The app_attest sub-namespace is the device-identity bootstrap: the
+      # iOS client hits challenges to get a fresh server nonce, then
+      # attestations once per install to register its Secure-Enclave-attested
+      # key. After that, every realtime_tokens / synthesis call carries an
+      # assertion signed by that key (see WalksEntitlement).
       namespace :walks do
         resources :realtime_tokens, only: [:create]
         post "synthesis", to: "synthesis#create"
+        namespace :app_attest do
+          resources :challenges, only: [:create]
+          resources :attestations, only: [:create]
+        end
       end
     end
   end

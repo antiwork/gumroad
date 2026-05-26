@@ -5,9 +5,13 @@
 # description, chapters, price, bullets). The iOS app calls this once
 # per walk; the Anthropic key stays server-side.
 class Api::V2::Walks::SynthesisController < Api::V2::BaseController
-  # See RealtimeTokensController for the entitlement rationale.
+  # See RealtimeTokensController for the entitlement rationale. Synthesis is
+  # the *end* of a walk that was already started via realtime_tokens, so the
+  # device's free-trial slot only needs to be *checked*, not consumed —
+  # otherwise a retry of a failed synthesis call would burn a second walk.
+  include WalksEntitlement
   skip_before_action :verify_authenticity_token, only: [:create]
-  before_action :require_walks_entitlement
+  before_action -> { require_walks_entitlement(consumes_free_trial: false) }, only: [:create]
 
   MIN_EXCHANGES = 5
   MAX_EXCHANGES = 100
@@ -115,9 +119,4 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       nil
     end
 
-    def require_walks_entitlement
-      jws = request.headers["X-Apple-Transaction-JWS"].to_s.presence
-      return if jws && AppStoreWalksJwsVerifier.verify(jws).valid?
-      render json: { error: "Active Gumroad Walks subscription required." }, status: :payment_required
-    end
 end
