@@ -102,15 +102,22 @@ describe Api::V2::SubscribersController do
           # If the controller drops any of the new includes (:user,
           # :original_purchase, :purchases, last_payment_option: [:price]),
           # these patterns fire once per subscription.
+          #
+          # Note: `links` is intentionally NOT in this list. The controller
+          # scopes `Subscription.where(link_id: @product.id)`, so every
+          # subscription shares the same link — a per-row links query is
+          # structurally impossible here. The preload issues a single
+          # `WHERE links.id = ?` and the controller's `@product` lookup
+          # issues `WHERE links.id = ? LIMIT 1`; both match a naive links
+          # regex but neither is an N+1.
           per_row_patterns = [
             [/FROM `users`.*WHERE `users`\.`id` = \d+/, "users (per row)"],
             [/FROM `purchases`.*WHERE `purchases`\.`id` = \d+ LIMIT/, "original_purchase (per row)"],
             [/FROM `prices`.*WHERE `prices`\.`id` = \d+ LIMIT/, "last_payment_option price (per row)"],
-            [/FROM `links`.*WHERE `links`\.`id` = \d+/, "links (per row)"],
           ]
           per_row_patterns.each do |pattern, label|
             hits = queries.grep(pattern)
-            expect(hits.size).to be <= 1,
+            expect(hits).to be_empty,
               "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
           end
         end
