@@ -24,4 +24,15 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     # Not the SecureHeaders default (which would block inline scripts).
     expect(csp).not_to include("default-src 'self'")
   end
+
+  it "sandboxes the response itself so a direct top-level load can't run scripts same-origin" do
+    get "/l/#{product.unique_permalink}/landing/embed", headers: { "HOST" => VALID_REQUEST_HOSTS.first }
+
+    csp = response.headers["Content-Security-Policy"]
+    # CSP sandbox applies whether the doc is framed or loaded directly — the
+    # iframe attribute alone wouldn't cover a direct navigation to this URL.
+    expect(csp).to include("sandbox allow-scripts allow-forms")
+    expect(csp).not_to include("allow-same-origin")
+    expect(csp).not_to include("allow-top-navigation")
+  end
 end

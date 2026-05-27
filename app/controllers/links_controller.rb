@@ -928,6 +928,12 @@ class LinksController < ApplicationController
     end
 
     CUSTOM_HTML_CSP = [
+      # Sandbox the response itself, not just the wrapper's iframe attribute.
+      # A buyer can navigate straight to /l/:id/landing/embed (top-level, not
+      # framed), where the iframe sandbox doesn't apply — without this the
+      # seller's inline scripts would run on the real subdomain origin. Matches
+      # the wrapper iframe's sandbox: scripts + forms, no same-origin/top-nav.
+      "sandbox allow-scripts allow-forms",
       "default-src 'none'",
       "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
       "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
