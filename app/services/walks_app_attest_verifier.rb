@@ -125,15 +125,19 @@ class WalksAppAttestVerifier
       return fail_result(:bad_assertion) unless signature.is_a?(String) && authenticator_data.is_a?(String)
 
       client_data_hash = OpenSSL::Digest::SHA256.digest(challenge.to_s + request_body.to_s)
-      # Apple signs with kSecKeyAlgorithmECDSASignatureMessageX962SHA256, which
-      # hashes the input internally before ECDSA. The "input" given to the
-      # Secure Enclave is `authenticatorData || clientDataHash`, so the signed
-      # digest is exactly `nonce = SHA256(authenticatorData || clientDataHash)`.
-      # Ruby's `dsa_verify_asn1(digest, sig)` is raw ECDSA verify (no further
-      # hashing), so we pass `nonce` directly — NOT `SHA256(nonce)`. Apple's
-      # CryptoKit reference does the same: `publicKey.isValidSignature(sig, for: nonce)`.
+      # Apple's App Attest assertion: the Secure Enclave is handed
+      # `nonce = SHA256(authenticatorData || clientDataHash)` and signs it with
+      # ES256, which hashes its input *again* with SHA256 before the ECDSA
+      # operation. So the value actually signed is `SHA256(nonce)`. Apple's
+      # CryptoKit reference, `publicKey.isValidSignature(sig, for: nonce)`,
+      # passes `nonce` as a message (DataProtocol), so CryptoKit hashes it
+      # before verifying — it does NOT treat `nonce` as a pre-computed digest.
+      # `dsa_verify_asn1(digest, sig)` is a raw ECDSA verify with no hashing, so
+      # we must pass `SHA256(nonce)`. Verifying against `nonce` directly is the
+      # classic App Attest mistake and rejects every genuine assertion.
       nonce = OpenSSL::Digest::SHA256.digest(authenticator_data + client_data_hash)
-      return fail_result(:bad_signature) unless key.public_key_ec.dsa_verify_asn1(nonce, signature)
+      signed_digest = OpenSSL::Digest::SHA256.digest(nonce)
+      return fail_result(:bad_signature) unless key.public_key_ec.dsa_verify_asn1(signed_digest, signature)
 
       parsed = parse_auth_data(authenticator_data, expect_attestation: false)
       return fail_result(:bad_auth_data) unless parsed
