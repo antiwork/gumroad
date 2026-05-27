@@ -938,6 +938,9 @@ class LinksController < ApplicationController
       "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
       "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
       "img-src data: blob: https:",
+      # Mirror img-src so the <audio>/<video>/<source> tags the sanitizer
+      # allows actually load — without this they'd inherit default-src 'none'.
+      "media-src data: blob: https:",
       "font-src data: https://fonts.gstatic.com https://fonts.bunny.net",
       "connect-src 'none'",
       "form-action 'self'",

@@ -21,6 +21,8 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     expect(csp).to include("connect-src 'none'")
     expect(csp).to include("img-src data: blob: https:")
     expect(csp).not_to include("img-src *")
+    # media-src present so the allowed <audio>/<video> tags aren't blocked by default-src 'none'.
+    expect(csp).to include("media-src data: blob: https:")
     # Not the SecureHeaders default (which would block inline scripts).
     expect(csp).not_to include("default-src 'self'")
   end
