@@ -141,5 +141,54 @@ describe PaginatedInstallmentsPresenter do
         end
       end
     end
+
+    context "N+1 query prevention" do
+      before do
+        stub_const("#{described_class}::PER_PAGE", 10)
+      end
+
+      it "does not issue per-installment seller / link / installment_rule / blasts queries" do
+        # Create more installments so an N+1 regression would visibly scale.
+        product = create(:product, user: seller)
+        5.times do |i|
+          inst = create(:installment, name: "extra #{i}", seller:, link: product, published_at: 1.hour.ago)
+          create(:installment_rule, installment: inst)
+          create(:blast, post: inst)
+        end
+
+        # Pre-warm to flush one-off setup queries (Pagy config, app feature flags, etc.).
+        described_class.new(seller:, type: "published").props
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA"
+          next if payload[:cached]
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+          queries << sql
+        end
+
+        begin
+          described_class.new(seller:, type: "published").props
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        # Each of these patterns is the per-installment lookup that fires if
+        # the include list is dropped or `has_been_blasted?` falls back to
+        # `blasts.exists?` instead of using the preloaded collection.
+        per_row_patterns = [
+          [/FROM `installment_rules`.*WHERE `installment_rules`\.`installment_id` = \d+/, "installment_rules (per row)"],
+          [/FROM `links`.*WHERE `links`\.`id` = \d+/, "links (per row)"],
+          [/SELECT 1 AS one FROM `blasts`.*WHERE `blasts`\.`post_id` = \d+/, "blasts.exists? (per row)"],
+          [/FROM `users`.*WHERE `users`\.`id` = \d+/, "users (per row)"],
+        ]
+        per_row_patterns.each do |pattern, label|
+          hits = queries.grep(pattern)
+          expect(hits.size).to be <= 1,
+            "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
+        end
+      end
+    end
   end
 end
