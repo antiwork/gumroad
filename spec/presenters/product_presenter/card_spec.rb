@@ -107,6 +107,23 @@ describe ProductPresenter::Card do
         creator
       end
 
+      def capture_queries
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA"
+          next if payload[:cached]
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+          queries << sql
+        end
+        begin
+          yield
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+        queries
+      end
+
       it "does not issue per-row queries for preloaded associations" do
         # Mix of product shapes: digital, physical (skus), variant categories,
         # rentable. Each exercises a different ASSOCIATIONS branch.
@@ -124,22 +141,11 @@ describe ProductPresenter::Card do
           described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
         end
 
-        queries = []
-        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-          next if payload[:name] == "SCHEMA"
-          next if payload[:cached]
-          sql = payload[:sql]
-          next unless sql.start_with?("SELECT")
-          queries << sql
-        end
-
-        begin
+        queries = capture_queries do
           loaded_products = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a
           loaded_products.each do |product|
             described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
           end
-        ensure
-          ActiveSupport::Notifications.unsubscribe(subscriber)
         end
 
         # If any caller drops back to `.where` on a preloaded association
@@ -152,7 +158,47 @@ describe ProductPresenter::Card do
         ]
         per_row_patterns.each do |pattern, label|
           hits = queries.grep(pattern)
-          expect(hits.size).to be <= 1,
+          expect(hits).to be_empty,
+            "Expected no per-row #{label} queries, got #{hits.size}:\n#{hits.join("\n")}"
+        end
+      end
+
+      it "does not issue per-row tier-price queries for tiered memberships" do
+        recurrence_price_values = [
+          { "monthly" => { enabled: true, price: 5 }, "yearly" => { enabled: true, price: 50 } },
+          { "monthly" => { enabled: true, price: 10 }, "yearly" => { enabled: true, price: 100 } },
+        ]
+        products = Array.new(2) do
+          create(:membership_product_with_preset_tiered_pricing,
+                 user: creator_with_domain, recurrence_price_values:,
+                 subscription_duration: "yearly")
+        end
+
+        ids = products.map(&:id)
+        # Pre-warm.
+        Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a.each do |product|
+          described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
+        end
+
+        queries = capture_queries do
+          loaded = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a
+          loaded.each do |product|
+            described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
+          end
+        end
+
+        # Antipattern 6: per-row VariantPrice / customizable_price lookups
+        # under tiers. The preload `tiers: :alive_prices` plus the
+        # `loaded?` guards on Link#has_customizable_price_option? and
+        # Product::Prices#lowest_tier_price should batch these into the
+        # initial `WHERE variant_id IN (...)` and never fire per-row.
+        per_row_patterns = [
+          [/FROM `prices` WHERE `prices`\.`variant_id` = \d+/, "tier prices (variant_id = N)"],
+          [/FROM `base_variants`.*customizable_price/, "base_variants customizable_price"],
+        ]
+        per_row_patterns.each do |pattern, label|
+          hits = queries.grep(pattern)
+          expect(hits).to be_empty,
             "Expected no per-row #{label} queries, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
