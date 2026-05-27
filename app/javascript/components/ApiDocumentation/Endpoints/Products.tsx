@@ -55,21 +55,36 @@ const UpdateProductResponseFields = () => (
 
 const CustomHtmlDocumentation = () => (
   <div id="custom-html" className="grid gap-4">
-    <h4>Custom HTML</h4>
+    <h4>Custom HTML landing pages</h4>
     <p>
-      Products can store one live custom HTML landing page in the <code>custom_html</code> field.{" "}
-      <code>GET /v2/products/:id</code> returns the field. <code>PUT /v2/products/:id</code> overwrites it, and sending{" "}
-      <code>null</code> or an empty string clears it. Gumroad keeps only the most recent push — no version history. Keep
-      your source HTML under version control if you want to roll back. Authenticate with a Bearer token that has the{" "}
-      <code>edit_products</code> scope.
+      A product can have one custom HTML landing page, stored in its <code>custom_html</code> field. While it's set and
+      the product is published, buyers see it instead of the default product page. Authenticate with a Bearer token that
+      has the <code>edit_products</code> scope.
     </p>
-    <CodeSnippet caption="Agent prompt">
-      {`Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it by \`PUT\`ting the HTML to my product's \`custom_html\` field via the Gumroad API.
-
-Product: https://api.gumroad.com/v2/products/<permalink>
-API token: <user_api_token>
-Docs: https://gumroad.com/api#custom-html`}
-    </CodeSnippet>
+    <ul>
+      <li>
+        <code>GET /v2/products/:id</code> returns the <code>custom_html</code> field.
+      </li>
+      <li>
+        <code>PUT /v2/products/:id</code> sets it; send <code>null</code> or an empty string to clear it.
+      </li>
+      <li>
+        <code>POST /v2/products/:id/preview_custom_html</code> returns the sanitized HTML and a sanitization report
+        without saving — use it to iterate before you publish.
+      </li>
+      <li>
+        Both <code>PUT</code> and preview return a <code>sanitization_report</code> listing what was stripped.
+      </li>
+      <li>
+        A successful <code>PUT</code> also returns <code>previous_custom_html</code> (the prior value, for one-step
+        rollback) and the live <code>landing_url</code>.
+      </li>
+      <li>Only the latest version is stored — there's no history, so keep your source under version control.</li>
+      <li>The HTML is capped at 500,000 characters.</li>
+      <li>
+        Rate limits per token: 30 <code>PUT</code>s/min, 60 previews/min.
+      </li>
+    </ul>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/<permalink> \\
   -X PUT \\
@@ -77,27 +92,36 @@ Docs: https://gumroad.com/api#custom-html`}
   -H "Content-Type: application/json" \\
   -d '{"custom_html":"<main><h1>My landing page</h1></main>"}'`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">{`gumroad products update <permalink> --custom-html ./landing.html`}</CodeSnippet>
-    <p>Security model:</p>
+    <CodeSnippet caption="Gumroad CLI">
+      {`gumroad products page preview <permalink> ./landing.html
+gumroad products page push <permalink> ./landing.html`}
+    </CodeSnippet>
+    <p>
+      Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
+      <code>sandbox="allow-scripts allow-forms"</code>).
+    </p>
+    <p>It can:</p>
     <ul>
+      <li>Run inline JavaScript for animations, scroll effects, sticky headers, and modals.</li>
+      <li>Load scripts from the Tailwind, jsDelivr, and unpkg CDNs.</li>
+      <li>Load images, fonts, and media from any HTTPS host.</li>
+      <li>Submit forms in-page with JavaScript.</li>
+    </ul>
+    <p>It can't:</p>
+    <ul>
+      <li>Read your Gumroad cookies or session — it runs on an opaque origin.</li>
+      <li>Touch or navigate the parent page, or open popups.</li>
       <li>
-        Your HTML is served inside a sandboxed iframe (<code>sandbox="allow-scripts allow-forms"</code>).
+        Make <code>fetch</code>, <code>XHR</code>, or WebSocket requests (<code>connect-src 'none'</code>).
       </li>
-      <li>Inline JS for animations, scroll effects, sticky headers, and modals can run in-page.</li>
       <li>
-        It runs on an opaque origin, so it cannot read your Gumroad cookies or session, touch the parent page, navigate
-        the parent window, or open popups.
-      </li>
-      <li>
-        Scripts cannot make <code>fetch</code>/<code>XHR</code>/WebSocket requests (<code>connect-src 'none'</code>).
-        The page can still load images, fonts, and media from external HTTPS hosts, so treat it as sandboxed rather than
-        fully network-isolated — assume anything a buyer types into a seller-built form could be sent out.
-      </li>
-      <li>External scripts are allowed only from Tailwind, jsDelivr, and unpkg CDNs.</li>
-      <li>
-        Forms work in-page via JS. <code>action=</code> attributes to external URLs are stripped.
+        Submit forms to external URLs — off-site <code>action</code> attributes are stripped.
       </li>
     </ul>
+    <p>
+      Because images and fonts still load from any HTTPS host, treat the page as sandboxed rather than fully
+      network-isolated: a crafted resource URL could carry off anything a buyer types into a seller-built form.
+    </p>
   </div>
 );
 
