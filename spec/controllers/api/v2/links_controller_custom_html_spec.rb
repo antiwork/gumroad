@@ -83,9 +83,12 @@ describe Api::V2::LinksController do
       expect(response).to have_http_status(:unauthorized)
     end
 
-    it "returns 403 when updating another seller's product" do
+    it "does not reveal another seller's product while updating custom_html" do
       put :update, params: { format: :json, access_token: @token.token, id: @other_product.external_id, custom_html: "<section>HTML</section>" }
-      expect(response).to have_http_status(:forbidden)
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "The product was not found." })
+      expect(@other_product.reload.custom_html).to be_nil
     end
 
     it "returns 404 when the id only matches another seller's custom permalink" do
@@ -253,9 +256,11 @@ describe Api::V2::LinksController do
       expect(response).to have_http_status(:unauthorized)
     end
 
-    it "returns 403 when previewing for another seller's product" do
+    it "does not reveal another seller's product while previewing custom_html" do
       post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @other_product.external_id, custom_html: "<section>HTML</section>" }
-      expect(response).to have_http_status(:forbidden)
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "The product was not found." })
     end
 
     it "returns a sanitization_report alongside the sanitized HTML" do
