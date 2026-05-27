@@ -228,7 +228,7 @@ describe User::Posts, :freeze_time do
 
     describe "N+1 query prevention" do
       it "does not issue per-row Link.find_by or per-post seller.sales queries when filtering seller posts with not_bought_products",
-         vcr: { cassette_name: "User_Posts/visible_posts_for/posts_with_shown_on_profile_true" } do
+         vcr: { cassette_name: "User_Posts/visible_posts_for/posts_with_shown_on_profile_true", allow_playback_repeats: true } do
         # Add multiple seller posts that each carry a not_bought_products
         # filter — the un-fixed code calls Link.find_by + seller.sales once
         # per post, which is what we're proving is gone.
