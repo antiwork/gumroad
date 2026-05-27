@@ -177,16 +177,24 @@ describe PaginatedInstallmentsPresenter do
         # Each of these patterns is the per-installment lookup that fires if
         # the include list is dropped or `has_been_blasted?` falls back to
         # `blasts.exists?` instead of using the preloaded collection.
+        #
+        # `:installment_rule` preloads as `installment_id IN (...)` (multi-value)
+        # and `blasts.exists?` only ever appears in the fallback path, so those
+        # patterns must hit zero. `:link` and `:seller` are shared across all
+        # installments in this fixture, so Rails emits a single
+        # `WHERE links.id = N` / `users.id = N` for the eager-load itself —
+        # one such match is the correct preloaded shape, anything more is the
+        # per-row regression we're guarding against.
         per_row_patterns = [
-          [/FROM `installment_rules`.*WHERE `installment_rules`\.`installment_id` = \d+/, "installment_rules (per row)"],
-          [/FROM `links`.*WHERE `links`\.`id` = \d+/, "links (per row)"],
-          [/SELECT 1 AS one FROM `blasts`.*WHERE `blasts`\.`post_id` = \d+/, "blasts.exists? (per row)"],
-          [/FROM `users`.*WHERE `users`\.`id` = \d+/, "users (per row)"],
+          [/FROM `installment_rules`.*WHERE `installment_rules`\.`installment_id` = \d+/, "installment_rules (per row)", 0],
+          [/SELECT 1 AS one FROM `blasts`.*WHERE `blasts`\.`post_id` = \d+/, "blasts.exists? (per row)", 0],
+          [/FROM `links`.*WHERE `links`\.`id` = \d+/, "links (per row)", 1],
+          [/FROM `users`.*WHERE `users`\.`id` = \d+/, "users (per row)", 1],
         ]
-        per_row_patterns.each do |pattern, label|
+        per_row_patterns.each do |pattern, label, max|
           hits = queries.grep(pattern)
-          expect(hits.size).to be <= 1,
-            "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
+          expect(hits.size).to be <= max,
+            "Expected at most #{max} per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
     end
