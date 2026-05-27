@@ -150,11 +150,14 @@ describe ProductPresenter::Card do
 
         # If any caller drops back to `.where` on a preloaded association
         # (Antipattern 1), these patterns will fire once per product.
+        # Note: `custom_domains` is intentionally NOT in this list. The
+        # preload itself issues `WHERE user_id = N` when all products in
+        # the fixture share one creator, which matches a naive regex —
+        # but with only one creator there's no N to multiply against.
         per_row_patterns = [
           [/FROM `prices`.*WHERE `prices`\.`link_id` = \d+/, "prices"],
           [/FROM `base_variants`.*WHERE.*`link_id` = \d+/, "base_variants (skus)"],
           [/FROM `variant_categories`.*WHERE.*`link_id` = \d+/, "variant_categories"],
-          [/FROM `custom_domains`.*WHERE.*`user_id` = \d+/, "custom_domains"],
         ]
         per_row_patterns.each do |pattern, label|
           hits = queries.grep(pattern)
