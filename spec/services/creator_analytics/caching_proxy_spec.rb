@@ -91,6 +91,19 @@ describe CreatorAnalytics::CachingProxy do
       )
     end
 
+    it "loads products only once across multiple cache-miss ranges" do
+      allow(@service).to receive(:use_cache?).and_return(true)
+
+      @dates.values_at(0, 3, 6).each do |date|
+        create(:computed_sales_analytics_day,
+               key: @service.send(:cache_key_for_data, date, by: :date),
+               data: web_data(:date, date, date).to_json)
+      end
+
+      expect(@user).to receive(:products_for_creator_analytics).once.and_call_original
+      @service.data_for_dates(@dates.first, @dates.last, by: :date)
+    end
+
     it "calls original method if cache shouldn't be used" do
       allow(@service).to receive(:use_cache?).and_return(false)
       expect(@service).not_to receive(:fetch_data_for_dates)
@@ -237,7 +250,8 @@ describe CreatorAnalytics::CachingProxy do
       user = create(:user, timezone: "London")
       start_date, end_date = Date.new(2019, 1, 1), Date.new(2019, 1, 7)
       dates = (start_date .. end_date).to_a
-      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:).thrice.and_call_original
+      products = user.products_for_creator_analytics.load
+      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:, products:).thrice.and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_date).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_state).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_referral).and_call_original

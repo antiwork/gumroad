@@ -99,9 +99,12 @@ class CreatorAnalytics::CachingProxy
       dates_to_keys.invert.values_at(*missing_keys)
     end
 
-    # Direct proxy for CreatorAnalytics::Web
+    def products
+      @_products ||= @user.products_for_creator_analytics.load
+    end
+
     def analytics_data(start_date, end_date, by: :date)
-      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
+      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a, products:).public_send("by_#{by}")
     end
 
     # Fetches and caches the analytics data for one specific date

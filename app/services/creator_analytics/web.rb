@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class CreatorAnalytics::Web
-  def initialize(user:, dates:)
+  def initialize(user:, dates:, products: nil)
     @user = user
     @dates = dates
+    @_products = products
   end
 
   def by_date
