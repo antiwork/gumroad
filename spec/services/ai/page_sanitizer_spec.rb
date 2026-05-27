@@ -78,6 +78,14 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include("<p>Stay</p>")
     end
 
+    it "strips meta tags after unwrapping document wrappers" do
+      sanitized = described_class.sanitize(%(<head><meta http-equiv="Content-Security-Policy" content="default-src *"><meta charset="utf-8"></head><p>Stay</p>))
+
+      expect(sanitized).to include("<p>Stay</p>")
+      expect(sanitized).not_to include("<meta")
+      expect(sanitized).not_to include("Content-Security-Policy")
+    end
+
     it "adds sandbox attributes to iframes without one" do
       sanitized = described_class.sanitize(%(<iframe src="https://example.com/embed"></iframe>))
 

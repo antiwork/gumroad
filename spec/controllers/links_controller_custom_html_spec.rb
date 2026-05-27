@@ -196,5 +196,13 @@ describe LinksController, :vcr, type: :controller do
       expect(stored).to include("<h1>Hi</h1>")
       expect(stored).not_to include("evil.com")
     end
+
+    it "stores nil when custom_html sanitizes to an empty string" do
+      post :update, params: { id: product.unique_permalink, custom_html: %(<script src="https://evil.com/x.js"></script>) }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.reload.custom_html).to be_nil
+    end
   end
 end

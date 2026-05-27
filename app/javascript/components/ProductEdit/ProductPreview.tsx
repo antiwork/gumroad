@@ -197,8 +197,8 @@ Command: gumroad products update ${uniquePermalink} --custom-html ./landing.html
         url: Routes.link_path(uniquePermalink),
         data: { custom_html: null },
       });
-      const json: { success?: boolean; message?: string } = await response.json();
-      if (!response.ok || json.success === false) throw new ResponseError(json.message);
+      const json: { success?: boolean; message?: string; error_message?: string } = await response.json();
+      if (!response.ok || json.success === false) throw new ResponseError(json.message ?? json.error_message);
 
       setIsResetOpen(false);
       showAlert("Landing page reset.", "success");

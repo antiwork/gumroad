@@ -338,7 +338,7 @@ class LinksController < ApplicationController
     authorize @product
     begin
       if custom_html_only_update?
-        @product.update!(custom_html: product_permitted_params[:custom_html])
+        @product.update!(custom_html: sanitized_custom_html_param)
         return render json: { success: true }
       end
 
@@ -660,6 +660,12 @@ class LinksController < ApplicationController
 
     def custom_html_only_update?
       product_permitted_params.keys == ["custom_html"]
+    end
+
+    def sanitized_custom_html_param
+      return nil if product_permitted_params[:custom_html].nil?
+
+      Ai::PageSanitizer.sanitize(product_permitted_params[:custom_html]).presence
     end
 
     def prepare_product_page
