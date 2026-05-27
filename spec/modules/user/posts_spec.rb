@@ -305,7 +305,7 @@ describe User::Posts, :freeze_time do
         ensure
           ActiveSupport::Notifications.unsubscribe(cache_sub)
         end
-        not_bought_hits = cache_hit_queries.grep(/FROM `purchases`.*`link_id` = .*`email` = /)
+        not_bought_hits = cache_hit_queries.grep(/FROM `purchases`.*`link_id`.*`email` = /)
         expect(not_bought_hits).to be_empty,
           "Second call with shared cache must issue 0 not_bought_products lookups, got #{not_bought_hits.size}:\n#{not_bought_hits.join("\n")}"
       end
