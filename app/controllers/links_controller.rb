@@ -900,7 +900,7 @@ class LinksController < ApplicationController
       "default-src 'none'",
       "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
       "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
-      "img-src data: blob: https://static-2.gumroad.com https://staging-static-2.gumroad.com https://test-static-2.gumroad.com https://files.gumroad.com https://staging-files.gumroad.com",
+      "img-src data: blob: https:",
       "font-src data: https://fonts.gstatic.com https://fonts.bunny.net",
       "connect-src 'none'",
       "form-action 'self'",
