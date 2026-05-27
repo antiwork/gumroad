@@ -36,6 +36,12 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include(%(<script src="https://cdn.tailwindcss.com"></script>))
     end
 
+    it "allows approved script hosts case-insensitively" do
+      sanitized = described_class.sanitize(%(<script src="https://CDN.tailwindcss.com"></script>))
+
+      expect(sanitized).to include(%(<script src="https://CDN.tailwindcss.com"></script>))
+    end
+
     it "strips script tags from unapproved hosts" do
       sanitized = described_class.sanitize(%(<script src="https://evil.com/x.js"></script><p>Safe</p>))
 
@@ -48,6 +54,14 @@ describe Ai::PageSanitizer do
 
       expect(sanitized).to include("<a>Click</a>")
       expect(sanitized).not_to include("javascript:")
+    end
+
+    it "strips link targets that navigate the parent browsing context" do
+      sanitized = described_class.sanitize(%(<a href="https://example.com" target="_top">Top</a><a href="https://example.com" target="_parent">Parent</a><a href="https://example.com" target="_blank">Blank</a>))
+
+      expect(sanitized).not_to include(%(target="_top"))
+      expect(sanitized).not_to include(%(target="_parent"))
+      expect(sanitized).to include(%(target="_blank"))
     end
 
     it "strips deeply encoded javascript URLs from links" do

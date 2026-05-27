@@ -126,6 +126,7 @@ class Ai::PageSanitizer
 
   def self.attribute_removal_reason(name, value)
     return "attribute not in allowlist" unless allowed_attribute?(name)
+    return unsafe_target_reason(value) if name.downcase == "target"
     return srcset_url_removal_reason(value) if SRCSET_ATTRIBUTES.include?(name.downcase)
     return dangerous_url_reason(value) if dangerous_url_attribute?(name, value)
 
@@ -220,9 +221,13 @@ class Ai::PageSanitizer
     return false if url.blank?
 
     uri = URI.parse(url)
-    uri.scheme == "https" && hosts.include?(uri.host)
+    uri.scheme == "https" && hosts.include?(uri.host&.downcase)
   rescue URI::InvalidURIError
     false
+  end
+
+  def self.unsafe_target_reason(value)
+    %w[_parent _top _unfencedtop].include?(value.to_s.strip.downcase) ? "target navigation blocked" : nil
   end
 
   def self.normalize_url(value)
@@ -238,5 +243,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
+  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :unsafe_target_reason, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end
