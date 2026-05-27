@@ -128,6 +128,16 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include("<h1>Live landing page</h1>")
     end
 
+    it "404s when requested through another seller's custom domain" do
+      custom_domain = create(:custom_domain, user: create(:user), domain: "seller-a.example.com")
+      @request.host = custom_domain.domain
+      allow(controller).to receive(:fetch_product_for_show) { controller.instance_variable_set(:@product, product) }
+
+      expect do
+        get :landing_iframe_content, params: { id: product.unique_permalink }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+
     it "interpolates data-gumroad-field markers with live product values" do
       product.update!(custom_html: %(<h1 data-gumroad-field="name">placeholder</h1><a data-gumroad-action="buy" href="#">Buy</a>))
 
@@ -203,6 +213,16 @@ describe LinksController, :vcr, type: :controller do
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(product.reload.custom_html).to be_nil
+    end
+
+    it "locks the product row before updating custom_html" do
+      expect_any_instance_of(Link).to receive(:with_lock).and_call_original
+
+      post :update, params: { id: product.unique_permalink, custom_html: "<section>Updated</section>" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.reload.custom_html).to eq("<section>Updated</section>")
     end
   end
 end

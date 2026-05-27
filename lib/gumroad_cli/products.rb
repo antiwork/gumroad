@@ -21,12 +21,21 @@ module GumroadCli
         raise Thor::Error, "Pass --custom-html with a file path, or --custom-html '' to clear custom_html."
       end
 
-      custom_html = options["custom_html"]
-      payload = { custom_html: custom_html == "" ? "" : File.read(custom_html) }
+      payload = { custom_html: custom_html_payload(options["custom_html"]) }
       print_json(request(:put, product_uri(permalink), payload))
     end
 
     no_commands do
+      def custom_html_payload(path)
+        return "" if path == ""
+
+        File.read(path)
+      rescue Errno::ENOENT
+        raise Thor::Error, "Custom HTML file not found: #{path}"
+      rescue Errno::EACCES, Errno::EISDIR
+        raise Thor::Error, "Custom HTML file is not readable: #{path}"
+      end
+
       def product_uri(permalink)
         URI("#{api_base_url}/products/#{URI.encode_www_form_component(permalink)}")
       end

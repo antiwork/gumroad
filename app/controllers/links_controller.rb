@@ -27,7 +27,7 @@ class LinksController < ApplicationController
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :check_if_needs_redirect, only: [:show]
-  before_action :ensure_domain_belongs_to_seller, only: [:show]
+  before_action :ensure_domain_belongs_to_seller, only: %i[show landing_iframe_content]
   before_action :render_custom_html_if_present, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
@@ -338,7 +338,9 @@ class LinksController < ApplicationController
     authorize @product
     begin
       if custom_html_only_update?
-        @product.update!(custom_html: sanitized_custom_html_param)
+        @product.with_lock do
+          @product.update!(custom_html: sanitized_custom_html_param)
+        end
         return render json: { success: true }
       end
 
