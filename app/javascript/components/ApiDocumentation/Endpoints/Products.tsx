@@ -58,10 +58,10 @@ const CustomHtmlDocumentation = () => (
     <h4>Custom HTML</h4>
     <p>
       Products can store one live custom HTML landing page in the <code>custom_html</code> field.{" "}
-      <code>GET /v2/products/:id</code> returns the field.{" "}
-      <code>PUT /v2/products/:id</code> overwrites it, and sending <code>null</code> or an empty string clears it.
-      Gumroad keeps only the most recent push — no version history. Keep your source HTML under version control if you
-      want to roll back. Authenticate with a Bearer token that has the <code>edit_products</code> scope.
+      <code>GET /v2/products/:id</code> returns the field. <code>PUT /v2/products/:id</code> overwrites it, and sending{" "}
+      <code>null</code> or an empty string clears it. Gumroad keeps only the most recent push — no version history. Keep
+      your source HTML under version control if you want to roll back. Authenticate with a Bearer token that has the{" "}
+      <code>edit_products</code> scope.
     </p>
     <CodeSnippet caption="Agent prompt">
       {`Take my Gumroad product and build an awesome, unique, specific landing page optimized for conversion that supports light mode, dark mode, and is fully responsive and accessible. Then publish it by \`PUT\`ting the HTML to my product's \`custom_html\` field via the Gumroad API.
@@ -85,8 +85,13 @@ Docs: https://gumroad.com/api#custom-html`}
       </li>
       <li>Inline JS for animations, scroll effects, sticky headers, and modals can run in-page.</li>
       <li>
-        It cannot access cookies or auth, fetch external URLs because CSP sets <code>connect-src 'none'</code>,
-        navigate the parent window, open popups, or auto-redirect.
+        It runs on an opaque origin, so it cannot read your Gumroad cookies or session, touch the parent page, navigate
+        the parent window, or open popups.
+      </li>
+      <li>
+        Scripts cannot make <code>fetch</code>/<code>XHR</code>/WebSocket requests (<code>connect-src 'none'</code>).
+        The page can still load images, fonts, and media from external HTTPS hosts, so treat it as sandboxed rather than
+        fully network-isolated — assume anything a buyer types into a seller-built form could be sent out.
       </li>
       <li>External scripts are allowed only from Tailwind, jsDelivr, and unpkg CDNs.</li>
       <li>
@@ -376,7 +381,10 @@ export const UpdateProduct = () => (
       <ApiParameter name="tags" description="(optional) array of tag strings; full replacement" />
       <ApiParameter name="custom_receipt" description="(optional)" />
       <ApiParameter name="custom_summary" description="(optional)" />
-      <ApiParameter name="custom_html" description="(optional) custom landing page HTML; null or empty string clears it" />
+      <ApiParameter
+        name="custom_html"
+        description="(optional) custom landing page HTML; null or empty string clears it"
+      />
       <ApiParameter name="cover_ids" description="(optional) array of cover GUIDs in display order" />
       <ApiParameter name="rich_content" description="(optional) array of pages; full replacement" />
       <ApiParameter
