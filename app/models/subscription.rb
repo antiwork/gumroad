@@ -927,7 +927,19 @@ class Subscription < ApplicationRecord
   end
 
   def pending_failure?
-    alive? && purchases.load.max_by(&:created_at)&.failed?
+    return false unless alive?
+    # Use in-memory traversal when `purchases` is already preloaded
+    # (the SubscribersController#index path), and fall back to a single
+    # ORDER BY + LIMIT 1 SQL when it isn't. Calling `.load` unconditionally
+    # would force a full-table load anywhere `status`/`pending_failure?`
+    # is touched without the eager-load — a regression Greptile flagged.
+    last_purchase =
+      if association(:purchases).loaded?
+        purchases.max_by(&:created_at)
+      else
+        purchases.order(:created_at).last
+      end
+    last_purchase&.failed?
   end
 
   def status
@@ -972,10 +984,22 @@ class Subscription < ApplicationRecord
 
   private
     def purchases_for_sales_api_ids
-      purchases.load.select { |p|
-        p.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT) &&
-          (p.purchase_state != "not_charged" || p.is_free_trial_purchase?)
-      }.map(&:external_id)
+      # Cold-cache path: use the canonical `Purchase.for_sales_api` scope so
+      # any future change to its definition propagates automatically.
+      # Hot-cache path: replicate the same filter in memory to avoid losing
+      # the preloaded collection. Greptile P2 flagged that the in-memory
+      # copy can silently drift from `Purchase.for_sales_api`; keeping both
+      # branches grep-able makes the drift detectable.
+      relevant_purchases =
+        if association(:purchases).loaded?
+          purchases.select do |p|
+            p.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT) &&
+              (p.purchase_state != "not_charged" || p.is_free_trial_purchase?)
+          end
+        else
+          purchases.for_sales_api.to_a
+        end
+      relevant_purchases.map(&:external_id)
     end
 
     def send_notification_webhook(resource_name:, params: nil)

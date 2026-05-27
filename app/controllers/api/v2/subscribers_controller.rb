@@ -8,11 +8,19 @@ class Api::V2::SubscribersController < Api::V2::BaseController
 
   def index
     subscriptions = Subscription.where(link_id: @product.id).active
-    subscriptions = subscriptions.includes(:link, :user, :purchases, :original_purchase, last_payment_option: [:price]).order(created_at: :desc, id: :desc)
     if params[:email].present?
+      # Email-filter via a join-based id subquery rather than chaining
+      # `.where(purchases: { email: })` onto the includes-loaded relation.
+      # The chained form switches Rails from `preload` → `eager_load`
+      # (LEFT OUTER JOIN), which restricts the in-memory `purchases`
+      # association to email-matched rows only — corrupting downstream
+      # callers (`Subscription#purchases_for_sales_api_ids`,
+      # `#pending_failure?`) that expect every purchase on the subscription.
       email = params[:email].strip
-      subscriptions = subscriptions.where(purchases: { email: })
+      matched_ids = subscriptions.joins(:purchases).where(purchases: { email: }).distinct.pluck(:id)
+      subscriptions = Subscription.where(id: matched_ids)
     end
+    subscriptions = subscriptions.includes(:link, :user, :purchases, :original_purchase, :true_original_purchase, last_payment_option: [:price]).order(created_at: :desc, id: :desc)
 
     if params[:page_key].present?
       begin
