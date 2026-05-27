@@ -66,6 +66,7 @@ class CollabProductsPagePresenter
       elsif only == "products"
         collabs = collabs.non_membership
       end
+      collabs = collabs.includes(:alive_prices, :tiers, :skus, variant_categories_alive: :alive_variants) if only.present?
       collabs = collabs.where("links.name like ?", "%#{query}%") if query.present?
       collabs
     end

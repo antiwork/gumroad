@@ -108,7 +108,8 @@ class DashboardProductsPagePresenter
     def paginated_memberships
       memberships = seller.products.membership.visible
       memberships = archived? ? memberships.archived : memberships.not_archived
-      memberships = memberships.where("name like ?", "%#{query}%") if query.present?
+      memberships = memberships.includes(:alive_prices, :tiers, :skus, variant_categories_alive: :alive_variants)
+      memberships = memberships.where("links.name like ?", "%#{query}%") if query.present?
 
       sort_and_paginate_products(
         key: memberships_sort&.dig(:key),
@@ -124,8 +125,10 @@ class DashboardProductsPagePresenter
       products = seller
         .products
         .includes([
-                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                    :alive_prices, :tiers, :skus,
+                    { variant_categories_alive: :alive_variants },
+                    { thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
+                    { thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
                   ])
         .non_membership
         .visible
