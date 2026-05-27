@@ -186,7 +186,7 @@ class LinksController < ApplicationController
   end
 
   def landing_iframe_content
-    return head :not_found if @product.blank? || @product.custom_html.blank?
+    return head :not_found unless custom_html_visible?
 
     # Opt out of SecureHeaders' default CSP so the strict, seller-scoped CSP we
     # set below survives. Without this, the middleware overwrites our header
@@ -337,6 +337,11 @@ class LinksController < ApplicationController
   def update
     authorize @product
     begin
+      if custom_html_only_update?
+        @product.update!(custom_html: product_permitted_params[:custom_html])
+        return render json: { success: true }
+      end
+
       ActiveRecord::Base.transaction do
         @product.assign_attributes(product_permitted_params.except(
           :products,
@@ -645,6 +650,18 @@ class LinksController < ApplicationController
       end
     end
 
+    def custom_html_visible?
+      @product.present? && @product.custom_html.present? && (@product.alive? || can_preview_custom_html?)
+    end
+
+    def can_preview_custom_html?
+      logged_in_user.present? && (logged_in_user == @product.user || logged_in_user.collaborator_for?(@product) || logged_in_user.is_team_member?)
+    end
+
+    def custom_html_only_update?
+      product_permitted_params.keys == ["custom_html"]
+    end
+
     def prepare_product_page
       @user                  = @product.user
       set_meta_tag(title: @product.name)
@@ -907,8 +924,7 @@ class LinksController < ApplicationController
     ].join("; ") + ";"
 
     def render_custom_html_if_present
-      return if @product.blank?
-      return if @product.custom_html.blank?
+      return unless custom_html_visible?
       # Buyer clicked Buy — fall through to the show action's checkout-bearing
       # product page so the existing ?wanted=true flow handles the redirect.
       return if params[:wanted] == "true"

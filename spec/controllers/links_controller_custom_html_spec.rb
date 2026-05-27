@@ -70,6 +70,15 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
 
+    it "falls back to the default product page when the product is unpublished" do
+      product.update!(purchase_disabled_at: Time.current)
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response.body).not_to include("<h1>Live landing page</h1>")
+      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+    end
+
     it "skips the wrapper when ?wanted=true and lets the checkout redirect fire" do
       get :show, params: { id: product.unique_permalink, wanted: "true" }
       expect(response).to be_redirect
@@ -99,6 +108,24 @@ describe LinksController, :vcr, type: :controller do
       product.update!(custom_html: nil)
       get :landing_iframe_content, params: { id: product.unique_permalink }
       expect(response).to have_http_status(:not_found)
+    end
+
+    it "404s when the product is unpublished" do
+      product.update!(purchase_disabled_at: Time.current)
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "allows the seller to preview unpublished custom_html" do
+      product.update!(purchase_disabled_at: Time.current)
+      sign_in seller
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.body).to include("<h1>Live landing page</h1>")
     end
 
     it "interpolates data-gumroad-field markers with live product values" do
@@ -142,13 +169,29 @@ describe LinksController, :vcr, type: :controller do
       post :update, params: { id: product.unique_permalink, custom_html: nil }
 
       expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
       expect(product.reload.custom_html).to be_nil
+    end
+
+    it "does not clear other product fields during a custom_html-only reset" do
+      product.update!(description: "Existing description")
+      product.save_custom_attributes([{ name: "Material", value: "Cotton" }])
+      product.save_tags!(["launch"])
+
+      post :update, params: { id: product.unique_permalink, custom_html: nil }
+
+      product.reload
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.description).to eq("Existing description")
+      expect(product.custom_attributes).to eq([{ "name" => "Material", "value" => "Cotton" }])
+      expect(product.tags.pluck(:name)).to eq(["launch"])
     end
 
     it "sanitizes seller-supplied custom_html on the internal update path" do
       post :update, params: { id: product.unique_permalink, custom_html: %(<section><script src="https://evil.com/x.js"></script><h1>Hi</h1></section>) }
 
       expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
       stored = product.reload.custom_html
       expect(stored).to include("<h1>Hi</h1>")
       expect(stored).not_to include("evil.com")
