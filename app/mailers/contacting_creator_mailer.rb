@@ -188,9 +188,10 @@ class ContactingCreatorMailer < ApplicationMailer
       end
   end
 
-  def credit_notification(user_id, amount_cents)
+  def credit_notification(user_id, amount_cents, reason = nil)
     @seller = User.find_by(id: user_id)
     @amount = Money.new(amount_cents * get_rate(@seller.currency_type).to_f, @seller.currency_type.to_sym).format(no_cents_if_whole: true, symbol: true)
+    @reason = reason
     @subject = "You've received Gumroad credit!"
   end
 

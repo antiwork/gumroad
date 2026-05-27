@@ -25,12 +25,13 @@ class Credit < ApplicationRecord
 
   attr_json_data_accessor :stripe_loan_paydown_id
 
-  def self.create_for_credit!(user:, amount_cents:, crediting_user:)
+  def self.create_for_credit!(user:, amount_cents:, crediting_user:, reason: nil)
     credit = new
     credit.user = user
     credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
     credit.amount_cents = amount_cents
     credit.crediting_user = crediting_user
+    credit.reason = reason
     credit.save!
 
     balance_transaction_amount = BalanceTransaction::Amount.new(
@@ -414,14 +415,14 @@ class Credit < ApplicationRecord
   end
 
   def notify_user
-    ContactingCreatorMailer.credit_notification(user.id, amount_cents).deliver_later(queue: "critical")
+    ContactingCreatorMailer.credit_notification(user.id, amount_cents, reason).deliver_later(queue: "critical")
   end
 
   def add_comment
     return if fee_retention_refund.present?
 
     comment_attrs = {
-      content: "issued #{formatted_dollar_amount(amount_cents)} credit.",
+      content: "issued #{formatted_dollar_amount(amount_cents)} credit#{" — #{reason}" if reason.present?}.",
       comment_type: :credit
     }
     if crediting_user

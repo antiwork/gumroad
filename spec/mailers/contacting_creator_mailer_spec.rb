@@ -318,6 +318,11 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq "You've received Gumroad credit!"
       expect(mail.body.encoded).to include "$2"
     end
+
+    it "includes the reason in the body when one is given" do
+      mail = ContactingCreatorMailer.credit_notification(@user.id, 200, "Thanks for reporting the checkout bug")
+      expect(mail.body.encoded).to include "Thanks for reporting the checkout bug"
+    end
   end
 
   describe "gumroad_day_credit_notification" do

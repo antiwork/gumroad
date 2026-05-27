@@ -187,7 +187,8 @@ describe Admin::UsersController, type: :controller, inertia: true do
       @user = create(:user)
       @params = { external_id: @user.external_id,
                   credit: {
-                    credit_amount: "100"
+                    credit_amount: "100",
+                    reason: "Goodwill for reported checkout bug"
                   } }
     end
 
@@ -195,6 +196,18 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect { post :add_credit, params: @params }.to change { Credit.count }.from(0).to(1)
       expect(Credit.last.amount_cents).to eq(10_000)
       expect(Credit.last.user).to eq(@user)
+    end
+
+    it "stores the reason on the credit" do
+      post :add_credit, params: @params
+      expect(Credit.last.reason).to eq("Goodwill for reported checkout bug")
+    end
+
+    it "fails when no reason is given" do
+      @params[:credit].delete(:reason)
+      expect { post :add_credit, params: @params }.not_to change { Credit.count }
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to eq("Reason is required")
     end
 
     it "creates a credit always associated with a gumroad merchant account" do
@@ -208,21 +221,23 @@ describe Admin::UsersController, type: :controller, inertia: true do
     it "successfully creates credits even with smaller amounts" do
       @params = { external_id: @user.external_id,
                   credit: {
-                    credit_amount: ".04"
+                    credit_amount: ".04",
+                    reason: "Goodwill for reported checkout bug"
                   } }
       expect { post :add_credit, params: @params }.to change { Credit.count }.from(0).to(1)
       expect(Credit.last.amount_cents).to eq(4)
       expect(Credit.last.user).to eq(@user)
     end
 
-    it "sends notification to user" do
+    it "sends notification to user with the reason" do
       @params = { external_id: @user.external_id,
                   credit: {
-                    credit_amount: ".04"
+                    credit_amount: ".04",
+                    reason: "Goodwill for reported checkout bug"
                   } }
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
-      expect(ContactingCreatorMailer).to receive(:credit_notification).with(@user.id, 4).and_return(mail_double)
+      expect(ContactingCreatorMailer).to receive(:credit_notification).with(@user.id, 4, "Goodwill for reported checkout bug").and_return(mail_double)
       post :add_credit, params: @params
     end
   end

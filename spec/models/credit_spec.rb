@@ -44,6 +44,32 @@ describe Credit do
       credit = Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first)
       expect(credit.balance.merchant_account).to eq(MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id))
     end
+
+    it "stores the reason on the credit" do
+      credit = Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
+      expect(credit.reason).to eq("Goodwill for reported checkout bug")
+    end
+
+    it "includes the reason in the comment" do
+      Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
+      expect(user.reload.comments.last.content).to eq("issued $10 credit — Goodwill for reported checkout bug.")
+    end
+
+    it "omits the dash when no reason is given" do
+      Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first)
+      expect(user.reload.comments.last.content).to eq("issued $10 credit.")
+    end
+  end
+
+  describe "#notify_user" do
+    let(:user) { create(:user) }
+
+    it "sends the credit notification including the reason" do
+      credit = Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
+      mailer = double(deliver_later: true)
+      expect(ContactingCreatorMailer).to receive(:credit_notification).with(user.id, 1000, "Goodwill for reported checkout bug").and_return(mailer)
+      credit.notify_user
+    end
   end
 
   describe "create_for_dispute_won!" do
