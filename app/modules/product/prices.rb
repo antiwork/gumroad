@@ -321,15 +321,30 @@ module Product::Prices
       # 1. there are multiple tiers, or
       # 2. any tiers have PWYW enabled, or
       # 3. there's only 1 tier but it has multiple prices
-      tiers.size > 1 || tiers.where(customizable_price: true).exists? || (default_tier.present? && default_tier.prices.alive.is_buy.size > 1)
+      multiple_tier_prices =
+        if default_tier.present? && default_tier.association(:alive_prices).loaded?
+          default_tier.alive_prices.count(&:is_buy?) > 1
+        else
+          default_tier.present? && default_tier.prices.alive.is_buy.size > 1
+        end
+      tiers.size > 1 || tiers.where(customizable_price: true).exists? || multiple_tier_prices
     end
 
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
-      prices = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
-      prices = prices.where(recurrence: subscription_duration) if for_default_duration
-      prices.order("price_cents asc").take ||
+      lowest =
+        if association(:tiers).loaded? && tiers.all? { |t| t.association(:alive_prices).loaded? }
+          candidates = tiers.flat_map(&:alive_prices).select(&:is_buy?)
+          candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
+          candidates.min_by(&:price_cents)
+        else
+          relation = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
+          relation = relation.where(recurrence: subscription_duration) if for_default_duration
+          relation.order("price_cents asc").take
+        end
+
+      lowest ||
         default_tier&.prices&.is_buy&.build(price_cents: 0, recurrence: subscription_duration) ||
         VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
     end
@@ -339,11 +354,21 @@ module Product::Prices
       # Mirrors `current_base_variants`: SKUs attached directly to the link
       # (default SKU has price_difference_cents: 0 for physical products) plus
       # alive variants under each alive variant category. Walks preloaded
-      # associations to avoid N+1; presenters that need this performance must
-      # `includes(:skus, variant_categories_alive: :alive_variants)`.
-      candidates = skus.select(&:alive?) +
-                   variant_categories_alive.flat_map(&:alive_variants)
-      candidates.min_by { |v| v.price_difference_cents.to_i }&.price_difference_cents
+      # associations when available to avoid N+1; otherwise falls through to
+      # a single batched aggregate so non-card callers
+      # (DashboardProductsPagePresenter#display_price_cents,
+      # CollabProductsPagePresenter#display_price_cents,
+      # Product::StructuredData#minimum_offer_price_cents) don't pay a
+      # per-category N+1.
+      if association(:variant_categories_alive).loaded? &&
+         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? } &&
+         association(:skus).loaded?
+        candidates = skus.select(&:alive?) +
+                     variant_categories_alive.flat_map(&:alive_variants)
+        candidates.map(&:price_difference_cents).compact.min
+      else
+        current_base_variants.minimum(:price_difference_cents)
+      end
     end
 
     def display_recurrence

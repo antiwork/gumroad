@@ -1050,7 +1050,12 @@ class Link < ApplicationRecord
   end
 
   def has_customizable_price_option?
-    is_tiered_membership? ? tiers.alive.exists?(customizable_price: true) : customizable_price?
+    return customizable_price? unless is_tiered_membership?
+    if association(:tiers).loaded?
+      tiers.any? { |t| t.alive? && t.customizable_price? }
+    else
+      tiers.alive.exists?(customizable_price: true)
+    end
   end
 
   def recurrence_price_enabled?(recurrence)

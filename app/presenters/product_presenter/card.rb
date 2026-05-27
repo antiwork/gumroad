@@ -5,8 +5,9 @@ class ProductPresenter::Card
   include ProductsHelper
 
   ASSOCIATIONS = [
-    :alive_prices, :product_review_stat, :tiers, :default_offer_code, :skus,
+    :alive_prices, :product_review_stat, :default_offer_code, :skus,
     {
+      tiers: :alive_prices,
       user: [:avatar_attachment, :avatar_blob, :custom_domain],
       variant_categories_alive: :alive_variants,
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
