@@ -130,7 +130,7 @@ class ContentModeration::Strategies::PromptStrategy
     else
       Result.new(status: "compliant", reasoning: [])
     end
-  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
+  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
     Rails.logger.warn("ContentModeration::PromptStrategy timeout: #{e.class} - #{e.message}")
     Result.new(status: "compliant", reasoning: [])
   rescue StandardError => e
@@ -161,7 +161,7 @@ class ContentModeration::Strategies::PromptStrategy
     rescue Faraday::BadRequestError => e
       notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !preset[:skip_images])
       { status: "compliant", reasoning: "" }
-    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
+    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
       Rails.logger.warn("ContentModeration::PromptStrategy preset timeout on #{preset[:name]}: #{e.class} - #{e.message}")
       { status: "compliant", reasoning: "" }
     rescue StandardError => e
@@ -195,7 +195,7 @@ class ContentModeration::Strategies::PromptStrategy
     rescue Faraday::BadRequestError => e
       notify_openai_rejection(e, stage: "uncertainty_check", images_sent: false)
       false
-    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
+    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
       Rails.logger.warn("ContentModeration::PromptStrategy uncertainty check timeout: #{e.class} - #{e.message}")
       false
     rescue StandardError => e
