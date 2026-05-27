@@ -3,6 +3,11 @@
 require "spec_helper"
 
 describe "Rack::Attack throttle", type: :request do
+  def reset_rack_attack!
+    Rack::Attack.cache.store.flushdb
+    Rack::Attack.reset!
+  end
+
   before do
     allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(VALID_REQUEST_HOSTS.first)
   end
@@ -18,8 +23,8 @@ describe "Rack::Attack throttle", type: :request do
   end
 
   describe "PUT /api/v2/products/:id per-token throttle" do
-    before { Rack::Attack.cache.store.flushdb }
-    after { Rack::Attack.cache.store.flushdb }
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
 
     it "throttles past 30 PUTs/min per token even when the source IP rotates" do
       user = create(:user)
@@ -43,8 +48,8 @@ describe "Rack::Attack throttle", type: :request do
   end
 
   describe "POST /api/v2/products/:id/preview_custom_html per-token throttle" do
-    before { Rack::Attack.cache.store.flushdb }
-    after { Rack::Attack.cache.store.flushdb }
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
 
     it "throttles past 60 preview requests/min per token even when the source IP rotates" do
       user = create(:user)
