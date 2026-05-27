@@ -115,7 +115,7 @@ class WishlistPresenter
       pagination, wishlist_products = pagy(wishlist.alive_wishlist_products, page:, limit: PER_PAGE)
 
       paginated_products = wishlist_products
-      .includes(product: ProductPresenter::ASSOCIATIONS_FOR_CARD)
+      .includes(product: ProductPresenter::ASSOCIATIONS_FOR_CARD, variant: [:link, { variant_category: :link }])
       .map do |wishlist_product|
         public_item_props(
           wishlist_product:,
