@@ -143,7 +143,11 @@ module WithFiltering
       if permalink_to_link_id
         not_bought_products.filter_map { |p| permalink_to_link_id[p] }
       else
-        Array.wrap(Link.find_by(unique_permalink: not_bought_products)&.id).compact
+        # `find_by` would only resolve ONE id when `not_bought_products`
+        # contains multiple permalinks (Rails appends `LIMIT 1`). Use
+        # `where(...).pluck(:id)` so the fallback matches the cache path,
+        # which uses `filter_map` across all permalinks.
+        Link.where(unique_permalink: not_bought_products).pluck(:id)
       end
     else
       []
