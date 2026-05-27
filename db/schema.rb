@@ -1358,6 +1358,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_30_000002) do
     t.index ["purchaser_id"], name: "index_orders_on_purchaser_id"
   end
 
+  create_table "pages", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "pageable_type", null: false
+    t.bigint "pageable_id", null: false
+    t.text "custom_html", size: :long
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["pageable_type", "pageable_id"], name: "index_pages_on_pageable", unique: true
+  end
+
   create_table "payment_options", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.integer "subscription_id"
     t.integer "price_id"
@@ -2018,9 +2027,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_30_000002) do
     t.bigint "created_by_id"
     t.datetime "executed_at"
     t.bigint "payout_amount_cents", null: false
-    t.string "processor"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "processor"
     t.index ["created_by_id"], name: "index_scheduled_payouts_on_created_by_id"
     t.index ["status", "scheduled_at"], name: "index_scheduled_payouts_on_status_and_scheduled_at"
     t.index ["user_id"], name: "index_scheduled_payouts_on_user_id"

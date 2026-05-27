@@ -14,16 +14,17 @@ class Api::V2::LinksController < Api::V2::BaseController
   RESULTS_PER_PAGE = 10
 
   SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
+    :page,
     :ordered_alive_product_files,
     :alive_rich_contents,
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
-  before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
 
   def index
     products = current_resource_owner.products.visible.includes(
@@ -214,6 +215,14 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
+    if params.key?(:custom_html) && !Feature.active?(:custom_html_pages, current_resource_owner)
+      return render_response(false, message: "You do not have access to custom HTML pages.")
+    end
+
+    if params.key?(:custom_html) && !params[:custom_html].nil? && !params[:custom_html].is_a?(String)
+      return render_response(false, message: "custom_html must be a string.")
+    end
+
     if params.key?(:tags)
       if !params[:tags].is_a?(Array) || params[:tags].any? { |t| !t.respond_to?(:to_str) }
         return render_response(false, message: "tags must be an array of strings.")
@@ -293,8 +302,15 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "rich_content must be an array of content page objects.")
     end
 
+    previous_custom_html = nil
+    sanitization_report = nil
     begin
       ActiveRecord::Base.transaction do
+        # Lock the product row so concurrent custom_html PUTs serialize their
+        # build_page calls — otherwise they race against the pages unique
+        # index. Must precede assign_attributes — lock! raises on a dirty record.
+        @product.lock! if params.key?(:custom_html)
+
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
@@ -324,6 +340,18 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         if params.key?(:custom_summary)
           @product.json_data["custom_summary"] = params[:custom_summary]
+        end
+
+        if params.key?(:custom_html)
+          previous_custom_html = @product.custom_html
+          if params[:custom_html].blank?
+            @product.custom_html = nil
+            sanitization_report = Ai::PageSanitizer.empty_report
+          else
+            result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
+            @product.custom_html = result.html.presence
+            sanitization_report = result.report
+          end
         end
 
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
@@ -394,12 +422,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "One or more numeric values are out of range.")
     end
 
+    additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
     offer_code_warning = check_offer_code_validity
-    if offer_code_warning
-      success_with_object(:product, @product, warning: offer_code_warning)
-    else
-      success_with_product(@product)
-    end
+    additional_info[:warning] = offer_code_warning if offer_code_warning
+    success_with_object(:product, @product, additional_info)
   end
 
   def disable
@@ -425,6 +451,31 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   def destroy
     success_with_product if @product.delete!
+  end
+
+  # Dry-run sanitize: returns what `custom_html` would look like after the
+  # sanitizer runs, without writing. Lets agents iterate on prompts without
+  # rewriting the live page every attempt. Mirrors `update`'s blank-to-nil
+  # normalization so the dry-run and the real PUT agree on edge cases like
+  # input that sanitizes entirely to an empty string.
+  def preview_custom_html
+    return render_response(false, message: "You do not have access to custom HTML pages.") unless Feature.active?(:custom_html_pages, current_resource_owner)
+    return render_response(false, message: "custom_html is required.") unless params.key?(:custom_html)
+
+    custom_html = params[:custom_html]
+    return render_response(false, message: "custom_html must be a string.") unless custom_html.nil? || custom_html.is_a?(String)
+
+    result = Ai::PageSanitizer.sanitize_with_report(custom_html)
+    sanitized = result.html.presence
+    candidate_page = Page.new(pageable: @product, custom_html: sanitized)
+    candidate_page.validate
+    errors = candidate_page.errors.where(:custom_html)
+
+    if errors.any?
+      render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)
+    else
+      render_response(true, custom_html: sanitized, sanitization_report: result.report)
+    end
   end
 
   private

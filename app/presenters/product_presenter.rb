@@ -110,6 +110,7 @@ class ProductPresenter
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
+        custom_html: product.custom_html,
         custom_view_content_button_text: product.custom_view_content_button_text,
         custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
         custom_receipt_text: product.custom_receipt_text,
@@ -265,6 +266,7 @@ class ProductPresenter
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
       price_checker_enabled: Feature.active?(:price_checker, product.user),
+      custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
     }

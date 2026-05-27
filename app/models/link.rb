@@ -91,6 +91,17 @@ class Link < ApplicationRecord
   has_many :prices
   has_many :alive_prices, -> { alive }, class_name: "Price"
   has_one :installment_plan, -> { alive }, class_name: "ProductInstallmentPlan"
+  has_one :page, as: :pageable, dependent: :destroy, autosave: true
+  delegate :custom_html, to: :page, allow_nil: true
+
+  def custom_html=(value)
+    if value.blank?
+      page.custom_html = nil if page.present?
+      return
+    end
+
+    (page || build_page).custom_html = value
+  end
   has_many :sales, class_name: "Purchase"
   has_many :orders, through: :sales, source: :order
   has_many :sold_calls, through: :sales, source: :call
@@ -1347,7 +1358,7 @@ class Link < ApplicationRecord
     def clear_featured_product_sections!
       SellerProfileFeaturedProductSection
         .where(seller_id: user_id)
-        .where(%q{CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?}, id)
+        .where('CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?', id)
         .find_each { |section| section.update!(json_data: section.json_data.except("featured_product_id")) }
     end
 

@@ -13,22 +13,23 @@ class LinksController < ApplicationController
 
 
 
-  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
+  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count landing_iframe_content].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
-  before_action :fetch_product_for_show, only: :show
-  before_action :check_banned, only: :show
+  before_action :fetch_product_for_show, only: %i[show landing_iframe_content]
+  before_action :check_banned, only: %i[show landing_iframe_content]
+  before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content]
   before_action :set_x_robots_tag_header, only: :show
   before_action :check_payment_details, only: :index
 
   before_action :set_affiliate_cookie, only: [:show]
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
-  before_action :ensure_seller_is_not_deleted, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
+  before_action :ensure_domain_belongs_to_seller, only: %i[show landing_iframe_content]
+  before_action :render_custom_html_if_present, only: [:show]
   before_action :prepare_product_page, only: %i[show]
-  before_action :ensure_domain_belongs_to_seller, only: [:show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
@@ -184,6 +185,22 @@ class LinksController < ApplicationController
     }
   end
 
+  def landing_iframe_content
+    return head :not_found unless custom_html_visible?
+
+    # Opt out of SecureHeaders' default CSP so the strict, seller-scoped CSP we
+    # set below survives. Without this, the middleware overwrites our header
+    # with the app default (no 'unsafe-inline'), silently blocking the seller's
+    # inline scripts. X-Frame-Options and Referrer-Policy aren't managed by
+    # SecureHeaders here, so setting those directly is fine.
+    SecureHeaders.opt_out_of_header(request, :csp)
+    response.set_header("Content-Security-Policy", CUSTOM_HTML_CSP)
+    response.set_header("X-Frame-Options", "SAMEORIGIN")
+    response.set_header("Referrer-Policy", "no-referrer")
+    interpolated = Pages::Interpolator.interpolate(@product.custom_html, product: @product)
+    render html: custom_html_document(interpolated).html_safe, layout: false
+  end
+
   def search
     format_search_params!
     search_params = params
@@ -320,7 +337,16 @@ class LinksController < ApplicationController
   def update
     authorize @product
     begin
+      if custom_html_only_update?
+        @product.with_lock do
+          @product.update!(custom_html: sanitized_custom_html_param)
+        end
+        return render json: { success: true }
+      end
+
       ActiveRecord::Base.transaction do
+        @product.lock! if custom_html_update?
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -611,7 +637,11 @@ class LinksController < ApplicationController
     end
 
     def product_permitted_params
-      @_product_permitted_params ||= params.permit(policy(@product).product_permitted_attributes)
+      @_product_permitted_params ||= begin
+        permitted = params.permit(policy(@product).product_permitted_attributes)
+        permitted.delete(:custom_html) unless Feature.active?(:custom_html_pages, @product.user)
+        permitted
+      end
     end
 
     def check_banned
@@ -626,6 +656,28 @@ class LinksController < ApplicationController
       if @is_user_custom_domain
         e404_page unless @product.user == user_by_domain(request.host)
       end
+    end
+
+    def custom_html_visible?
+      @product.present? && Feature.active?(:custom_html_pages, @product.user) && @product.custom_html.present? && (@product.alive? || can_preview_custom_html?)
+    end
+
+    def can_preview_custom_html?
+      logged_in_user.present? && (logged_in_user == @product.user || logged_in_user.collaborator_for?(@product) || logged_in_user.is_team_member?)
+    end
+
+    def custom_html_only_update?
+      product_permitted_params.keys == ["custom_html"]
+    end
+
+    def custom_html_update?
+      product_permitted_params.key?("custom_html")
+    end
+
+    def sanitized_custom_html_param
+      return nil if product_permitted_params[:custom_html].nil?
+
+      Ai::PageSanitizer.sanitize(product_permitted_params[:custom_html]).presence
     end
 
     def prepare_product_page
@@ -877,5 +929,110 @@ class LinksController < ApplicationController
       rescue => e
         ErrorNotifier.notify(e)
       end
+    end
+
+    PAGE_ASSET_HOSTS = [CDN_S3_PROXY_HOST, PUBLIC_STORAGE_CDN_S3_PROXY_HOST].compact.uniq.join(" ")
+
+    CUSTOM_HTML_CSP = [
+      # Sandbox the response itself, not just the wrapper's iframe attribute.
+      # A buyer can navigate straight to /l/:id/landing/embed (top-level, not
+      # framed), where the iframe sandbox doesn't apply — without this the
+      # seller's inline scripts would run on the real subdomain origin. Matches
+      # the wrapper iframe's sandbox: scripts + forms, no same-origin/top-nav.
+      "sandbox allow-scripts allow-forms",
+      "default-src 'none'",
+      "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
+      "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
+      "img-src data: blob: #{PAGE_ASSET_HOSTS}",
+      # Mirror img-src so the <audio>/<video>/<source> tags the sanitizer
+      # allows actually load — without this they'd inherit default-src 'none'.
+      "media-src data: blob: #{PAGE_ASSET_HOSTS}",
+      "font-src data: https://fonts.gstatic.com https://fonts.bunny.net",
+      "connect-src 'none'",
+      "form-action 'self'",
+    ].join("; ") + ";"
+
+    def render_custom_html_if_present
+      return unless custom_html_visible?
+      # Buyer clicked Buy — fall through to the show action's checkout-bearing
+      # product page so the existing ?wanted=true flow handles the redirect.
+      return if params[:wanted] == "true"
+
+      nonce = SecureHeaders.content_security_policy_script_nonce(request)
+      render html: custom_html_wrapper_document(@product, nonce:, offer_code: params[:offer_code].presence || params[:code].presence).html_safe, layout: false
+    end
+
+    def custom_html_document(custom_html)
+      <<~HTML
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            #{self.class.pages_tailwind_inline}
+          </head>
+          <body>
+            #{custom_html}
+          </body>
+        </html>
+      HTML
+    end
+
+    # Memoized per process — the file ships with the deployed artifact and
+    # only changes on deploy, which restarts the process.
+    def self.pages_tailwind_inline
+      path = Rails.root.join("public/pages-tailwind.css")
+      return "" unless File.exist?(path)
+
+      @pages_tailwind_inline ||= "<style>#{File.read(path)}</style>"
+    end
+
+    # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin
+    # — no access to gumroad.com cookies or parent DOM. We also omit
+    # `allow-top-navigation`: the seller's HTML must never navigate the buyer's
+    # tab (that would let a malicious onclick redirect to a phishing site with
+    # gumroad.com still in the URL bar). Instead the buy button posts a message
+    # to this wrapper, which navigates to the one checkout URL we control here.
+    def custom_html_wrapper_document(product, nonce:, offer_code: nil)
+      iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
+      checkout_params = { wanted: true }
+      checkout_params[:code] = offer_code if offer_code.present?
+      checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
+      title = ERB::Util.h(product.name.to_s)
+      canonical = ERB::Util.h(product.long_url.to_s)
+      og_image = product.thumbnail&.alive&.url
+      og_image_tag = og_image ? %(<meta property="og:image" content="#{ERB::Util.h(og_image)}">) : ""
+      <<~HTML
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>#{title}</title>
+            <link rel="canonical" href="#{canonical}">
+            <meta property="og:title" content="#{title}">
+            <meta property="og:type" content="product">
+            <meta property="og:url" content="#{canonical}">
+            #{og_image_tag}
+            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
+          </head>
+          <body>
+            <iframe
+              id="gumroad-landing-frame"
+              src="#{iframe_src}"
+              title="#{title}"
+              sandbox="allow-scripts allow-forms"
+            ></iframe>
+            <script nonce="#{ERB::Util.h(nonce)}">
+              var frame = document.getElementById("gumroad-landing-frame");
+              window.addEventListener("message", function (e) {
+                if (e.source === frame.contentWindow && e.origin === "null" && e.data === "gumroad:checkout") {
+                  window.location.href = #{checkout_url_js};
+                }
+              });
+            </script>
+          </body>
+        </html>
+      HTML
     end
 end

@@ -26,13 +26,13 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
   );
   editor.destroy();
   product.files = product.files.filter((file) => fileIds.has(file.id));
-
+  const { custom_html: _customHtml, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
-      ...product,
+      ...productParams,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
@@ -42,7 +42,8 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok) throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
+  if (!response.ok)
+    throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
   if (response.status === 204) return {};
   return typia.assert<{ warning_message?: string }>(await response.json());
 };

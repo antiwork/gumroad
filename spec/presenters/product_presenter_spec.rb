@@ -299,6 +299,7 @@ describe ProductPresenter do
             default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
+            custom_html: nil,
             custom_view_content_button_text: "Download Files",
             custom_view_content_button_text_max_length: 26,
             custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
@@ -474,6 +475,7 @@ describe ProductPresenter do
           },
           cancellation_discounts_enabled: false,
           price_checker_enabled: false,
+          custom_html_pages_enabled: false,
           ai_generated: false,
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
@@ -485,6 +487,14 @@ describe ProductPresenter do
 
       it "exposes price_checker_enabled: true in edit_props" do
         expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
+      end
+    end
+
+    context "when the custom_html_pages feature flag is enabled for the seller" do
+      before { Feature.activate_user(:custom_html_pages, product.user) }
+
+      it "exposes custom_html_pages_enabled: true in edit_props" do
+        expect(presenter.edit_props[:custom_html_pages_enabled]).to eq(true)
       end
     end
 
@@ -567,6 +577,7 @@ describe ProductPresenter do
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_html: nil,
               custom_view_content_button_text: nil,
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
@@ -727,6 +738,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: true,
             price_checker_enabled: false,
+            custom_html_pages_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
@@ -827,6 +839,7 @@ describe ProductPresenter do
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
+              custom_html: nil,
               custom_view_content_button_text: nil,
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
@@ -942,6 +955,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: false,
             price_checker_enabled: false,
+            custom_html_pages_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }

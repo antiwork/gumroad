@@ -10,6 +10,7 @@ import {
   UpdateCustomField,
   DeleteCustomField,
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
+import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
 import { FilesOverview, PresignFile, CompleteFile, AbortFile, AttachFile } from "$app/components/ApiDocumentation/Endpoints/Files";
 import {
   VerifyLicense,
@@ -25,7 +26,6 @@ import {
   UpdateOfferCode,
   DeleteOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
-import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
 import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
   GetProducts,
@@ -72,6 +72,20 @@ import { Layout } from "$app/components/Developer/Layout";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 export default function Api() {
+  React.useEffect(() => {
+    const scrollToHash = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      const target = id ? document.getElementById(id) : null;
+      target?.scrollIntoView();
+    };
+    const frame = requestAnimationFrame(scrollToHash);
+    window.addEventListener("hashchange", scrollToHash);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToHash);
+    };
+  }, []);
+
   return (
     <Layout currentPage="api">
       <main className="p-4 md:p-8">
