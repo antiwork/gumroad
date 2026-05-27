@@ -225,6 +225,56 @@ describe User::Posts, :freeze_time do
         expect(visible_posts).not_to include(membership_post_2, membership_post_4)
       end
     end
+
+    describe "N+1 query prevention" do
+      it "does not issue per-row Link.find_by or per-post seller.sales queries when filtering seller posts with not_bought_products" do
+        # Add multiple seller posts that each carry a not_bought_products
+        # filter — the un-fixed code calls Link.find_by + seller.sales once
+        # per post, which is what we're proving is gone.
+        extra_product = create(:product, name: "extra product", user: @creator)
+        5.times do |i|
+          create(:seller_installment,
+                 name: "seller post with not_bought_products #{i}",
+                 seller: @creator,
+                 published_at: 2.hours.ago,
+                 shown_on_profile: true,
+                 json_data: { not_bought_products: [extra_product.unique_permalink] })
+        end
+
+        pundit_user = SellerContext.new(user: @dude, seller: @dude)
+        # Pre-warm — flush one-shot setup queries.
+        @creator.visible_posts_for(pundit_user:)
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA"
+          next if payload[:cached]
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+          queries << sql
+        end
+
+        begin
+          @creator.visible_posts_for(pundit_user:)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        # The fix batches all not_bought_products into one Link lookup and
+        # reuses a single seller.sales relation across every post. So at
+        # most ONE links-by-permalink lookup, regardless of post count.
+        links_by_permalink = queries.grep(/FROM `links`.*WHERE.*`unique_permalink`/)
+        expect(links_by_permalink.size).to be <= 1,
+          "Expected at most 1 Link.find_by(unique_permalink:) lookup, got #{links_by_permalink.size}:\n#{links_by_permalink.join("\n")}"
+
+        # The seller.sales scope used inside seller_post_passes_filters
+        # generates a sales SELECT each time it's reloaded. With the
+        # `seller_sales:` cache it loads at most once total inside the loop.
+        sales_lookups = queries.grep(/FROM `purchases`.*`seller_id` = #{@creator.id}\b/)
+        expect(sales_lookups.size).to be <= 2,
+          "Expected at most 2 purchases-by-seller lookups (one outer, one cached), got #{sales_lookups.size}:\n#{sales_lookups.join("\n")}"
+      end
+    end
   end
 
   describe "#last_5_created_posts" do
