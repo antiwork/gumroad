@@ -100,6 +100,64 @@ describe ProductPresenter::Card do
       end
     end
 
+    describe "N+1 query prevention" do
+      let(:creator_with_domain) do
+        creator = create(:user)
+        create(:custom_domain, user: creator, domain: "creator-#{SecureRandom.hex(4)}.example.com")
+        creator
+      end
+
+      it "does not issue per-row queries for preloaded associations" do
+        # Mix of product shapes: digital, physical (skus), variant categories,
+        # rentable. Each exercises a different ASSOCIATIONS branch.
+        physical = create(:physical_product, user: creator_with_domain)
+        digital = create(:product, user: creator_with_domain)
+        variant_category = create(:variant_category, link: digital)
+        create(:variant, variant_category:)
+        create(:variant, variant_category:)
+
+        ids = [physical.id, digital.id]
+        loaded_products = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a
+        # Pre-warm caches (e.g. CDN configs, currency rate fetches) so we do not
+        # count one-shot setup queries as N+1.
+        loaded_products.each do |product|
+          described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
+        end
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA"
+          next if payload[:cached]
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+          queries << sql
+        end
+
+        begin
+          loaded_products = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a
+          loaded_products.each do |product|
+            described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: false)
+          end
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        # If any caller drops back to `.where` on a preloaded association
+        # (Antipattern 1), these patterns will fire once per product.
+        per_row_patterns = [
+          [/FROM `prices`.*WHERE `prices`\.`link_id` = \d+/, "prices"],
+          [/FROM `base_variants`.*WHERE.*`link_id` = \d+/, "base_variants (skus)"],
+          [/FROM `variant_categories`.*WHERE.*`link_id` = \d+/, "variant_categories"],
+          [/FROM `custom_domains`.*WHERE.*`user_id` = \d+/, "custom_domains"],
+        ]
+        per_row_patterns.each do |pattern, label|
+          hits = queries.grep(pattern)
+          expect(hits.size).to be <= 1,
+            "Expected no per-row #{label} queries, got #{hits.size}:\n#{hits.join("\n")}"
+        end
+      end
+    end
+
     context "membership product" do
       let(:product) do
         recurrence_price_values = [

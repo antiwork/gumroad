@@ -26,13 +26,13 @@ module Product::Prices
   def rental_price_cents
     return read_attribute(:rental_price_cents) unless persisted?
 
-    rentable? ? alive_prices.select { |p| p.currency == price_currency_type && p.is_rental? }.last&.price_cents : nil
+    rentable? ? prices_for_currency.select(&:is_rental?).last&.price_cents : nil
   end
 
   def default_price
-    return alive_prices.select { |p| p.currency == price_currency_type && p.is_rental? }.last if rent_only?
+    return prices_for_currency.select(&:is_rental?).last if rent_only?
 
-    relevant_prices = alive_prices.select { |p| p.currency == price_currency_type && p.is_buy? }
+    relevant_prices = prices_for_currency.select(&:is_buy?)
     relevant_prices = relevant_prices.select(&:is_default_recurrence?) if is_recurring_billing && subscription_duration.present?
     relevant_prices.last
   end
@@ -249,6 +249,22 @@ module Product::Prices
   end
 
   private
+    # Returns the alive prices matching the product's current `price_currency_type`.
+    # Filters in memory when `alive_prices` is already preloaded (the read path used by
+    # ProductPresenter::Card / CardForWeb), and falls back to a `.where` when it isn't.
+    # The `loaded?` guard is required: callers like the test helper
+    # `change_membership_product_currency_to` do `prices.update_all(currency: ...)`
+    # which mutates the DB rows without invalidating the in-memory cache, so an
+    # unconditional in-memory `select` would see stale data and validation
+    # (`default_price` returning nil) would fail.
+    def prices_for_currency
+      if association(:alive_prices).loaded?
+        alive_prices.select { |p| p.currency == price_currency_type }
+      else
+        alive_prices.where(currency: price_currency_type)
+      end
+    end
+
     # Private: Called only on create to instantiate Price object(s) and associate it to the newly created product.
     def associate_price
       # for tiered memberships, price is set at the tier level
