@@ -10,6 +10,8 @@ import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
+  const { custom_html: _customHtml, ...productParams } = product;
+
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const richContents =
@@ -31,7 +33,7 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
-      ...product,
+      ...productParams,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
@@ -41,7 +43,8 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok) throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
+  if (!response.ok)
+    throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
   if (response.status === 204) return {};
   return typia.assert<{ warning_message?: string }>(await response.json());
 };
