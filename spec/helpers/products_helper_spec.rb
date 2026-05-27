@@ -203,4 +203,48 @@ describe ProductsHelper do
       end
     end
   end
+
+  describe "#files_data" do
+    it "eager-loads subtitle files, transcoded videos, and thumbnail attachments (no N+1)" do
+      product = create(:product)
+      file_one = create(:streamable_video, link: product, position: 0)
+      file_two = create(:streamable_video, link: product, position: 1)
+      create(:subtitle_file, product_file: file_one)
+      create(:subtitle_file, product_file: file_two)
+      create(:transcoded_video, streamable: file_one, original_video_key: file_one.s3_key, state: "completed")
+      create(:transcoded_video, streamable: file_two, original_video_key: file_two.s3_key, state: "completed")
+
+      # Pre-warm: hit the path once to fault in any one-time caches.
+      helper.files_data(product)
+
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+        next if payload[:name] == "SCHEMA"
+        next if payload[:cached]
+        sql = payload[:sql]
+        next unless sql.start_with?("SELECT")
+        queries << sql
+      end
+
+      begin
+        # Reload to force a fresh association cache so the eager-load is what
+        # actually keeps queries flat — not a stale memoised result.
+        product.reload
+        helper.files_data(product)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      per_row_patterns = [
+        [/FROM `subtitle_files`.*WHERE.*`product_file_id` = \d+/, "subtitle_files (per row)"],
+        [/FROM `transcoded_videos`.*WHERE.*`streamable_id` = \d+/, "transcoded_videos (per row)"],
+        [/FROM `active_storage_attachments`.*WHERE.*`record_id` = \d+ AND.*`record_type` = 'ProductFile' AND.*`name` = 'thumbnail'/, "thumbnail attachment (per row)"],
+      ]
+      per_row_patterns.each do |pattern, label|
+        hits = queries.grep(pattern)
+        expect(hits.size).to be <= 1,
+          "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
+      end
+    end
+  end
 end
