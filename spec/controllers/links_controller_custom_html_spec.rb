@@ -224,5 +224,17 @@ describe LinksController, :vcr, type: :controller do
       expect(response.parsed_body["success"]).to eq(true)
       expect(product.reload.custom_html).to eq("<section>Updated</section>")
     end
+
+    it "locks the product row before mixed-field custom_html updates" do
+      expect_any_instance_of(Link).to receive(:lock!).and_call_original
+
+      post :update, params: { id: product.unique_permalink, name: "Updated product", custom_html: "<section>Updated</section>" }
+
+      expect(response).to be_successful
+      expect(response).to have_http_status(:no_content)
+      product.reload
+      expect(product.name).to eq("Updated product")
+      expect(product.custom_html).to eq("<section>Updated</section>")
+    end
   end
 end

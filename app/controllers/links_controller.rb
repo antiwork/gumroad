@@ -345,6 +345,8 @@ class LinksController < ApplicationController
       end
 
       ActiveRecord::Base.transaction do
+        @product.lock! if custom_html_update?
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -662,6 +664,10 @@ class LinksController < ApplicationController
 
     def custom_html_only_update?
       product_permitted_params.keys == ["custom_html"]
+    end
+
+    def custom_html_update?
+      product_permitted_params.key?("custom_html")
     end
 
     def sanitized_custom_html_param
