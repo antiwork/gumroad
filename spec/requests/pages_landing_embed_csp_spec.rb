@@ -21,10 +21,14 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     expect(csp).to include("default-src 'none'")
     expect(csp).to include("script-src 'unsafe-inline'")
     expect(csp).to include("connect-src 'none'")
-    expect(csp).to include("img-src data: blob: https:")
-    expect(csp).not_to include("img-src *")
-    # media-src present so the allowed <audio>/<video> tags aren't blocked by default-src 'none'.
-    expect(csp).to include("media-src data: blob: https:")
+    # Images/media are locked to Gumroad's own CDN hosts — no bare `https:` wildcard,
+    # so a seller's page can't beacon data out via an arbitrary-host image/media GET.
+    img_sources = csp[/img-src([^;]*)/, 1].split
+    expect(img_sources).to include(CDN_S3_PROXY_HOST)
+    expect(img_sources).not_to include("https:")
+    media_sources = csp[/media-src([^;]*)/, 1].split
+    expect(media_sources).to include(CDN_S3_PROXY_HOST)
+    expect(media_sources).not_to include("https:")
     # Not the SecureHeaders default (which would block inline scripts).
     expect(csp).not_to include("default-src 'self'")
   end

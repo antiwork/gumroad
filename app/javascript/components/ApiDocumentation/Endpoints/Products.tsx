@@ -104,7 +104,8 @@ gumroad products page push <permalink> ./landing.html`}
     <ul>
       <li>Run inline JavaScript for animations, scroll effects, sticky headers, and modals.</li>
       <li>Load scripts from the Tailwind, jsDelivr, and unpkg CDNs.</li>
-      <li>Load images, fonts, and media from any HTTPS host.</li>
+      <li>Load fonts from Google Fonts and Bunny Fonts.</li>
+      <li>Load images and media from Gumroad only — e.g. your product's covers and thumbnail.</li>
       <li>Submit forms in-page with JavaScript.</li>
     </ul>
     <p>It can't:</p>
@@ -114,13 +115,14 @@ gumroad products page push <permalink> ./landing.html`}
       <li>
         Make <code>fetch</code>, <code>XHR</code>, or WebSocket requests (<code>connect-src 'none'</code>).
       </li>
+      <li>Load images or media from any non-Gumroad host.</li>
       <li>
         Submit forms to external URLs — off-site <code>action</code> attributes are stripped.
       </li>
     </ul>
     <p>
-      Because images and fonts still load from any HTTPS host, treat the page as sandboxed rather than fully
-      network-isolated: a crafted resource URL could carry off anything a buyer types into a seller-built form.
+      Every external load is restricted to Gumroad's CDN (images and media) or the named font and script CDNs above, so
+      the page has no arbitrary-host network channel — it can't beacon data off to a server you control.
     </p>
   </div>
 );

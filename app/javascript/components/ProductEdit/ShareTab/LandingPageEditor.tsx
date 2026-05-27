@@ -22,7 +22,7 @@ export const LandingPageEditor = () => {
 
   const agentPrompt = `Build and publish a custom landing page for my Gumroad product ${uniquePermalink}.
 
-Design a unique, conversion-focused page tailored to this product — fully responsive, accessible, and supporting light and dark mode. Save it as one self-contained file, landing.html. The page is sanitized and runs sandboxed: inline CSS/JS (animations, scroll effects, modals) and a Tailwind CDN work, and images, fonts, and video load over HTTPS, but it can't fetch external URLs or read the buyer's account.
+Design a unique, conversion-focused page tailored to this product — fully responsive, accessible, and supporting light and dark mode. Save it as one self-contained file, landing.html. The page is sanitized and runs sandboxed: inline CSS/JS (animations, scroll effects, modals) and a Tailwind CDN work. For images and media, use only your product's own assets (run gumroad products view ${uniquePermalink} for its cover and thumbnail URLs), inline data: URIs, or CSS — external image/media hosts are blocked, and the page can't fetch external URLs or read the buyer's account.
 
 Then publish it with the Gumroad CLI:
 - Preview without publishing (check the sanitization report first): gumroad products page preview ${uniquePermalink} ./landing.html --json --no-input

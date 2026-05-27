@@ -931,6 +931,8 @@ class LinksController < ApplicationController
       end
     end
 
+    PAGE_ASSET_HOSTS = [CDN_S3_PROXY_HOST, PUBLIC_STORAGE_CDN_S3_PROXY_HOST].compact.uniq.join(" ")
+
     CUSTOM_HTML_CSP = [
       # Sandbox the response itself, not just the wrapper's iframe attribute.
       # A buyer can navigate straight to /l/:id/landing/embed (top-level, not
@@ -941,10 +943,10 @@ class LinksController < ApplicationController
       "default-src 'none'",
       "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
       "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
-      "img-src data: blob: https:",
+      "img-src data: blob: #{PAGE_ASSET_HOSTS}",
       # Mirror img-src so the <audio>/<video>/<source> tags the sanitizer
       # allows actually load — without this they'd inherit default-src 'none'.
-      "media-src data: blob: https:",
+      "media-src data: blob: #{PAGE_ASSET_HOSTS}",
       "font-src data: https://fonts.gstatic.com https://fonts.bunny.net",
       "connect-src 'none'",
       "form-action 'self'",
