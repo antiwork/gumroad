@@ -143,6 +143,13 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include("data:image/svg+xml")
     end
 
+    it "strips data URLs from iframe src attributes" do
+      sanitized = described_class.sanitize(%(<iframe src="data:image/svg+xml,<svg><script>alert(1)</script></svg>"></iframe>))
+
+      expect(sanitized).to include(%(<iframe sandbox="allow-scripts"></iframe>))
+      expect(sanitized).not_to include("data:image/svg+xml")
+    end
+
     it "preserves SVG tags and attributes lowercased by the HTML parser" do
       sanitized = described_class.sanitize(<<~HTML)
         <svg viewBox="0 0 10 10" preserveAspectRatio="xMidYMid meet">

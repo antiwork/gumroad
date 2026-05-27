@@ -40,9 +40,9 @@ class Ai::PageSanitizer
   # in these attributes loads a document with no CSP, so its scripts escape
   # `connect-src 'none'` — block `data:` here outright.
   NAVIGABLE_URL_ATTRIBUTES = %w[action href xlink:href].freeze
-  # `src`/`poster` load a resource, not a document. `data:` is fine for inline
-  # media (images render without executing embedded SVG script) but not for
-  # document MIME types that a browser would parse and script.
+  DOCUMENT_SOURCE_TAGS = %w[iframe].freeze
+  # Media `src`/`poster` attributes load a resource, not a document. `data:` is
+  # fine for inline media but not for document MIME types that a browser would parse and script.
   SAFE_DATA_URI_PREFIXES = %w[data:image/ data:video/ data:audio/ data:font/].freeze
   WRAPPER_TAGS = %w[html head body].freeze
   MAX_REPORT_ENTRIES = 100
@@ -116,7 +116,7 @@ class Ai::PageSanitizer
     # which would skip the next entry if we iterated it live (same reason the
     # children traversal above snapshots).
     node.attribute_nodes.to_a.each do |attribute|
-      reason = attribute_removal_reason(attribute.name, attribute.value)
+      reason = attribute_removal_reason(node.name, attribute.name, attribute.value)
       next unless reason
 
       record_removed_attribute(report, node, attribute.name, attribute.value, reason)
@@ -124,9 +124,10 @@ class Ai::PageSanitizer
     end
   end
 
-  def self.attribute_removal_reason(name, value)
+  def self.attribute_removal_reason(tag_name, name, value)
     return "attribute not in allowlist" unless allowed_attribute?(name)
     return unsafe_target_reason(value) if name.downcase == "target"
+    return "data: URL blocked" if document_source_data_url?(tag_name, name, value)
     return srcset_url_removal_reason(value) if SRCSET_ATTRIBUTES.include?(name.downcase)
     return dangerous_url_reason(value) if dangerous_url_attribute?(name, value)
 
@@ -192,6 +193,12 @@ class Ai::PageSanitizer
     NAVIGABLE_URL_ATTRIBUTES.include?(normalized_name) || SAFE_DATA_URI_PREFIXES.none? { |prefix| normalized.start_with?(prefix) }
   end
 
+  def self.document_source_data_url?(tag_name, name, value)
+    DOCUMENT_SOURCE_TAGS.include?(tag_name.downcase) &&
+      name.downcase == "src" &&
+      normalize_url(value).start_with?("data:")
+  end
+
   def self.srcset_url_removal_reason(value)
     normalized_urls = srcset_urls(value).map { |url| normalize_url(url) }
     return "javascript: URL blocked" if normalized_urls.any? { |url| url.start_with?("javascript:") }
@@ -243,5 +250,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :unsafe_target_reason, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
+  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :document_source_data_url?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :unsafe_target_reason, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end
