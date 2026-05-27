@@ -112,6 +112,27 @@ describe LinksController, :vcr, type: :controller do
     end
   end
 
+  describe ".pages_tailwind_inline" do
+    before do
+      described_class.remove_instance_variable(:@pages_tailwind_inline) if described_class.instance_variable_defined?(:@pages_tailwind_inline)
+    end
+
+    after do
+      described_class.remove_instance_variable(:@pages_tailwind_inline) if described_class.instance_variable_defined?(:@pages_tailwind_inline)
+    end
+
+    it "does not memoize a missing Tailwind build artifact" do
+      path = Rails.root.join("public/pages-tailwind.css")
+      allow(File).to receive(:exist?).and_call_original
+      allow(File).to receive(:read).and_call_original
+      allow(File).to receive(:exist?).with(path).and_return(false, true)
+      allow(File).to receive(:read).with(path).and_return(".hero{display:block}")
+
+      expect(described_class.pages_tailwind_inline).to eq("")
+      expect(described_class.pages_tailwind_inline).to eq("<style>.hero{display:block}</style>")
+    end
+  end
+
   describe "PUT update (internal dashboard, session-authed Reset flow)" do
     before { sign_in seller }
 

@@ -936,10 +936,10 @@ class LinksController < ApplicationController
     # Memoized per process — the file ships with the deployed artifact and
     # only changes on deploy, which restarts the process.
     def self.pages_tailwind_inline
-      @pages_tailwind_inline ||= begin
-        path = Rails.root.join("public/pages-tailwind.css")
-        File.exist?(path) ? "<style>#{File.read(path)}</style>" : ""
-      end
+      path = Rails.root.join("public/pages-tailwind.css")
+      return "" unless File.exist?(path)
+
+      @pages_tailwind_inline ||= "<style>#{File.read(path)}</style>"
     end
 
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin
