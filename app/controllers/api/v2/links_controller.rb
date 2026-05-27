@@ -215,6 +215,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
+    if params.key?(:custom_html) && !params[:custom_html].nil? && !params[:custom_html].is_a?(String)
+      return render_response(false, message: "custom_html must be a string.")
+    end
+
     if params.key?(:tags)
       if !params[:tags].is_a?(Array) || params[:tags].any? { |t| !t.respond_to?(:to_str) }
         return render_response(false, message: "tags must be an array of strings.")

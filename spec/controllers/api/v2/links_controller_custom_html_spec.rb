@@ -111,6 +111,18 @@ describe Api::V2::LinksController do
       expect(@product.reload.custom_html).to be_nil
     end
 
+    it "rejects a non-string custom_html with a controlled error, not a 500" do
+      @product.update!(custom_html: "<section>Existing</section>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: %w[not a string] }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(false)
+      expect(body["message"]).to match(/must be a string/i)
+      # The existing page is untouched — the bad request didn't clear or crash it.
+      expect(@product.reload.custom_html).to eq("<section>Existing</section>")
+    end
+
     it "includes landing_url in the response so the agent can echo where the page is now live" do
       put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>HTML</section>" }
 
