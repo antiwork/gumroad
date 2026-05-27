@@ -2771,6 +2771,22 @@ describe User, :vcr do
         expect(active_access_token_of_another_user.reload.revoked_at).to be_nil
       end
     end
+
+  end
+
+  describe "#invalidate_browser_sessions!" do
+    let(:user) { create(:user) }
+    let(:oauth_application) { create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID) }
+    let!(:active_access_token) { create("doorkeeper/access_token", application: oauth_application, resource_owner_id: user.id, scopes: "mobile_api") }
+
+    it "updates the timestamp without revoking mobile access tokens" do
+      travel_to(DateTime.current) do
+        expect do
+          user.invalidate_browser_sessions!
+        end.to change { user.reload.last_active_sessions_invalidated_at }.from(nil).to(DateTime.current)
+         .and not_change { active_access_token.reload.revoked_at }
+      end
+    end
   end
 
   describe "#init_default_notification_settings" do

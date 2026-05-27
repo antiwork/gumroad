@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_28_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_30_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2793,6 +2793,27 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_28_000000) do
     t.bigint "user_id", null: false
     t.index ["record_type", "record_id"], name: "index_video_files_on_record"
     t.index ["user_id"], name: "index_video_files_on_user_id"
+  end
+
+  create_table "walks_app_attest_keys", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "key_id", limit: 64, null: false
+    t.binary "public_key", limit: 200, null: false
+    t.bigint "counter", default: 0, null: false
+    t.string "environment", limit: 16, null: false
+    t.datetime "attested_at", null: false
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key_id"], name: "index_walks_app_attest_keys_on_key_id", unique: true
+  end
+
+  create_table "walks_free_trials", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "walks_app_attest_key_id", null: false
+    t.datetime "consumed_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "synthesis_attempts", default: 0, null: false
+    t.index ["walks_app_attest_key_id"], name: "index_walks_free_trials_on_walks_app_attest_key_id", unique: true
   end
 
   create_table "watched_users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

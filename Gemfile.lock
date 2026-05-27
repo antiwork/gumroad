@@ -216,6 +216,7 @@ GEM
       rack-test (>= 0.6.3)
       regexp_parser (>= 1.5, < 3.0)
       xpath (~> 3.2)
+    cbor (0.5.9.8)
     cgi (0.5.1)
     chunky_png (1.4.0)
     closure_tree (7.4.0)
@@ -1121,6 +1122,7 @@ DEPENDENCIES
   byebug (~> 11.1)
   capybara (~> 3.38)
   capybara_accessible_selectors!
+  cbor (~> 0.5)
   closure_tree (~> 7.4)
   colorize (~> 1.0)
   countries (~> 6.0)
@@ -1150,6 +1152,7 @@ DEPENDENCIES
   google-apis-androidpublisher_v3 (~> 0.64)
   googleauth (~> 1.7)
   htmlentities (~> 4.3)
+  http (~> 5.2)
   http_accept_language (~> 2.1)
   httparty (~> 0.21)
   ibandit (~> 1.26)

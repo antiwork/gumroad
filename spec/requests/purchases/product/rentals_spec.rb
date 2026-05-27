@@ -109,6 +109,19 @@ describe("Rentals from product page", type: :system, js: true) do
       expect(UrlRedirect.last.is_rental).to be(true)
     end
 
+    it "hides the rent/buy toggle and still allows buying when a buy_and_rent product has no rental price" do
+      @product.prices.alive.is_rental.each(&:mark_deleted!)
+
+      visit "/l/#{@product.unique_permalink}"
+
+      expect(page).to have_selector("h1", text: "rental test")
+      expect(page).to_not have_radio_button("Rent")
+      expect(page).to_not have_radio_button("Buy")
+
+      add_to_cart(@product)
+      expect(page).to have_cart_item(@product.name)
+    end
+
     describe "rentals and vat" do
       before do
         allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("2.47.255.255") # Italy

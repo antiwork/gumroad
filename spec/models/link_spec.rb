@@ -629,6 +629,37 @@ describe Link, :vcr do
       end
     end
 
+    describe "#rental" do
+      it "returns nil for a buy-only product" do
+        product = create(:product, purchase_type: :buy_only)
+        expect(product.rental).to be_nil
+      end
+
+      it "returns the price and rent_only flag for a rent-only product" do
+        product = create(:product, purchase_type: :rent_only, rental_price_cents: 300)
+        expect(product.rental).to eq(price_cents: 300, rent_only: true)
+      end
+
+      it "returns the price and rent_only flag for a buy-and-rent product" do
+        product = create(:product, purchase_type: :buy_and_rent, rental_price_cents: 200)
+        expect(product.rental).to eq(price_cents: 200, rent_only: false)
+      end
+
+      it "returns nil for a buy-and-rent product with no rental price" do
+        product = create(:product, purchase_type: :buy_and_rent, rental_price_cents: 200)
+        product.prices.alive.is_rental.each(&:mark_deleted!)
+
+        expect(product.reload.rental).to be_nil
+      end
+
+      it "returns nil for a rent-only product with no rental price" do
+        product = create(:product, purchase_type: :rent_only, rental_price_cents: 300)
+        product.prices.alive.is_rental.each(&:mark_deleted!)
+
+        expect(product.reload.rental).to be_nil
+      end
+    end
+
     describe "adding to profile sections" do
       it "adds newly created products to all sections that have add_new_products set" do
         seller = create(:user)

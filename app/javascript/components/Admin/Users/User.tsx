@@ -65,15 +65,15 @@ export type RecentEfw = {
 
 export type User = {
   external_id: string;
-  email: string;
+  email: string | null;
   support_email?: string | null;
   name: string | null;
   avatar_url: string;
   username: string;
   profile_url: string;
-  form_email: string;
+  form_email: string | null;
   blocked_by_form_email_object: PlatformBlock | null;
-  form_email_domain: string;
+  form_email_domain: string | null;
   blocked_by_form_email_domain_object: PlatformBlock | null;
   subdomain_with_protocol: string;
   custom_fee_per_thousand: number | null;

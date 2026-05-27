@@ -126,6 +126,34 @@ class Rack::Attack
 
     # Don't allow spammer to send confirmation emails to many random emails
     throttle_by_ip path: "/settings", requests: 3, period: 20.seconds, method: :put # Initial: 9rpm, Max: 45 requests/9 hours
+
+    # Gumroad Walks: realtime token creation is an *expensive* endpoint — each
+    # successful response gives the client up to 2h of OpenAI Realtime usage
+    # against our key. JWS verification is the primary gate, but a leaked or
+    # replayed JWS would otherwise be unbounded — IP throttling caps that
+    # blast radius at ~$10/IP/hr of OpenAI spend. 5 req/IP/hour is generous
+    # for real users (1-2 walks/day).
+    #
+    # `max_level: 1` skips the exponential-backoff tiers — with a 1-hour base
+    # period, `rpm * level` rounds to <1 and Rack::Attack would block the very
+    # first request that escalates. The base 5/hour limit is already strict.
+    #
+    # Both `/api/v2/walks/...` (gumroad.com) and `/v2/walks/...` (api.gumroad.com)
+    # need throttles since `api_routes` is mounted under both prefixes.
+    throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/realtime_tokens",     method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/synthesis",           method: :post, requests: 5, period: 1.hour, max_level: 1
+
+    # App Attest bootstrap. `attestations` is genuinely once-per-install on the
+    # happy path; cap at 3/IP/hr so a single corporate NAT can recover from
+    # transient failures but a botnet can't fan out attested keys.
+    # `challenges` is one-per-request on every walks call + once per
+    # attestation, so it needs more headroom.
+    throttle_by_ip path: "/api/v2/walks/app_attest/attestations", method: :post, requests: 3,  period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/app_attest/attestations",     method: :post, requests: 3,  period: 1.hour, max_level: 1
+    throttle_by_ip path: "/api/v2/walks/app_attest/challenges",   method: :post, requests: 60, period: 1.hour, max_level: 1
+    throttle_by_ip path: "/v2/walks/app_attest/challenges",       method: :post, requests: 60, period: 1.hour, max_level: 1
   end
 
   throttle_by_ip path: "/",                               requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours

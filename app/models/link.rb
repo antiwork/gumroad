@@ -667,7 +667,12 @@ class Link < ApplicationRecord
   end
 
   def rental
-    purchase_type != "buy_only" ? { price_cents: rental_price_cents, rent_only: purchase_type == "rent_only" } : nil
+    return unless rentable?
+
+    price_cents = rental_price_cents
+    return if price_cents.nil?
+
+    { price_cents:, rent_only: rent_only? }
   end
 
   def is_legacy_subscription?

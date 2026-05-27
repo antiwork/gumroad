@@ -26,7 +26,8 @@ module PushNotificationService
       end
 
       def send_notification
-        notification_args = { title:, body:, icon: "notification_icon" }.compact
+        tag = notification_tag
+        notification_args = { title:, body:, icon: "notification_icon", tag: }.compact
 
         notification = Rpush::Fcm::Notification.new
         notification.app = app
@@ -37,15 +38,26 @@ module PushNotificationService
         if @sound.present?
           notification.sound = @sound
           notification_args[:channel_id] = "Purchases"
+        else
+          notification_args[:channel_id] = "default"
         end
 
         notification.notification = notification_args
 
         if consumer_app?
-          notification.data = data.merge(message: title)
+          notification.data = data.merge("tag" => tag, "message" => title)
         end
 
         notification.save!
+      end
+
+      def notification_tag
+        data["tag"].presence ||
+          data["installment_id"].presence ||
+          data["purchase_id"].presence ||
+          data["subscription_id"].presence ||
+          data["follower_id"].presence ||
+          SecureRandom.uuid
       end
 
       def creator_app?

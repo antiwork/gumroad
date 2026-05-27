@@ -30,7 +30,7 @@ class ProfilePresenter
     shared_profile_props(seller_custom_domain_url: nil, request:, as_logged_out_user: true).merge(
       {
         profile_settings: {
-          username: seller.username,
+          username: seller.read_attribute(:username).to_s,
           name: seller.name,
           bio: seller.bio,
           font: seller.seller_profile.font,
