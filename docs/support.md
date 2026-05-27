@@ -230,53 +230,18 @@ user.confirm
 
 ### Refresh purchases in user's library
 
-An empty or incomplete library has one of two causes:
-
-1. **Unlinked purchases** — rows with `purchaser_id IS NULL` that were never associated with the user's account. The library only shows purchases where `purchases.purchaser_id = users.id`.
-2. **Buyer-deleted purchases** — rows with the `is_deleted_by_buyer` flag set. The library hides these via the `not_is_deleted_by_buyer` scope (`LibraryPresenter#library_cards`). This flag is set whenever a buyer clicks "Delete" on a product in the library (or via the mobile app), and it is the usual reason a library renders empty even though `purchaser_id` is correct. Backfilling `purchaser_id` alone does **not** surface these rows.
-
-There is no separate library cache — `LibraryPresenter` queries the database live, so once a purchase passes the `for_library` filters it appears on the next page load. Refunded, charged-back, and recurring-charge rows are excluded by design and should stay hidden.
-
-#### Diagnose
-
-Find out how many purchases reach the library and where the rest drop off:
-
-```ruby
-user = User.find_by(email: "customer@example.com")
-raise "No user found" unless user.present?
-
-base = user.purchases.for_library
-puts "for_library:             #{base.count}"
-puts "  not_rental_expired:    #{base.not_rental_expired.count}"
-puts "  not_is_deleted_by_buyer: #{base.not_rental_expired.not_is_deleted_by_buyer.count}  <- this many show in the library"
-puts "unlinked (purchaser_id IS NULL) on this email: #{Purchase.where(email: user.email, purchaser_id: nil).count}"
-```
-
-#### Fix
-
 ```ruby
 user = User.find_by(email: "customer@example.com")
 if user.present?
-  # 1. Link purchases that were never associated with the account.
-  linked = Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
-  puts "Linked #{linked} previously unlinked purchase(s)."
-
-  # 2. Un-hide purchases the buyer (or a bug) removed from the library. This reverses the
-  #    library "Delete" action and keeps Elasticsearch in sync (same as the admin undelete).
-  unhidden = 0
+  # Link unlinked purchases, then un-hide any the buyer deleted (the library hides is_deleted_by_buyer rows).
+  Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
   user.purchases.for_library
     .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:is_deleted_by_buyer])
-    .find_each do |purchase|
-      purchase.update!(is_deleted_by_buyer: false)
-      unhidden += 1
-    end
-  puts "Restored #{unhidden} buyer-deleted purchase(s)."
+    .find_each { |purchase| purchase.update!(is_deleted_by_buyer: false) }
 else
   puts "No user found with email: customer@example.com"
 end
 ```
-
-If the customer changed their email, purchases made under the old address won't match `user.email`. Look those up by the previous email and reassign them with the "Remove old email from checkout" / reassignment flow before running step 1.
 
 ### Resend all receipts
 
