@@ -4,10 +4,12 @@ require "spec_helper"
 
 describe WalksAppAttestChallenge do
   describe ".issue!" do
-    it "issues a 32+ char url-safe string and writes it to the cache" do
+    it "issues a 32+ char url-safe string and writes it to redis with a TTL" do
       challenge = described_class.issue!
       expect(challenge).to match(/\A[A-Za-z0-9_-]{30,}\z/)
-      expect(Rails.cache.read("#{described_class::PREFIX}#{challenge}")).to eq("1")
+      key = RedisKey.walks_app_attest_challenge(challenge)
+      expect($redis.get(key)).to eq("1")
+      expect($redis.ttl(key)).to be_within(5).of(described_class::TTL.to_i)
     end
 
     it "produces a distinct challenge on each call" do
@@ -21,7 +23,7 @@ describe WalksAppAttestChallenge do
     it "deletes the challenge and returns true the first time" do
       challenge = described_class.issue!
       expect(described_class.consume!(challenge)).to be(true)
-      expect(Rails.cache.read("#{described_class::PREFIX}#{challenge}")).to be_nil
+      expect($redis.get(RedisKey.walks_app_attest_challenge(challenge))).to be_nil
     end
 
     it "returns false on second consume" do
