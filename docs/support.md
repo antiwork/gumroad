@@ -233,14 +233,20 @@ user.confirm
 ```ruby
 user = User.find_by(email: "customer@example.com")
 if user.present?
-  # Link unlinked purchases, then un-hide any the buyer deleted (the library hides is_deleted_by_buyer rows).
   Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
-  user.purchases.for_library
-    .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:is_deleted_by_buyer])
-    .find_each { |purchase| purchase.update!(is_deleted_by_buyer: false) }
 else
   puts "No user found with email: customer@example.com"
 end
+```
+
+### Restore purchases the buyer deleted from their library
+
+```ruby
+user = User.find_by(email: "customer@example.com")
+# The library hides is_deleted_by_buyer rows; clear the flag to restore them (mirrors the admin undelete).
+user.purchases.for_library
+  .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:is_deleted_by_buyer])
+  .find_each { |purchase| purchase.update!(is_deleted_by_buyer: false) }
 ```
 
 ### Resend all receipts
