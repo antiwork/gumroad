@@ -13,8 +13,8 @@ class Page < ApplicationRecord
 
   private
     def sanitize_html
-      return if custom_html.blank?
+      return if custom_html.nil?
 
-      self.custom_html = Ai::PageSanitizer.sanitize(custom_html)
+      self.custom_html = Ai::PageSanitizer.sanitize(custom_html).presence
     end
 end
