@@ -61,7 +61,7 @@ class BaseVariant < ApplicationRecord
   def quantity_left
     return nil if max_purchase_count.nil?
 
-    [max_purchase_count - sales_count_for_inventory, 0].max
+    [max_purchase_count - sales_count_for_inventory.to_i, 0].max
   end
 
   def available?
