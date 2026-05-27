@@ -321,13 +321,19 @@ module Product::Prices
       # 1. there are multiple tiers, or
       # 2. any tiers have PWYW enabled, or
       # 3. there's only 1 tier but it has multiple prices
+      any_customizable =
+        if association(:tiers).loaded?
+          tiers.any?(&:customizable_price?)
+        else
+          tiers.where(customizable_price: true).exists?
+        end
       multiple_tier_prices =
         if default_tier.present? && default_tier.association(:alive_prices).loaded?
           default_tier.alive_prices.count(&:is_buy?) > 1
         else
           default_tier.present? && default_tier.prices.alive.is_buy.size > 1
         end
-      tiers.size > 1 || tiers.where(customizable_price: true).exists? || multiple_tier_prices
+      tiers.size > 1 || any_customizable || multiple_tier_prices
     end
 
     def lowest_tier_price(for_default_duration: false)
