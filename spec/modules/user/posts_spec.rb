@@ -267,12 +267,47 @@ describe User::Posts, :freeze_time do
         expect(links_by_permalink.size).to be <= 1,
           "Expected at most 1 Link.find_by(unique_permalink:) lookup, got #{links_by_permalink.size}:\n#{links_by_permalink.join("\n")}"
 
-        # The seller.sales scope used inside seller_post_passes_filters
-        # generates a sales SELECT each time it's reloaded. With the
-        # `seller_sales:` cache it loads at most once total inside the loop.
-        sales_lookups = queries.grep(/FROM `purchases`.*`seller_id` = #{@creator.id}\b/)
-        expect(sales_lookups.size).to be <= 2,
-          "Expected at most 2 purchases-by-seller lookups (one outer, one cached), got #{sales_lookups.size}:\n#{sales_lookups.join("\n")}"
+        # Direct probe of the filter cache: call seller_post_passes_filters
+        # twice on the same post with the same cache; the second call must
+        # issue ZERO purchases-by-email SELECTs because the (signature, email)
+        # tuple is already memoised. This is the strict be_empty assertion
+        # required by the gumroad-n-plus-one-fixes skill — no `<= 1`
+        # slackness, no setup-query exemptions.
+        target_post = @creator.installments.where("installment_type = ?", Installment::SELLER_TYPE)
+                              .reload
+                              .find { |p| p.not_bought_products.present? }
+        expect(target_post).to be_present, "expected a SELLER_TYPE installment with not_bought_products"
+        cache = {}
+        # Pre-warm — populates cache with the (signature, email) tuple.
+        target_post.seller_post_passes_filters(
+          email: @dude.email,
+          product_permalinks: [@creator.products.first.unique_permalink],
+          variant_external_ids: [],
+          seller_sales: @creator.sales,
+          seller_post_filter_cache: cache,
+        )
+
+        cache_hit_queries = []
+        cache_sub = ActiveSupport::Notifications.subscribe("sql.active_record") do |_n, _s, _f, _i, payload|
+          next if payload[:name] == "SCHEMA" || payload[:cached]
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+          cache_hit_queries << sql
+        end
+        begin
+          target_post.seller_post_passes_filters(
+            email: @dude.email,
+            product_permalinks: [@creator.products.first.unique_permalink],
+            variant_external_ids: [],
+            seller_sales: @creator.sales,
+            seller_post_filter_cache: cache,
+          )
+        ensure
+          ActiveSupport::Notifications.unsubscribe(cache_sub)
+        end
+        not_bought_hits = cache_hit_queries.grep(/FROM `purchases`.*`link_id` = .*`email` = /)
+        expect(not_bought_hits).to be_empty,
+          "Second call with shared cache must issue 0 not_bought_products lookups, got #{not_bought_hits.size}:\n#{not_bought_hits.join("\n")}"
       end
     end
   end

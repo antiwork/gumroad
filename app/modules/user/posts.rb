@@ -31,6 +31,7 @@ module User::Posts
       if purchases.exists?
         product_post_ids = Set.new
         seller_sales = sales
+        seller_post_filter_cache = {}
 
         seller_type_installments = installments.where("installment_type = ?", Installment::SELLER_TYPE).to_a
         all_not_bought_permalinks = seller_type_installments
@@ -62,13 +63,13 @@ module User::Posts
                               .where("published_at >= ?", purchase.created_at)
           posts = posts.where("published_at < ?", terminated_at) if terminated_at.present?
           posts = posts.filter { |post| subscription.alive_at?(post.published_at) } if subscription.present?
-          product_post_ids += posts.filter_map { |post| post.id if post.purchase_passes_filters(purchase, seller_sales:) }
+          product_post_ids += posts.filter_map { |post| post.id if post.purchase_passes_filters(purchase, seller_sales:, seller_post_filter_cache:) }
         end
         filters = filters.symbolize_keys.except(:id)
         filters[:product_permalinks] = filters[:product_permalinks].split(",").compact if filters[:product_permalinks].present?
 
         seller_post_ids = seller_type_installments
-                            .filter_map { |post| post.id if post.seller_post_passes_filters(**filters, permalink_to_link_id:, seller_sales:) }
+                            .filter_map { |post| post.id if post.seller_post_passes_filters(**filters, permalink_to_link_id:, seller_sales:, seller_post_filter_cache:) }
 
         display_audience_posts = true
       end
