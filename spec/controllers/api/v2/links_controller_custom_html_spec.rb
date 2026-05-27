@@ -101,7 +101,10 @@ describe Api::V2::LinksController do
       expect(JSON.parse(response.body)).to eq({ "success" => false, "message" => "The product was not found." })
     end
 
-    it "rejects HTML over the size limit" do
+    it "rejects HTML over the size limit before the sanitizer parses it" do
+      # The cheap length guard must fire before Nokogiri touches the payload, so
+      # an oversized body can't force expensive parsing on the rate-limited path.
+      expect(Ai::PageSanitizer).not_to receive(:sanitize_with_report)
       oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 
       put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }
@@ -213,7 +216,8 @@ describe Api::V2::LinksController do
       expect(@product.reload.custom_html).to be_nil
     end
 
-    it "reports validation errors without writing" do
+    it "rejects oversized input before the sanitizer parses it" do
+      expect(Ai::PageSanitizer).not_to receive(:sanitize_with_report)
       oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 
       post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: oversized }

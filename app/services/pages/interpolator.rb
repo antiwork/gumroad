@@ -22,11 +22,13 @@ class Pages::Interpolator
 
     # The iframe sandbox omits top-navigation, so the buy button can't
     # navigate the buyer's tab itself. It messages the wrapper, which owns the
-    # one checkout URL it will navigate to. `return false` stops the anchor
-    # from navigating the iframe to a dead checkout-in-iframe.
-    fragment.css('a[data-gumroad-action="buy"]').each do |a|
-      a["href"] = "/l/#{product.unique_permalink}?wanted=true"
-      a["onclick"] = "parent.postMessage('gumroad:checkout','*');return false;"
+    # one checkout URL it will navigate to. `return false` stops an anchor (or a
+    # button inside a form) from navigating/submitting the iframe to a dead
+    # checkout-in-iframe. Match any element, not just <a>, so an agent-authored
+    # <button>/<div> buy control still gets wired up instead of silently dying.
+    fragment.css('[data-gumroad-action="buy"]').each do |node|
+      node["onclick"] = "parent.postMessage('gumroad:checkout','*');return false;"
+      node["href"] = "/l/#{product.unique_permalink}?wanted=true" if node.name == "a"
     end
 
     fragment.to_html

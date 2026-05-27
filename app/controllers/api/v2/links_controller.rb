@@ -223,6 +223,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "custom_html must be a string.")
     end
 
+    if (length_error = custom_html_length_error)
+      return render_response(false, message: length_error)
+    end
+
     if params.key?(:tags)
       if !params[:tags].is_a?(Array) || params[:tags].any? { |t| !t.respond_to?(:to_str) }
         return render_response(false, message: "tags must be an array of strings.")
@@ -465,6 +469,10 @@ class Api::V2::LinksController < Api::V2::BaseController
     custom_html = params[:custom_html]
     return render_response(false, message: "custom_html must be a string.") unless custom_html.nil? || custom_html.is_a?(String)
 
+    if (length_error = custom_html_length_error)
+      return render_response(false, message: length_error)
+    end
+
     result = Ai::PageSanitizer.sanitize_with_report(custom_html)
     sanitized = result.html.presence
     candidate_page = Page.new(pageable: @product, custom_html: sanitized)
@@ -485,6 +493,16 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def error_with_product(product = nil)
       error_with_object(:product, product)
+    end
+
+    # Reject oversized HTML before the sanitizer parses it. Page validates the
+    # same 500 KB cap, but only after Nokogiri has parsed the whole payload — a
+    # cheap length check first bounds CPU on the rate-limited agent path.
+    def custom_html_length_error
+      value = params[:custom_html]
+      return unless value.is_a?(String) && value.length > Page::MAX_CUSTOM_HTML_LENGTH
+
+      "custom_html is too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
     end
 
     UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze

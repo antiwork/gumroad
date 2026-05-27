@@ -237,6 +237,18 @@ describe LinksController, :vcr, type: :controller do
       expect(product.name).to eq("Updated product")
       expect(product.custom_html).to eq("<section>Updated</section>")
     end
+
+    it "preserves the existing description when a mixed-field custom_html update omits it" do
+      product.update!(description: "Existing description")
+
+      post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>Updated</section>" }
+
+      expect(response).to have_http_status(:no_content)
+      product.reload
+      expect(product.name).to eq("Renamed")
+      expect(product.custom_html).to eq("<section>Updated</section>")
+      expect(product.description).to eq("Existing description")
+    end
   end
 
   describe "when the custom_html_pages feature is disabled" do

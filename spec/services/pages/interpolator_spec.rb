@@ -88,13 +88,16 @@ describe Pages::Interpolator do
       expect(described_class.interpolate(nil, product: product)).to be_nil
     end
 
-    it "does not wrap non-anchor elements with data-gumroad-action='buy'" do
+    it "wires non-anchor buy elements via onclick without converting them to anchors" do
       html = %(<button data-gumroad-action="buy">Buy</button>)
 
       result = described_class.interpolate(html, product: product)
 
+      expect(result).to include("parent.postMessage('gumroad:checkout','*')")
+      expect(result).to include("return false")
+      expect(result).to include("<button")
       expect(result).not_to include("<a")
-      expect(result).to include(%(<button data-gumroad-action="buy">Buy</button>))
+      expect(result).not_to include("href=")
     end
   end
 end
