@@ -230,6 +230,8 @@ user.confirm
 
 ### Refresh purchases in user's library
 
+Link unlinked purchases:
+
 ```ruby
 user = User.find_by(email: "customer@example.com")
 if user.present?
@@ -239,7 +241,7 @@ else
 end
 ```
 
-### Restore purchases the buyer deleted from their library
+Restore purchases the buyer deleted from their library:
 
 ```ruby
 user = User.find_by(email: "customer@example.com")
