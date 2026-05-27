@@ -475,6 +475,7 @@ describe ProductPresenter do
           },
           cancellation_discounts_enabled: false,
           price_checker_enabled: false,
+          custom_html_pages_enabled: false,
           ai_generated: false,
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
@@ -486,6 +487,14 @@ describe ProductPresenter do
 
       it "exposes price_checker_enabled: true in edit_props" do
         expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
+      end
+    end
+
+    context "when the custom_html_pages feature flag is enabled for the seller" do
+      before { Feature.activate_user(:custom_html_pages, product.user) }
+
+      it "exposes custom_html_pages_enabled: true in edit_props" do
+        expect(presenter.edit_props[:custom_html_pages_enabled]).to eq(true)
       end
     end
 
@@ -729,6 +738,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: true,
             price_checker_enabled: false,
+            custom_html_pages_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
@@ -945,6 +955,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: false,
             price_checker_enabled: false,
+            custom_html_pages_enabled: false,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }

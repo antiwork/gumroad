@@ -29,6 +29,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     seller_refund_policy_enabled,
     seller_refund_policy,
     seller,
+    customHtmlPagesEnabled,
     updateProduct,
   } = useProductEditContext();
 
@@ -271,6 +272,8 @@ Command: gumroad products update ${uniquePermalink} --custom-html ./landing.html
         />
       </>
     );
+
+  if (!customHtmlPagesEnabled) return defaultPreview;
 
   return (
     <>

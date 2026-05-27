@@ -10,6 +10,8 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
   let(:seller) { create(:user, username: "landingseller") }
   let(:product) { create(:product, user: seller, custom_html: "<section><script>window.ok = true;</script></section>") }
 
+  before { Feature.activate_user(:custom_html_pages, seller) }
+
   it "serves the strict custom_html CSP, not the app default from SecureHeaders" do
     get "/l/#{product.unique_permalink}/landing/embed", headers: { "HOST" => VALID_REQUEST_HOSTS.first }
 

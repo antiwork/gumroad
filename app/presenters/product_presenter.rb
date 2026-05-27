@@ -266,6 +266,7 @@ class ProductPresenter
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
       price_checker_enabled: Feature.active?(:price_checker, product.user),
+      custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
     }

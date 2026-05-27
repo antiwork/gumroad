@@ -31,6 +31,7 @@ describe "Rack::Attack throttle", type: :request do
       product = create(:product, user: user)
       app = create(:oauth_application, owner: create(:user))
       token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products").token
+      Feature.activate_user(:custom_html_pages, user)
 
       30.times do |i|
         put "/api/v2/products/#{product.external_id}",
@@ -56,6 +57,7 @@ describe "Rack::Attack throttle", type: :request do
       product = create(:product, user: user)
       app = create(:oauth_application, owner: create(:user))
       token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products").token
+      Feature.activate_user(:custom_html_pages, user)
 
       60.times do |i|
         post "/api/v2/products/#{product.external_id}/preview_custom_html",

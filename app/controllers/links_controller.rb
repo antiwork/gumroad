@@ -637,7 +637,11 @@ class LinksController < ApplicationController
     end
 
     def product_permitted_params
-      @_product_permitted_params ||= params.permit(policy(@product).product_permitted_attributes)
+      @_product_permitted_params ||= begin
+        permitted = params.permit(policy(@product).product_permitted_attributes)
+        permitted.delete(:custom_html) unless Feature.active?(:custom_html_pages, @product.user)
+        permitted
+      end
     end
 
     def check_banned
@@ -655,7 +659,7 @@ class LinksController < ApplicationController
     end
 
     def custom_html_visible?
-      @product.present? && @product.custom_html.present? && (@product.alive? || can_preview_custom_html?)
+      @product.present? && Feature.active?(:custom_html_pages, @product.user) && @product.custom_html.present? && (@product.alive? || can_preview_custom_html?)
     end
 
     def can_preview_custom_html?

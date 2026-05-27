@@ -9,6 +9,8 @@ describe "GET /l/:id/landing/embed routing", type: :request do
   let(:seller) { create(:user, username: "landingseller") }
   let(:product) { create(:product, user: seller, custom_html: "<section><h1>Live</h1></section>") }
 
+  before { Feature.activate_user(:custom_html_pages, seller) }
+
   it "resolves on the seller subdomain and serves the seller's HTML" do
     host = URI.parse(seller.subdomain_with_protocol).host
     get "/l/#{product.unique_permalink}/landing/embed", headers: { "HOST" => host }

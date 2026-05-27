@@ -203,6 +203,7 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
   priceCheckerEnabled: boolean;
+  customHtmlPagesEnabled: boolean;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

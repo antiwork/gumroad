@@ -215,6 +215,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
+    if params.key?(:custom_html) && !Feature.active?(:custom_html_pages, current_resource_owner)
+      return render_response(false, message: "You do not have access to custom HTML pages.")
+    end
+
     if params.key?(:custom_html) && !params[:custom_html].nil? && !params[:custom_html].is_a?(String)
       return render_response(false, message: "custom_html must be a string.")
     end
@@ -455,6 +459,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   # normalization so the dry-run and the real PUT agree on edge cases like
   # input that sanitizes entirely to an empty string.
   def preview_custom_html
+    return render_response(false, message: "You do not have access to custom HTML pages.") unless Feature.active?(:custom_html_pages, current_resource_owner)
     return render_response(false, message: "custom_html is required.") unless params.key?(:custom_html)
 
     custom_html = params[:custom_html]

@@ -10,6 +10,7 @@ describe LinksController, :vcr, type: :controller do
 
   before do
     @request.host = URI.parse(seller.subdomain_with_protocol).host
+    Feature.activate_user(:custom_html_pages, seller)
   end
 
   describe "GET show with custom_html" do
@@ -235,6 +236,34 @@ describe LinksController, :vcr, type: :controller do
       product.reload
       expect(product.name).to eq("Updated product")
       expect(product.custom_html).to eq("<section>Updated</section>")
+    end
+  end
+
+  describe "when the custom_html_pages feature is disabled" do
+    before { Feature.deactivate_user(:custom_html_pages, seller) }
+
+    it "renders the default product page instead of the custom_html wrapper" do
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+    end
+
+    it "404s the landing embed endpoint" do
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "ignores custom_html on the internal update path, leaving the live page untouched" do
+      sign_in seller
+
+      post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>New HTML</section>" }
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.name).to eq("Renamed")
+      expect(product.custom_html).to eq("<section><h1>Live landing page</h1></section>")
     end
   end
 end

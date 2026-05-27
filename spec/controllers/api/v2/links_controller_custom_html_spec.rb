@@ -10,6 +10,7 @@ describe Api::V2::LinksController do
     @product = create(:product, user: @user)
     @other_product = create(:product, user: @other_user)
     @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
+    Feature.activate_user(:custom_html_pages, @user)
   end
 
   describe "PUT 'update' with custom_html" do
@@ -283,6 +284,37 @@ describe Api::V2::LinksController do
       expect(body["custom_html"]).to include("<h1>Keep</h1>")
       expect(body["sanitization_report"]["total_removed"]).to eq(1)
       expect(body["sanitization_report"]["removed_tags"].first["reason"]).to eq("script src host not allowed")
+    end
+  end
+
+  describe "when the custom_html_pages feature is disabled" do
+    before { Feature.deactivate_user(:custom_html_pages, @user) }
+
+    it "rejects a custom_html update with an access error and leaves the page unchanged" do
+      @product.update!(custom_html: "<section>Existing</section>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>New</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(false)
+      expect(body["message"]).to eq("You do not have access to custom HTML pages.")
+      expect(@product.reload.custom_html).to eq("<section>Existing</section>")
+    end
+
+    it "allows updating other attributes when custom_html is not part of the request" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, name: "Renamed product" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(@product.reload.name).to eq("Renamed product")
+    end
+
+    it "rejects preview_custom_html with an access error" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>HTML</section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(false)
+      expect(body["message"]).to eq("You do not have access to custom HTML pages.")
     end
   end
 end
