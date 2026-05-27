@@ -238,6 +238,27 @@ describe Product::Prices do
 
           expect(product.display_price_cents).to eq 5_99
         end
+
+        it "issues no per-row variant queries when associations are not preloaded (dashboard path)" do
+          create(:variant, variant_category: category, price_difference_cents: 200)
+          create(:variant, variant_category: category, price_difference_cents: 99)
+          fresh_product = Link.find(product.id)
+
+          queries = []
+          subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+            next if payload[:name] == "SCHEMA" || payload[:cached]
+            queries << payload[:sql] if payload[:sql].start_with?("SELECT")
+          end
+          begin
+            expect(fresh_product.display_price_cents).to eq 5_99
+          ensure
+            ActiveSupport::Notifications.unsubscribe(subscriber)
+          end
+
+          per_row_alive_variants = queries.grep(/FROM `base_variants`.*`variant_category_id` = \d+/)
+          expect(per_row_alive_variants).to be_empty,
+            "Expected no per-row alive_variants queries when associations are not preloaded, got:\n#{per_row_alive_variants.join("\n")}"
+        end
       end
     end
 
