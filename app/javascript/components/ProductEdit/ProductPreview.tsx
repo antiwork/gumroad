@@ -192,9 +192,9 @@ Command: gumroad products update ${uniquePermalink} --custom-html ./landing.html
 
     try {
       const response = await request({
-        method: "PUT",
+        method: "POST",
         accept: "json",
-        url: Routes.internal_product_path(uniquePermalink),
+        url: Routes.link_path(uniquePermalink),
         data: { custom_html: null },
       });
       const json: { success?: boolean; message?: string } = await response.json();
