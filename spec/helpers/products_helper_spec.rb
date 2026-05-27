@@ -242,7 +242,7 @@ describe ProductsHelper do
       ]
       per_row_patterns.each do |pattern, label|
         hits = queries.grep(pattern)
-        expect(hits.size).to be <= 1,
+        expect(hits).to be_empty,
           "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
       end
     end

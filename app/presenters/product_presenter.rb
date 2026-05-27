@@ -90,7 +90,7 @@ class ProductPresenter
     user.alive_product_files_preferred_for_product(product)
         .limit($redis.get(RedisKey.product_presenter_existing_product_files_limit))
         .order(id: :desc)
-        .includes(:alive_subtitle_files).map { _1.as_json(existing_product_file: true) }
+        .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
   end
 
   def edit_props
