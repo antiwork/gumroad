@@ -10,8 +10,6 @@ import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
-  const { custom_html: _customHtml, ...productParams } = product;
-
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const richContents =
@@ -28,6 +26,7 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
   );
   editor.destroy();
   product.files = product.files.filter((file) => fileIds.has(file.id));
+  const { custom_html: _customHtml, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
