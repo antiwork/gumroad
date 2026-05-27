@@ -73,10 +73,15 @@ describe Api::V2::SubscribersController do
       context "N+1 query prevention" do
         it "does not issue per-row queries for link / user / purchases / original_purchase / last_payment_option" do
           # Create multiple active subscriptions so an N+1 regression would be
-          # clearly visible (one repeated query per subscription).
+          # clearly visible (one repeated query per subscription). Each
+          # subscription gets a PaymentOption with its own Price so that the
+          # `last_payment_option -> price` preload path is actually exercised
+          # — without these, the prices regex would never match anything and
+          # the assertion would be vacuous.
           5.times do
             sub = create(:subscription, link: @product, user: create(:user))
             create(:membership_purchase, link: @product, subscription: sub)
+            create(:payment_option, subscription: sub)
           end
 
           # Pre-warm to flush one-time setup queries (schema, app config, etc.)
