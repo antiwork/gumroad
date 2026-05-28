@@ -184,6 +184,13 @@ describe Checkout::Upsells::ProductsController do
     end
 
     it "eager-loads associations needed by the presenter (no N+1)" do
+      # Attach thumbnails to two products so the variant_records per-row
+      # pattern below is reachable. Without these the regex always matches
+      # zero rows (an unreachable per_row_pattern is a vacuous assertion —
+      # see Antipattern 3 reachability rule).
+      create(:thumbnail, product: product1)
+      create(:thumbnail, product: product2)
+
       # Pre-warm Rails internals so we count only product-related queries.
       sign_in seller
       get :index
@@ -207,9 +214,8 @@ describe Checkout::Upsells::ProductsController do
       end
 
       # 5 products in setup, MAX_PRODUCTS = 25, so all are loaded.
-      # If PRODUCT_INCLUDES drops :alive_prices or the variant_records chain,
-      # we'll see per-product SELECTs against `prices`,
-      # `active_storage_attachments`, `active_storage_blobs`, or
+      # If PRODUCT_INCLUDES drops :alive_prices or the variant_records
+      # chain, we'll see per-product SELECTs against `prices` or
       # `active_storage_variant_records` — fail the spec.
       [
         /SELECT.*FROM `prices`.*WHERE `prices`\.`link_id` = /,
