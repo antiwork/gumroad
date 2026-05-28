@@ -31,8 +31,8 @@ describe CreatorAnalytics::CachingProxy do
         end
 
         # check that the two missing date ranges are generated dynamically
-        expect(@service).to receive(:analytics_data).with(@dates[1], @dates[2], by:).and_call_original
-        expect(@service).to receive(:analytics_data).with(@dates[4], @dates[5], by:).and_call_original
+        expect(@service).to receive(:analytics_data).with(@dates[1], @dates[2], by:, products: anything).and_call_original
+        expect(@service).to receive(:analytics_data).with(@dates[4], @dates[5], by:, products: anything).and_call_original
         if by == :date
           expect(@service).to receive(:rebuild_month_index_values!).and_call_original
         end
@@ -250,8 +250,7 @@ describe CreatorAnalytics::CachingProxy do
       user = create(:user, timezone: "London")
       start_date, end_date = Date.new(2019, 1, 1), Date.new(2019, 1, 7)
       dates = (start_date .. end_date).to_a
-      products = user.products_for_creator_analytics.load
-      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:, products:).thrice.and_call_original
+      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:, products: nil).thrice.and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_date).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_state).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_referral).and_call_original
