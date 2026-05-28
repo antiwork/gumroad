@@ -75,8 +75,11 @@ class Pages::BuyButtonParams
       val = Float(raw, exception: false)
       return nil unless val && val.finite? && val > 0
 
-      # Mirror the checkout's expectation: ?price arrives in major units and the
-      # show action multiplies by 100 to get cents (see LinksController#show).
+      # Convert to cents the same way the checkout does — LinksController#show
+      # uses (price.to_f * 100).to_i — so this validation never admits a price the
+      # checkout would itself truncate below the minimum and refuse to honor. The
+      # float quirk (e.g. 9.99 → 998) lives on both sides; dropping such a
+      # boundary price here just falls the buy button back to the default checkout.
       val_cents = (val * 100).to_i
       return nil if val_cents < product.price_cents.to_i
 

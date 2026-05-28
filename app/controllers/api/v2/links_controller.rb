@@ -311,8 +311,11 @@ class Api::V2::LinksController < Api::V2::BaseController
     begin
       ActiveRecord::Base.transaction do
         # Lock the product row so concurrent custom_html PUTs serialize their
-        # build_page calls — otherwise they race against the pages unique
-        # index. Must precede assign_attributes — lock! raises on a dirty record.
+        # build_page calls — otherwise they race against the pages unique index.
+        # Must precede assign_attributes — lock! raises on a dirty record. lock!
+        # reloads the row, which also swaps in a fresh (empty) association cache,
+        # so the previous_custom_html read below reflects a concurrent writer's
+        # committed page rather than one cached before the lock.
         @product.lock! if params.key?(:custom_html)
 
         attrs = {}

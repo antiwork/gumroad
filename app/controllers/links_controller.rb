@@ -346,9 +346,18 @@ class LinksController < ApplicationController
         return render json: { success: true }
       end
 
-      ActiveRecord::Base.transaction do
-        @product.lock! if custom_html_update?
+      # This dashboard endpoint serves the editor's full-form save (which strips
+      # custom_html) and the Remove button (custom_html-only, handled above). A
+      # request mixing custom_html with other fields isn't a real client flow,
+      # and it would fall through to the partial-update path below that clears any
+      # collection the request omits (rich content, covers, shipping). Reject it;
+      # the API v2 endpoint owns multi-field custom_html writes, guarding each
+      # field independently.
+      if custom_html_update?
+        return render json: { error_message: "Update custom_html on its own, or use the API to change it alongside other fields." }, status: :unprocessable_entity
+      end
 
+      ActiveRecord::Base.transaction do
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,

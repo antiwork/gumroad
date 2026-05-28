@@ -237,35 +237,23 @@ describe LinksController, :vcr, type: :controller do
       expect(product.reload.custom_html).to eq("<section>Updated</section>")
     end
 
-    it "locks the product row before mixed-field custom_html updates" do
-      expect_any_instance_of(Link).to receive(:lock!).and_call_original
-
-      post :update, params: { id: product.unique_permalink, name: "Updated product", custom_html: "<section>Updated</section>" }
-
-      expect(response).to be_successful
-      expect(response).to have_http_status(:no_content)
-      product.reload
-      expect(product.name).to eq("Updated product")
-      expect(product.custom_html).to eq("<section>Updated</section>")
-    end
-
-    it "preserves other product fields when a mixed-field custom_html update omits them" do
+    it "rejects a mixed custom_html update so it can't reach the destructive partial-update path" do
+      # The editor strips custom_html from its full-form save and the Remove
+      # button sends custom_html on its own, so a request mixing custom_html with
+      # other fields is not a real client flow. Reject it rather than let it fall
+      # through to the partial-update path that would clear omitted collections
+      # (rich content, covers, shipping); multi-field custom_html writes go
+      # through the API v2 endpoint instead.
       product.update!(description: "Existing description")
-      product.save_custom_attributes([{ name: "Material", value: "Cotton" }])
-      product.save_tags!(["launch"])
-      # show_in_sections!([]) would wipe seller-profile section membership; the
-      # guard skips the call entirely when section_ids isn't in the params.
-      expect_any_instance_of(Link).not_to receive(:show_in_sections!)
 
-      post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>Updated</section>" }
+      post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>New</section>" }
 
-      expect(response).to have_http_status(:no_content)
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error_message"]).to match(/on its own|use the api/i)
       product.reload
-      expect(product.name).to eq("Renamed")
-      expect(product.custom_html).to eq("<section>Updated</section>")
+      expect(product.name).not_to eq("Renamed")
+      expect(product.custom_html).to eq("<section><h1>Live landing page</h1></section>")
       expect(product.description).to eq("Existing description")
-      expect(product.custom_attributes).to eq([{ "name" => "Material", "value" => "Cotton" }])
-      expect(product.tags.pluck(:name)).to eq(["launch"])
     end
   end
 
