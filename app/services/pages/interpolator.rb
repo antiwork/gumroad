@@ -34,8 +34,12 @@ class Pages::Interpolator
     # validated server-side and serialized into a JSON data attribute the
     # onclick reads at click time, so a typo in the agent's HTML falls back
     # to the product's default checkout instead of breaking the buyer's view.
+    # Build the validator once so the product-derived lookups (variant names,
+    # allowed recurrences) are memoized across every buy button on the page,
+    # not re-queried per element.
+    buy_button_validator = Pages::BuyButtonParams.new(product)
     fragment.css('[data-gumroad-action="buy"]').each do |node|
-      selection = Pages::BuyButtonParams.from(node, product:)
+      selection = buy_button_validator.validate(node)
       node["data-gumroad-checkout-params"] = selection.to_json
       node["onclick"] = BUY_BUTTON_ONCLICK_JS
       if node.name == "a"

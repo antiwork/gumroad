@@ -16,45 +16,48 @@
 # Returned hash uses the same keys the checkout already accepts on the URL
 # (`?variant=&quantity=&price=&recurrence=` — see LinksController#show), so the
 # caller can pass it straight through to the wrapper without remapping.
+#
+# Build the validator once per render (`new(product)`) and call `validate(node)`
+# per buy element — the product-derived lookups (variant names, allowed
+# recurrences) are memoized on the instance so a page with many buy buttons
+# doesn't re-query `product.options` / `product.recurrences` per button.
 class Pages::BuyButtonParams
+  # One-shot helper for callers validating a single node. The interpolator
+  # instantiates the validator once and reuses it across all buy buttons.
   def self.from(node, product:)
-    new(node, product).build
+    new(product).validate(node)
   end
 
-  def initialize(node, product)
-    @node = node
+  def initialize(product)
     @product = product
   end
 
-  def build
+  def validate(node)
     {}.tap do |params|
-      params[:variant] = variant if variant
-      params[:quantity] = quantity if quantity
-      params[:price] = price if price
-      params[:recurrence] = recurrence if recurrence
+      if (v = variant(node)); params[:variant] = v; end
+      if (q = quantity(node)); params[:quantity] = q; end
+      if (p = price(node)); params[:price] = p; end
+      if (r = recurrence(node)); params[:recurrence] = r; end
     end
   end
 
   private
-    attr_reader :node, :product
+    attr_reader :product
 
-    def variant
+    def variant(node)
       raw = node["data-gumroad-option"]
       return nil if raw.blank?
 
-      options = product.options
-      return nil if options.empty?
-
-      options.find { |o| o[:name].to_s == raw.to_s } ? raw.to_s : nil
+      option_names.include?(raw.to_s) ? raw.to_s : nil
     end
 
-    def quantity
+    def quantity(node)
       return nil unless product.quantity_enabled
 
       raw = node["data-gumroad-quantity"]
       return nil if raw.blank?
 
-      n = Integer(raw, 10) rescue nil
+      n = Integer(raw, 10, exception: false)
       return nil unless n && n >= 1
 
       max = product.max_purchase_count
@@ -63,13 +66,13 @@ class Pages::BuyButtonParams
       n
     end
 
-    def price
+    def price(node)
       return nil unless product.customizable_price
 
       raw = node["data-gumroad-price"]
       return nil if raw.blank?
 
-      val = Float(raw) rescue nil
+      val = Float(raw, exception: false)
       return nil unless val && val.finite? && val > 0
 
       # Mirror the checkout's expectation: ?price arrives in major units and the
@@ -80,13 +83,20 @@ class Pages::BuyButtonParams
       val
     end
 
-    def recurrence
+    def recurrence(node)
       return nil unless product.is_recurring_billing
 
       raw = node["data-gumroad-recurrence"]
       return nil if raw.blank?
 
-      enabled = product.recurrences&.dig(:enabled) || []
-      enabled.find { |r| r[:recurrence].to_s == raw.to_s } ? raw.to_s : nil
+      enabled_recurrences.include?(raw.to_s) ? raw.to_s : nil
+    end
+
+    def option_names
+      @option_names ||= product.options.map { |o| o[:name].to_s }.to_set
+    end
+
+    def enabled_recurrences
+      @enabled_recurrences ||= (product.recurrences[:enabled] || []).map { |r| r[:recurrence].to_s }.to_set
     end
 end
