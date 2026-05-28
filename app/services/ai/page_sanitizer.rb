@@ -27,7 +27,7 @@ class Ai::PageSanitizer
 
   ALLOWED_ATTRIBUTES = %w[
     accept accept-charset alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
-    charset cols colspan content contenteditable controls coords crossorigin data-gumroad-action data-gumroad-field datetime defer dir disabled download draggable enctype
+    charset cols colspan content contenteditable controls coords crossorigin datetime defer dir disabled download draggable enctype
     fill for form height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
     preserveaspectratio readonly rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
     value viewbox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule clip-path points transform offset stop-color
