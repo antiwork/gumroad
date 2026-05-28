@@ -2611,8 +2611,8 @@ describe Link, :vcr do
       expect(build(:product).compliance_blocked(ip)).to be(false)
     end
 
-    it "blocks ips from 'bad' countries, like Libya" do
-      ip = "41.208.70.70" # Tripoly Libya Telecom
+    it "blocks ips from 'bad' countries, like Iran" do
+      ip = "2.144.0.1" # MCI Iran
       expect(build(:product).compliance_blocked(ip)).to be(true)
     end
 
