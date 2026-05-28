@@ -1023,7 +1023,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       it "shows confirmation modal and updates the country if confirmed" do
         visit settings_payments_path
-        expect(find(:select, "Country")).to have_selector(:option, "Somalia (not supported)", disabled: true)
+        expect(find(:select, "Country")).to have_selector(:option, "Cuba (not supported)", disabled: true)
         select(@update_country, from: "Country")
 
         within_modal do
@@ -6317,7 +6317,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_modal do
           expect(page).to have_content "Where are you located?"
           expect(page).to have_button "Save", disabled: true
-          expect(find(:select, "Country")).to have_selector(:option, "Somalia (not supported)", disabled: true)
+          expect(find(:select, "Country")).to have_selector(:option, "Cuba (not supported)", disabled: true)
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
           check "I have proof of residence within this country"
