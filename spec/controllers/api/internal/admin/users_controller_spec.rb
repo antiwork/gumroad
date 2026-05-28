@@ -2173,6 +2173,122 @@ describe Api::Internal::Admin::UsersController do
                      extra_params: { expected_purchase_count: 0, expected_total_amount_cents: 0 }
   end
 
+  describe "POST add_credit" do
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+    let(:user) { create(:user) }
+    let(:reason) { "Goodwill for reported checkout bug" }
+
+    include_examples "admin api authorization required", :post, :add_credit, { user_id: "missing", amount_cents: "1000", reason: "Goodwill" }
+
+    it "returns 400 when user_id is missing" do
+      post :add_credit, params: { email: user.email, amount_cents: "1000", reason: }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :add_credit, params: { user_id: "missing", amount_cents: "1000", reason: }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns 400 when amount_cents is missing" do
+      post :add_credit, params: { user_id: user.external_id, reason: }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "amount_cents is required" }.as_json)
+    end
+
+    it "returns 400 when amount_cents is not an integer" do
+      post :add_credit, params: { user_id: user.external_id, amount_cents: "10.25", reason: }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "amount_cents must be an integer" }.as_json)
+    end
+
+    it "returns 400 when amount_cents is zero" do
+      post :add_credit, params: { user_id: user.external_id, amount_cents: "0", reason: }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "amount_cents must not be zero" }.as_json)
+    end
+
+    it "returns 400 when reason is missing" do
+      post :add_credit, params: { user_id: user.external_id, amount_cents: "1000" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "reason is required" }.as_json)
+    end
+
+    it "returns 400 when reason is blank" do
+      post :add_credit, params: { user_id: user.external_id, amount_cents: "1000", reason: "   " }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "reason is required" }.as_json)
+    end
+
+    it "creates a credit with the reason and notifies the user" do
+      mail = double(deliver_later: true)
+      expect(ContactingCreatorMailer).to receive(:credit_notification).with(user.id, 1000, reason).and_return(mail)
+
+      expect do
+        post :add_credit, params: { user_id: user.external_id, amount_cents: "1000", reason: }
+      end.to change { Credit.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+
+      credit = Credit.last
+      expect(credit).to have_attributes(user_id: user.id, amount_cents: 1000, reason:, crediting_user_id: admin_user.id)
+      expect(response.parsed_body["credit"]).to include(
+        "id" => credit.id.to_s,
+        "amount_cents" => 1000,
+        "reason" => reason
+      )
+      expect(user.comments.reload.last.content).to eq("issued $10 credit — #{reason}.")
+    end
+
+    it "records an audit log attributed to the actor" do
+      actor = create(:admin_user)
+      plaintext_token = AdminApiToken.mint!(actor_user_id: actor.id)
+      admin_api_token = AdminApiToken.find_by!(actor_user: actor, token_hash: AdminApiToken.hash_token(plaintext_token))
+      request.headers["Authorization"] = "Bearer #{plaintext_token}"
+
+      expect do
+        post :add_credit, params: { user_id: user.external_id, amount_cents: "1000", reason: }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(Credit.last.crediting_user_id).to eq(actor.id)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "users.add_credit",
+        actor_user_id: actor.id,
+        admin_api_token_id: admin_api_token.id,
+        target_type: "User",
+        target_id: user.id,
+        response_status: 200
+      )
+    end
+
+    it "claws back credit with a negative amount without emailing the user" do
+      expect(ContactingCreatorMailer).not_to receive(:credit_notification)
+
+      expect do
+        post :add_credit, params: { user_id: user.external_id, amount_cents: "-500", reason: "Clawback: unspent goodwill" }
+      end.to change { Credit.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(Credit.last.amount_cents).to eq(-500)
+      expect(response.parsed_body["credit"]["amount_cents"]).to eq(-500)
+    end
+
+    include_examples "requires user_id for user mutation", :add_credit, extra_params: { amount_cents: "1000", reason: "Goodwill" }
+    include_examples "supports user lookup by user_id", :add_credit, extra_params: { amount_cents: "1000", reason: "Goodwill" }
+    include_examples "checks expected_email for user mutation", :add_credit, extra_params: { amount_cents: "1000", reason: "Goodwill" }
+  end
+
   describe "POST reset_password" do
     let(:user) { create(:user) }
 
