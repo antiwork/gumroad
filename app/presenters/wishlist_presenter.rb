@@ -115,7 +115,7 @@ class WishlistPresenter
       pagination, wishlist_products = pagy(wishlist.alive_wishlist_products, page:, limit: PER_PAGE)
 
       paginated_products = wishlist_products
-        .includes(product: ProductPresenter::ASSOCIATIONS_FOR_CARD)
+        .includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD)
         .to_a
 
       # Preload variant chain for `wishlist_product.variant&.to_option`. Two STI
