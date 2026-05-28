@@ -133,7 +133,7 @@ class WishlistPresenter
       sku_records     = variants.select { |v| v.is_a?(Sku) }
       if variant_records.any?
         ActiveRecord::Associations::Preloader
-          .new(records: variant_records, associations: { variant_category: :link })
+          .new(records: variant_records, associations: [{ variant_category: :link }, :alive_prices])
           .call
       end
       if sku_records.any?

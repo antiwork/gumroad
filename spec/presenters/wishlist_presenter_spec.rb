@@ -398,6 +398,12 @@ describe WishlistPresenter do
         # ASSOCIATIONS_FOR_CARD preload uses batched WHERE id IN (...) which
         # is legitimate; we only want to catch per-row WHERE id = N.
         /FROM `links`.*`links`\.`id` = \d+(?!.*\bIN\b)/,
+        # `BaseVariant#to_option` calls `recurrence_price_values` whenever
+        # `link.is_tiered_membership` is true, which loads the variant's
+        # `alive_prices` (VariantPrice rows on the `prices` STI table).
+        # Without preloading, each tiered-membership variant fires its own
+        # per-row prices query keyed by variant_id.
+        /FROM `prices`.*`prices`\.`variant_id` = \d+\b/,
       ].each do |per_row_pattern|
         per_row = queries.grep(per_row_pattern)
         expect(per_row).to be_empty,
