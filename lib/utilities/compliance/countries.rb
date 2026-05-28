@@ -20,24 +20,13 @@ module Compliance
       return [] if country.nil?
       ([country.common_name] + (country.data["gumroad_historical_names"] || [])).uniq
     end
-    # This list would be updated according to changes in OFAC regulation.
+    # This list reflects countries under comprehensive OFAC sanctions.
+    # Targeted SDN-list screening on individuals/entities is enforced
+    # separately and is not based on country of residence.
     BLOCKED_COUNTRY_CODES = [
-      AFG, # Afghanistan
       CUB, # Cuba
-      COD, # Congo, the Democratic Republic of the
-      CIV, # Côte d'Ivoire
-      IRQ, # Iraq
       IRN, # Iran
-      LBN, # Lebanon
-      LBR, # Liberia
-      LBY, # Libya
-      MMR, # Myanmar
       PRK, # North Korea
-      SOM, # Somalia
-      SDN, # Sudan
-      SYR, # Syrian Arabic Republic
-      YEM, # Yemen
-      ZWE, # Zimbabwe
     ].map(&:alpha2).freeze
     private_constant :BLOCKED_COUNTRY_CODES
 
