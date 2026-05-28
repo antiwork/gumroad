@@ -94,14 +94,11 @@ describe Sku do
   end
 
   describe "#inventory_left" do
-    context "when inventory_counter_cache is active and the cache is unpopulated" do
-      before { Feature.activate(:inventory_counter_cache) }
-      after { Feature.deactivate(:inventory_counter_cache) }
-
-      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising TypeError" do
+    context "when the product's sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
         product = create(:product, max_purchase_count: 100)
-        product.update_columns(sales_count_for_inventory_cache: nil)
         sku = create(:sku, link: product)
+        allow(sku.link).to receive(:sales_count_for_inventory).and_return(nil)
         expect { sku.inventory_left }.not_to raise_error
         expect(sku.inventory_left).to eq(100)
       end

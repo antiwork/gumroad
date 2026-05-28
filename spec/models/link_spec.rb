@@ -48,13 +48,10 @@ describe Link, :vcr do
       expect(build(:product, max_purchase_count: 100).valid?).to eq(true)
     end
 
-    context "when inventory_counter_cache is active and the cache is unpopulated" do
-      before { Feature.activate(:inventory_counter_cache) }
-      after { Feature.deactivate(:inventory_counter_cache) }
-
-      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising ArgumentError" do
+    context "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising ArgumentError on max_purchase_count change" do
         product = create(:product, max_purchase_count: 100)
-        product.update_columns(sales_count_for_inventory_cache: nil)
+        allow(product).to receive(:sales_count_for_inventory).and_return(nil)
         product.max_purchase_count = 50
         expect { product.valid? }.not_to raise_error
         expect(product).to be_valid
@@ -2176,13 +2173,10 @@ describe Link, :vcr do
       end
     end
 
-    describe "when inventory_counter_cache is active and the cache is unpopulated" do
-      before { Feature.activate(:inventory_counter_cache) }
-      after { Feature.deactivate(:inventory_counter_cache) }
-
-      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising TypeError" do
+    describe "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
         link.update!(max_purchase_count: 100)
-        link.update_columns(sales_count_for_inventory_cache: nil)
+        allow(link).to receive(:sales_count_for_inventory).and_return(nil)
         expect { link.remaining_for_sale_count }.not_to raise_error
         expect(link.remaining_for_sale_count).to eq(100)
       end
