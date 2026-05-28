@@ -4709,4 +4709,28 @@ describe LinksController, :vcr, inertia: true do
       end
     end
   end
+
+  context "when signed in as a user without an email" do
+    let(:user) { create(:user, provider: :twitter, email: nil, unconfirmed_email: nil) }
+
+    before do
+      sign_in user
+      @request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+    end
+
+    it "redirects authenticated seller actions to the settings page" do
+      get :index
+      expect(response).to redirect_to(settings_main_path)
+    end
+
+    it "does not gate the public product page" do
+      seller = create(:user, :eligible_for_service_products)
+      product = create(:product, user: seller)
+      @request.host = URI.parse(seller.subdomain_with_protocol).host
+
+      get :show, params: { id: product.to_param }
+
+      expect(response).to be_successful
+    end
+  end
 end

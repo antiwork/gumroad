@@ -3485,7 +3485,7 @@ describe Purchase, :vcr do
       end
 
       it "does not allow shipping to a region that is not compliant" do
-        bad_purchase = create(:physical_purchase, price_cents: 100_00, link: @phys_link, chargeable: create(:chargeable), country: "Libya")
+        bad_purchase = create(:physical_purchase, price_cents: 100_00, link: @phys_link, chargeable: create(:chargeable), country: "Iran")
 
         expect(bad_purchase.errors[:base].present?).to be(true)
         expect(bad_purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SHIPPING_COUNTRY

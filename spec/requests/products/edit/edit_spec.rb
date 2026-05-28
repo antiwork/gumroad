@@ -514,16 +514,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
   it "does not allow publishing when creator's email is empty" do
     allow_any_instance_of(User).to receive(:email).and_return("")
+    allow_any_instance_of(User).to receive(:unconfirmed_email).and_return(nil)
     product = create(:product, user: seller, draft: true, purchase_disabled_at: Time.current)
     visit edit_link_path(product.unique_permalink) + "/content"
 
-    click_on "Publish and continue"
-
-    within :alert, text: "To publish a product, we need you to have an email. Set an email to continue." do
-      expect(page).to have_link("Set an email", href: settings_main_url(host: UrlService.domain_with_protocol))
-    end
-    expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
-    expect(page).to have_button "Publish and continue"
+    # RequireAccountEmail concern redirects empty-email users to /settings
+    # before they can reach the product edit page or the publish button.
+    expect(page).to have_current_path(settings_main_path)
+    expect(page).to have_alert(text: "Please add an email address to your account before continuing.")
     expect(product.reload.alive?).to be(false)
   end
 
