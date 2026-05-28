@@ -238,8 +238,13 @@ describe LinksController, :vcr, type: :controller do
       expect(product.custom_html).to eq("<section>Updated</section>")
     end
 
-    it "preserves the existing description when a mixed-field custom_html update omits it" do
+    it "preserves other product fields when a mixed-field custom_html update omits them" do
       product.update!(description: "Existing description")
+      product.save_custom_attributes([{ name: "Material", value: "Cotton" }])
+      product.save_tags!(["launch"])
+      # show_in_sections!([]) would wipe seller-profile section membership; the
+      # guard skips the call entirely when section_ids isn't in the params.
+      expect_any_instance_of(Link).not_to receive(:show_in_sections!)
 
       post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>Updated</section>" }
 
@@ -248,6 +253,8 @@ describe LinksController, :vcr, type: :controller do
       expect(product.name).to eq("Renamed")
       expect(product.custom_html).to eq("<section>Updated</section>")
       expect(product.description).to eq("Existing description")
+      expect(product.custom_attributes).to eq([{ "name" => "Material", "value" => "Cotton" }])
+      expect(product.tags.pluck(:name)).to eq(["launch"])
     end
   end
 
