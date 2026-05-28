@@ -182,6 +182,50 @@ describe Checkout::Upsells::ProductsController do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq([])
     end
+
+    it "eager-loads associations needed by the presenter (no N+1)" do
+      # Attach thumbnails to two products so the variant_records per-row
+      # pattern below is reachable. Without these the regex always matches
+      # zero rows (an unreachable per_row_pattern is a vacuous assertion —
+      # see Antipattern 3 reachability rule).
+      create(:thumbnail, product: product1)
+      create(:thumbnail, product: product2)
+
+      # Pre-warm Rails internals so we count only product-related queries.
+      sign_in seller
+      get :index
+      expect(response).to have_http_status(:ok)
+
+      # Capture every SQL SELECT fired by the controller action itself.
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+        next if payload[:name] == "SCHEMA"
+        next if payload[:cached]
+        sql = payload[:sql]
+        next unless sql.start_with?("SELECT")
+        queries << sql
+      end
+
+      begin
+        get :index
+        expect(response).to have_http_status(:ok)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      # 5 products in setup, MAX_PRODUCTS = 25, so all are loaded.
+      # If PRODUCT_INCLUDES drops :alive_prices or the variant_records
+      # chain, we'll see per-product SELECTs against `prices` or
+      # `active_storage_variant_records` — fail the spec.
+      [
+        /SELECT.*FROM `prices`.*WHERE `prices`\.`link_id` = /,
+        /SELECT.*FROM `active_storage_variant_records`.*WHERE `active_storage_variant_records`\.`blob_id` = \d+\b/,
+      ].each do |per_row_pattern|
+        per_row = queries.grep(per_row_pattern)
+        expect(per_row).to be_empty,
+          "Expected no per-row queries matching #{per_row_pattern.inspect}, got #{per_row.size}:\n#{per_row.join("\n")}"
+      end
+    end
   end
 
   describe "GET #show" do

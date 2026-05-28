@@ -3766,9 +3766,10 @@ class Purchase < ApplicationRecord
       # Allow recurring billing and pre-order charges even after the product is sold out.
       return if does_not_count_towards_max_purchases
       return if link.max_purchase_count.nil?
-      return if (link.sales_count_for_inventory + quantity) <= link.max_purchase_count
+      sales_count = link.sales_count_for_inventory.to_i
+      return if (sales_count + quantity) <= link.max_purchase_count
 
-      if link.sales_count_for_inventory == link.max_purchase_count
+      if sales_count == link.max_purchase_count
         self.error_code = PurchaseErrorCode::PRODUCT_SOLD_OUT
         errors.add :base, "Sold out, please go back and pick another option."
       else

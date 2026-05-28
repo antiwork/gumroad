@@ -99,9 +99,17 @@ class CreatorAnalytics::CachingProxy
       dates_to_keys.invert.values_at(*missing_keys)
     end
 
-    # Direct proxy for CreatorAnalytics::Web
-    def analytics_data(start_date, end_date, by: :date)
-      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
+    # Direct proxy for CreatorAnalytics::Web. When `products:` is passed (from
+    # `compile_data_for_dates_and_fill_missing`, which fires `analytics_data`
+    # once per missing date range inside a single `data_for_dates` request),
+    # the caller's preloaded collection is shared across all `Web` instances
+    # for that request — eliminating the per-range N+1 on products. When
+    # omitted, each `Web` instance loads its own products (preserves original
+    # behavior for `fetch_data` / `overwrite_cache`, which run outside the
+    # missing-range loop and may observe newly-created products between
+    # successive calls on the same proxy).
+    def analytics_data(start_date, end_date, by: :date, products: nil)
+      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a, products:).public_send("by_#{by}")
     end
 
     # Fetches and caches the analytics data for one specific date
@@ -136,12 +144,16 @@ class CreatorAnalytics::CachingProxy
     end
 
     # Takes an hash of { date => (data | nil), }, returns an array of data for all days.
+    # Loads `products_for_creator_analytics` once and threads it through every
+    # `analytics_data` call so the N missing date ranges share a single product
+    # query instead of issuing one per range (the original Sentry N+1).
     def compile_data_for_dates_and_fill_missing(data_for_dates, by: :date)
       missing_date_ranges = find_missing_date_ranges(data_for_dates)
+      products = @user.products_for_creator_analytics.load if missing_date_ranges.any?
       data_for_dates.flat_map do |date, day_data|
         next day_data if day_data
         missing_range = missing_date_ranges.find { |range| range.begin == date }
-        analytics_data(missing_range.begin, missing_range.end, by:) if missing_range
+        analytics_data(missing_range.begin, missing_range.end, by:, products:) if missing_range
       end.compact.map(&:with_indifferent_access)
     end
 

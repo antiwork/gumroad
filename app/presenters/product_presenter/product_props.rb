@@ -66,7 +66,7 @@ class ProductPresenter::ProductProps
         ppp_details: product.ppp_details(request.remote_ip),
         can_edit: pundit_user&.user ? Pundit.policy!(pundit_user, product).edit? : false,
         refund_policy: refund_policy_props,
-        bundle_products: product.bundle_products.in_order.includes(:product, :variant).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
+        bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },

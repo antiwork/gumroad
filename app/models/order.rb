@@ -22,21 +22,19 @@ class Order < ApplicationRecord
   after_save :schedule_review_reminder!, if: :should_schedule_review_reminder?
 
   def receipt_for_gift_receiver?
-    # Ref https://gumroad.slack.com/archives/C01DBV0A257/p1702993001755659?thread_ts=1702968729.055289&cid=C01DBV0A257
-    # Raise to document the current state so that the caller is aware, rather than returning a Boolean that can
-    # generate undesired results.
     raise NotImplementedError, "Not supported for multi-item orders" if successful_purchases.count > 1
+    purchase = purchase_as_orderable
+    return false if purchase.nil?
 
-    purchase_as_orderable.is_gift_receiver_purchase?
+    purchase.is_gift_receiver_purchase?
   end
 
   def receipt_for_gift_sender?
-    # Ref https://gumroad.slack.com/archives/C01DBV0A257/p1702993001755659?thread_ts=1702968729.055289&cid=C01DBV0A257
-    # Raise to document the current state so that the caller is aware, rather than returning a Boolean that can
-    # generate undesired results.
     raise NotImplementedError, "Not supported for multi-item orders" if successful_purchases.count > 1
+    purchase = purchase_as_orderable
+    return false if purchase.nil?
 
-    purchase_as_orderable.is_gift_sender_purchase?
+    purchase.is_gift_sender_purchase?
   end
 
   def email

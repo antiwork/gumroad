@@ -47,6 +47,16 @@ describe Link, :vcr do
     it "allows it to be set on new records with no purchases" do
       expect(build(:product, max_purchase_count: 100).valid?).to eq(true)
     end
+
+    context "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising ArgumentError on max_purchase_count change" do
+        product = create(:product, max_purchase_count: 100)
+        allow(product).to receive(:sales_count_for_inventory).and_return(nil)
+        product.max_purchase_count = 50
+        expect { product.valid? }.not_to raise_error
+        expect(product).to be_valid
+      end
+    end
   end
 
   it "allows > $1000 links for verified users" do
@@ -2160,6 +2170,15 @@ describe Link, :vcr do
         expect(bundle.remaining_for_sale_count).to eq(2)
         bundle.bundle_products.second.mark_deleted!
         expect(bundle.remaining_for_sale_count).to eq(3)
+      end
+    end
+
+    describe "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
+        link.update!(max_purchase_count: 100)
+        allow(link).to receive(:sales_count_for_inventory).and_return(nil)
+        expect { link.remaining_for_sale_count }.not_to raise_error
+        expect(link.remaining_for_sale_count).to eq(100)
       end
     end
   end

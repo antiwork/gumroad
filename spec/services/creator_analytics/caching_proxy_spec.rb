@@ -31,8 +31,8 @@ describe CreatorAnalytics::CachingProxy do
         end
 
         # check that the two missing date ranges are generated dynamically
-        expect(@service).to receive(:analytics_data).with(@dates[1], @dates[2], by:).and_call_original
-        expect(@service).to receive(:analytics_data).with(@dates[4], @dates[5], by:).and_call_original
+        expect(@service).to receive(:analytics_data).with(@dates[1], @dates[2], by:, products: anything).and_call_original
+        expect(@service).to receive(:analytics_data).with(@dates[4], @dates[5], by:, products: anything).and_call_original
         if by == :date
           expect(@service).to receive(:rebuild_month_index_values!).and_call_original
         end
@@ -89,6 +89,19 @@ describe CreatorAnalytics::CachingProxy do
           totals: { permalinks[0] => { "direct" => [200, 100] } }
         }
       )
+    end
+
+    it "loads products only once across multiple cache-miss ranges" do
+      allow(@service).to receive(:use_cache?).and_return(true)
+
+      @dates.values_at(0, 3, 6).each do |date|
+        create(:computed_sales_analytics_day,
+               key: @service.send(:cache_key_for_data, date, by: :date),
+               data: web_data(:date, date, date).to_json)
+      end
+
+      expect(@user).to receive(:products_for_creator_analytics).once.and_call_original
+      @service.data_for_dates(@dates.first, @dates.last, by: :date)
     end
 
     it "calls original method if cache shouldn't be used" do
@@ -237,7 +250,7 @@ describe CreatorAnalytics::CachingProxy do
       user = create(:user, timezone: "London")
       start_date, end_date = Date.new(2019, 1, 1), Date.new(2019, 1, 7)
       dates = (start_date .. end_date).to_a
-      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:).thrice.and_call_original
+      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:, products: nil).thrice.and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_date).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_state).and_call_original
       expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_referral).and_call_original
@@ -369,7 +382,8 @@ describe CreatorAnalytics::CachingProxy do
       expect(@service).to receive(:analytics_data).with(
         Date.new(2020, 1, 2),
         Date.new(2020, 1, 3),
-        by: :date
+        by: :date,
+        products: anything
       ).and_return("data-for-day-two-and-three" => :bar)
 
       result = @service.send(:compile_data_for_dates_and_fill_missing,

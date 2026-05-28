@@ -103,13 +103,14 @@ describe WalksAppAttestVerifier do
     def build_assertion(counter:, challenge:, body: request_body, rp_id_hash: app_id_hash)
       auth_data = rp_id_hash + [0].pack("C") + [counter].pack("N")
       client_data_hash = OpenSSL::Digest::SHA256.digest(challenge + body)
-      # Mirror Apple's kSecKeyAlgorithmECDSASignatureMessageX962SHA256: the
-      # Secure Enclave hashes the input internally, so it signs over `nonce`
-      # (= SHA256(authData || clientDataHash)) directly. Ruby's
-      # `dsa_sign_asn1(digest)` is raw ECDSA sign, so pass `nonce` — NOT a
-      # second SHA256 — to match what a real iPhone produces.
+      # Reproduce what a real iPhone produces. Apple hands the Secure Enclave
+      # `nonce = SHA256(authData || clientDataHash)` and signs it with ES256,
+      # which hashes that input *again* with SHA256 before ECDSA — so the value
+      # actually signed is `SHA256(nonce)`. `dsa_sign_asn1(digest)` is a raw
+      # ECDSA sign with no hashing, so pass `SHA256(nonce)`. (Verified against a
+      # live device assertion: signing `nonce` directly does NOT match.)
       nonce = OpenSSL::Digest::SHA256.digest(auth_data + client_data_hash)
-      signature = ec_key.dsa_sign_asn1(nonce)
+      signature = ec_key.dsa_sign_asn1(OpenSSL::Digest::SHA256.digest(nonce))
       cbor = CBOR.encode("signature" => signature, "authenticatorData" => auth_data)
       Base64.strict_encode64(cbor)
     end

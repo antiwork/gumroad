@@ -632,6 +632,17 @@ describe Purchase, :vcr do
       expect(purchase_2.error_code).to eq PurchaseErrorCode::PRODUCT_SOLD_OUT
     end
 
+    context "when the product's sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
+        product = create(:product, max_purchase_count: 5)
+        purchase = build(:purchase, link: product, quantity: 1)
+        allow(purchase).to receive(:link).and_return(product)
+        allow(product).to receive(:sales_count_for_inventory).and_return(nil)
+        expect { purchase.send(:sold_out) }.not_to raise_error
+        expect(purchase.errors[:base]).to be_empty
+      end
+    end
+
     describe "subscriptions" do
       before do
         @product = create(:membership_product, subscription_duration: :monthly, max_purchase_count: 1)

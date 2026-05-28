@@ -54,7 +54,10 @@ module WalksEntitlement
       key_id    = request.headers["X-App-Attest-KeyId"].to_s.presence
       assertion = request.headers["X-App-Attest-Assertion"].to_s.presence
       challenge = request.headers["X-App-Attest-Challenge"].to_s.presence
-      return nil if key_id.nil? || assertion.nil? || challenge.nil?
+      if key_id.nil? || assertion.nil? || challenge.nil?
+        Rails.logger.warn("WalksAppAttest assertion rejected: missing_headers")
+        return nil
+      end
 
       result = WalksAppAttestVerifier.assert(
         key_id: key_id,
@@ -62,7 +65,14 @@ module WalksEntitlement
         challenge: challenge,
         request_body: request.raw_post,
       )
-      result.valid? ? result.key : nil
+      return result.key if result.valid?
+
+      # The verifier's specific failure symbol (e.g. bad_signature vs
+      # invalid_challenge) is otherwise discarded here — log it so a 402 on
+      # the walks endpoints can be diagnosed without a client-side capture.
+      # Mirrors the attestations controller, which already logs its reason.
+      Rails.logger.warn("WalksAppAttest assertion rejected: #{result.error}")
+      nil
     end
 
     def valid_jws?
