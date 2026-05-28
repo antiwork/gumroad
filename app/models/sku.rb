@@ -25,7 +25,7 @@ class Sku < BaseVariant
   # Public: This method returns the remaining inventory considering the product's overall quantity limitation as well as this SKU's.
   # Returns Float::INFINITY when no inventory limitation exists.
   def inventory_left
-    product_quantity_left = link.max_purchase_count ? [(link.max_purchase_count - link.sales_count_for_inventory), 0].max : Float::INFINITY
+    product_quantity_left = link.max_purchase_count ? [(link.max_purchase_count - link.sales_count_for_inventory.to_i), 0].max : Float::INFINITY
     quantity_left ? [quantity_left, product_quantity_left].min : product_quantity_left
   end
 

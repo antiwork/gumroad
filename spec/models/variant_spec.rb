@@ -347,6 +347,18 @@ describe Variant do
         expect(@variant.valid?).to eq(false)
       end
     end
+
+    describe "when inventory_counter_cache is active and the cache is unpopulated" do
+      before { Feature.activate(:inventory_counter_cache) }
+      after { Feature.deactivate(:inventory_counter_cache) }
+
+      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising TypeError" do
+        variant = create(:variant, max_purchase_count: 100)
+        variant.update_columns(sales_count_for_inventory_cache: nil)
+        expect { variant.quantity_left }.not_to raise_error
+        expect(variant.quantity_left).to eq(100)
+      end
+    end
   end
 
   describe "price_formatted_without_dollar_sign" do

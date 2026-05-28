@@ -2162,6 +2162,18 @@ describe Link, :vcr do
         expect(bundle.remaining_for_sale_count).to eq(3)
       end
     end
+
+    describe "when inventory_counter_cache is active and the cache is unpopulated" do
+      before { Feature.activate(:inventory_counter_cache) }
+      after { Feature.deactivate(:inventory_counter_cache) }
+
+      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising TypeError" do
+        link.update!(max_purchase_count: 100)
+        link.update_columns(sales_count_for_inventory_cache: nil)
+        expect { link.remaining_for_sale_count }.not_to raise_error
+        expect(link.remaining_for_sale_count).to eq(100)
+      end
+    end
   end
 
   describe "#remaining_call_availabilities" do
