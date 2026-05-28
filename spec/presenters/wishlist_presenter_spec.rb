@@ -364,7 +364,15 @@ describe WishlistPresenter do
     end
 
     it "does not issue per-item N+1 queries for variant associations" do
+      # Cover both BaseVariant STI subclasses: `Variant` (link via
+      # :variant_category delegation) and `Sku` (direct :link belongs_to).
+      # A regression on either branch would fire per-row SELECTs.
       3.times { create(:wishlist_product, :with_recurring_variant, wishlist:) }
+      2.times do
+        physical_product = create(:physical_product)
+        sku = create(:sku, link: physical_product)
+        create(:wishlist_product, wishlist:, product: physical_product, variant: sku)
+      end
 
       # Pre-warm to exclude one-time setup queries (Feature flags, etc.).
       described_class.new(wishlist:).public_items(request:, pundit_user:)
