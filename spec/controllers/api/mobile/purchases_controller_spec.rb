@@ -691,6 +691,35 @@ describe Api::Mobile::PurchasesController do
         get :search, params: @params.merge(q: "julia")
         expect(response.parsed_body[:purchases].size).to eq(1)
       end
+
+      it "does not issue per-row queries for sellers and products when filtering by q" do
+        seller_1 = create(:named_user, name: "EagerSeller")
+        seller_2 = create(:named_user, name: "EagerSeller")
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1, name: "Product A"))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2, name: "Product B"))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1, name: "Product C"))
+
+        seller_ids = [seller_1.id, seller_2.id]
+        per_row_queries = []
+        counter = lambda do |*, payload|
+          sql = payload[:sql].to_s
+          next unless sql.start_with?("SELECT")
+          next unless sql.match?(/LIMIT\s+1\z/)
+          next unless (sql.include?("`users`") && seller_ids.any? { |id| sql.include?("`id` = #{id} ") }) ||
+                      sql.include?("`links`")
+
+          per_row_queries << sql
+        end
+
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get :search, params: @params.merge(q: "EagerSeller")
+        end
+
+        expect(response.parsed_body[:success]).to be true
+        expect(response.parsed_body[:purchases].size).to eq(3)
+        expect(per_row_queries).to be_empty,
+          "Expected zero per-row SELECTs for sellers/products, got:\n#{per_row_queries.join("\n")}"
+      end
     end
 
     describe "ordering" do

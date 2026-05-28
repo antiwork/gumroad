@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Settings::Team::InvitationsController < Sellers::BaseController
+  skip_before_action :require_account_email, only: :accept
   before_action :set_team_invitation, only: %i[update destroy restore resend_invitation]
 
   def create

@@ -65,68 +65,68 @@ describe Compliance do
         expect(Compliance::Countries.blocked?("US")).to be false
       end
 
-      it "returns true for Afghanistan" do
-        expect(Compliance::Countries.blocked?("AF")).to be true
-      end
-
       it "returns true for Cuba" do
         expect(Compliance::Countries.blocked?("CU")).to be true
-      end
-
-      it "returns true for Congo, the Democratic Republic of the" do
-        expect(Compliance::Countries.blocked?("CD")).to be true
-      end
-
-      it "returns true for Côte d'Ivoire" do
-        expect(Compliance::Countries.blocked?("CI")).to be true
-      end
-
-      it "returns true for Iraq" do
-        expect(Compliance::Countries.blocked?("IQ")).to be true
       end
 
       it "returns true for Iran" do
         expect(Compliance::Countries.blocked?("IR")).to be true
       end
 
-      it "returns true for Lebanon" do
-        expect(Compliance::Countries.blocked?("LB")).to be true
-      end
-
-      it "returns true for Liberia" do
-        expect(Compliance::Countries.blocked?("LR")).to be true
-      end
-
-      it "returns true for Libya" do
-        expect(Compliance::Countries.blocked?("LY")).to be true
-      end
-
-      it "returns true for Myanmar" do
-        expect(Compliance::Countries.blocked?("MM")).to be true
-      end
-
       it "returns true for North Korea" do
         expect(Compliance::Countries.blocked?("KP")).to be true
       end
 
-      it "returns true for Somalia" do
-        expect(Compliance::Countries.blocked?("SO")).to be true
+      it "returns false for Afghanistan (no comprehensive sanctions)" do
+        expect(Compliance::Countries.blocked?("AF")).to be false
       end
 
-      it "returns true for Sudan" do
-        expect(Compliance::Countries.blocked?("SD")).to be true
+      it "returns false for Syria (sanctions lifted 2025)" do
+        expect(Compliance::Countries.blocked?("SY")).to be false
       end
 
-      it "returns true for Syrian Arab Republic" do
-        expect(Compliance::Countries.blocked?("SY")).to be true
+      it "returns false for Sudan (sanctions lifted 2017)" do
+        expect(Compliance::Countries.blocked?("SD")).to be false
       end
 
-      it "returns true for Yemen" do
-        expect(Compliance::Countries.blocked?("YE")).to be true
+      it "returns false for Zimbabwe (sanctions lifted 2024)" do
+        expect(Compliance::Countries.blocked?("ZW")).to be false
       end
 
-      it "returns true for Zimbabwe" do
-        expect(Compliance::Countries.blocked?("ZW")).to be true
+      it "returns false for Yemen" do
+        expect(Compliance::Countries.blocked?("YE")).to be false
+      end
+
+      it "returns false for Iraq (sanctions lifted 2004)" do
+        expect(Compliance::Countries.blocked?("IQ")).to be false
+      end
+
+      it "returns false for Libya (sanctions lifted 2004)" do
+        expect(Compliance::Countries.blocked?("LY")).to be false
+      end
+
+      it "returns false for Côte d'Ivoire (sanctions lifted 2016)" do
+        expect(Compliance::Countries.blocked?("CI")).to be false
+      end
+
+      it "returns false for Liberia (sanctions lifted 2016)" do
+        expect(Compliance::Countries.blocked?("LR")).to be false
+      end
+
+      it "returns false for Lebanon (targeted SDN only)" do
+        expect(Compliance::Countries.blocked?("LB")).to be false
+      end
+
+      it "returns false for Myanmar (targeted SDN only)" do
+        expect(Compliance::Countries.blocked?("MM")).to be false
+      end
+
+      it "returns false for Somalia (targeted SDN only)" do
+        expect(Compliance::Countries.blocked?("SO")).to be false
+      end
+
+      it "returns false for Democratic Republic of the Congo (targeted SDN only)" do
+        expect(Compliance::Countries.blocked?("CD")).to be false
       end
     end
 
@@ -545,7 +545,7 @@ describe Compliance do
 
   def for_select_expected
     [
-      ["AF", "Afghanistan (not supported)"],
+      ["AF", "Afghanistan"],
       ["AL", "Albania"],
       ["DZ", "Algeria"],
       ["AS", "American Samoa"],
@@ -595,7 +595,7 @@ describe Compliance do
       ["CO", "Colombia"],
       ["KM", "Comoros"],
       ["CG", "Congo"],
-      ["CD", "Congo, The Democratic Republic of the (not supported)"],
+      ["CD", "Congo, The Democratic Republic of the"],
       ["CK", "Cook Islands"],
       ["CR", "Costa Rica"],
       ["HR", "Croatia"],
@@ -603,7 +603,7 @@ describe Compliance do
       ["CW", "Curaçao"],
       ["CY", "Cyprus"],
       ["CZ", "Czechia"],
-      ["CI", "Côte d'Ivoire (not supported)"],
+      ["CI", "Côte d'Ivoire"],
       ["DK", "Denmark"],
       ["DJ", "Djibouti"],
       ["DM", "Dominica"],
@@ -650,7 +650,7 @@ describe Compliance do
       ["IN", "India"],
       ["ID", "Indonesia"],
       ["IR", "Iran (not supported)"],
-      ["IQ", "Iraq (not supported)"],
+      ["IQ", "Iraq"],
       ["IE", "Ireland"],
       ["IM", "Isle of Man"],
       ["IL", "Israel"],
@@ -667,10 +667,10 @@ describe Compliance do
       ["KG", "Kyrgyzstan"],
       ["LA", "Lao People's Democratic Republic"],
       ["LV", "Latvia"],
-      ["LB", "Lebanon (not supported)"],
+      ["LB", "Lebanon"],
       ["LS", "Lesotho"],
-      ["LR", "Liberia (not supported)"],
-      ["LY", "Libya (not supported)"],
+      ["LR", "Liberia"],
+      ["LY", "Libya"],
       ["LI", "Liechtenstein"],
       ["LT", "Lithuania"],
       ["LU", "Luxembourg"],
@@ -695,7 +695,7 @@ describe Compliance do
       ["MS", "Montserrat"],
       ["MA", "Morocco"],
       ["MZ", "Mozambique"],
-      ["MM", "Myanmar (not supported)"],
+      ["MM", "Myanmar"],
       ["NA", "Namibia"],
       ["NR", "Nauru"],
       ["NP", "Nepal"],
@@ -749,19 +749,19 @@ describe Compliance do
       ["SK", "Slovakia"],
       ["SI", "Slovenia"],
       ["SB", "Solomon Islands"],
-      ["SO", "Somalia (not supported)"],
+      ["SO", "Somalia"],
       ["ZA", "South Africa"],
       ["GS", "South Georgia and the South Sandwich Islands"],
       ["KR", "South Korea"],
       ["SS", "South Sudan"],
       ["ES", "Spain"],
       ["LK", "Sri Lanka"],
-      ["SD", "Sudan (not supported)"],
+      ["SD", "Sudan"],
       ["SR", "Suriname"],
       ["SJ", "Svalbard and Jan Mayen"],
       ["SE", "Sweden"],
       ["CH", "Switzerland"],
-      ["SY", "Syrian Arab Republic (not supported)"],
+      ["SY", "Syrian Arab Republic"],
       ["TW", "Taiwan"],
       ["TJ", "Tajikistan"],
       ["TZ", "Tanzania"],
@@ -791,9 +791,9 @@ describe Compliance do
       ["VI", "Virgin Islands, U.S."],
       ["WF", "Wallis and Futuna"],
       ["EH", "Western Sahara"],
-      ["YE", "Yemen (not supported)"],
+      ["YE", "Yemen"],
       ["ZM", "Zambia"],
-      ["ZW", "Zimbabwe (not supported)"],
+      ["ZW", "Zimbabwe"],
       ["AX", "Åland Islands"]
     ]
   end

@@ -2106,6 +2106,24 @@ describe Link, :vcr do
     end
   end
 
+  describe "#price_currency_type=" do
+    it "downcases the currency type" do
+      subject.price_currency_type = "USD"
+      expect(subject.price_currency_type).to eq("usd")
+    end
+
+    it "handles symbol input" do
+      subject.price_currency_type = :GBP
+      expect(subject.price_currency_type).to eq("gbp")
+    end
+
+    it "allows clean_price to work with uppercase currency input" do
+      product = create(:product, price_currency_type: "USD", price_cents: 100)
+      product.price_range = "12"
+      expect(product.price_cents).to eq(1200)
+    end
+  end
+
   describe "#remaining_for_sale_count" do
     it "defaults to nil" do
       expect(link.max_purchase_count).to be(nil)
@@ -2611,8 +2629,8 @@ describe Link, :vcr do
       expect(build(:product).compliance_blocked(ip)).to be(false)
     end
 
-    it "blocks ips from 'bad' countries, like Libya" do
-      ip = "41.208.70.70" # Tripoly Libya Telecom
+    it "blocks ips from 'bad' countries, like Iran" do
+      ip = "2.144.0.1" # MCI Iran
       expect(build(:product).compliance_blocked(ip)).to be(true)
     end
 

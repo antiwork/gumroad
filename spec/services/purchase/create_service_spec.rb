@@ -94,7 +94,7 @@ describe Purchase::CreateService, :vcr do
     params[:purchase].merge!(
       full_name: "Edgar Gumstein",
       street_address: "123 Gum Road",
-      country: "LY",
+      country: "IR",
       state: "CA",
       city: "San Francisco",
       zip_code: "94117"

@@ -230,6 +230,11 @@ class Link < ApplicationRecord
   rescue ArgumentError
     super(:buy_only)
   end
+
+  def price_currency_type=(value)
+    super(value.present? ? value.to_s.downcase : value)
+  end
+
   enum free_trial_duration_unit: %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }

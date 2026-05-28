@@ -6,6 +6,7 @@ class LinksController < ApplicationController
           CreateDiscoverSearch, DiscoverCuratedProducts, FetchProductByUniquePermalink
 
   include PageMeta::Favicon, PageMeta::Product
+  include RequireAccountEmail
 
   DEFAULT_PRICE = 500
 
@@ -16,6 +17,7 @@ class LinksController < ApplicationController
   PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
+  skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
   before_action :fetch_product_for_show, only: :show
   before_action :check_banned, only: :show
