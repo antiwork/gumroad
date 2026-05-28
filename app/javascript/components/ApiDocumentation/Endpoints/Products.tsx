@@ -124,6 +124,46 @@ gumroad products page push <permalink> ./landing.html`}
       Every external load is restricted to Gumroad's CDN (images and media) or the named font and script CDNs above, so
       the page has no arbitrary-host network channel — it can't beacon data off to a server you control.
     </p>
+    <h5>Live values and buy buttons</h5>
+    <p>
+      Mark elements with data attributes that Gumroad fills in server-side so the page always shows current values and a
+      working checkout button:
+    </p>
+    <ul>
+      <li>
+        <code>data-gumroad-field="name|price|description"</code> — the element's contents are replaced with the product's
+        current value (HTML-escaped).
+      </li>
+      <li>
+        <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag
+        (<code>&lt;a&gt;</code>, <code>&lt;button&gt;</code>, <code>&lt;div&gt;</code>).
+      </li>
+    </ul>
+    <p>
+      For products with selection state, set the choice directly on the buy element. Invalid values silently fall back to
+      the product defaults — they won't break the page.
+    </p>
+    <ul>
+      <li>
+        <code>data-gumroad-option="&lt;variant name&gt;"</code> — products with variants/versions/tiers.
+      </li>
+      <li>
+        <code>data-gumroad-quantity="&lt;integer&gt;"</code> — products with quantity enabled.
+      </li>
+      <li>
+        <code>data-gumroad-price="&lt;decimal&gt;"</code> — pay-what-you-want products; major units (e.g.{" "}
+        <code>"9.99"</code>).
+      </li>
+      <li>
+        <code>data-gumroad-recurrence="monthly|quarterly|biannually|yearly|every_two_years"</code> —
+        membership/subscription products.
+      </li>
+    </ul>
+    <CodeSnippet caption="Example buy buttons">
+      {`<a data-gumroad-action="buy">Buy now</a>
+<a data-gumroad-action="buy" data-gumroad-option="Pro" data-gumroad-recurrence="yearly">Buy Pro – $99/year</a>
+<button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>`}
+    </CodeSnippet>
   </div>
 );
 

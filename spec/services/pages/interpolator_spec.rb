@@ -38,7 +38,8 @@ describe Pages::Interpolator do
       result = described_class.interpolate(html, product: product)
 
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
-      expect(result).to include("parent.postMessage('gumroad:checkout','*')")
+      expect(result).to include("type:'gumroad:checkout'")
+      expect(result).to include("this.dataset.gumroadCheckoutParams")
       expect(result).to include("return false")
     end
 
@@ -93,11 +94,48 @@ describe Pages::Interpolator do
 
       result = described_class.interpolate(html, product: product)
 
-      expect(result).to include("parent.postMessage('gumroad:checkout','*')")
+      expect(result).to include("type:'gumroad:checkout'")
+      expect(result).to include("this.dataset.gumroadCheckoutParams")
       expect(result).to include("return false")
       expect(result).to include("<button")
       expect(result).not_to include("<a")
       expect(result).not_to include("href=")
+    end
+
+    it "bakes valid variant/quantity selection into the anchor href and the checkout-params payload" do
+      product = create(:product_with_digital_versions, quantity_enabled: true)
+      product.alive_variants.first.update!(name: "Pro plan")
+
+      result = described_class.interpolate(
+        %(<a data-gumroad-action="buy" data-gumroad-option="Pro plan" data-gumroad-quantity="2">Buy Pro</a>),
+        product: product
+      )
+
+      # href encodes the validated selection so SEO/no-JS still lands on the right checkout
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true&amp;variant=Pro+plan&amp;quantity=2"))
+      # postMessage payload mirrors the selection (the wrapper appends to its base URL)
+      expect(result).to include(%(data-gumroad-checkout-params="{&quot;variant&quot;:&quot;Pro plan&quot;,&quot;quantity&quot;:2}"))
+    end
+
+    it "silently drops selection attributes the product can't honor (lenient fallback)" do
+      product = create(:product, price_cents: 100) # simple product, no variants/PWYW/quantity/recurrence
+
+      result = described_class.interpolate(
+        %(<a data-gumroad-action="buy"
+             data-gumroad-option="Mystery"
+             data-gumroad-quantity="9"
+             data-gumroad-price="99.99"
+             data-gumroad-recurrence="yearly">Buy</a>),
+        product: product
+      )
+
+      # No selection survives, so the href is the default checkout and the payload is empty
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
+      expect(result).not_to include("variant=")
+      expect(result).not_to include("quantity=")
+      expect(result).not_to include("price=")
+      expect(result).not_to include("recurrence=")
+      expect(result).to include(%(data-gumroad-checkout-params="{}"))
     end
   end
 end

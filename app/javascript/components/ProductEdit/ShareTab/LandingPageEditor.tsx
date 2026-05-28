@@ -24,6 +24,21 @@ export const LandingPageEditor = () => {
 
 Design a unique, conversion-focused page tailored to this product — fully responsive, accessible, and supporting light and dark mode. Save it as one self-contained file, landing.html. The page is sanitized and runs sandboxed: inline CSS/JS (animations, scroll effects, modals) and a Tailwind CDN work. For images and media, use only your product's own assets (run gumroad products view ${uniquePermalink} for its cover and thumbnail URLs), inline data: URIs, or CSS — external image/media hosts are blocked, and the page can't fetch external URLs or read the buyer's account.
 
+Mark live values and buy buttons with data attributes that Gumroad fills in server-side:
+- data-gumroad-field="name|price|description" — interpolated with the product's current values.
+- data-gumroad-action="buy" — wired up to launch the Gumroad checkout. Use on any element (<a>, <button>, <div>).
+
+For products with selection state, set the choice directly on the buy element so the checkout opens pre-selected (an invalid value silently falls back to the product defaults — it won't break the page):
+- data-gumroad-option="<variant name>" — for products with variants/versions/tiers.
+- data-gumroad-quantity="<integer>" — for products with quantity enabled.
+- data-gumroad-price="<decimal>" — for pay-what-you-want products (major units, e.g. "9.99").
+- data-gumroad-recurrence="monthly|quarterly|biannually|yearly|every_two_years" — for membership/subscription products.
+
+Example buy buttons:
+  <a data-gumroad-action="buy">Buy now</a>
+  <a data-gumroad-action="buy" data-gumroad-option="Pro" data-gumroad-recurrence="yearly">Buy Pro – $99/year</a>
+  <button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>
+
 Then publish it with the Gumroad CLI:
 - Preview without publishing (check the sanitization report first): gumroad products page preview ${uniquePermalink} ./landing.html --json --no-input
 - Publish: gumroad products page push ${uniquePermalink} ./landing.html --json --no-input

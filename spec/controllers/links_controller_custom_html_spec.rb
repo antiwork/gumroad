@@ -36,23 +36,34 @@ describe LinksController, :vcr, type: :controller do
       get :show, params: { id: product.unique_permalink }
       expect(response.body).to include(%(sandbox="allow-scripts allow-forms"))
       expect(response.body).not_to include("allow-top-navigation")
-      # The wrapper owns the one checkout URL it will navigate to; seller HTML
-      # only sends the "gumroad:checkout" signal.
-      expect(response.body).to include(%(window.location.href = "/l/#{product.unique_permalink}?wanted=true"))
+      # The wrapper owns the base checkout URL; seller HTML sends either the
+      # "gumroad:checkout" signal (string) or a structured payload with selection.
+      expect(response.body).to include(%(BASE_CHECKOUT = "/l/#{product.unique_permalink}?wanted=true"))
       expect(response.body).to include('e.data === "gumroad:checkout"')
+      expect(response.body).to include('e.data.type === "gumroad:checkout"')
       expect(response.body).to include('e.origin === "null"')
       # Script carries a nonce — script-src has no 'unsafe-inline', so without
       # it the listener would be CSP-blocked in the browser.
       expect(response.body).to match(/<script nonce="[^"]+">/)
       # Only our own iframe can trigger checkout — gate on e.source so an
       # embedding page can't drive the navigation.
-      expect(response.body).to include("e.source === frame.contentWindow")
+      expect(response.body).to include("e.source !== frame.contentWindow")
     end
 
     it "preserves URL offer codes when mediating checkout" do
       get :show, params: { id: product.unique_permalink, code: "DISCOUNT20" }
 
-      expect(response.body).to include(%(window.location.href = "/l/#{product.unique_permalink}?wanted=true\\u0026code=DISCOUNT20"))
+      expect(response.body).to include(%(BASE_CHECKOUT = "/l/#{product.unique_permalink}?wanted=true\\u0026code=DISCOUNT20"))
+    end
+
+    it "only honors selection-state keys the checkout actually accepts in the structured postMessage form" do
+      get :show, params: { id: product.unique_permalink }
+
+      # The wrapper builds the final checkout URL by appending whitelisted keys
+      # from the iframe payload to BASE_CHECKOUT. Any key not in this list is
+      # ignored, even if the buy button claims it — defense in depth against a
+      # compromised seller HTML page trying to redirect to arbitrary URLs.
+      expect(response.body).to include(%(ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"]))
     end
 
     it "escapes the checkout URL for JavaScript string context" do

@@ -1033,9 +1033,30 @@ class LinksController < ApplicationController
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}">
               var frame = document.getElementById("gumroad-landing-frame");
+              var BASE_CHECKOUT = #{checkout_url_js};
+              // Whitelist the selection-state keys the checkout already accepts on the
+              // URL (see LinksController#show). The iframe is opaque-origin and untrusted,
+              // so anything not in this list is ignored even if the buy button claims it.
+              var ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"];
+              function buildCheckoutUrl(base, params) {
+                if (!params || typeof params !== "object") return base;
+                try {
+                  var u = new URL(base, window.location.origin);
+                  for (var i = 0; i < ALLOWED_CHECKOUT_KEYS.length; i++) {
+                    var k = ALLOWED_CHECKOUT_KEYS[i], v = params[k];
+                    if (v == null || v === "") continue;
+                    u.searchParams.set(k, String(v));
+                  }
+                  return u.pathname + u.search;
+                } catch (_e) { return base; }
+              }
               window.addEventListener("message", function (e) {
-                if (e.source === frame.contentWindow && e.origin === "null" && e.data === "gumroad:checkout") {
-                  window.location.href = #{checkout_url_js};
+                if (e.source !== frame.contentWindow || e.origin !== "null") return;
+                // String form: back-compat for any caller still sending the old signal.
+                if (e.data === "gumroad:checkout") { window.location.href = BASE_CHECKOUT; return; }
+                // Structured form: {type:"gumroad:checkout", params:{variant,quantity,price,recurrence}}.
+                if (e.data && typeof e.data === "object" && e.data.type === "gumroad:checkout") {
+                  window.location.href = buildCheckoutUrl(BASE_CHECKOUT, e.data.params);
                 }
               });
             </script>
