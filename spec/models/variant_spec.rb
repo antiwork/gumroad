@@ -347,6 +347,27 @@ describe Variant do
         expect(@variant.valid?).to eq(false)
       end
     end
+
+    describe "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
+        variant = create(:variant, max_purchase_count: 100)
+        allow(variant).to receive(:sales_count_for_inventory).and_return(nil)
+        expect { variant.quantity_left }.not_to raise_error
+        expect(variant.quantity_left).to eq(100)
+      end
+    end
+  end
+
+  describe "max_purchase_count_is_greater_than_or_equal_to_inventory_sold" do
+    context "when sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising ArgumentError" do
+        variant = create(:variant, max_purchase_count: 100)
+        allow(variant).to receive(:sales_count_for_inventory).and_return(nil)
+        variant.max_purchase_count = 50
+        expect { variant.valid? }.not_to raise_error
+        expect(variant).to be_valid
+      end
+    end
   end
 
   describe "price_formatted_without_dollar_sign" do

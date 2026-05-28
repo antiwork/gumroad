@@ -115,8 +115,34 @@ class WishlistPresenter
       pagination, wishlist_products = pagy(wishlist.alive_wishlist_products, page:, limit: PER_PAGE)
 
       paginated_products = wishlist_products
-      .includes(product: ProductPresenter::ASSOCIATIONS_FOR_CARD)
-      .map do |wishlist_product|
+        .includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD)
+        .to_a
+
+      # Preload variant chain for `wishlist_product.variant&.to_option`. Two STI
+      # subclasses of `BaseVariant` with different `link` paths:
+      #   - `Variant`: delegates `link` through `:variant_category`, so preload
+      #     `{ variant_category: :link }` on Variant rows.
+      #   - `Sku`: has a direct `belongs_to :link`, so preload `:link` on Sku rows.
+      # Passing `variant: :link` on a mixed BaseVariant relation raises
+      # `AssociationNotFoundError` on Variant rows (Variant has no `:link`),
+      # and `variant: { variant_category: :link }` raises on Sku rows (Sku has
+      # no `:variant_category`). Partition by subclass and preload each subset
+      # against its real associations.
+      variants = paginated_products.map(&:variant).compact
+      variant_records = variants.select { |v| v.is_a?(Variant) }
+      sku_records     = variants.select { |v| v.is_a?(Sku) }
+      if variant_records.any?
+        ActiveRecord::Associations::Preloader
+          .new(records: variant_records, associations: [{ variant_category: :link }, :alive_prices])
+          .call
+      end
+      if sku_records.any?
+        ActiveRecord::Associations::Preloader
+          .new(records: sku_records, associations: :link)
+          .call
+      end
+
+      paginated_products = paginated_products.map do |wishlist_product|
         public_item_props(
           wishlist_product:,
           request:,

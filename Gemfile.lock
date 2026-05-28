@@ -498,8 +498,9 @@ GEM
       activerecord
       kaminari-core (= 1.2.2)
     kaminari-core (1.2.2)
-    knapsack_pro (7.8.0)
+    knapsack_pro (10.0.1)
       rake
+      thor (~> 1.4)
     koala (3.6.0)
       addressable
       base64
@@ -1164,7 +1165,7 @@ DEPENDENCIES
   json-schema (~> 5.0)
   json_matchers (~> 0.11)
   kaminari (~> 1.2)
-  knapsack_pro (~> 7.0)
+  knapsack_pro (~> 10.0)
   koala (~> 3.3)
   lograge (~> 0.12)
   makara (= 0.6.0.pre)

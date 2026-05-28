@@ -92,4 +92,16 @@ describe Sku do
       sku.update!(price_difference_cents: 20)
     end
   end
+
+  describe "#inventory_left" do
+    context "when the product's sales_count_for_inventory returns nil" do
+      it "treats nil as 0 instead of raising TypeError" do
+        product = create(:product, max_purchase_count: 100)
+        sku = create(:sku, link: product)
+        allow(sku.link).to receive(:sales_count_for_inventory).and_return(nil)
+        expect { sku.inventory_left }.not_to raise_error
+        expect(sku.inventory_left).to eq(100)
+      end
+    end
+  end
 end

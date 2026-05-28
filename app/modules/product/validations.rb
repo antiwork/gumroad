@@ -10,7 +10,7 @@ module Product::Validations
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
       return unless max_purchase_count_changed?
       return if max_purchase_count.nil?
-      errors.add(:base, "Sorry, you cannot limit the number of purchases to that amount.") unless max_purchase_count >= sales_count_for_inventory
+      errors.add(:base, "Sorry, you cannot limit the number of purchases to that amount.") unless max_purchase_count >= sales_count_for_inventory.to_i
     end
 
     def require_shipping_for_physical

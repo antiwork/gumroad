@@ -61,7 +61,7 @@ class BaseVariant < ApplicationRecord
   def quantity_left
     return nil if max_purchase_count.nil?
 
-    [max_purchase_count - sales_count_for_inventory, 0].max
+    [max_purchase_count - sales_count_for_inventory.to_i, 0].max
   end
 
   def available?
@@ -186,7 +186,7 @@ class BaseVariant < ApplicationRecord
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
       return unless max_purchase_count_changed?
       return if max_purchase_count.nil?
-      cached_sales_count_for_inventory = sales_count_for_inventory
+      cached_sales_count_for_inventory = sales_count_for_inventory.to_i
       return if max_purchase_count >= cached_sales_count_for_inventory
 
       errors.add(:base, "You have chosen an amount lower than what you have already sold. Please enter an amount greater than #{cached_sales_count_for_inventory}.")

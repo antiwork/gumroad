@@ -18,7 +18,7 @@ end
 group :development, :test do
   gem "bundler"
   gem "dotenv-rails", "~> 2.8"
-  gem "knapsack_pro", "~> 7.0"
+  gem "knapsack_pro", "~> 10.0"
   gem "pry-byebug", "~> 3.10"
   gem "pry-rails", "~> 0.3", require: "pry-rails/console"
   gem "rubocop", "~> 1.79", require: false

@@ -492,6 +492,42 @@ describe ProductPresenter::ProductProps do
           ]
         )
       end
+
+      it "does not issue per-row queries for bundle product card associations" do
+        3.times do |i|
+          extra = create(:product, user: seller)
+          create(:bundle_product, bundle:, product: extra, position: i + 2)
+        end
+        bundle.reload
+        bundle_product_link_ids = bundle.bundle_products.alive.map { _1.product.id }
+
+        described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA"
+          next if payload[:cached]
+          sql = payload[:sql]
+          next unless sql&.start_with?("SELECT")
+          queries << sql
+        end
+
+        begin
+          described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        bundle_product_link_ids.each do |link_id|
+          [
+            [/FROM `prices`.*WHERE `prices`\.`link_id` = #{link_id}\b/, "prices"],
+            [/FROM `product_review_stats`.*WHERE `product_review_stats`\.`product_id` = #{link_id}\b/, "product_review_stats"],
+          ].each do |pattern, label|
+            hits = queries.grep(pattern)
+            expect(hits).to be_empty, "Expected no per-row #{label} queries for bundle product link_id=#{link_id}, got #{hits.size}:\n#{hits.join("\n")}"
+          end
+        end
+      end
     end
 
     describe "collaborators" do

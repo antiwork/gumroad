@@ -38,6 +38,15 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     expect(@product.recommendable?).to be(false)
   end
 
+  context "when sales_count_for_inventory returns nil" do
+    it "treats nil as 0 in the not_sold_out reason instead of raising ArgumentError" do
+      @product.update!(max_purchase_count: 100)
+      allow(@product).to receive(:sales_count_for_inventory).and_return(nil)
+      expect { @product.recommendable_reasons }.not_to raise_error
+      expect(@product.recommendable_reasons[:not_sold_out]).to be(true)
+    end
+  end
+
   it "is false if no sale made" do
     expect(@product.recommendable_reasons[:sale_made]).to be(false)
     expect(@product.recommendable_reasons.except(:sale_made).values).to all(be true)
