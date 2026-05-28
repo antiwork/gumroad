@@ -47,6 +47,19 @@ describe Link, :vcr do
     it "allows it to be set on new records with no purchases" do
       expect(build(:product, max_purchase_count: 100).valid?).to eq(true)
     end
+
+    context "when inventory_counter_cache is active and the cache is unpopulated" do
+      before { Feature.activate(:inventory_counter_cache) }
+      after { Feature.deactivate(:inventory_counter_cache) }
+
+      it "treats a nil sales_count_for_inventory_cache as 0 instead of raising ArgumentError" do
+        product = create(:product, max_purchase_count: 100)
+        product.update_columns(sales_count_for_inventory_cache: nil)
+        product.max_purchase_count = 50
+        expect { product.valid? }.not_to raise_error
+        expect(product).to be_valid
+      end
+    end
   end
 
   it "allows > $1000 links for verified users" do
