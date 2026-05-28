@@ -23,16 +23,18 @@ class Order < ApplicationRecord
 
   def receipt_for_gift_receiver?
     raise NotImplementedError, "Not supported for multi-item orders" if successful_purchases.count > 1
-    return false if purchase_as_orderable.nil?
+    purchase = purchase_as_orderable
+    return false if purchase.nil?
 
-    purchase_as_orderable.is_gift_receiver_purchase?
+    purchase.is_gift_receiver_purchase?
   end
 
   def receipt_for_gift_sender?
     raise NotImplementedError, "Not supported for multi-item orders" if successful_purchases.count > 1
-    return false if purchase_as_orderable.nil?
+    purchase = purchase_as_orderable
+    return false if purchase.nil?
 
-    purchase_as_orderable.is_gift_sender_purchase?
+    purchase.is_gift_sender_purchase?
   end
 
   def email
