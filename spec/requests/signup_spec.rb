@@ -116,7 +116,11 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
       expect do
         click_button "Stripe"
-        expect(page).to have_content("We're here to help you get paid for your work.")
+        # Stripe OAuth doesn't supply an email, so the new RequireAccountEmail
+        # gate redirects the fresh signup to settings to add one before they
+        # can use the dashboard.
+        expect(page).to have_current_path(settings_main_path)
+        expect(page).to have_alert(text: "Please add an email address to your account before continuing.")
       end.to change(User, :count).by(1)
     end
   end
