@@ -366,6 +366,7 @@ describe WishlistPresenter do
     it "does not issue per-item N+1 queries for variant associations" do
       3.times { create(:wishlist_product, :with_recurring_variant, wishlist:) }
 
+      # Pre-warm to exclude one-time setup queries (Feature flags, etc.).
       described_class.new(wishlist:).public_items(request:, pundit_user:)
 
       queries = []
@@ -379,16 +380,21 @@ describe WishlistPresenter do
         described_class.new(wishlist:).public_items(request:, pundit_user:)
       end
 
-      per_row_variant_queries = queries.count { |q| q.include?("base_variants") && q.match?(/`base_variants`\.`id` = \d+/) }
-      per_row_variant_category_queries = queries.count { |q| q.include?("variant_categories") && q.match?(/`variant_categories`\.`id` = \d+/) }
-      per_row_link_queries = queries.count { |q| q.include?("`links`") && q.match?(/`links`\.`id` = \d+/) && !q.include?("IN") }
-
-      expect(per_row_variant_queries).to eq(0),
-        "Expected no per-row base_variants queries, got #{per_row_variant_queries}"
-      expect(per_row_variant_category_queries).to eq(0),
-        "Expected no per-row variant_categories queries, got #{per_row_variant_category_queries}"
-      expect(per_row_link_queries).to be <= 1,
-        "Expected at most 1 links query (eager-load), got #{per_row_link_queries}"
+      # Per-row patterns: each must be empty. Without the variant preloads,
+      # `wishlist_product.variant&.to_option` triggers a fresh BaseVariant /
+      # variant_categories / links lookup per wishlist item.
+      [
+        /FROM `base_variants`.*`base_variants`\.`id` = \d+\b/,
+        /FROM `variant_categories`.*`variant_categories`\.`id` = \d+\b/,
+        # Single-id links lookup that is NOT part of an IN(...) batch. The
+        # ASSOCIATIONS_FOR_CARD preload uses batched WHERE id IN (...) which
+        # is legitimate; we only want to catch per-row WHERE id = N.
+        /FROM `links`.*`links`\.`id` = \d+(?!.*\bIN\b)/,
+      ].each do |per_row_pattern|
+        per_row = queries.grep(per_row_pattern)
+        expect(per_row).to be_empty,
+          "Expected no per-row queries matching #{per_row_pattern.inspect}, got #{per_row.size}:\n#{per_row.join("\n")}"
+      end
     end
   end
 
