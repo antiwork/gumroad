@@ -34,12 +34,12 @@ class Ai::PageSanitizer
     stop-opacity
   ].freeze
 
-  URL_ATTRIBUTES = %w[action href poster src xlink:href].freeze
+  URL_ATTRIBUTES = %w[action href poster src].freeze
   SRCSET_ATTRIBUTES = %w[srcset].freeze
   # Navigating to a URL runs whatever document it resolves to. A `data:` URL
   # in these attributes loads a document with no CSP, so its scripts escape
   # `connect-src 'none'` — block `data:` here outright.
-  NAVIGABLE_URL_ATTRIBUTES = %w[action href xlink:href].freeze
+  NAVIGABLE_URL_ATTRIBUTES = %w[action href].freeze
   DOCUMENT_SOURCE_TAGS = %w[iframe].freeze
   # Media `src`/`poster` attributes load a resource, not a document. `data:` is
   # fine for inline media but not for document MIME types that a browser would parse and script.
