@@ -167,24 +167,25 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def add_credit
-    credit_params = params.require(:credit).permit(:credit_amount)
+    credit_params = params.require(:credit).permit(:credit_amount, :reason)
     credit_amount = credit_params[:credit_amount]
+    reason = credit_params[:reason].to_s.strip
 
-    if credit_amount.present?
-      begin
-        credit_amount_cents = (BigDecimal(credit_amount.to_s) * 100).round
-        user_credit = Credit.create_for_credit!(
-          user: @user,
-          amount_cents: credit_amount_cents,
-          crediting_user: current_user
-        )
-        user_credit.notify_user if credit_amount_cents > 0
-        render json: { success: true, amount: credit_amount }
-      rescue ArgumentError, Credit::Error => e
-        render json: { success: false, message: e.message }
-      end
-    else
-      render json: { success: false, message: "Credit amount is required" }
+    return render json: { success: false, message: "Credit amount is required" } if credit_amount.blank?
+    return render json: { success: false, message: "Reason is required" } if reason.blank?
+
+    begin
+      credit_amount_cents = (BigDecimal(credit_amount.to_s) * 100).round
+      user_credit = Credit.create_for_credit!(
+        user: @user,
+        amount_cents: credit_amount_cents,
+        crediting_user: current_user,
+        reason:
+      )
+      user_credit.notify_user if credit_amount_cents > 0
+      render json: { success: true, amount: credit_amount }
+    rescue ArgumentError, Credit::Error => e
+      render json: { success: false, message: e.message }
     end
   end
 

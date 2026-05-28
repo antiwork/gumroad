@@ -375,6 +375,25 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  def add_credit
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    amount_cents = parse_credit_amount_cents
+    return if performed?
+
+    reason = params[:reason].to_s.strip
+    return render json: { success: false, message: "reason is required" }, status: :bad_request if reason.blank?
+
+    record_admin_write(action: "users.add_credit", target: user) do
+      credit = Credit.create_for_credit!(user:, amount_cents:, crediting_user: Current.admin_actor, reason:)
+      credit.notify_user if amount_cents > 0
+      render json: internal_admin_user_success_payload(user, credit: serialize_credit(credit))
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
   def watch
     return render json: { success: false, message: "revenue_threshold is required" }, status: :bad_request if params[:revenue_threshold].blank?
 
@@ -802,6 +821,15 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       }
     end
 
+    def serialize_credit(credit)
+      {
+        id: credit.id.to_s,
+        amount_cents: credit.amount_cents,
+        reason: credit.reason,
+        created_at: credit.created_at.iso8601
+      }
+    end
+
     def build_admin_note(user, content)
       user.comments.new(
         author_id: current_admin_actor_id,
@@ -848,6 +876,28 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       end
 
       value.to_i
+    end
+
+    def parse_credit_amount_cents
+      raw = params[:amount_cents]
+      if raw.blank?
+        render json: { success: false, message: "amount_cents is required" }, status: :bad_request
+        return
+      end
+
+      value = raw.to_s
+      unless value.match?(/\A-?\d+\z/)
+        render json: { success: false, message: "amount_cents must be an integer" }, status: :bad_request
+        return
+      end
+
+      cents = value.to_i
+      if cents.zero?
+        render json: { success: false, message: "amount_cents must not be zero" }, status: :bad_request
+        return
+      end
+
+      cents
     end
 
     def unpaid_balance_summary_matches?(summary, expected_purchase_count:, expected_total_amount_cents:)

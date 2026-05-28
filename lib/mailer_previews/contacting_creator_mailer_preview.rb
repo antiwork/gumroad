@@ -60,7 +60,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def credit_notification
-    ContactingCreatorMailer.credit_notification(User.last&.id, 1000)
+    ContactingCreatorMailer.credit_notification(User.last&.id, 1000, "Thanks for reporting the checkout bug — here's a credit on us.")
   end
 
   def gumroad_day_credit_notification

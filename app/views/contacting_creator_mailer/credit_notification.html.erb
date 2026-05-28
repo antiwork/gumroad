@@ -1,5 +1,8 @@
 <%= header_section("You've received Gumroad credit!") %>
 <div>
+  <% if @reason.present? %>
+    <%= simple_format(@reason) %>
+  <% end %>
   <p>Your Gumroad balance has been credited with <%= @amount %>. The credit is treated as a normal sale and will be added to your next payout.</p>
 
 </div>

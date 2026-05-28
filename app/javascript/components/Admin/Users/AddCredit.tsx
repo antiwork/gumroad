@@ -9,6 +9,7 @@ import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type AdminUserAddCreditProps = {
   user: User;
@@ -29,16 +30,20 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
       >
         {(isLoading) => (
           <Fieldset>
-            <div className="flex gap-2">
-              <InputGroup className="flex-1">
-                <Pill className="-ml-2 shrink-0">$</Pill>
-                <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
-              </InputGroup>
+            <InputGroup>
+              <Pill className="-ml-2 shrink-0">$</Pill>
+              <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
+            </InputGroup>
 
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Add credits"}
-              </Button>
-            </div>
+            <Textarea
+              name="credit[reason]"
+              placeholder="Reason (shown to the creator in their credit email and recorded for the audit trail)"
+              required
+            />
+
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Saving..." : "Add credits"}
+            </Button>
 
             <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
           </Fieldset>
