@@ -382,7 +382,8 @@ describe CreatorAnalytics::CachingProxy do
       expect(@service).to receive(:analytics_data).with(
         Date.new(2020, 1, 2),
         Date.new(2020, 1, 3),
-        by: :date
+        by: :date,
+        products: anything
       ).and_return("data-for-day-two-and-three" => :bar)
 
       result = @service.send(:compile_data_for_dates_and_fill_missing,
