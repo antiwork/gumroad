@@ -3,12 +3,14 @@
 class Onetime::BackfillRadarValueLists
   BATCH_SIZE = 500
 
-  def self.process(batch_size: BATCH_SIZE)
-    new(batch_size:).process
+  def self.process(batch_size: BATCH_SIZE, since: nil, before: nil)
+    new(batch_size:, since:, before:).process
   end
 
-  def initialize(batch_size: BATCH_SIZE)
+  def initialize(batch_size: BATCH_SIZE, since: nil, before: nil)
     @batch_size = batch_size
+    @since = since
+    @before = before
     @service = Radar::ValueListSyncService.new
   end
 
@@ -18,7 +20,13 @@ class Onetime::BackfillRadarValueLists
   end
 
   private
-    attr_reader :batch_size, :service
+    attr_reader :batch_size, :service, :since, :before
+
+    def scoped(relation)
+      relation = relation.where("blocked_at >= ?", since) if since
+      relation = relation.where("blocked_at <= ?", before) if before
+      relation
+    end
 
     def backfill_emails
       list = service.find_or_create_list(
@@ -28,7 +36,7 @@ class Onetime::BackfillRadarValueLists
       )
 
       total = 0
-      PlatformBlock.email.active.in_batches(of: batch_size) do |batch|
+      scoped(PlatformBlock.email.active).in_batches(of: batch_size) do |batch|
         batch.each { |obj| service.add_item_to_list(list.id, obj.object_value) }
         total += batch.size
         puts "Radar email backfill: #{total} pushed"
@@ -43,8 +51,8 @@ class Onetime::BackfillRadarValueLists
       )
 
       total = 0
-      PlatformBlock.charge_processor_fingerprint.active
-        .where("object_value REGEXP ?", Radar::ValueListSyncService::STRIPE_FINGERPRINT_PATTERN.source)
+      scoped(PlatformBlock.charge_processor_fingerprint.active
+        .where("object_value REGEXP ?", Radar::ValueListSyncService::STRIPE_FINGERPRINT_PATTERN.source))
         .in_batches(of: batch_size) do |batch|
         batch.each { |obj| service.add_item_to_list(list.id, obj.object_value) }
         total += batch.size
