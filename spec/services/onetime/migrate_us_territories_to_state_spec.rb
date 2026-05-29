@@ -108,5 +108,26 @@ describe Onetime::MigrateUsTerritoriesToState do
       expect { described_class.process }.not_to(change { seller.reload.alive_user_compliance_info.country })
       expect(seller.alive_user_compliance_info.country).to eq("United Kingdom")
     end
+
+    it "preserves Strongbox-encrypted tax IDs on the migrated UCI" do
+      passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
+      individual_uci = create(:user_compliance_info_empty, user: create(:user),
+                              country: "Puerto Rico", state: nil,
+                              individual_tax_id: "111223333")
+      business_uci = create(:user_compliance_info_business, user: create(:user),
+                            country: "Puerto Rico", state: nil,
+                            business_country: "Puerto Rico", business_state: nil,
+                            individual_tax_id: "444556666",
+                            business_tax_id: "987654321")
+
+      described_class.process
+
+      migrated_individual = individual_uci.user.reload.alive_user_compliance_info
+      expect(migrated_individual.individual_tax_id.decrypt(passphrase)).to eq("111223333")
+
+      migrated_business = business_uci.user.reload.alive_user_compliance_info
+      expect(migrated_business.individual_tax_id.decrypt(passphrase)).to eq("444556666")
+      expect(migrated_business.business_tax_id.decrypt(passphrase)).to eq("987654321")
+    end
   end
 end
