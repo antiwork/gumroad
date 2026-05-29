@@ -249,6 +249,19 @@ describe SignupController, type: :controller, inertia: true do
       expect(response.parsed_body["error_message"]).to eq "Please provide a valid email address."
     end
 
+    it "rejects malformed user param sent as a string" do
+      post "create", params: { user: "foo" }
+      expect(response).to redirect_to(signup_path)
+      expect(flash[:warning]).to eq "Please provide a valid email address."
+      expect(User.count).to eq 0
+    end
+
+    it "returns json error for malformed user param sent as a string" do
+      post "create", params: { user: "foo" }, format: :json
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["error_message"]).to eq "Please provide a valid email address."
+    end
+
     it "turns notifications off the user if the user is from Canada" do
       @request.env["REMOTE_ADDR"] = "76.66.210.142"
       user = build(:user, password: "password")
