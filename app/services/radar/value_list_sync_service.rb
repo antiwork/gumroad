@@ -61,14 +61,20 @@ class Radar::ValueListSyncService
   end
 
   def find_or_create_list(list_alias:, name:, item_type:)
-    Stripe::Radar::ValueList.retrieve(list_alias)
-  rescue Stripe::InvalidRequestError => e
-    raise unless e.code == "resource_missing"
-    Stripe::Radar::ValueList.create(
-      alias: list_alias,
-      name: name,
-      item_type: item_type
-    )
+    existing = Stripe::Radar::ValueList.list(alias: list_alias, limit: 1).data.first
+    return existing if existing
+
+    begin
+      Stripe::Radar::ValueList.create(
+        alias: list_alias,
+        name: name,
+        item_type: item_type
+      )
+    rescue Stripe::InvalidRequestError => e
+      raise unless e.message.to_s.include?("already exists")
+      Stripe::Radar::ValueList.list(alias: list_alias, limit: 1).data.first ||
+        raise("Radar value list '#{list_alias}' could not be found after race recovery")
+    end
   end
 
   def add_item_to_list(value_list_id, value)
@@ -77,7 +83,7 @@ class Radar::ValueListSyncService
       value: value
     )
   rescue Stripe::InvalidRequestError => e
-    raise unless e.code == "value_list_item_already_exists"
+    raise unless e.code == "value_list_item_already_exists" || e.message.to_s.include?("already exists")
   end
 
   private

@@ -9,9 +9,9 @@ describe Radar::ValueListSyncService do
 
   describe "#sync_blocked_emails" do
     before do
-      allow(Stripe::Radar::ValueList).to receive(:retrieve)
-        .with("gumroad_blocked_emails")
-        .and_return(value_list)
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_return(double(data: [value_list]))
       allow(Stripe::Radar::ValueListItem).to receive(:list)
         .and_return(double(data: []))
     end
@@ -67,9 +67,9 @@ describe Radar::ValueListSyncService do
     end
 
     it "creates the value list if it does not exist" do
-      allow(Stripe::Radar::ValueList).to receive(:retrieve)
-        .with("gumroad_blocked_emails")
-        .and_raise(Stripe::InvalidRequestError.new("No such value list", "alias", code: "resource_missing"))
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_return(double(data: []))
 
       expect(Stripe::Radar::ValueList).to receive(:create).with(
         alias: "gumroad_blocked_emails",
@@ -80,11 +80,66 @@ describe Radar::ValueListSyncService do
       service.sync_blocked_emails
     end
 
+    it "returns the existing list when Stripe already has a list with that alias (no create call)" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "existing@example.com")
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      expect(Stripe::Radar::ValueList).not_to receive(:create)
+
+      service.sync_blocked_emails
+    end
+
+    it "recovers when create races against an existing alias" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_return(double(data: []), double(data: [value_list]))
+      allow(Stripe::Radar::ValueList).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("A list with the alias 'gumroad_blocked_emails' already exists", "alias"))
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "race@example.com")
+
+      expect { service.sync_blocked_emails }.not_to raise_error
+    end
+
+    it "raises a descriptive error if race recovery cannot find the list" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_return(double(data: []), double(data: []))
+      allow(Stripe::Radar::ValueList).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("A list with the alias 'gumroad_blocked_emails' already exists", "alias"))
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "lost@example.com")
+
+      expect { service.sync_blocked_emails }
+        .to raise_error(RuntimeError, /Radar value list 'gumroad_blocked_emails' could not be found/)
+    end
+
+    it "does not swallow non-'already exists' errors from the initial lookup" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_raise(Stripe::InvalidRequestError.new("Internal server error", "alias"))
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "boom@example.com")
+
+      expect { service.sync_blocked_emails }
+        .to raise_error(Stripe::InvalidRequestError, /Internal server error/)
+    end
+
     it "ignores duplicate item errors" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "dup@example.com")
 
       allow(Stripe::Radar::ValueListItem).to receive(:create)
         .and_raise(Stripe::InvalidRequestError.new("This value already exists", "value", code: "value_list_item_already_exists"))
+
+      expect { service.sync_blocked_emails }.not_to raise_error
+    end
+
+    it "ignores case-insensitive duplicate item errors (Stripe returns code: nil)" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "dup2@example.com")
+
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("This item already exists in this case-insensitive list.", "value"))
 
       expect { service.sync_blocked_emails }.not_to raise_error
     end
@@ -109,9 +164,9 @@ describe Radar::ValueListSyncService do
 
   describe "#sync_blocked_cards" do
     before do
-      allow(Stripe::Radar::ValueList).to receive(:retrieve)
-        .with("gumroad_blocked_cards")
-        .and_return(value_list)
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_cards", limit: 1)
+        .and_return(double(data: [value_list]))
       allow(Stripe::Radar::ValueListItem).to receive(:list)
         .and_return(double(data: []))
     end
@@ -146,6 +201,15 @@ describe Radar::ValueListSyncService do
       expect { service.sync_blocked_cards }.not_to raise_error
     end
 
+    it "ignores case-insensitive duplicate item errors (Stripe returns code: nil)" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpdup2")
+
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("This item already exists in this case-insensitive list.", "value"))
+
+      expect { service.sync_blocked_cards }.not_to raise_error
+    end
+
     it "removes recently unblocked card fingerprints from Stripe Radar" do
       blocked = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpunblock1")
       blocked.unblock!
@@ -173,6 +237,28 @@ describe Radar::ValueListSyncService do
       expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_card_2")
 
       service.sync_blocked_cards
+    end
+
+    it "returns the existing list when Stripe already has a list with that alias (no create call)" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fpexisting")
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      expect(Stripe::Radar::ValueList).not_to receive(:create)
+
+      service.sync_blocked_cards
+    end
+
+    it "recovers when create races against an existing alias" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_cards", limit: 1)
+        .and_return(double(data: []), double(data: [value_list]))
+      allow(Stripe::Radar::ValueList).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("A list with the alias 'gumroad_blocked_cards' already exists", "alias"))
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "fprace")
+
+      expect { service.sync_blocked_cards }.not_to raise_error
     end
   end
 end
