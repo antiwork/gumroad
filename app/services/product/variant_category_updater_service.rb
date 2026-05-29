@@ -41,7 +41,7 @@ class Product::VariantCategoryUpdaterService
     end
 
     if category_params[:options].nil?
-      variant_category.variants.map(&:mark_deleted)
+      batch_delete_variants(variant_category.variants)
       variant_category.mark_deleted! if variant_category.title.blank?
     else
       existing_variants = variant_category.variants.to_a
@@ -77,7 +77,7 @@ class Product::VariantCategoryUpdaterService
       end
 
       variants_to_delete = existing_variants - keep_variants
-      variants_to_delete.map(&:mark_deleted) if variants_to_delete.present?
+      batch_delete_variants(variants_to_delete)
     end
 
     variant_category.save!
@@ -85,6 +85,21 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    def batch_delete_variants(variants)
+      variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
+      return if variant_ids.empty?
+
+      now = Time.current
+      BaseVariant.where(id: variant_ids).update_all(deleted_at: now, updated_at: now)
+
+      variant_ids.each do |variant_id|
+        DeleteProductRichContentWorker.perform_async(product.id, variant_id)
+        DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
+      end
+
+      product.invalidate_cache
+    end
+
     def create_or_update_variant!(external_id, params)
       return Variant.create!(params.slice(*ALLOWED_ATTRIBUTES)) if external_id.blank?
 
