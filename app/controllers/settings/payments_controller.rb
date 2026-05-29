@@ -15,6 +15,15 @@ class Settings::PaymentsController < Settings::BaseController
     end
     return unless current_seller.fetch_or_build_user_compliance_info.country.present?
 
+    submitted_country_codes = [
+      params.dig(:user, :updated_country_code),
+      params.dig(:user, :country),
+      params.dig(:user, :business_country),
+    ].compact
+    if (submitted_country_codes & Compliance::Countries::US_OUTLYING_AREA_ALPHA2).any?
+      return redirect_with_error("US outlying areas (Puerto Rico, Guam, US Virgin Islands, etc.) are not valid compliance countries. Select United States and your territory as state.")
+    end
+
     compliance_info = current_seller.fetch_or_build_user_compliance_info
 
     updated_country_code = params.dig(:user, :updated_country_code)

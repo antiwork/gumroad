@@ -109,6 +109,22 @@ describe Onetime::MigratePuertoRicoToUsState do
       expect(seller.alive_user_compliance_info.country).to eq("United Kingdom")
     end
 
+    it "migrates a UCI whose personal country is non-PR but business_country is Puerto Rico" do
+      seller = create(:user)
+      create(:user_compliance_info_business, user: seller,
+                                             country: "United States", state: "CA",
+                                             business_country: "Puerto Rico", business_state: nil)
+
+      described_class.process
+
+      migrated = seller.reload.alive_user_compliance_info
+      expect(migrated.business_country).to eq("United States")
+      expect(migrated.business_state).to eq("PR")
+      # Personal address stays put — only the PR-tainted business address flips.
+      expect(migrated.country).to eq("United States")
+      expect(migrated.state).to eq("CA")
+    end
+
     it "preserves Strongbox-encrypted tax IDs on the migrated UCI" do
       passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
       individual_uci = create(:user_compliance_info_empty, user: create(:user),

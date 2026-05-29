@@ -37,8 +37,12 @@ module Onetime
         migrated = 0
         skipped = 0
 
+        # `company_hash` sends `country: legal_entity_country_code` to Stripe, which falls back
+        # to `business_country_code` for business sellers — so any UCI with `business_country`
+        # set to the territory will hit a Stripe rejection on next sync even if its personal
+        # `country` is something else. Match either field so no PR-tainted UCI is left behind.
         UserComplianceInfo
-          .country(country_name)
+          .where("country = ? OR business_country = ?", country_name, country_name)
           .alive
           .in_batches(of: batch_size) do |batch|
             ReplicaLagWatcher.watch
@@ -61,8 +65,10 @@ module Onetime
         return false unless uci.user&.alive_user_compliance_info&.id == uci.id
 
         uci.dup_and_save! do |new_uci|
-          new_uci.country = Compliance::Countries::USA.common_name
-          new_uci.state   = state_code
+          if uci.country == country_name
+            new_uci.country = Compliance::Countries::USA.common_name
+            new_uci.state   = state_code
+          end
           if uci.business_country == country_name
             new_uci.business_country = Compliance::Countries::USA.common_name
             new_uci.business_state   = state_code
