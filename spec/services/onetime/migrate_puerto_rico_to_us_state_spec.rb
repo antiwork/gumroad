@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Onetime::MigrateUsTerritoriesToState do
+describe Onetime::MigratePuertoRicoToUsState do
   describe ".process" do
     let(:seller) { create(:user) }
 
@@ -112,13 +112,13 @@ describe Onetime::MigrateUsTerritoriesToState do
     it "preserves Strongbox-encrypted tax IDs on the migrated UCI" do
       passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
       individual_uci = create(:user_compliance_info_empty, user: create(:user),
-                              country: "Puerto Rico", state: nil,
-                              individual_tax_id: "111223333")
+                                                           country: "Puerto Rico", state: nil,
+                                                           individual_tax_id: "111223333")
       business_uci = create(:user_compliance_info_business, user: create(:user),
-                            country: "Puerto Rico", state: nil,
-                            business_country: "Puerto Rico", business_state: nil,
-                            individual_tax_id: "444556666",
-                            business_tax_id: "987654321")
+                                                            country: "Puerto Rico", state: nil,
+                                                            business_country: "Puerto Rico", business_state: nil,
+                                                            individual_tax_id: "444556666",
+                                                            business_tax_id: "987654321")
 
       described_class.process
 

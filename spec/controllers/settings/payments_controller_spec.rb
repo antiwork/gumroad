@@ -1668,6 +1668,17 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(user.currency_type).to eq(Currency::CAD)
         end
       end
+
+      describe "US outlying areas" do
+        %w[AS GU MP PR UM VI].each do |territory|
+          it "rejects #{territory} so the catch-22 in issue #394 cannot recur via direct POST" do
+            expect do
+              post :set_country, params: params.merge(country: territory), as: :json
+            end.not_to change { UserComplianceInfo.count }
+            expect(response).to be_forbidden
+          end
+        end
+      end
     end
   end
 

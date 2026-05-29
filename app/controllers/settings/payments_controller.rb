@@ -103,6 +103,7 @@ class Settings::PaymentsController < Settings::BaseController
   def set_country
     compliance_info = current_seller.fetch_or_build_user_compliance_info
     return head :forbidden if compliance_info.country.present?
+    return head :forbidden if Compliance::Countries::US_OUTLYING_AREA_ALPHA2.include?(params[:country])
 
     compliance_info.dup_and_save! do |new_compliance_info|
       new_compliance_info.country = ISO3166::Country[params[:country]]&.common_name

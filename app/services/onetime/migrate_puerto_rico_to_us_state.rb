@@ -20,7 +20,7 @@
 # `skip_stripe_job_on_create = true` is set on the dup so `HandleNewUserComplianceInfoWorker`
 # does not fire ~4.5k times; the small Stripe-connected cohort is re-synced separately.
 module Onetime
-  class MigrateUsTerritoriesToState
+  class MigratePuertoRicoToUsState
     BATCH_SIZE = 200
 
     TERRITORY_NAME_TO_STATE_CODE = {
