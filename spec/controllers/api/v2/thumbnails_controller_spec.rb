@@ -198,6 +198,26 @@ describe Api::V2::ThumbnailsController do
         expect(@product.reload.thumbnail).to be_nil
       end
 
+      it "does not count discarded redirect response bodies against the final image size" do
+        url = "https://example.com/redirecting-thumbnail.png"
+        redirect_response = remote_file_response("blah.txt", "text/plain", chunks: ["a" * Thumbnail::MAX_FILE_SIZE], redirect: true)
+        final_response = remote_file_response("smilie.png", "image/png")
+        allow(SsrfFilter).to receive(:get).with(url) do |&block|
+          block.call(redirect_response)
+          block.call(final_response)
+          final_response
+        end
+
+        post @action, params: @params.merge(url:)
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        expect(@product.reload.thumbnail).to be_alive
+        expect(@product.thumbnail.file.blob.filename.to_s).to eq("redirecting-thumbnail.png")
+        expect(@product.thumbnail.file.blob.byte_size).to eq(File.size(Rails.root.join("spec", "support", "fixtures", "smilie.png")))
+      end
+
       it "purges the downloaded blob and keeps the existing thumbnail when analysis fails" do
         existing = create(:thumbnail, product: @product)
         old_blob = existing.file.blob
@@ -213,6 +233,20 @@ describe Api::V2::ThumbnailsController do
         expect(body["success"]).to be(false)
         expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
         expect(@product.reload.thumbnail.file.blob).to eq(old_blob)
+      end
+
+      it "returns processing errors for non-success remote responses without creating a blob" do
+        url = "https://example.com/not-found.png"
+        stub_remote_file(url, "blah.txt", "text/html", response_class: Net::HTTPNotFound)
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
+        expect(@product.reload.thumbnail).to be_nil
       end
 
       it "returns processing errors for non-image remote files" do
@@ -367,18 +401,21 @@ describe Api::V2::ThumbnailsController do
     end
   end
 
-  def stub_remote_file(url, fixture_name, content_type, content_length: nil, chunks: nil)
-    response = remote_file_response(fixture_name, content_type, content_length:, chunks:)
+  def stub_remote_file(url, fixture_name, content_type, content_length: nil, chunks: nil, response_class: Net::HTTPOK)
+    response = remote_file_response(fixture_name, content_type, content_length:, chunks:, response_class:)
 
     allow(SsrfFilter).to receive(:get).with(url).and_yield(response).and_return(response)
   end
 
-  def remote_file_response(fixture_name, content_type, content_length: nil, chunks: nil, redirect: false)
-    response_class = redirect ? Net::HTTPRedirection : Object
+  def remote_file_response(fixture_name, content_type, content_length: nil, chunks: nil, response_class: Net::HTTPOK, redirect: false)
+    response_class = Net::HTTPRedirection if redirect
 
     Class.new(response_class) do
       define_method(:initialize) do |fixture_name, content_type, content_length, chunks|
-        super("1.1", "302", "Found") if redirect
+        if is_a?(Net::HTTPResponse)
+          code = redirect ? "302" : Net::HTTPResponse::CODE_TO_OBJ.key(response_class)
+          super("1.1", code, code)
+        end
 
         @body = File.binread(Rails.root.join("spec", "support", "fixtures", fixture_name))
         @content_type = content_type

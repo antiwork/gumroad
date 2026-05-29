@@ -52,18 +52,20 @@ class Thumbnail < ApplicationRecord
     blob = nil
     tempfile = Tempfile.new(binmode: true)
     begin
-      downloaded_byte_size = 0
       response = SsrfFilter.get(new_url) do |http_response|
         raise RemoteFileTooLarge if http_response["content-length"].to_i > MAX_FILE_SIZE
 
-        write_file = !http_response.is_a?(Net::HTTPRedirection)
+        write_file = http_response.is_a?(Net::HTTPSuccess)
+        response_byte_size = 0
         http_response.read_body do |chunk|
-          raise RemoteFileTooLarge if downloaded_byte_size + chunk.bytesize > MAX_FILE_SIZE
+          response_byte_size += chunk.bytesize
+          raise RemoteFileTooLarge if response_byte_size > MAX_FILE_SIZE
 
           tempfile.write(chunk) if write_file
-          downloaded_byte_size += chunk.bytesize
         end
       end
+      raise ActiveStorage::FileNotFoundError unless response.is_a?(Net::HTTPSuccess)
+
       tempfile.rewind
       blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
                                                     filename: filename,
