@@ -46,6 +46,8 @@ class Thumbnail < ApplicationRecord
     raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
     raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
     new_url = new_uri.to_s
+    filename = File.basename(new_uri.path)
+    filename = "thumbnail" if filename.blank? || filename == "/"
 
     blob = nil
     tempfile = Tempfile.new(binmode: true)
@@ -64,14 +66,17 @@ class Thumbnail < ApplicationRecord
       end
       tempfile.rewind
       blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
-                                                    filename: File.basename(new_url),
+                                                    filename: filename,
                                                     content_type: response.content_type)
+      blob.analyze
+      self.unsplash_url = nil
+      file.attach(blob.signed_id)
+    rescue
+      blob&.purge
+      raise
     ensure
       tempfile.close!
     end
-    self.unsplash_url = nil
-    file.attach(blob.signed_id)
-    file.analyze
   end
 
   def url(variant: :default)

@@ -43,7 +43,7 @@ describe Api::V2::ThumbnailsController do
       end
 
       it "attaches a thumbnail from a URL" do
-        url = "https://example.com/thumbnail.png"
+        url = "https://example.com/assets/thumbnail.png?token=abc&w=600"
         stub_remote_file(url, "smilie.png", "image/png")
 
         post @action, params: @params.merge(url:)
@@ -198,6 +198,23 @@ describe Api::V2::ThumbnailsController do
         expect(@product.reload.thumbnail).to be_nil
       end
 
+      it "purges the downloaded blob and keeps the existing thumbnail when analysis fails" do
+        existing = create(:thumbnail, product: @product)
+        old_blob = existing.file.blob
+        url = "https://example.com/thumbnail.png"
+        stub_remote_file(url, "smilie.png", "image/png")
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:analyze).and_raise(Net::ReadTimeout)
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
+        expect(@product.reload.thumbnail.file.blob).to eq(old_blob)
+      end
+
       it "returns processing errors for non-image remote files" do
         url = "https://example.com/not-image.txt"
         stub_remote_file(url, "blah.txt", "text/plain")
@@ -228,6 +245,30 @@ describe Api::V2::ThumbnailsController do
 
       it "returns error for invalid URLs" do
         post @action, params: @params.merge(url: "ftp://example.com/thumbnail.png")
+
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Please provide a valid public image URL.")
+      end
+
+      it "returns error for unresolved URLs" do
+        url = "https://nonexistent.example.com/thumbnail.png"
+        allow(SsrfFilter).to receive(:get).with(url).and_raise(SsrfFilter::UnresolvedHostname)
+
+        post @action, params: @params.merge(url:)
+
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Please provide a valid public image URL.")
+      end
+
+      it "returns error for URLs with too many redirects" do
+        url = "https://example.com/redirect-loop.png"
+        allow(SsrfFilter).to receive(:get).with(url).and_raise(SsrfFilter::TooManyRedirects)
+
+        post @action, params: @params.merge(url:)
 
         expect(response).to have_http_status(:bad_request)
         body = response.parsed_body
