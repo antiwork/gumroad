@@ -37,6 +37,27 @@ class Thumbnail < ApplicationRecord
     alive? ? self : nil
   end
 
+  def url=(new_url)
+    new_url = new_url.to_s
+    new_url = "https:#{new_url}" if new_url.starts_with?("//")
+    new_url = Addressable::URI.escape(new_url) unless URI::ABS_URI.match?(new_url)
+    new_uri = URI.parse(new_url)
+    raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
+    raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
+    new_url = new_uri.to_s
+
+    response = SsrfFilter.get(new_url)
+    tempfile = Tempfile.new(binmode: true)
+    tempfile.write(response.body)
+    tempfile.rewind
+    blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
+                                                  filename: File.basename(new_url),
+                                                  content_type: response.content_type)
+    self.unsplash_url = nil
+    file.attach(blob.signed_id)
+    file.analyze
+  end
+
   def url(variant: :default)
     return unsplash_url if unsplash_url.present?
     return unless file.attached?

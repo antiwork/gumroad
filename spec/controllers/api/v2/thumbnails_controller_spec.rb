@@ -42,6 +42,24 @@ describe Api::V2::ThumbnailsController do
         expect(@product.reload.thumbnail).to be_alive
       end
 
+      it "attaches a thumbnail from a URL" do
+        url = "https://example.com/thumbnail.png"
+        stub_remote_file(url, "smilie.png", "image/png")
+
+        post @action, params: @params.merge(url:)
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        expect(body["thumbnail"]["url"]).to be_present
+        expect(body["thumbnail"]["guid"]).to be_present
+        expect(@product.reload.thumbnail).to be_alive
+        expect(@product.thumbnail.file.blob.filename.to_s).to eq("thumbnail.png")
+        expect(@product.thumbnail.file.blob.metadata.slice("width", "height")).to eq("width" => 1006, "height" => 1006)
+        expect(@product.thumbnail.unsplash_url).to be_nil
+        expect(SsrfFilter).to have_received(:get).with(url)
+      end
+
       it "replaces an existing thumbnail" do
         existing = create(:thumbnail, product: @product)
         old_guid = existing.guid
@@ -61,6 +79,25 @@ describe Api::V2::ThumbnailsController do
         expect(@product.thumbnail).to be_alive
       end
 
+      it "replaces an existing thumbnail from a URL" do
+        existing = create(:thumbnail, product: @product)
+        old_guid = existing.guid
+        old_blob = existing.file.blob
+        url = "https://example.com/replacement.png"
+        stub_remote_file(url, "smilie.png", "image/png")
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { Thumbnail.count }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        expect(@product.reload.thumbnail.guid).to eq(old_guid)
+        expect(@product.thumbnail.file.blob).not_to eq(old_blob)
+        expect(@product.thumbnail.file.blob.filename.to_s).to eq("replacement.png")
+      end
+
       it "returns validation errors for invalid files" do
         blob = ActiveStorage::Blob.create_and_upload!(
           io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png"),
@@ -75,12 +112,62 @@ describe Api::V2::ThumbnailsController do
         expect(body["message"]).to be_present
       end
 
-      it "returns error when signed_blob_id is not provided" do
+      it "returns validation errors for too-small remote files" do
+        url = "https://example.com/small.png"
+        stub_remote_file(url, "test-small.png", "image/png")
+
+        post @action, params: @params.merge(url:)
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "returns validation errors for non-square remote files" do
+        url = "https://example.com/non-square.png"
+        stub_remote_file(url, "kFDzu.png", "image/png")
+
+        post @action, params: @params.merge(url:)
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Please upload a square thumbnail.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "returns validation errors for oversized remote files and purges the downloaded blob" do
+        url = "https://example.com/large.jpeg"
+        stub_remote_file(url, "error_file.jpeg", "image/jpeg")
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "returns processing errors for non-image remote files" do
+        url = "https://example.com/not-image.txt"
+        stub_remote_file(url, "blah.txt", "text/plain")
+
+        post @action, params: @params.merge(url:)
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "returns error when neither signed_blob_id nor url is provided" do
         post @action, params: @params
 
         body = response.parsed_body
         expect(body["success"]).to be(false)
-        expect(body["message"]).to eq("Please provide a signed_blob_id.")
+        expect(body["message"]).to eq("Please provide a signed_blob_id or url.")
       end
 
       it "returns error for invalid signed_blob_id" do
@@ -89,6 +176,38 @@ describe Api::V2::ThumbnailsController do
         body = response.parsed_body
         expect(body["success"]).to be(false)
         expect(body["message"]).to eq("The signed_blob_id is invalid or expired.")
+      end
+
+      it "returns error for invalid URLs" do
+        post @action, params: @params.merge(url: "ftp://example.com/thumbnail.png")
+
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Please provide a valid public image URL.")
+      end
+
+      it "returns error for blocked internal URLs" do
+        url = "http://127.0.0.1/thumbnail.png"
+        allow(SsrfFilter).to receive(:get).with(url).and_raise(SsrfFilter::PrivateIPAddress)
+
+        post @action, params: @params.merge(url:)
+
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Please provide a valid public image URL.")
+      end
+
+      it "returns processing errors when the remote file cannot be downloaded" do
+        url = "https://example.com/missing.png"
+        allow(SsrfFilter).to receive(:get).with(url).and_raise(SocketError)
+
+        post @action, params: @params.merge(url:)
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please try again.")
       end
 
       it "revives a previously deleted thumbnail" do
@@ -157,5 +276,14 @@ describe Api::V2::ThumbnailsController do
         expect(body["message"]).to eq("The thumbnail was not found.")
       end
     end
+  end
+
+  def stub_remote_file(url, fixture_name, content_type)
+    allow(SsrfFilter).to receive(:get).with(url).and_return(
+      Struct.new(:body, :content_type).new(
+        File.binread(Rails.root.join("spec", "support", "fixtures", fixture_name)),
+        content_type
+      )
+    )
   end
 end

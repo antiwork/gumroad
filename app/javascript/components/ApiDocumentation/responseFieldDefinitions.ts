@@ -21,6 +21,11 @@ export const COVER_FIELDS: FieldDefinition[] = [
   { name: "native_height", type: "number", description: "Intrinsic height of the source asset in pixels" },
 ];
 
+export const THUMBNAIL_FIELDS: FieldDefinition[] = [
+  { name: "url", type: "string", description: "CDN URL of the product thumbnail image" },
+  { name: "guid", type: "string", description: "Unique identifier for the thumbnail" },
+];
+
 const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
   { name: "title", type: "string", description: 'Variant category title (e.g. "Tier")' },
   {
