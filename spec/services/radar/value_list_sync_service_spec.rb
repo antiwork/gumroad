@@ -102,6 +102,30 @@ describe Radar::ValueListSyncService do
       expect { service.sync_blocked_emails }.not_to raise_error
     end
 
+    it "raises a descriptive error if race recovery cannot find the list" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_return(double(data: []), double(data: []))
+      allow(Stripe::Radar::ValueList).to receive(:create)
+        .and_raise(Stripe::InvalidRequestError.new("A list with the alias 'gumroad_blocked_emails' already exists", "alias"))
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "lost@example.com")
+
+      expect { service.sync_blocked_emails }
+        .to raise_error(RuntimeError, /Radar value list 'gumroad_blocked_emails' could not be found/)
+    end
+
+    it "does not swallow non-'already exists' errors from the initial lookup" do
+      allow(Stripe::Radar::ValueList).to receive(:list)
+        .with(alias: "gumroad_blocked_emails", limit: 1)
+        .and_raise(Stripe::InvalidRequestError.new("Internal server error", "alias"))
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "boom@example.com")
+
+      expect { service.sync_blocked_emails }
+        .to raise_error(Stripe::InvalidRequestError, /Internal server error/)
+    end
+
     it "ignores duplicate item errors" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "dup@example.com")
 
