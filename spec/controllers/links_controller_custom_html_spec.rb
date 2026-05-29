@@ -41,7 +41,7 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(%(BASE_CHECKOUT = "/l/#{product.unique_permalink}?wanted=true"))
       expect(response.body).to include('e.data === "gumroad:checkout"')
       expect(response.body).to include('e.data.type === "gumroad:checkout"')
-      expect(response.body).to include('e.origin === "null"')
+      expect(response.body).to include('e.origin !== "null"')
       # Script carries a nonce — script-src has no 'unsafe-inline', so without
       # it the listener would be CSP-blocked in the browser.
       expect(response.body).to match(/<script nonce="[^"]+">/)

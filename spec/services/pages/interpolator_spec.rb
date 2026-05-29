@@ -113,8 +113,10 @@ describe Pages::Interpolator do
 
       # href encodes the validated selection so SEO/no-JS still lands on the right checkout
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true&amp;variant=Pro+plan&amp;quantity=2"))
-      # postMessage payload mirrors the selection (the wrapper appends to its base URL)
-      expect(result).to include(%(data-gumroad-checkout-params="{&quot;variant&quot;:&quot;Pro plan&quot;,&quot;quantity&quot;:2}"))
+      # postMessage payload mirrors the selection. The JSON contains double quotes,
+      # so Nokogiri serializes the attribute single-quoted with the inner quotes
+      # left literal — the browser's dataset read + JSON.parse handle it fine.
+      expect(result).to include(%(data-gumroad-checkout-params='{"variant":"Pro plan","quantity":2}'))
     end
 
     it "silently drops selection attributes the product can't honor (lenient fallback)" do
@@ -129,12 +131,12 @@ describe Pages::Interpolator do
         product: product
       )
 
-      # No selection survives, so the href is the default checkout and the payload is empty
+      # No selection survives: the href is the default checkout and the payload is
+      # empty. The data-gumroad-* attributes stay on the element (the interpolator
+      # reads them, it doesn't strip them), so assert on the href/payload rather
+      # than the absence of the attribute names.
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
-      expect(result).not_to include("variant=")
-      expect(result).not_to include("quantity=")
-      expect(result).not_to include("price=")
-      expect(result).not_to include("recurrence=")
+      expect(result).not_to match(/href="[^"]*&amp;(variant|option|quantity|price|recurrence)=/)
       expect(result).to include(%(data-gumroad-checkout-params="{}"))
     end
   end
