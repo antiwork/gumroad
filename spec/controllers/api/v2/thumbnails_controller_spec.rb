@@ -150,6 +150,54 @@ describe Api::V2::ThumbnailsController do
         expect(@product.reload.thumbnail).to be_nil
       end
 
+      it "rejects remote files with content length above the thumbnail limit before creating a blob" do
+        url = "https://example.com/large.jpeg"
+        stub_remote_file(url, "smilie.png", "image/jpeg", content_length: Thumbnail::MAX_FILE_SIZE + 1)
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "stops downloading remote files when the streamed body exceeds the thumbnail limit" do
+        url = "https://example.com/large.jpeg"
+        stub_remote_file(url, "smilie.png", "image/jpeg", chunks: ["a" * Thumbnail::MAX_FILE_SIZE, "a"])
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
+      it "stops downloading redirect response bodies when they exceed the thumbnail limit" do
+        url = "https://example.com/redirecting-thumbnail.png"
+        redirect_response = remote_file_response("blah.txt", "text/plain", chunks: ["a" * Thumbnail::MAX_FILE_SIZE, "a"], redirect: true)
+        final_response = remote_file_response("smilie.png", "image/png")
+        allow(SsrfFilter).to receive(:get).with(url) do |&block|
+          block.call(redirect_response)
+          block.call(final_response)
+          final_response
+        end
+
+        expect do
+          post @action, params: @params.merge(url:)
+        end.not_to change { ActiveStorage::Blob.count }
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
+        expect(@product.reload.thumbnail).to be_nil
+      end
+
       it "returns processing errors for non-image remote files" do
         url = "https://example.com/not-image.txt"
         stub_remote_file(url, "blah.txt", "text/plain")
@@ -278,12 +326,34 @@ describe Api::V2::ThumbnailsController do
     end
   end
 
-  def stub_remote_file(url, fixture_name, content_type)
-    allow(SsrfFilter).to receive(:get).with(url).and_return(
-      Struct.new(:body, :content_type).new(
-        File.binread(Rails.root.join("spec", "support", "fixtures", fixture_name)),
-        content_type
-      )
-    )
+  def stub_remote_file(url, fixture_name, content_type, content_length: nil, chunks: nil)
+    response = remote_file_response(fixture_name, content_type, content_length:, chunks:)
+
+    allow(SsrfFilter).to receive(:get).with(url).and_yield(response).and_return(response)
+  end
+
+  def remote_file_response(fixture_name, content_type, content_length: nil, chunks: nil, redirect: false)
+    response_class = redirect ? Net::HTTPRedirection : Object
+
+    Class.new(response_class) do
+      define_method(:initialize) do |fixture_name, content_type, content_length, chunks|
+        super("1.1", "302", "Found") if redirect
+
+        @body = File.binread(Rails.root.join("spec", "support", "fixtures", fixture_name))
+        @content_type = content_type
+        @content_length = content_length
+        @chunks = chunks
+      end
+
+      attr_reader :content_type
+
+      def [](header)
+        @content_length if header.downcase == "content-length"
+      end
+
+      def read_body
+        (@chunks || [@body]).each { yield _1 }
+      end
+    end.new(fixture_name, content_type, content_length, chunks)
   end
 end

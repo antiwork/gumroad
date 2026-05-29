@@ -29,6 +29,8 @@ class Api::V2::ThumbnailsController < Api::V2::BaseController
     render_response(false, message: "The signed_blob_id is invalid or expired.")
   rescue URI::InvalidURIError, Addressable::URI::InvalidURIError, SsrfFilter::CRLFInjection, SsrfFilter::InvalidUriScheme, SsrfFilter::PrivateIPAddress
     render status: :bad_request, json: { success: false, message: "Please provide a valid public image URL." }
+  rescue Thumbnail::RemoteFileTooLarge
+    render_response(false, message: "Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
   rescue ActiveRecord::InvalidForeignKey, ActiveStorage::FileNotFoundError, *INTERNET_EXCEPTIONS
     render_response(false, message: "Could not process your thumbnail, please try again.")
   end

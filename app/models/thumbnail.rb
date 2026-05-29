@@ -7,6 +7,7 @@ class Thumbnail < ApplicationRecord
   DISPLAY_THUMBNAIL_DIMENSION = 600
   MAX_FILE_SIZE = 5.megabytes
   ALLOW_CONTENT_TYPES = /jpeg|gif|png|jpg/i
+  RemoteFileTooLarge = Class.new(StandardError)
 
   belongs_to :product, class_name: "Link", optional: true
 
@@ -46,13 +47,28 @@ class Thumbnail < ApplicationRecord
     raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
     new_url = new_uri.to_s
 
-    response = SsrfFilter.get(new_url)
+    blob = nil
     tempfile = Tempfile.new(binmode: true)
-    tempfile.write(response.body)
-    tempfile.rewind
-    blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
-                                                  filename: File.basename(new_url),
-                                                  content_type: response.content_type)
+    begin
+      downloaded_byte_size = 0
+      response = SsrfFilter.get(new_url) do |http_response|
+        raise RemoteFileTooLarge if http_response["content-length"].to_i > MAX_FILE_SIZE
+
+        write_file = !http_response.is_a?(Net::HTTPRedirection)
+        http_response.read_body do |chunk|
+          raise RemoteFileTooLarge if downloaded_byte_size + chunk.bytesize > MAX_FILE_SIZE
+
+          tempfile.write(chunk) if write_file
+          downloaded_byte_size += chunk.bytesize
+        end
+      end
+      tempfile.rewind
+      blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
+                                                    filename: File.basename(new_url),
+                                                    content_type: response.content_type)
+    ensure
+      tempfile.close!
+    end
     self.unsplash_url = nil
     file.attach(blob.signed_id)
     file.analyze
