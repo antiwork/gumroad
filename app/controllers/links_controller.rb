@@ -385,18 +385,12 @@ class LinksController < ApplicationController
           :community_chat_enabled,
           :default_offer_code_id
         ))
-        if product_permitted_params.key?(:description)
-          @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
-        end
+        @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
-        if product_permitted_params.key?(:custom_attributes)
-          @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
-        end
-        if product_permitted_params.key?(:tags)
-          @product.save_tags!(product_permitted_params[:tags] || [])
-        end
+        @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
+        @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
           @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
@@ -404,9 +398,7 @@ class LinksController < ApplicationController
             @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
           end
         end
-        if product_permitted_params.key?(:section_ids)
-          @product.show_in_sections!(product_permitted_params[:section_ids] || [])
-        end
+        @product.show_in_sections!(product_permitted_params[:section_ids] || [])
         @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
 
         if Feature.active?(:cancellation_discounts, @product.user) && (product_permitted_params[:cancellation_discount].present? || @product.cancellation_discount_offer_code.present?)
