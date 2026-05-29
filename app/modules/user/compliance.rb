@@ -127,7 +127,6 @@ module User::Compliance
     Compliance::Countries::MAC,
     Compliance::Countries::BEN,
     Compliance::Countries::CIV,
-    Compliance::Countries::PRI,
   ].concat(EUROPEAN_COUNTRIES).freeze
 
   SUPPORTED_COUNTRIES_HAVING_STATES = [

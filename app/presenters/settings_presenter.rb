@@ -149,7 +149,7 @@ class SettingsPresenter
         additional_notes: billing_detail&.additional_notes || "",
         auto_email_invoice_enabled: billing_detail.nil? || billing_detail.auto_email_invoice_enabled,
       },
-      countries: Compliance::Countries.for_select.to_h,
+      countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
       business_id_country_codes: BusinessIdLabels::COUNTRY_CODES,
       business_id_labels: BusinessIdLabels::LABELS,
     }
@@ -224,7 +224,7 @@ class SettingsPresenter
         payments_policy.set_country?,
       aus_backtax_details: aus_backtax_details(user_compliance_info),
       stripe_connect:,
-      countries: Compliance::Countries.for_select.to_h,
+      countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,
