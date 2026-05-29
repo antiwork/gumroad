@@ -189,6 +189,21 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         put :update, params: { user: params.merge(country: "US") }
         expect(session[:inertia_errors]).to be_blank
       end
+
+      it "lets an unmigrated PR seller update non-country settings (the form echoes their existing country=PR)" do
+        pr_seller = create(:user, email: "pr-seller-#{SecureRandom.hex(4)}@example.com")
+        create(:user_compliance_info_empty, user: pr_seller, country: "Puerto Rico")
+        sign_in pr_seller
+
+        put :update, params: { user: params.merge(country: "PR", first_name: "Sofia") }
+
+        expect(session[:inertia_errors]).to be_blank
+      end
+
+      it "rejects a US seller attempting to change their business_country to PR while submitting a non-PR personal country" do
+        put :update, params: { user: params.merge(country: "US", business_country: "PR", is_business: true) }
+        expect_territory_rejection_error
+      end
     end
 
     describe "tos" do

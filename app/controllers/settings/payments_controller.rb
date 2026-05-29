@@ -15,12 +15,21 @@ class Settings::PaymentsController < Settings::BaseController
     end
     return unless current_seller.fetch_or_build_user_compliance_info.country.present?
 
-    submitted_country_codes = [
-      params.dig(:user, :updated_country_code),
-      params.dig(:user, :country),
-      params.dig(:user, :business_country),
-    ].compact
-    if (submitted_country_codes & Compliance::Countries::US_OUTLYING_AREA_ALPHA2).any?
+    # Block requests that would *change* a country field to a US outlying area, but allow
+    # unmigrated territory sellers (e.g. country: "Puerto Rico") to submit other settings
+    # changes — their form echoes back the current country value, which must not be
+    # treated as an attempted bypass. See issue gumroad-private#394.
+    current_uci = current_seller.alive_user_compliance_info
+    attempted_territory_change = [
+      [params.dig(:user, :updated_country_code), current_uci&.legal_entity_country_code],
+      [params.dig(:user, :country),              current_uci&.country_code],
+      [params.dig(:user, :business_country),     current_uci&.business_country_code],
+    ].any? do |submitted, current|
+      submitted.present? &&
+        submitted != current &&
+        Compliance::Countries::US_OUTLYING_AREA_ALPHA2.include?(submitted)
+    end
+    if attempted_territory_change
       return redirect_with_error("US outlying areas (Puerto Rico, Guam, US Virgin Islands, etc.) are not valid compliance countries. Select United States and your territory as state.")
     end
 

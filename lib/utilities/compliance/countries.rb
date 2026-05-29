@@ -74,6 +74,7 @@ module Compliance
     def self.for_select_for_seller_compliance
       for_select.reject { |alpha2, _name| US_OUTLYING_AREA_ALPHA2.include?(alpha2) }
     end
+
     GLOBE_SHOWING_AMERICAS_EMOJI = [127758].pack("U*")
     private_constant :GLOBE_SHOWING_AMERICAS_EMOJI
 
