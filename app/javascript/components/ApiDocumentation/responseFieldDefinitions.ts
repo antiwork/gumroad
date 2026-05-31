@@ -37,6 +37,11 @@ export const CATEGORY_FIELDS: FieldDefinition[] = [
   },
 ];
 
+export const THUMBNAIL_FIELDS: FieldDefinition[] = [
+  { name: "url", type: "string", description: "CDN URL of the product thumbnail image" },
+  { name: "guid", type: "string", description: "Unique identifier for the thumbnail" },
+];
+
 const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
   { name: "title", type: "string", description: 'Variant category title (e.g. "Tier")' },
   {

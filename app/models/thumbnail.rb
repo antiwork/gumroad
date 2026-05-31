@@ -7,6 +7,7 @@ class Thumbnail < ApplicationRecord
   DISPLAY_THUMBNAIL_DIMENSION = 600
   MAX_FILE_SIZE = 5.megabytes
   ALLOW_CONTENT_TYPES = /jpeg|gif|png|jpg/i
+  RemoteFileTooLarge = Class.new(StandardError)
 
   belongs_to :product, class_name: "Link", optional: true
 
@@ -35,6 +36,49 @@ class Thumbnail < ApplicationRecord
 
   def alive
     alive? ? self : nil
+  end
+
+  def url=(new_url)
+    new_url = new_url.to_s
+    new_url = "https:#{new_url}" if new_url.starts_with?("//")
+    new_url = Addressable::URI.escape(new_url) unless URI::ABS_URI.match?(new_url)
+    new_uri = URI.parse(new_url)
+    raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
+    raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
+    new_url = new_uri.to_s
+    filename = File.basename(new_uri.path)
+    filename = "thumbnail" if filename.blank? || filename == "/"
+
+    blob = nil
+    tempfile = Tempfile.new(binmode: true)
+    begin
+      response = SsrfFilter.get(new_url) do |http_response|
+        raise RemoteFileTooLarge if http_response["content-length"].to_i > MAX_FILE_SIZE
+
+        write_file = http_response.is_a?(Net::HTTPSuccess)
+        response_byte_size = 0
+        http_response.read_body do |chunk|
+          response_byte_size += chunk.bytesize
+          raise RemoteFileTooLarge if response_byte_size > MAX_FILE_SIZE
+
+          tempfile.write(chunk) if write_file
+        end
+      end
+      raise ActiveStorage::FileNotFoundError unless response.is_a?(Net::HTTPSuccess)
+
+      tempfile.rewind
+      blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
+                                                    filename: filename,
+                                                    content_type: response.content_type)
+      blob.analyze
+      self.unsplash_url = nil
+      file.attach(blob.signed_id)
+    rescue
+      blob&.purge
+      raise
+    ensure
+      tempfile.close!
+    end
   end
 
   def url(variant: :default)
