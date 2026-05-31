@@ -45,6 +45,18 @@ GUMROAD_API_V2_METHODS = [
     ]
   },
   {
+    name: "Categories",
+    methods: [
+      {
+        type: :get,
+        path: "/categories",
+        description: "Retrieve the full product category list.",
+        response_layout: :categories,
+        curl_layout: :get_categories
+      }
+    ]
+  },
+  {
     name: "Variant categories",
     methods: [
       {

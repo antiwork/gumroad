@@ -22,6 +22,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
+  before_action :resolve_category_param, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
   before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
 
@@ -117,15 +118,6 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
       error = validate_file_urls(params[:files])
       return render_response(false, message: error) if error
-    end
-
-    if params[:taxonomy_id].present?
-      if params[:taxonomy_id].respond_to?(:key?) || params[:taxonomy_id].is_a?(Array)
-        return render_response(false, message: "taxonomy_id must be a scalar value.")
-      end
-      if !Taxonomy.exists?(params[:taxonomy_id])
-        return render_response(false, message: "Invalid taxonomy_id.")
-      end
     end
 
     is_recurring_billing = native_type == Link::NATIVE_TYPE_MEMBERSHIP
@@ -496,6 +488,40 @@ class Api::V2::LinksController < Api::V2::BaseController
         return "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first."
       end
       nil
+    end
+
+    def resolve_category_param
+      if params.key?(:category)
+        if params[:category].respond_to?(:key?) || params[:category].is_a?(Array)
+          return render_response(false, message: "category must be a scalar value.")
+        end
+
+        if params[:category].present?
+          if params[:taxonomy_id].present?
+            return render_response(false, message: "Specify either category or taxonomy_id, not both.")
+          end
+
+          category = Discover::TaxonomyPresenter.new.category_for_path(params[:category].to_s)
+          return render_response(false, message: "Invalid category.") if category.blank?
+
+          params[:taxonomy_id] = category[:id]
+        end
+      end
+
+      validate_taxonomy_id_param
+    end
+
+    def validate_taxonomy_id_param
+      return if params[:taxonomy_id].blank?
+
+      if params[:taxonomy_id].respond_to?(:key?) || params[:taxonomy_id].is_a?(Array)
+        return render_response(false, message: "taxonomy_id must be a scalar value.")
+      end
+      if !Taxonomy.exists?(params[:taxonomy_id])
+        render_response(false, message: "Invalid taxonomy_id.")
+      end
+    rescue ActiveModel::RangeError
+      render_response(false, message: "One or more numeric values are out of range.")
     end
 
     def set_link_id_to_id

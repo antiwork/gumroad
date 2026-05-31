@@ -21,6 +21,22 @@ export const COVER_FIELDS: FieldDefinition[] = [
   { name: "native_height", type: "number", description: "Intrinsic height of the source asset in pixels" },
 ];
 
+export const CATEGORY_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "number", description: "Numeric category ID accepted by taxonomy_id" },
+  { name: "name", type: "string", description: 'Short category slug (e.g. "figma")' },
+  { name: "label", type: "string", description: 'Human-readable category label (e.g. "Figma")' },
+  {
+    name: "path",
+    type: "string",
+    description: 'Full category path accepted by category (e.g. "design/ui-and-web/figma")',
+  },
+  {
+    name: "parent_id",
+    type: "number | null",
+    description: "Numeric ID of the parent category; null for root categories",
+  },
+];
+
 const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
   { name: "title", type: "string", description: 'Variant category title (e.g. "Tier")' },
   {
@@ -103,6 +119,9 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
     condition: "present when the seller has purchasing power parity enabled and the product has not opted out",
   },
   { name: "currency", type: "string", description: 'ISO currency code (e.g. "usd")' },
+  { name: "taxonomy_id", type: "number | null", description: "Numeric category ID" },
+  { name: "category", type: "string | null", description: "Full category path" },
+  { name: "category_label", type: "string | null", description: "Human-readable category label" },
   { name: "short_url", type: "string", description: "Short Gumroad URL for the product" },
   { name: "thumbnail_url", type: "string | null", description: "URL of the product thumbnail image" },
   {

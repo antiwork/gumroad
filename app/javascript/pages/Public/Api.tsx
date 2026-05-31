@@ -28,6 +28,7 @@ import {
 import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
 import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
+  GetCategories,
   GetProducts,
   GetProduct,
   CreateProduct,
@@ -106,6 +107,10 @@ export default function Api() {
                 <DeleteProduct />
                 <EnableProduct />
                 <DisableProduct />
+              </ApiResource>
+
+              <ApiResource name="Categories" id="categories">
+                <GetCategories />
               </ApiResource>
 
               <ApiResource name="Files" id="files">
