@@ -661,6 +661,18 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to eq("Invalid category.")
       end
 
+      it "rejects stale cached category paths as invalid categories" do
+        taxonomy = create_category_taxonomy_tree
+        expect(Discover::TaxonomyPresenter.new.category_for_path("design/ui-and-web/figma")).to be_present
+        taxonomy.delete
+
+        post @action, params: @params.merge(category: "design/ui-and-web/figma")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
       it "rejects category and taxonomy_id together" do
         taxonomy = create_category_taxonomy_tree
 
@@ -1391,6 +1403,17 @@ describe Api::V2::LinksController do
         create_category_taxonomy_tree
 
         put @action, params: @params.merge(category: "design/ui-and-web/not-real")
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
+      it "rejects stale cached category paths as invalid categories" do
+        taxonomy = create_category_taxonomy_tree
+        expect(Discover::TaxonomyPresenter.new.category_for_path("design/ui-and-web/figma")).to be_present
+        taxonomy.delete
+
+        put @action, params: @params.merge(category: "design/ui-and-web/figma")
 
         expect(response.parsed_body["success"]).to be(false)
         expect(response.parsed_body["message"]).to eq("Invalid category.")

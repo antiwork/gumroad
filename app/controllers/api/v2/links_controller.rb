@@ -506,20 +506,21 @@ class Api::V2::LinksController < Api::V2::BaseController
           return render_response(false, message: "Invalid category.") if category.blank?
 
           params[:taxonomy_id] = category[:id]
+          return validate_taxonomy_id_param(invalid_message: "Invalid category.")
         end
       end
 
       validate_taxonomy_id_param
     end
 
-    def validate_taxonomy_id_param
+    def validate_taxonomy_id_param(invalid_message: "Invalid taxonomy_id.")
       return if params[:taxonomy_id].blank?
 
       if params[:taxonomy_id].respond_to?(:key?) || params[:taxonomy_id].is_a?(Array)
         return render_response(false, message: "taxonomy_id must be a scalar value.")
       end
       if !Taxonomy.exists?(params[:taxonomy_id])
-        render_response(false, message: "Invalid taxonomy_id.")
+        render_response(false, message: invalid_message)
       end
     rescue ActiveModel::RangeError
       render_response(false, message: "One or more numeric values are out of range.")
