@@ -45,6 +45,22 @@ describe Api::V2::LinksController do
         }.as_json(api_scopes: ["view_public"], slim: true))
       end
 
+      it "preloads category metadata once for the product list" do
+        taxonomy = create_category_taxonomy_tree
+        @product1.update!(taxonomy:)
+        @product2.update!(taxonomy:)
+
+        expect(Discover::TaxonomyPresenter).to receive(:new).once.and_call_original
+
+        get @action, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["products"].map { |product| product["category"] }).to contain_exactly(
+          "design/ui-and-web/figma",
+          "design/ui-and-web/figma"
+        )
+      end
+
       it "omits detail-only fields from the slim response" do
         versioned_product = create(:product_with_digital_versions, user: @user, created_at: Time.current + 7200)
         create(:product_file, link: versioned_product, url: "#{S3_BASE_URL}specs/test.pdf")

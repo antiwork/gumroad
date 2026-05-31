@@ -80,7 +80,7 @@ module Product::AsJson
 
       ppp_factors = purchasing_power_parity_enabled? ? options[:preloaded_ppp_factors] || PurchasingPowerParityService.new.get_all_countries_factors(user) : nil
       slim = options[:slim]
-      category = taxonomy_id.present? ? Discover::TaxonomyPresenter.new.category_for_taxonomy_id(taxonomy_id) : nil
+      category = category_for_api(options)
 
       json = as_json(original: true, only: keep).merge!(
         "id" => external_id,
@@ -183,6 +183,17 @@ module Product::AsJson
       factors.keys.index_with do |country_code|
         price_cents == 0 ? 0 : [factors[country_code] * price_cents, currency["min_price"]].max.round
       end
+    end
+
+    def category_for_api(options)
+      return if taxonomy_id.blank?
+
+      preloaded_categories_by_taxonomy_id = options[:preloaded_categories_by_taxonomy_id]
+      if preloaded_categories_by_taxonomy_id.present?
+        return preloaded_categories_by_taxonomy_id[taxonomy_id.to_s]
+      end
+
+      Discover::TaxonomyPresenter.new.category_for_taxonomy_id(taxonomy_id)
     end
 
     def as_json_for_mobile_api

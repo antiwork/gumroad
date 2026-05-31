@@ -49,6 +49,14 @@ describe Api::V2::CategoriesController do
           "parent_id" => @figma.parent_id
         )
       end
+
+      it "allows clients to cache the category list for an hour without shared-cache reuse" do
+        get @action, params: @params
+
+        expect(response.headers["Cache-Control"]).to include("max-age=3600")
+        expect(response.headers["Cache-Control"]).to include("private")
+        expect(response.headers["Cache-Control"]).not_to include("public")
+      end
     end
 
     it "grants access with the account scope" do

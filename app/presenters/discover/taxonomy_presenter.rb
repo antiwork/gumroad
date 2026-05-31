@@ -358,6 +358,10 @@ class Discover::TaxonomyPresenter
     categories_by_id.values.sort_by { |category| category[:path] }
   end
 
+  def categories_by_id_for_api
+    categories_by_id
+  end
+
   def category_for_taxonomy_id(taxonomy_id)
     return if taxonomy_id.blank?
 

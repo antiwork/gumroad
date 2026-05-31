@@ -47,7 +47,8 @@ class Api::V2::LinksController < Api::V2::BaseController
     as_json_options = {
       api_scopes: doorkeeper_token.scopes,
       slim: true,
-      preloaded_ppp_factors: PurchasingPowerParityService.new.get_all_countries_factors(current_resource_owner)
+      preloaded_ppp_factors: PurchasingPowerParityService.new.get_all_countries_factors(current_resource_owner),
+      preloaded_categories_by_taxonomy_id: Discover::TaxonomyPresenter.new.categories_by_id_for_api
     }
 
     products_as_json = paginated_products.as_json(as_json_options)
