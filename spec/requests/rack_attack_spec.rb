@@ -33,18 +33,20 @@ describe "Rack::Attack throttle", type: :request do
       token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products").token
       Feature.activate_user(:custom_html_pages, user)
 
-      30.times do |i|
+      travel_to(Time.current) do
+        30.times do |i|
+          put "/api/v2/products/#{product.external_id}",
+              params: { access_token: token, custom_html: "<p>#{i}</p>" },
+              headers: { "HTTP_CF_CONNECTING_IP" => "10.0.0.#{i + 1}" }
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
         put "/api/v2/products/#{product.external_id}",
-            params: { access_token: token, custom_html: "<p>#{i}</p>" },
-            headers: { "HTTP_CF_CONNECTING_IP" => "10.0.0.#{i + 1}" }
-        expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+            params: { access_token: token, custom_html: "<p>over</p>" },
+            headers: { "HTTP_CF_CONNECTING_IP" => "10.0.0.99" }
+
+        expect(response.status).to eq(429)
       end
-
-      put "/api/v2/products/#{product.external_id}",
-          params: { access_token: token, custom_html: "<p>over</p>" },
-          headers: { "HTTP_CF_CONNECTING_IP" => "10.0.0.99" }
-
-      expect(response.status).to eq(429)
     end
   end
 
@@ -59,18 +61,20 @@ describe "Rack::Attack throttle", type: :request do
       token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products").token
       Feature.activate_user(:custom_html_pages, user)
 
-      60.times do |i|
+      travel_to(Time.current) do
+        60.times do |i|
+          post "/api/v2/products/#{product.external_id}/preview_custom_html",
+               params: { access_token: token, custom_html: "<p>#{i}</p>" },
+               headers: { "HTTP_CF_CONNECTING_IP" => "10.1.0.#{i + 1}" }
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
         post "/api/v2/products/#{product.external_id}/preview_custom_html",
-             params: { access_token: token, custom_html: "<p>#{i}</p>" },
-             headers: { "HTTP_CF_CONNECTING_IP" => "10.1.0.#{i + 1}" }
-        expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+             params: { access_token: token, custom_html: "<p>over</p>" },
+             headers: { "HTTP_CF_CONNECTING_IP" => "10.1.0.99" }
+
+        expect(response.status).to eq(429)
       end
-
-      post "/api/v2/products/#{product.external_id}/preview_custom_html",
-           params: { access_token: token, custom_html: "<p>over</p>" },
-           headers: { "HTTP_CF_CONNECTING_IP" => "10.1.0.99" }
-
-      expect(response.status).to eq(429)
     end
   end
 end
