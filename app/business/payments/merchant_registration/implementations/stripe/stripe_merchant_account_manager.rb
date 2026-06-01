@@ -561,22 +561,28 @@ module StripeMerchantAccountManager
                          })
       end
 
-      # For US accounts, only submit the Personal Tax ID if it's longer than four digits, otherwise the field contains the SSN Last 4.
-      # For non-US accounts, always submit the Personal Tax ID.
-      if personal_tax_id && (country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
-        hash.deep_merge!(id_number: personal_tax_id)
-      end
-
-      # For US accounts, only submit the SSN Last 4 if we have enough digits in the Tax ID to get the last 4.
-      # For non-US accounts, never submit this field, it is for US accounts only.
-      if country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
-        hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
+      # `id_number` / `ssn_last_4` are validated by Stripe against the *account* country, not the
+      # representative's. For a US account Stripe expects a 9-digit SSN/ITIN. Submitting a foreign
+      # national ID (e.g. a 10-digit Bangladeshi NID for a foreign-resident US-LLC owner) trips a
+      # "must be 9 digits" rejection. In that case we omit the tax ID so Stripe falls through to the
+      # standard document-verification remediation flow.
+      legal_entity_country_code = user_compliance_info.legal_entity_country_code
+      if personal_tax_id.present?
+        if legal_entity_country_code == Compliance::Countries::USA.alpha2
+          if country_code == Compliance::Countries::USA.alpha2 && personal_tax_id.length == 4
+            hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
+          elsif personal_tax_id.length == 9
+            hash.deep_merge!(id_number: personal_tax_id)
+          end
+        else
+          hash.deep_merge!(id_number: personal_tax_id)
+        end
       end
 
       if [Compliance::Countries::ARE.alpha2,
           Compliance::Countries::SGP.alpha2,
           Compliance::Countries::BGD.alpha2,
-          Compliance::Countries::PAK.alpha2].include?(user_compliance_info.country_code)
+          Compliance::Countries::PAK.alpha2].include?(legal_entity_country_code)
         hash.deep_merge!(nationality: user_compliance_info.nationality)
       end
 
