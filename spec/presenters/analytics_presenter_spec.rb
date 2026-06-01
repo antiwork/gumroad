@@ -26,10 +26,12 @@ describe AnalyticsPresenter do
         }
       )
       expect(presenter.page_props[:country_codes]).to include(
-        "United States" => "US",
-        "The Netherlands" => "NL",
-        "Russia" => "RU",
-        "Congo Republic" => "CG",
+        "united states" => "US",
+        "the netherlands" => "NL",
+        "russia" => "RU",
+        "congo republic" => "CG",
+        "macedonia" => "MK",
+        "ivory coast" => "CI",
       )
       expect(presenter.page_props[:state_names].first).to eq("Alabama")
       expect(presenter.page_props[:state_names].last).to eq("Other")

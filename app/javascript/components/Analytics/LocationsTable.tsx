@@ -97,7 +97,7 @@ export const AnalyticsCountriesTable = ({
           items.map(({ name, totals, sales, views }) => (
             <TableRow key={name}>
               <TableCell>
-                <CountryFlag countryCode={countries[name] || ""} />
+                <CountryFlag countryCode={countries[name.toLowerCase()] || ""} />
                 {name}
               </TableCell>
               <TableCell>{views}</TableCell>
