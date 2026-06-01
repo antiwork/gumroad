@@ -15,7 +15,7 @@ consul_put() {
 # Set default value for port
 export PORT=3000
 
-# Send notification to Slack on preview app deployment
+# For preview apps, use the Nomad-allocated port and register the app's address in consul for routing
 if [[ $BRANCH_DEPLOYMENT == "true" ]]; then
   if [[ ! -z "$NOMAD_HOST_PORT_puma" ]]; then
     export PORT=$NOMAD_HOST_PORT_puma
