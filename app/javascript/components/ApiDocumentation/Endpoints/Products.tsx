@@ -5,7 +5,7 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
 import { ApiResponseFields, renderFields } from "../ApiResponseFields";
-import { PRODUCT_FIELDS, PRODUCT_LIST_FIELDS } from "../responseFieldDefinitions";
+import { CATEGORY_FIELDS, PRODUCT_FIELDS, PRODUCT_LIST_FIELDS } from "../responseFieldDefinitions";
 
 const ProductResponseFields = () => (
   <ApiResponseFields>
@@ -33,6 +33,15 @@ const SingleProductResponseFields = () => (
     {renderFields([
       { name: "success", type: "boolean", description: "Whether the request succeeded" },
       { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS },
+    ])}
+  </ApiResponseFields>
+);
+
+const CategoriesResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "categories", type: "array", description: "Flat list of product categories", children: CATEGORY_FIELDS },
     ])}
   </ApiResponseFields>
 );
@@ -131,17 +140,17 @@ gumroad products page push <permalink> ./landing.html`}
     </p>
     <ul>
       <li>
-        <code>data-gumroad-field="name|price|description"</code> — the element's contents are replaced with the product's
-        current value (HTML-escaped).
+        <code>data-gumroad-field="name|price|description"</code> — the element's contents are replaced with the
+        product's current value (HTML-escaped).
       </li>
       <li>
-        <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag
-        (<code>&lt;a&gt;</code>, <code>&lt;button&gt;</code>, <code>&lt;div&gt;</code>).
+        <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag (
+        <code>&lt;a&gt;</code>, <code>&lt;button&gt;</code>, <code>&lt;div&gt;</code>).
       </li>
     </ul>
     <p>
-      For products with selection state, set the choice directly on the buy element. Invalid values silently fall back to
-      the product defaults — they won't break the page.
+      For products with selection state, set the choice directly on the buy element. Invalid values silently fall back
+      to the product defaults — they won't break the page.
     </p>
     <ul>
       <li>
@@ -165,6 +174,35 @@ gumroad products page push <permalink> ./landing.html`}
 <button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>`}
     </CodeSnippet>
   </div>
+);
+
+export const GetCategories = () => (
+  <ApiEndpoint
+    method="get"
+    path="/categories"
+    description="Retrieve the full product category list. Use a category's path as the category parameter when creating or updating products."
+  >
+    <CategoriesResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/categories \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -X GET`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "categories": [
+    {
+      "id": 123,
+      "name": "figma",
+      "label": "Figma",
+      "path": "design/ui-and-web/figma",
+      "parent_id": 122
+    }
+  ]
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
 );
 
 export const GetProducts = () => (
@@ -200,6 +238,9 @@ export const GetProducts = () => (
     "url": null, # Deprecated, always null
     "id": "A-m3CDDC5dlrSdKZp0RFhA==",
     "price": 100,
+    "taxonomy_id": 123,
+    "category": "design/ui-and-web/figma",
+    "category_label": "Figma",
     "purchasing_power_parity_prices": {
       "US": 100,
       "IN": 50,
@@ -279,6 +320,9 @@ export const GetProduct = () => (
     "url": null, # Deprecated, always null
     "id": "A-m3CDDC5dlrSdKZp0RFhA==",
     "price": 100,
+    "taxonomy_id": 123,
+    "category": "design/ui-and-web/figma",
+    "category_label": "Figma",
     "purchasing_power_parity_prices": {
       "US": 100,
       "IN": 50,
@@ -358,7 +402,14 @@ export const CreateProduct = () => (
       <ApiParameter name="customizable_price" description="(optional, true or false) pay-what-you-want" />
       <ApiParameter name="suggested_price_cents" description="(optional)" />
       <ApiParameter name="max_purchase_count" description="(optional)" />
-      <ApiParameter name="taxonomy_id" description="(optional)" />
+      <ApiParameter
+        name="category"
+        description='(optional) full category path from GET /v2/categories, e.g. "design/ui-and-web/figma"; cannot be sent with taxonomy_id'
+      />
+      <ApiParameter
+        name="taxonomy_id"
+        description="(optional) numeric category ID; alias for category, cannot be sent with category"
+      />
       <ApiParameter name="tags" description="(optional) array of tag strings" />
       <ApiParameter name="custom_summary" description="(optional)" />
       <ApiParameter
@@ -386,6 +437,7 @@ export const CreateProduct = () => (
   -d "name=Pencil Icon PSD" \\
   -d "price=100" \\
   -d "price_currency_type=usd" \\
+  -d "category=design/ui-and-web/figma" \\
   -X POST`}
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">
@@ -402,6 +454,9 @@ export const CreateProduct = () => (
     "name": "Pencil Icon PSD",
     "price": 100,
     "currency": "usd",
+    "taxonomy_id": 123,
+    "category": "design/ui-and-web/figma",
+    "category_label": "Figma",
     "published": false,
     "files": [],
     "covers": [],
@@ -443,7 +498,14 @@ export const UpdateProduct = () => (
       <ApiParameter name="is_adult" description="(optional, true or false)" />
       <ApiParameter name="display_product_reviews" description="(optional, true or false)" />
       <ApiParameter name="should_show_sales_count" description="(optional, true or false)" />
-      <ApiParameter name="taxonomy_id" description="(optional)" />
+      <ApiParameter
+        name="category"
+        description='(optional) full category path from GET /v2/categories, e.g. "design/ui-and-web/figma"; cannot be sent with taxonomy_id'
+      />
+      <ApiParameter
+        name="taxonomy_id"
+        description="(optional) numeric category ID; alias for category, cannot be sent with category"
+      />
       <ApiParameter name="tags" description="(optional) array of tag strings; full replacement" />
       <ApiParameter name="custom_receipt" description="(optional)" />
       <ApiParameter name="custom_summary" description="(optional)" />
@@ -473,6 +535,7 @@ export const UpdateProduct = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -d "name=Pencil Icon PSD v2" \\
   -d "max_purchase_count=100" \\
+  -d "category=design/ui-and-web/figma" \\
   -X PUT`}
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">

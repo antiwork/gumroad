@@ -1200,6 +1200,34 @@ describe Purchase, :vcr do
     end
   end
 
+  context "when is_applying_plan_change is true on a require_shipping product" do
+    it "skips address presence validations on :create so plan-change application can proceed for legacy subscribers without an address" do
+      purchase = build(:purchase,
+                       street_address: nil, full_name: nil, country: nil, state: nil, city: nil, zip_code: nil,
+                       link: create(:product, require_shipping: true))
+      purchase.is_applying_plan_change = true
+
+      expect(purchase).to be_valid
+      %i[full_name street_address country state city zip_code].each do |field|
+        expect(purchase.errors[field]).to be_empty
+      end
+    end
+
+    it "skips address presence validations on :update so later updates to the placeholder purchase don't fail" do
+      purchase = build(:purchase,
+                       street_address: nil, full_name: nil, country: nil, state: nil, city: nil, zip_code: nil,
+                       link: create(:product, require_shipping: true))
+      purchase.is_updated_original_subscription_purchase = true
+      purchase.save!(validate: false)
+      purchase.is_applying_plan_change = true
+
+      expect(purchase.valid?(:update)).to be true
+      %i[full_name street_address country state city zip_code].each do |field|
+        expect(purchase.errors[field]).to be_empty
+      end
+    end
+  end
+
   describe "limiting # of sales for a link" do
     let(:user) { create(:user) }
     let(:link) { create(:product, max_purchase_count: 1) }
@@ -6282,6 +6310,31 @@ describe Purchase, :vcr do
       product.user.update!(bears_affiliate_fee: true)
       expect(affiliate_purchase.send(:determine_affiliate_fee_cents)).to eq 0
       expect(affiliate_purchase.fee_cents).to eq 209
+    end
+  end
+
+  describe "#determine_affiliate_balance_cents" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+
+    it "returns 0 when the affiliate user is the seller (self-affiliate)" do
+      global_affiliate = seller.global_affiliate
+      expect(global_affiliate.affiliate_user_id).to eq(seller.id)
+
+      purchase = create(:purchase, link: product, seller: seller, affiliate: global_affiliate)
+
+      expect(purchase.send(:determine_affiliate_balance_cents)).to eq(0)
+      expect(purchase.affiliate_credit_cents).to eq(0)
+    end
+
+    it "credits the affiliate normally when the affiliate user is not the seller" do
+      affiliate_user = create(:user)
+      direct_affiliate = create(:direct_affiliate, seller: seller, affiliate_user: affiliate_user, affiliate_basis_points: 1000, products: [product])
+
+      purchase = create(:purchase, link: product, seller: seller, affiliate: direct_affiliate)
+
+      expect(purchase.send(:determine_affiliate_balance_cents)).to be > 0
+      expect(purchase.affiliate_credit_cents).to be > 0
     end
   end
 

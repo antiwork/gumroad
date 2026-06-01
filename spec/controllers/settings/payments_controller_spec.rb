@@ -161,6 +161,51 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(flash[:notice]).to eq("Thanks! You're all set.")
     end
 
+    describe "US outlying area rejection (issue #394)" do
+      def expect_territory_rejection_error
+        expect(session[:inertia_errors][:base]).to include(
+          a_string_matching(/US outlying areas \(Puerto Rico, Guam, US Virgin Islands, etc\.\) are not valid compliance countries/)
+        )
+      end
+
+      %w[AS GU MP PR UM VI].each do |territory|
+        it "rejects updated_country_code=#{territory}" do
+          put :update, params: { user: params.merge(updated_country_code: territory) }
+          expect_territory_rejection_error
+        end
+
+        it "rejects user[country]=#{territory} via the compliance update" do
+          put :update, params: { user: params.merge(country: territory, is_business: true) }
+          expect_territory_rejection_error
+        end
+
+        it "rejects user[business_country]=#{territory} via the compliance update" do
+          put :update, params: { user: params.merge(business_country: territory, is_business: true) }
+          expect_territory_rejection_error
+        end
+      end
+
+      it "allows a normal US compliance update through unchanged" do
+        put :update, params: { user: params.merge(country: "US") }
+        expect(session[:inertia_errors]).to be_blank
+      end
+
+      it "lets an unmigrated PR seller update non-country settings (the form echoes their existing country=PR)" do
+        pr_seller = create(:user, email: "pr-seller-#{SecureRandom.hex(4)}@example.com")
+        create(:user_compliance_info_empty, user: pr_seller, country: "Puerto Rico")
+        sign_in pr_seller
+
+        put :update, params: { user: params.merge(country: "PR", first_name: "Sofia") }
+
+        expect(session[:inertia_errors]).to be_blank
+      end
+
+      it "rejects a US seller attempting to change their business_country to PR while submitting a non-PR personal country" do
+        put :update, params: { user: params.merge(country: "US", business_country: "PR", is_business: true) }
+        expect_territory_rejection_error
+      end
+    end
+
     describe "tos" do
       describe "with terms notice displayed" do
         describe "with time" do
@@ -1666,6 +1711,17 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(response).to be_successful
           user.reload
           expect(user.currency_type).to eq(Currency::CAD)
+        end
+      end
+
+      describe "US outlying areas" do
+        %w[AS GU MP PR UM VI].each do |territory|
+          it "rejects #{territory} so the catch-22 in issue #394 cannot recur via direct POST" do
+            expect do
+              post :set_country, params: params.merge(country: territory), as: :json
+            end.not_to change { UserComplianceInfo.count }
+            expect(response).to be_forbidden
+          end
         end
       end
     end

@@ -10,6 +10,17 @@ describe Api::V2::LinksController do
     @app = create(:oauth_application, owner: create(:user))
   end
 
+  def create_category_taxonomy_tree
+    Rails.cache.delete("taxonomies_for_nav")
+
+    design = Taxonomy.find_or_create_by!(slug: "design")
+    ui_and_web = Taxonomy.find_or_create_by!(slug: "ui-and-web", parent: design)
+    figma = Taxonomy.find_or_create_by!(slug: "figma", parent: ui_and_web)
+
+    Rails.cache.delete("taxonomies_for_nav")
+    figma
+  end
+
   describe "GET 'index'" do
     before do
       @action = :index
@@ -32,6 +43,22 @@ describe Api::V2::LinksController do
           success: true,
           products: [@product2, @product1]
         }.as_json(api_scopes: ["view_public"], slim: true))
+      end
+
+      it "preloads category metadata once for the product list" do
+        taxonomy = create_category_taxonomy_tree
+        @product1.update!(taxonomy:)
+        @product2.update!(taxonomy:)
+
+        expect(Discover::TaxonomyPresenter).to receive(:new).once.and_call_original
+
+        get @action, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["products"].map { |product| product["category"] }).to contain_exactly(
+          "design/ui-and-web/figma",
+          "design/ui-and-web/figma"
+        )
       end
 
       it "omits detail-only fields from the slim response" do
@@ -560,6 +587,13 @@ describe Api::V2::LinksController do
         expect(product.taxonomy.slug).to eq("other")
       end
 
+      it "defaults taxonomy to 'other' when category is blank" do
+        post @action, params: @params.merge(category: "")
+
+        product = @user.links.last
+        expect(product.taxonomy.slug).to eq("other")
+      end
+
       it "uses the seller's currency when currency is omitted" do
         @user.update!(currency_type: "gbp")
 
@@ -575,6 +609,78 @@ describe Api::V2::LinksController do
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
         expect(response.parsed_body["message"]).to include("Invalid taxonomy_id")
+      end
+
+      it "handles taxonomy_id range errors" do
+        allow(Taxonomy).to receive(:exists?).and_raise(ActiveModel::RangeError)
+
+        post @action, params: @params.merge(taxonomy_id: 1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("One or more numeric values are out of range.")
+      end
+
+      it "creates a product with taxonomy_id" do
+        taxonomy = create_category_taxonomy_tree
+
+        post @action, params: @params.merge(taxonomy_id: taxonomy.id)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+
+        product = @user.links.last
+        expect(product.taxonomy).to eq(taxonomy)
+        expect(response.parsed_body["product"]["taxonomy_id"]).to eq(taxonomy.id)
+        expect(response.parsed_body["product"]["category"]).to eq("design/ui-and-web/figma")
+        expect(response.parsed_body["product"]["category_label"]).to eq("Figma")
+      end
+
+      it "creates a product with category path" do
+        taxonomy = create_category_taxonomy_tree
+
+        post @action, params: @params.merge(category: "design/ui-and-web/figma")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+
+        product = @user.links.last
+        expect(product.taxonomy).to eq(taxonomy)
+        expect(response.parsed_body["product"]["taxonomy_id"]).to eq(taxonomy.id)
+        expect(response.parsed_body["product"]["category"]).to eq("design/ui-and-web/figma")
+        expect(response.parsed_body["product"]["category_label"]).to eq("Figma")
+      end
+
+      it "rejects unknown category path" do
+        create_category_taxonomy_tree
+
+        post @action, params: @params.merge(category: "design/ui-and-web/not-real")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
+      it "rejects stale cached category paths as invalid categories" do
+        taxonomy = create_category_taxonomy_tree
+        expect(Discover::TaxonomyPresenter.new.category_for_path("design/ui-and-web/figma")).to be_present
+        taxonomy.delete
+
+        post @action, params: @params.merge(category: "design/ui-and-web/figma")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
+      it "rejects category and taxonomy_id together" do
+        taxonomy = create_category_taxonomy_tree
+
+        post @action, params: @params.merge(category: "design/ui-and-web/figma", taxonomy_id: taxonomy.id)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("Specify either category or taxonomy_id, not both.")
       end
 
       it "creates a product with rich content pages" do
@@ -1258,6 +1364,68 @@ describe Api::V2::LinksController do
         put @action, params: @params.merge(native_type: "membership")
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.native_type).to eq(original_type)
+      end
+
+      it "updates taxonomy_id" do
+        taxonomy = create_category_taxonomy_tree
+
+        put @action, params: @params.merge(taxonomy_id: taxonomy.id)
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.taxonomy).to eq(taxonomy)
+        expect(response.parsed_body["product"]["taxonomy_id"]).to eq(taxonomy.id)
+        expect(response.parsed_body["product"]["category"]).to eq("design/ui-and-web/figma")
+        expect(response.parsed_body["product"]["category_label"]).to eq("Figma")
+      end
+
+      it "handles taxonomy_id range errors" do
+        allow(Taxonomy).to receive(:exists?).and_raise(ActiveModel::RangeError)
+
+        put @action, params: @params.merge(taxonomy_id: 1)
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("One or more numeric values are out of range.")
+      end
+
+      it "updates category by path" do
+        taxonomy = create_category_taxonomy_tree
+
+        put @action, params: @params.merge(category: "design/ui-and-web/figma")
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.taxonomy).to eq(taxonomy)
+        expect(response.parsed_body["product"]["taxonomy_id"]).to eq(taxonomy.id)
+        expect(response.parsed_body["product"]["category"]).to eq("design/ui-and-web/figma")
+        expect(response.parsed_body["product"]["category_label"]).to eq("Figma")
+      end
+
+      it "rejects unknown category path" do
+        create_category_taxonomy_tree
+
+        put @action, params: @params.merge(category: "design/ui-and-web/not-real")
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
+      it "rejects stale cached category paths as invalid categories" do
+        taxonomy = create_category_taxonomy_tree
+        expect(Discover::TaxonomyPresenter.new.category_for_path("design/ui-and-web/figma")).to be_present
+        taxonomy.delete
+
+        put @action, params: @params.merge(category: "design/ui-and-web/figma")
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Invalid category.")
+      end
+
+      it "rejects category and taxonomy_id together" do
+        taxonomy = create_category_taxonomy_tree
+
+        put @action, params: @params.merge(category: "design/ui-and-web/figma", taxonomy_id: taxonomy.id)
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Specify either category or taxonomy_id, not both.")
       end
 
       it "returns validation errors in standard format" do

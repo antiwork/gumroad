@@ -353,4 +353,54 @@ class Discover::TaxonomyPresenter
 
     taxonomies
   end
+
+  def categories_for_api
+    categories_by_id.values.sort_by { |category| category[:path] }
+  end
+
+  def categories_by_id_for_api
+    categories_by_id
+  end
+
+  def category_for_taxonomy_id(taxonomy_id)
+    return if taxonomy_id.blank?
+
+    categories_by_id[taxonomy_id.to_s]
+  end
+
+  def category_for_path(path)
+    return if path.blank?
+
+    categories_by_path[path]
+  end
+
+  private
+    def categories_by_path
+      @categories_by_path ||= categories_by_id.values.index_by { |category| category[:path] }
+    end
+
+    def categories_by_id
+      @categories_by_id ||= begin
+        taxonomies = taxonomies_for_nav
+        taxonomies_by_id = taxonomies.index_by { |taxonomy| taxonomy[:key] }
+        path_by_id = {}
+
+        taxonomies.each_with_object({}) do |taxonomy, hash|
+          hash[taxonomy[:key]] = {
+            id: taxonomy[:key].to_i,
+            name: taxonomy[:slug],
+            label: taxonomy[:label] || taxonomy[:slug],
+            path: path_for_taxonomy(taxonomy, taxonomies_by_id, path_by_id),
+            parent_id: taxonomy[:parent_key]&.to_i
+          }
+        end
+      end
+    end
+
+    def path_for_taxonomy(taxonomy, taxonomies_by_id, path_by_id)
+      path_by_id[taxonomy[:key]] ||= begin
+        parent = taxonomies_by_id[taxonomy[:parent_key]]
+        parent.present? ? "#{path_for_taxonomy(parent, taxonomies_by_id, path_by_id)}/#{taxonomy[:slug]}" : taxonomy[:slug]
+      end
+    end
 end

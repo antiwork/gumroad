@@ -136,6 +136,21 @@ describe Compliance do
       end
     end
 
+    describe ".for_select_for_seller_compliance" do
+      it "excludes the six US outlying areas so sellers cannot pick a territory as their country" do
+        codes = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
+        %w[AS GU MP PR UM VI].each do |territory|
+          expect(codes).not_to include(territory), "expected #{territory} to be excluded but it was present"
+        end
+      end
+
+      it "leaves every other country in place" do
+        full = Compliance::Countries.for_select.map(&:first)
+        filtered = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
+        expect(full - filtered).to match_array(%w[AS GU MP PR UM VI])
+      end
+    end
+
     describe ".country_with_flag_by_name" do
       context "for a valid country name" do
         it "returns a country with its corresponding flag" do
@@ -839,6 +854,7 @@ describe Compliance do
       ["OK", "Oklahoma"],
       ["OR", "Oregon"],
       ["PA", "Pennsylvania"],
+      ["PR", "Puerto Rico"],
       ["RI", "Rhode Island"],
       ["SC", "South Carolina"],
       ["SD", "South Dakota"],

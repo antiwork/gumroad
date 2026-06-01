@@ -5,63 +5,72 @@ import { Authentication } from "$app/components/ApiDocumentation/Authentication"
 import { CommandLine } from "$app/components/ApiDocumentation/CommandLine";
 import { CreateCover, DeleteCover } from "$app/components/ApiDocumentation/Endpoints/Covers";
 import {
-  GetCustomFields,
   CreateCustomField,
-  UpdateCustomField,
   DeleteCustomField,
+  GetCustomFields,
+  UpdateCustomField,
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
 import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
-import { FilesOverview, PresignFile, CompleteFile, AbortFile, AttachFile } from "$app/components/ApiDocumentation/Endpoints/Files";
 import {
-  VerifyLicense,
-  EnableLicense,
-  DisableLicense,
+  AbortFile,
+  AttachFile,
+  CompleteFile,
+  FilesOverview,
+  PresignFile,
+} from "$app/components/ApiDocumentation/Endpoints/Files";
+import {
   DecrementUsesCount,
+  DisableLicense,
+  EnableLicense,
   RotateLicense,
+  VerifyLicense,
 } from "$app/components/ApiDocumentation/Endpoints/Licenses";
 import {
-  GetOfferCodes,
-  GetOfferCode,
   CreateOfferCode,
-  UpdateOfferCode,
   DeleteOfferCode,
+  GetOfferCode,
+  GetOfferCodes,
+  UpdateOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
-import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
+import { GetPayout, GetPayouts, GetUpcomingPayouts } from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
-  GetProducts,
-  GetProduct,
   CreateProduct,
-  UpdateProduct,
   DeleteProduct,
-  EnableProduct,
   DisableProduct,
+  EnableProduct,
+  GetCategories,
+  GetProduct,
+  GetProducts,
+  UpdateProduct,
 } from "$app/components/ApiDocumentation/Endpoints/Products";
+import { GetRefundPolicy, UpdateRefundPolicy } from "$app/components/ApiDocumentation/Endpoints/RefundPolicy";
 import {
   CreateResourceSubscription,
-  GetResourceSubscriptions,
   DeleteResourceSubscription,
+  GetResourceSubscriptions,
 } from "$app/components/ApiDocumentation/Endpoints/ResourceSubscriptions";
 import {
-  GetSales,
-  GetSale,
   MarkSaleAsShipped,
   RefundSale,
   ResendReceipt,
+  GetSale,
+  GetSales,
 } from "$app/components/ApiDocumentation/Endpoints/Sales";
 import { GetSubscribers, GetSubscriber } from "$app/components/ApiDocumentation/Endpoints/Subscribers";
 import { GetTaxForms, DownloadTaxForm } from "$app/components/ApiDocumentation/Endpoints/TaxForms";
+import { CreateThumbnail, DeleteThumbnail } from "$app/components/ApiDocumentation/Endpoints/Thumbnails";
 import { GetUser } from "$app/components/ApiDocumentation/Endpoints/User";
 import {
-  CreateVariantCategory,
-  GetVariantCategory,
-  UpdateVariantCategory,
-  DeleteVariantCategory,
-  GetVariantCategories,
   CreateVariant,
-  GetVariant,
-  UpdateVariant,
+  CreateVariantCategory,
   DeleteVariant,
+  DeleteVariantCategory,
+  GetVariant,
+  GetVariantCategories,
+  GetVariantCategory,
   GetVariants,
+  UpdateVariant,
+  UpdateVariantCategory,
 } from "$app/components/ApiDocumentation/Endpoints/Variants";
 import { Errors } from "$app/components/ApiDocumentation/Errors";
 import { Introduction } from "$app/components/ApiDocumentation/Introduction";
@@ -122,6 +131,10 @@ export default function Api() {
                 <DisableProduct />
               </ApiResource>
 
+              <ApiResource name="Categories" id="categories">
+                <GetCategories />
+              </ApiResource>
+
               <ApiResource name="Files" id="files">
                 <FilesOverview />
                 <PresignFile />
@@ -133,6 +146,11 @@ export default function Api() {
               <ApiResource name="Covers" id="covers">
                 <CreateCover />
                 <DeleteCover />
+              </ApiResource>
+
+              <ApiResource name="Thumbnails" id="thumbnails">
+                <CreateThumbnail />
+                <DeleteThumbnail />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
@@ -165,6 +183,11 @@ export default function Api() {
 
               <ApiResource name="User" id="user">
                 <GetUser />
+              </ApiResource>
+
+              <ApiResource name="Refund policy" id="refund-policy">
+                <GetRefundPolicy />
+                <UpdateRefundPolicy />
               </ApiResource>
 
               <ApiResource name="Resource subscriptions" id="resource-subscriptions">

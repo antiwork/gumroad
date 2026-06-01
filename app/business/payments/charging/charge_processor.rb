@@ -179,13 +179,15 @@ module ChargeProcessor
   def self.refund!(charge_processor_id, charge_id, amount_cents: nil, merchant_account: nil,
                    paypal_order_purchase_unit_refund: nil,
                    reverse_transfer: true,
-                   is_for_fraud: nil)
+                   is_for_fraud: nil,
+                   purchase: nil)
     get_charge_processor(charge_processor_id).refund!(charge_id,
                                                       amount_cents:,
                                                       merchant_account:,
                                                       paypal_order_purchase_unit_refund:,
                                                       reverse_transfer:,
-                                                      is_for_fraud:)
+                                                      is_for_fraud:,
+                                                      purchase:)
   end
 
   # Public: Handles a charge event.

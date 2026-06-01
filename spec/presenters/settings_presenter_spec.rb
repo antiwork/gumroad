@@ -454,7 +454,7 @@ describe SettingsPresenter do
           stripe_disconnect_allowed: true,
           supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
         },
-        countries: Compliance::Countries.for_select.to_h,
+        countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
         ip_country_code: nil,
         bank_account_details: {
           show_bank_account: false,
@@ -596,6 +596,14 @@ describe SettingsPresenter do
 
     it "returns correct props for a seller who has no compliance info or payout method" do
       expect(presenter.payments_props).to eq(@base_props)
+    end
+
+    it "excludes US outlying areas from the seller compliance country dropdown" do
+      countries = presenter.payments_props[:countries]
+      %w[AS GU MP PR UM VI].each do |territory|
+        expect(countries).not_to have_key(territory), "expected #{territory} to be excluded from countries but it was present"
+      end
+      expect(countries).to have_key("US")
     end
 
     it "shows the AU backtax prompt when the feature is on and the creator owes more than $100 and the creator has received an email" do

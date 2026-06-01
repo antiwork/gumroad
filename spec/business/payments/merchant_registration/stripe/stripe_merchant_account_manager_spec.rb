@@ -481,6 +481,88 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "US business with a foreign-resident representative (person_hash)" do
+      # Regression coverage for gumroad-private#441: a US LLC with a Bangladesh-resident
+      # representative could not save settings because we sent the rep's foreign national ID
+      # as person.id_number on a US Stripe Connect account, which Stripe rejects with a
+      # "must be 9 digits" SSN error and our controller surfaces verbatim to the seller.
+      def build_us_llc_with_foreign_rep(individual_tax_id:)
+        create(:user_compliance_info_business,
+               user:,
+               first_name: "Rashed",
+               last_name: "Khan",
+               street_address: "House 12, Road 3",
+               city: "Rajshahi",
+               state: nil,
+               zip_code: "6203",
+               country: "Bangladesh",
+               individual_tax_id:)
+      end
+
+      context "with a non-US tax ID (e.g. Bangladesh national ID)" do
+        let(:user_compliance_info) { build_us_llc_with_foreign_rep(individual_tax_id: "1234567890") }
+
+        let(:person_hash) do
+          described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        end
+
+        it "omits id_number so Stripe can request document verification instead of rejecting" do
+          expect(person_hash).not_to have_key(:id_number)
+          expect(person_hash).not_to have_key(:ssn_last_4)
+        end
+
+        it "omits nationality because the Stripe account country (US) does not require it" do
+          expect(person_hash).not_to have_key(:nationality)
+        end
+
+        it "still carries the rep's foreign address so Stripe knows where they live" do
+          expect(person_hash[:address]).to include(country: "BD", city: "Rajshahi", postal_code: "6203")
+        end
+      end
+
+      context "with a 9-digit US tax ID (e.g. an ITIN held by a foreign resident)" do
+        let(:user_compliance_info) { build_us_llc_with_foreign_rep(individual_tax_id: "900123456") }
+
+        it "submits the id_number to Stripe so the account can verify without document upload" do
+          person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+          expect(person_hash[:id_number]).to eq("900123456")
+          expect(person_hash).not_to have_key(:ssn_last_4)
+        end
+      end
+    end
+
+    describe "Bangladesh business with a rep resident outside Bangladesh (person_hash)" do
+      # Reverse direction of the foreign-rep fix: gating nationality on the account country instead
+      # of the rep's residential country also means BGD/SGP/PAK/UAE *accounts* keep submitting
+      # nationality regardless of where the rep lives (Stripe KYC asks for citizenship here, not
+      # residence). Guards against regressing that direction.
+      let(:user_compliance_info) do
+        create(:user_compliance_info_business,
+               user:,
+               first_name: "Imran",
+               last_name: "Choudhury",
+               country: "United States",
+               business_name: "Choudhury Trading Ltd",
+               business_street_address: "Sheikh Mujib Road 14",
+               business_city: "Dhaka",
+               business_state: nil,
+               business_zip_code: "1212",
+               business_country: "Bangladesh",
+               nationality: "BD",
+               individual_tax_id: "12345678901")
+      end
+
+      it "still submits nationality because the Stripe account country (BD) requires it" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:nationality]).to eq("BD")
+      end
+
+      it "submits the rep's id_number unchanged since the account is non-US" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:id_number]).to eq("12345678901")
+      end
+    end
+
     describe "all info provided of an individual (non-US)" do
       let(:user_compliance_info) { create(:user_compliance_info, user:, zip_code: "M4C 1T2", city: "Toronto", state: nil, country: "Canada") }
       let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
@@ -8624,80 +8706,6 @@ describe StripeMerchantAccountManager, :vcr do
           expect { subject.create_account(user, passphrase: "1234", from_admin: true) }.not_to raise_error
           expect(user.merchant_accounts.alive.count).to be(2)
           expect(user.merchant_accounts.alive.last.charge_processor_alive_at).not_to be(nil)
-        end
-      end
-    end
-
-    describe "Puerto Rico seller onboarded onto a US-side Stripe Connect account" do
-      let(:user_compliance_info) do
-        create(:user_compliance_info, user:,
-                                      country: "Puerto Rico", state: "PR", city: "San Juan", zip_code: "00921")
-      end
-      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
-      let(:tos_agreement) { create(:tos_agreement, user:) }
-      let(:stripe_account_stub) do
-        external_account = double("Stripe::BankAccount", id: "ba_stub", fingerprint: "fp_stub")
-        external_accounts = double("Stripe::ListObject")
-        allow(external_accounts).to receive(:first).and_return(external_account)
-        stripe_account = double("Stripe::Account", id: "acct_pr_stub", external_accounts:)
-        allow(stripe_account).to receive(:[]).with("metadata").and_return({ "user_compliance_info_id" => user_compliance_info.external_id })
-        allow(stripe_account).to receive(:capabilities).and_return(double(keys: []))
-        stripe_account
-      end
-
-      before do
-        user_compliance_info
-        bank_account
-        tos_agreement
-        allow(Stripe::Account).to receive(:create).and_return(stripe_account_stub)
-        allow(CheckPaymentAddressWorker).to receive(:perform_async)
-        allow(DefaultAbandonedCartWorkflowGeneratorService).to receive(:new).and_return(double(generate: nil))
-      end
-
-      it "sends country: 'US' to Stripe and stores the merchant account with country 'US'" do
-        merchant_account = subject.create_account(user, passphrase: "1234")
-
-        expect(Stripe::Account).to have_received(:create) do |params|
-          expect(params[:country]).to eq("US")
-          expect(params[:default_currency]).to eq(Currency::USD)
-          expect(params[:individual][:address][:country]).to eq("US")
-        end
-        expect(merchant_account.country).to eq("US")
-        expect(merchant_account.currency).to eq(Currency::USD)
-      end
-
-      it "follows US SSN semantics when submitting the personal tax ID" do
-        subject.create_account(user, passphrase: "1234")
-
-        expect(Stripe::Account).to have_received(:create) do |params|
-          # 9-digit SSN: id_number is sent (US semantics: full SSN under id_number)
-          expect(params[:individual][:id_number]).to eq("000000000")
-          expect(params[:individual]).not_to have_key(:ssn_last_4)
-        end
-      end
-
-      describe "Puerto Rico business seller" do
-        let(:user_compliance_info) do
-          create(:user_compliance_info_business, user:,
-                                                 country: "Puerto Rico", state: "PR", city: "San Juan", zip_code: "00921",
-                                                 business_country: "Puerto Rico", business_state: "PR",
-                                                 business_city: "San Juan", business_zip_code: "00921")
-        end
-
-        before do
-          # Business sellers also trigger Stripe::Account.create_person for the representative;
-          # stub it so the test doesn't make an unhandled HTTP request.
-          allow(Stripe::Account).to receive(:create_person).and_return(double("Stripe::Person", id: "person_stub"))
-        end
-
-        it "remaps company.address.country to US so Stripe accepts the business address" do
-          subject.create_account(user, passphrase: "1234")
-
-          expect(Stripe::Account).to have_received(:create) do |params|
-            # Stripe rejects with "Address for business must match account country" if these differ
-            expect(params[:country]).to eq("US")
-            expect(params[:company][:address][:country]).to eq("US")
-          end
         end
       end
     end

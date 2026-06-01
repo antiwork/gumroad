@@ -29,10 +29,16 @@ export const Navigation = () => (
             <a href="#products">Products</a>
           </li>
           <li>
+            <a href="#categories">Categories</a>
+          </li>
+          <li>
             <a href="#files">Files</a>
           </li>
           <li>
             <a href="#covers">Covers</a>
+          </li>
+          <li>
+            <a href="#thumbnails">Thumbnails</a>
           </li>
           <li>
             <a href="#variant-categories">Variant categories</a>
@@ -45,6 +51,9 @@ export const Navigation = () => (
           </li>
           <li>
             <a href="#user">User</a>
+          </li>
+          <li>
+            <a href="#refund-policy">Refund policy</a>
           </li>
           <li>
             <a href="#resource-subscriptions">Resource subscriptions</a>

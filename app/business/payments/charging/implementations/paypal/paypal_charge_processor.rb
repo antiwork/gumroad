@@ -309,6 +309,18 @@ class PaypalChargeProcessor
     formatted_amount_for_paypal(usd_cents_to_currency(currency, money), currency)
   end
 
+  # Rounded-down USD-cents → merchant-currency-cents conversion. Used in PayPal refund paths
+  # so cumulative refunds against a single multi-currency capture never exceed the captured
+  # amount due to standard rounding pushing one of the converted values over the truth.
+  def self.format_money_floored(money, currency)
+    return 0 if money.blank?
+    return money if currency.to_s == "usd"
+    rate = BigDecimal(get_rate(currency).to_s)
+    converted = BigDecimal(money.to_s) * rate
+    converted /= 100 if is_currency_type_single_unit?(currency)
+    converted.floor.to_i
+  end
+
   def self.formatted_amount_for_paypal(cents, currency)
     amount = Money.new(cents, currency).amount
 
@@ -538,9 +550,9 @@ class PaypalChargeProcessor
     end
   end
 
-  def refund!(charge_id, amount_cents: nil, merchant_account: nil, paypal_order_purchase_unit_refund: nil, **_args)
+  def refund!(charge_id, amount_cents: nil, merchant_account: nil, paypal_order_purchase_unit_refund: nil, purchase: nil, **_args)
     if paypal_order_purchase_unit_refund
-      refund_response = refund_order_purchase_unit!(charge_id, merchant_account, amount_cents)
+      refund_response = refund_order_purchase_unit!(charge_id, merchant_account, amount_cents, purchase:)
       PaypalOrderRefund.new(refund_response, charge_id)
     else
       if amount_cents.nil?
@@ -663,10 +675,18 @@ class PaypalChargeProcessor
     # REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in your PayPal account)
     #
     # EXTDISPUTE_REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in seller's PayPal account)
-    def refund_order_purchase_unit!(capture_id, merchant_account, amount_cents)
+    def refund_order_purchase_unit!(capture_id, merchant_account, amount_cents, purchase: nil)
       paypal_rest_api = PaypalRestApi.new
-      api_response = paypal_rest_api.refund(capture_id:, merchant_account:,
-                                            amount: self.class.format_money(amount_cents, merchant_account.currency))
+      refund_amount_cents = refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)
+      if amount_cents.present? && refund_amount_cents <= 0
+        raise ChargeProcessorAlreadyRefundedError, "Capture #{capture_id} has no remaining balance to refund"
+      end
+
+      api_response = paypal_rest_api.refund(
+        capture_id:,
+        merchant_account:,
+        amount: self.class.formatted_amount_for_paypal(refund_amount_cents, merchant_account.currency)
+      )
 
       self.class.log_paypal_api_response("Refund Order Purchase Unit", capture_id, api_response)
       if paypal_rest_api.successful_response?(api_response)
@@ -675,6 +695,96 @@ class PaypalChargeProcessor
         error_message = PaypalChargeProcessor.build_error_message("Failed refund capture id - #{capture_id}", api_response.result.details[0].description)
         raise determine_refund_order_error(api_response), error_message
       end
+    end
+
+    # Returns the refund amount in the merchant account's currency, in cents.
+    # When a `purchase` is provided and the PayPal order can be located, the amount is derived
+    # from PayPal's recorded per-item value (avoiding USD→merchant-currency drift) and capped
+    # at the capture's remaining balance. Otherwise falls back to converting the USD amount,
+    # rounded down to never overshoot the capture.
+    def refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)
+      if purchase&.paypal_order_id.present? && purchase.respond_to?(:is_part_of_combined_charge?) && purchase.is_part_of_combined_charge?
+        paypal_order = paypal_rest_api.fetch_order(order_id: purchase.paypal_order_id)&.result
+        purchase_unit = paypal_order&.purchase_units&.find { |pu| pu.payments&.captures&.any? { |c| c.id == capture_id } }
+        if purchase_unit
+          desired = item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
+          return [desired, remaining_capture_cents(purchase_unit, capture_id)].min if desired
+        end
+      end
+
+      self.class.format_money_floored(amount_cents, merchant_account.currency)
+    end
+
+    def item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
+      permalink = purchase.link&.unique_permalink
+      return nil if permalink.blank?
+      item = purchase_unit.items&.find { |i| i.sku == permalink }
+      return nil unless item
+
+      scale = paypal_cents_scale(purchase_unit.amount&.currency_code)
+      total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * scale * i.quantity.to_i }
+      this_item_unit_value = BigDecimal(item.unit_amount.value) * scale * item.quantity.to_i
+
+      breakdown_extras = breakdown_extras_cents(purchase_unit.amount&.breakdown, scale)
+      this_item_extras_share = total_unit_value.positive? ? (this_item_unit_value * breakdown_extras / total_unit_value) : BigDecimal(0)
+      this_item_full_value_cents = this_item_unit_value + this_item_extras_share
+
+      ratio = if amount_cents.present? && purchase.total_transaction_cents.to_i.positive?
+        [BigDecimal(amount_cents) / purchase.total_transaction_cents, BigDecimal(1)].min
+      else
+        BigDecimal(1)
+      end
+
+      (this_item_full_value_cents * ratio).floor.to_i
+    end
+
+    # A purchase unit's captured amount equals the sum of its item unit_amounts plus
+    # `tax_total + shipping + handling - discount` from the breakdown. Returning the net
+    # extras lets each item's refund value carry its proportional share of those line items;
+    # without this, refunds on units with shipping/handling/discount would undercount and
+    # PayPal could reject subsequent refunds (or buyers would be short-refunded).
+    def breakdown_extras_cents(breakdown, scale)
+      return BigDecimal(0) if breakdown.blank?
+      additions = %i[tax_total shipping handling].sum(BigDecimal(0)) do |key|
+        value = breakdown.respond_to?(key) ? breakdown.public_send(key)&.value : nil
+        value.present? ? BigDecimal(value) * scale : BigDecimal(0)
+      end
+      discount_value = breakdown.respond_to?(:discount) ? breakdown.discount&.value : nil
+      discount = discount_value.present? ? BigDecimal(discount_value) * scale : BigDecimal(0)
+      additions - discount
+    end
+
+    def remaining_capture_cents(purchase_unit, capture_id)
+      capture = purchase_unit.payments.captures.find { |c| c.id == capture_id }
+      return 0 unless capture
+
+      scale = paypal_cents_scale(capture.amount&.currency_code)
+      captured = (BigDecimal(capture.amount.value) * scale).to_i
+      refunded = (purchase_unit.payments.refunds || []).sum do |r|
+        next 0 unless refund_belongs_to_capture?(r, capture_id)
+        (BigDecimal(r.amount.value) * scale).to_i
+      end
+      captured - refunded
+    end
+
+    # PayPal Orders v2 lists refunds at the purchase-unit level rather than nested under
+    # the specific capture they came from. Each refund's `links` array carries an "up" link
+    # back to the originating capture id; use it to attribute refunds correctly when a
+    # purchase unit has multiple captures. Default to inclusive when links are absent so we
+    # don't drop refunds we can't positively attribute (preserves the single-capture-per-unit
+    # default that older payloads and test fixtures rely on).
+    def refund_belongs_to_capture?(refund, capture_id)
+      links = refund.respond_to?(:links) ? refund.links : nil
+      return true if links.blank?
+      links.any? { |l| l.respond_to?(:href) && l.href.to_s.include?("/captures/#{capture_id}") }
+    end
+
+    # PayPal records amounts as decimal strings in the major unit (e.g. "10.59" for GBP £10.59 or
+    # "2141" for JPY ¥2141). To produce a cents-style integer that matches `formatted_amount_for_paypal`
+    # expectations, multiply by 100 for normal currencies and by 1 for zero-decimal currencies
+    # (JPY/TWD/HUF) — matching the asymmetry that `usd_cents_to_currency` already handles.
+    def paypal_cents_scale(currency_code)
+      self.class.is_currency_type_single_unit?(currency_code.to_s.downcase) ? 1 : 100
     end
 
     def self.determine_create_order_error(api_response)
