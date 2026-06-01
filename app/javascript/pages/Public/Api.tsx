@@ -43,6 +43,7 @@ import {
   GetProducts,
   UpdateProduct,
 } from "$app/components/ApiDocumentation/Endpoints/Products";
+import { GetRefundPolicy, UpdateRefundPolicy } from "$app/components/ApiDocumentation/Endpoints/RefundPolicy";
 import {
   CreateResourceSubscription,
   DeleteResourceSubscription,
@@ -168,6 +169,11 @@ export default function Api() {
 
               <ApiResource name="User" id="user">
                 <GetUser />
+              </ApiResource>
+
+              <ApiResource name="Refund policy" id="refund-policy">
+                <GetRefundPolicy />
+                <UpdateRefundPolicy />
               </ApiResource>
 
               <ApiResource name="Resource subscriptions" id="resource-subscriptions">

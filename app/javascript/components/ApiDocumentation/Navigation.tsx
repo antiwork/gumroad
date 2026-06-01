@@ -53,6 +53,9 @@ export const Navigation = () => (
             <a href="#user">User</a>
           </li>
           <li>
+            <a href="#refund-policy">Refund policy</a>
+          </li>
+          <li>
             <a href="#resource-subscriptions">Resource subscriptions</a>
           </li>
           <li>

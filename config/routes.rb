@@ -59,6 +59,7 @@ Rails.application.routes.draw do
 
       get "/user", to: "users#show"
       resources :categories, only: [:index]
+      resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
         resources :custom_fields, only: [:index, :create, :update, :destroy]
         resources :offer_codes, only: [:index, :create, :show, :update, :destroy]
