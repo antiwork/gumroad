@@ -5,7 +5,15 @@
 class AppStoreWalksJwsVerifier
   PRODUCT_ID = "ProSub"
   BUNDLE_ID = "com.gumroad.walks"
-  ENVIRONMENT = Rails.env.production? ? "Production" : "Sandbox"
+  # Accepted StoreKit environments per Rails env. A production backend must
+  # accept *both* "Production" and "Sandbox": TestFlight builds and sandbox
+  # Apple IDs always produce Sandbox-signed transactions yet talk to the
+  # production API, so hard-pinning to "Production" rejected every internal
+  # tester's valid ProSub JWS — they fell through to the consumed free-trial
+  # path and got a 402 → paywall → recording never started. Apple explicitly
+  # recommends not pinning verification to the server's own environment for
+  # exactly this reason. Non-production backends only ever see Sandbox.
+  ACCEPTED_ENVIRONMENTS = Rails.env.production? ? %w[Production Sandbox].freeze : %w[Sandbox].freeze
   APPLE_ROOT_CA_PATH = Rails.root.join("config", "certs", "AppleRootCA-G3.pem")
 
   Result = Struct.new(:valid?, :expires_at, :product_id, :original_transaction_id, :error, keyword_init: true)
@@ -49,7 +57,7 @@ class AppStoreWalksJwsVerifier
         expires_at && expires_at > Time.current &&
         product_id == PRODUCT_ID &&
         bundle_id == BUNDLE_ID &&
-        environment == ENVIRONMENT
+        ACCEPTED_ENVIRONMENTS.include?(environment)
 
       Result.new(
         valid?: ok,

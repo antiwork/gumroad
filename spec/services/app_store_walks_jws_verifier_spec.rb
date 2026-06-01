@@ -188,7 +188,7 @@ describe AppStoreWalksJwsVerifier do
         expect(result.valid?).to be(false)
       end
 
-      it "rejects a subscription from the wrong environment" do
+      it "rejects a Production-signed subscription in a non-production env (test env accepts only Sandbox)" do
         result = described_class.verify(make_jws({
           productId: "ProSub",
           bundleId: "com.gumroad.walks",
@@ -196,6 +196,50 @@ describe AppStoreWalksJwsVerifier do
           expiresDate: (Time.current.to_i + 86_400) * 1000,
         }))
         expect(result.valid?).to be(false)
+      end
+
+      it "rejects an unknown environment value" do
+        result = described_class.verify(make_jws({
+          productId: "ProSub",
+          bundleId: "com.gumroad.walks",
+          environment: "Xcode",
+          expiresDate: (Time.current.to_i + 86_400) * 1000,
+        }))
+        expect(result.valid?).to be(false)
+      end
+
+      context "on a production backend (accepts both Production and Sandbox)" do
+        before { stub_const("AppStoreWalksJwsVerifier::ACCEPTED_ENVIRONMENTS", %w[Production Sandbox]) }
+
+        it "accepts a Production-signed ProSub subscription" do
+          result = described_class.verify(make_jws({
+            productId: "ProSub",
+            bundleId: "com.gumroad.walks",
+            environment: "Production",
+            expiresDate: (Time.current.to_i + 86_400) * 1000,
+          }))
+          expect(result.valid?).to be(true)
+        end
+
+        it "accepts a Sandbox-signed ProSub subscription (TestFlight / sandbox tester on prod)" do
+          result = described_class.verify(make_jws({
+            productId: "ProSub",
+            bundleId: "com.gumroad.walks",
+            environment: "Sandbox",
+            expiresDate: (Time.current.to_i + 86_400) * 1000,
+          }))
+          expect(result.valid?).to be(true)
+        end
+
+        it "still rejects an unknown environment value" do
+          result = described_class.verify(make_jws({
+            productId: "ProSub",
+            bundleId: "com.gumroad.walks",
+            environment: "Xcode",
+            expiresDate: (Time.current.to_i + 86_400) * 1000,
+          }))
+          expect(result.valid?).to be(false)
+        end
       end
     end
   end
