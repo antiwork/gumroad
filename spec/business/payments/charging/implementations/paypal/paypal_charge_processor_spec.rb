@@ -1022,6 +1022,78 @@ describe PaypalChargeProcessor, :vcr do
           end.not_to raise_error
         end
 
+        context "when the purchase's link is nil" do
+          let(:purchase) do
+            double("Purchase",
+                   paypal_order_id:,
+                   price_cents: 1346,
+                   total_transaction_cents: 1427,
+                   is_part_of_combined_charge?: true,
+                   link: nil)
+          end
+
+          it "falls back to format_money_floored without raising" do
+            allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7426")
+
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            expect do
+              subject.refund!(capture_id,
+                              amount_cents: 1427,
+                              merchant_account: gbp_merchant_account,
+                              paypal_order_purchase_unit_refund: true,
+                              purchase:)
+            end.not_to raise_error
+          end
+        end
+
+        context "when the capture is in a zero-decimal currency (e.g. JPY)" do
+          let(:jpy_merchant_account) { create(:merchant_account_paypal, currency: "jpy", charge_processor_merchant_id: "JPY_MERCHANT") }
+          let(:jpy_capture_id) { "JPY_CAPTURE" }
+          let(:jpy_order) do
+            OpenStruct.new(
+              purchase_units: [OpenStruct.new(
+                items: [OpenStruct.new(unit_amount: OpenStruct.new(value: "2141", currency_code: "JPY"), quantity: 1, sku: "jpY01")],
+                amount: OpenStruct.new(currency_code: "JPY", value: "2141", breakdown: nil),
+                payments: OpenStruct.new(
+                  captures: [OpenStruct.new(id: jpy_capture_id, amount: OpenStruct.new(value: "2141", currency_code: "JPY"))],
+                  refunds: []
+                )
+              )]
+            )
+          end
+          let(:jpy_purchase) do
+            double("Purchase",
+                   paypal_order_id: "JPY_ORDER",
+                   price_cents: 1500,
+                   total_transaction_cents: 1500,
+                   is_part_of_combined_charge?: true,
+                   link: double("Link", unique_permalink: "jpY01"))
+          end
+
+          before do
+            allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+              .with(order_id: "JPY_ORDER")
+              .and_return(OpenStruct.new(result: jpy_order))
+          end
+
+          it "treats the PayPal value as already-in-unit (does not multiply by 100)" do
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id: jpy_capture_id, merchant_account: jpy_merchant_account, amount: 2141)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            subject.refund!(jpy_capture_id,
+                            amount_cents: nil,
+                            merchant_account: jpy_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase: jpy_purchase)
+          end
+        end
+
         context "when the purchase's product has no matching item in the PayPal order" do
           let(:purchase) do
             double("Purchase",

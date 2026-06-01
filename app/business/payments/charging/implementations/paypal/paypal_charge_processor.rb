@@ -716,13 +716,16 @@ class PaypalChargeProcessor
     end
 
     def item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
-      item = purchase_unit.items&.find { |i| i.sku == purchase.link.unique_permalink }
+      permalink = purchase.link&.unique_permalink
+      return nil if permalink.blank?
+      item = purchase_unit.items&.find { |i| i.sku == permalink }
       return nil unless item
 
-      total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * 100 * i.quantity.to_i }
-      this_item_unit_value = BigDecimal(item.unit_amount.value) * 100 * item.quantity.to_i
+      scale = paypal_cents_scale(purchase_unit.amount&.currency_code)
+      total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * scale * i.quantity.to_i }
+      this_item_unit_value = BigDecimal(item.unit_amount.value) * scale * item.quantity.to_i
       tax_total_value = purchase_unit.amount&.breakdown&.tax_total&.value
-      tax_total = tax_total_value.present? ? BigDecimal(tax_total_value) * 100 : BigDecimal(0)
+      tax_total = tax_total_value.present? ? BigDecimal(tax_total_value) * scale : BigDecimal(0)
       this_item_tax_share = total_unit_value.positive? ? (this_item_unit_value * tax_total / total_unit_value) : BigDecimal(0)
       this_item_full_value_cents = this_item_unit_value + this_item_tax_share
 
@@ -739,9 +742,18 @@ class PaypalChargeProcessor
       capture = purchase_unit.payments.captures.find { |c| c.id == capture_id }
       return 0 unless capture
 
-      captured = (BigDecimal(capture.amount.value) * 100).to_i
-      refunded = (purchase_unit.payments.refunds || []).sum { |r| (BigDecimal(r.amount.value) * 100).to_i }
+      scale = paypal_cents_scale(capture.amount&.currency_code)
+      captured = (BigDecimal(capture.amount.value) * scale).to_i
+      refunded = (purchase_unit.payments.refunds || []).sum { |r| (BigDecimal(r.amount.value) * scale).to_i }
       captured - refunded
+    end
+
+    # PayPal records amounts as decimal strings in the major unit (e.g. "10.59" for GBP £10.59 or
+    # "2141" for JPY ¥2141). To produce a cents-style integer that matches `formatted_amount_for_paypal`
+    # expectations, multiply by 100 for normal currencies and by 1 for zero-decimal currencies
+    # (JPY/TWD/HUF) — matching the asymmetry that `usd_cents_to_currency` already handles.
+    def paypal_cents_scale(currency_code)
+      self.class.is_currency_type_single_unit?(currency_code.to_s.downcase) ? 1 : 100
     end
 
     def self.determine_create_order_error(api_response)
