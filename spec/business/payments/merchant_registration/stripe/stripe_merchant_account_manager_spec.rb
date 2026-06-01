@@ -531,6 +531,38 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "Bangladesh business with a rep resident outside Bangladesh (person_hash)" do
+      # Reverse direction of the foreign-rep fix: gating nationality on the account country instead
+      # of the rep's residential country also means BGD/SGP/PAK/UAE *accounts* keep submitting
+      # nationality regardless of where the rep lives (Stripe KYC asks for citizenship here, not
+      # residence). Guards against regressing that direction.
+      let(:user_compliance_info) do
+        create(:user_compliance_info_business,
+               user:,
+               first_name: "Imran",
+               last_name: "Choudhury",
+               country: "United States",
+               business_name: "Choudhury Trading Ltd",
+               business_street_address: "Sheikh Mujib Road 14",
+               business_city: "Dhaka",
+               business_state: nil,
+               business_zip_code: "1212",
+               business_country: "Bangladesh",
+               nationality: "BD",
+               individual_tax_id: "12345678901")
+      end
+
+      it "still submits nationality because the Stripe account country (BD) requires it" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:nationality]).to eq("BD")
+      end
+
+      it "submits the rep's id_number unchanged since the account is non-US" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:id_number]).to eq("12345678901")
+      end
+    end
+
     describe "all info provided of an individual (non-US)" do
       let(:user_compliance_info) { create(:user_compliance_info, user:, zip_code: "M4C 1T2", city: "Toronto", state: nil, country: "Canada") }
       let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
