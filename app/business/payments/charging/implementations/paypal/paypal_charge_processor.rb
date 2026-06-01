@@ -744,8 +744,23 @@ class PaypalChargeProcessor
 
       scale = paypal_cents_scale(capture.amount&.currency_code)
       captured = (BigDecimal(capture.amount.value) * scale).to_i
-      refunded = (purchase_unit.payments.refunds || []).sum { |r| (BigDecimal(r.amount.value) * scale).to_i }
+      refunded = (purchase_unit.payments.refunds || []).sum do |r|
+        next 0 unless refund_belongs_to_capture?(r, capture_id)
+        (BigDecimal(r.amount.value) * scale).to_i
+      end
       captured - refunded
+    end
+
+    # PayPal Orders v2 lists refunds at the purchase-unit level rather than nested under
+    # the specific capture they came from. Each refund's `links` array carries an "up" link
+    # back to the originating capture id; use it to attribute refunds correctly when a
+    # purchase unit has multiple captures. Default to inclusive when links are absent so we
+    # don't drop refunds we can't positively attribute (preserves the single-capture-per-unit
+    # default that older payloads and test fixtures rely on).
+    def refund_belongs_to_capture?(refund, capture_id)
+      links = refund.respond_to?(:links) ? refund.links : nil
+      return true if links.blank?
+      links.any? { |l| l.respond_to?(:href) && l.href.to_s.include?("/captures/#{capture_id}") }
     end
 
     # PayPal records amounts as decimal strings in the major unit (e.g. "10.59" for GBP £10.59 or

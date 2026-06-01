@@ -1050,6 +1050,50 @@ describe PaypalChargeProcessor, :vcr do
           end
         end
 
+        context "when the purchase_unit has multiple captures with their own refunds" do
+          let(:other_capture_id) { "OTHER_CAPTURE_XYZ" }
+          let(:multi_capture_order) do
+            OpenStruct.new(
+              purchase_units: [OpenStruct.new(
+                items: [OpenStruct.new(unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY")],
+                amount: OpenStruct.new(currency_code: "GBP", value: "20.00", breakdown: nil),
+                payments: OpenStruct.new(
+                  captures: [
+                    OpenStruct.new(id: capture_id, amount: OpenStruct.new(value: "10.00", currency_code: "GBP")),
+                    OpenStruct.new(id: other_capture_id, amount: OpenStruct.new(value: "10.00", currency_code: "GBP")),
+                  ],
+                  refunds: [
+                    OpenStruct.new(
+                      id: "REFUND_OF_OTHER_CAPTURE",
+                      amount: OpenStruct.new(value: "9.99", currency_code: "GBP"),
+                      links: [OpenStruct.new(rel: "up", href: "https://api.paypal.com/v2/payments/captures/#{other_capture_id}")]
+                    ),
+                  ]
+                )
+              )]
+            )
+          end
+
+          before do
+            allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+              .with(order_id: paypal_order_id)
+              .and_return(OpenStruct.new(result: multi_capture_order))
+          end
+
+          it "does not subtract refunds belonging to a different capture from this capture's remaining balance" do
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.00)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            subject.refund!(capture_id,
+                            amount_cents: nil,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end
+        end
+
         context "when the capture is in a zero-decimal currency (e.g. JPY)" do
           let(:jpy_merchant_account) { create(:merchant_account_paypal, currency: "jpy", charge_processor_merchant_id: "JPY_MERCHANT") }
           let(:jpy_capture_id) { "JPY_CAPTURE" }
