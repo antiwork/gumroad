@@ -43,8 +43,10 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include('e.data.type === "gumroad:checkout"')
       expect(response.body).to include('e.origin !== "null"')
       # Script carries a nonce — script-src has no 'unsafe-inline', so without
-      # it the listener would be CSP-blocked in the browser.
-      expect(response.body).to match(/<script nonce="[^"]+">/)
+      # it the listener would be CSP-blocked in the browser. It also opts out of
+      # Rocket Loader so Cloudflare doesn't rewrite the inline handler and drop
+      # the nonce before the browser sees it.
+      expect(response.body).to match(/<script nonce="[^"]+" data-cfasync="false">/)
       # Only our own iframe can trigger checkout — gate on e.source so an
       # embedding page can't drive the navigation.
       expect(response.body).to include("e.source !== frame.contentWindow")
@@ -175,6 +177,19 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(">#{product.name}<")
       expect(response.body).not_to include(">placeholder<")
       expect(response.body).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
+    end
+
+    it "serves a Rocket Loader-safe delegated checkout bridge" do
+      product.update!(custom_html: %(<button data-gumroad-action="buy">Buy</button>))
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response.body).to include(%(<script data-cfasync="false">))
+      expect(response.body).to include(%(target.closest('[data-gumroad-action="buy"]')))
+      expect(response.body).to include("e.preventDefault();")
+      expect(response.body).not_to include("stopImmediatePropagation")
+      expect(response.body).to include(%(parent.postMessage({type:"gumroad:checkout",params:params},"*");))
+      expect(response.body).not_to include("onclick=")
     end
   end
 

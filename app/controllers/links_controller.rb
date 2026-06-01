@@ -983,6 +983,21 @@ class LinksController < ApplicationController
           </head>
           <body>
             #{custom_html}
+            <script data-cfasync="false">
+              document.addEventListener("click", function (e) {
+                var target = e.target;
+                var buyButton = target && target.closest ? target.closest('[data-gumroad-action="buy"]') : null;
+                if (!buyButton) return;
+                e.preventDefault();
+
+                var params = {};
+                try {
+                  params = JSON.parse(buyButton.dataset.gumroadCheckoutParams || "{}");
+                } catch (_e) {}
+
+                parent.postMessage({type:"gumroad:checkout",params:params},"*");
+              }, true);
+            </script>
           </body>
         </html>
       HTML
@@ -1033,7 +1048,7 @@ class LinksController < ApplicationController
               title="#{title}"
               sandbox="allow-scripts allow-forms"
             ></iframe>
-            <script nonce="#{ERB::Util.h(nonce)}">
+            <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
               var frame = document.getElementById("gumroad-landing-frame");
               var BASE_CHECKOUT = #{checkout_url_js};
               // Whitelist the selection-state keys the checkout already accepts on the

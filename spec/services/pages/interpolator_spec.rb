@@ -32,15 +32,14 @@ describe Pages::Interpolator do
       expect(result).not_to include("<strong>")
     end
 
-    it "wires <a data-gumroad-action='buy'> to message the wrapper instead of navigating itself" do
+    it "prepares <a data-gumroad-action='buy'> for the delegated checkout bridge" do
       html = %(<a data-gumroad-action="buy" href="#">Buy</a>)
 
       result = described_class.interpolate(html, product: product)
 
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
-      expect(result).to include("type:'gumroad:checkout'")
-      expect(result).to include("this.dataset.gumroadCheckoutParams")
-      expect(result).to include("return false")
+      expect(result).to include(%(data-gumroad-checkout-params="{}"))
+      expect(result).not_to include("onclick")
     end
 
     it "leaves unknown field markers untouched (graceful fallback)" do
@@ -89,14 +88,13 @@ describe Pages::Interpolator do
       expect(described_class.interpolate(nil, product: product)).to be_nil
     end
 
-    it "wires non-anchor buy elements via onclick without converting them to anchors" do
+    it "prepares non-anchor buy elements without converting them to anchors" do
       html = %(<button data-gumroad-action="buy">Buy</button>)
 
       result = described_class.interpolate(html, product: product)
 
-      expect(result).to include("type:'gumroad:checkout'")
-      expect(result).to include("this.dataset.gumroadCheckoutParams")
-      expect(result).to include("return false")
+      expect(result).to include(%(data-gumroad-checkout-params="{}"))
+      expect(result).not_to include("onclick")
       expect(result).to include("<button")
       expect(result).not_to include("<a")
       expect(result).not_to include("href=")
