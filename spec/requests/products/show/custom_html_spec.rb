@@ -32,8 +32,7 @@ describe "Custom HTML product page", type: :system, js: true do
     end
 
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
-    within("[role='listitem']", match: :first) do
-      expect(page).to have_text(product.name)
+    within_cart_item(product.name) do
       expect(page).to have_text("Qty: 2")
     end
   end
