@@ -1050,6 +1050,52 @@ describe PaypalChargeProcessor, :vcr do
           end
         end
 
+        context "when the purchase_unit has shipping and handling on top of items+tax" do
+          let(:order_with_shipping) do
+            OpenStruct.new(
+              purchase_units: [OpenStruct.new(
+                items: [
+                  OpenStruct.new(unit_amount: OpenStruct.new(value: "22.29", currency_code: "GBP"), quantity: 1, sku: "BalZT"),
+                  OpenStruct.new(unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY"),
+                ],
+                amount: OpenStruct.new(
+                  currency_code: "GBP",
+                  value: "37.23",
+                  breakdown: OpenStruct.new(
+                    tax_total: OpenStruct.new(value: "1.94", currency_code: "GBP"),
+                    shipping: OpenStruct.new(value: "2.00", currency_code: "GBP"),
+                    handling: OpenStruct.new(value: "1.00", currency_code: "GBP"),
+                    discount: OpenStruct.new(value: "0.00", currency_code: "GBP")
+                  )
+                ),
+                payments: OpenStruct.new(
+                  captures: [OpenStruct.new(id: capture_id, amount: OpenStruct.new(value: "37.23", currency_code: "GBP"))],
+                  refunds: []
+                )
+              )]
+            )
+          end
+
+          before do
+            allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+              .with(order_id: paypal_order_id)
+              .and_return(OpenStruct.new(result: order_with_shipping))
+          end
+
+          it "includes the item's proportional share of shipping, handling, and discount in the refund amount" do
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 11.52)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            subject.refund!(capture_id,
+                            amount_cents: nil,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end
+        end
+
         context "when the purchase_unit has multiple captures with their own refunds" do
           let(:other_capture_id) { "OTHER_CAPTURE_XYZ" }
           let(:multi_capture_order) do

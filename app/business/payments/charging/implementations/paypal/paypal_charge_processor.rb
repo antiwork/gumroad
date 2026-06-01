@@ -724,10 +724,10 @@ class PaypalChargeProcessor
       scale = paypal_cents_scale(purchase_unit.amount&.currency_code)
       total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * scale * i.quantity.to_i }
       this_item_unit_value = BigDecimal(item.unit_amount.value) * scale * item.quantity.to_i
-      tax_total_value = purchase_unit.amount&.breakdown&.tax_total&.value
-      tax_total = tax_total_value.present? ? BigDecimal(tax_total_value) * scale : BigDecimal(0)
-      this_item_tax_share = total_unit_value.positive? ? (this_item_unit_value * tax_total / total_unit_value) : BigDecimal(0)
-      this_item_full_value_cents = this_item_unit_value + this_item_tax_share
+
+      breakdown_extras = breakdown_extras_cents(purchase_unit.amount&.breakdown, scale)
+      this_item_extras_share = total_unit_value.positive? ? (this_item_unit_value * breakdown_extras / total_unit_value) : BigDecimal(0)
+      this_item_full_value_cents = this_item_unit_value + this_item_extras_share
 
       ratio = if amount_cents.present? && purchase.total_transaction_cents.to_i.positive?
         [BigDecimal(amount_cents) / purchase.total_transaction_cents, BigDecimal(1)].min
@@ -736,6 +736,22 @@ class PaypalChargeProcessor
       end
 
       (this_item_full_value_cents * ratio).floor.to_i
+    end
+
+    # A purchase unit's captured amount equals the sum of its item unit_amounts plus
+    # `tax_total + shipping + handling - discount` from the breakdown. Returning the net
+    # extras lets each item's refund value carry its proportional share of those line items;
+    # without this, refunds on units with shipping/handling/discount would undercount and
+    # PayPal could reject subsequent refunds (or buyers would be short-refunded).
+    def breakdown_extras_cents(breakdown, scale)
+      return BigDecimal(0) if breakdown.blank?
+      additions = %i[tax_total shipping handling].sum(BigDecimal(0)) do |key|
+        value = breakdown.respond_to?(key) ? breakdown.public_send(key)&.value : nil
+        value.present? ? BigDecimal(value) * scale : BigDecimal(0)
+      end
+      discount_value = breakdown.respond_to?(:discount) ? breakdown.discount&.value : nil
+      discount = discount_value.present? ? BigDecimal(discount_value) * scale : BigDecimal(0)
+      additions - discount
     end
 
     def remaining_capture_cents(purchase_unit, capture_id)
