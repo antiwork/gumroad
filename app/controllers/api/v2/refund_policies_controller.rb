@@ -4,7 +4,6 @@ class Api::V2::RefundPoliciesController < Api::V2::BaseController
   REFUND_PERIOD_ALLOWED_VALUES = %w[none 7 14 30 183].freeze
   REFUND_PERIOD_VALUES = {
     "none" => 0,
-    "0" => 0,
     "7" => 7,
     "14" => 14,
     "30" => 30,
@@ -21,6 +20,7 @@ class Api::V2::RefundPoliciesController < Api::V2::BaseController
 
   def update
     return render_response(false, message: ACCOUNT_LEVEL_REFUND_POLICY_NOT_IN_EFFECT_MESSAGE) unless current_resource_owner.account_level_refund_policy_enabled?
+    return render_response(false, message: "Refund period is required.") if params[:refund_period].blank?
 
     refund_policy = current_resource_owner.refund_policy
     if refund_policy.update(refund_policy_params)

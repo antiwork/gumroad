@@ -112,6 +112,30 @@ describe Api::V2::RefundPoliciesController do
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
 
+      it "rejects undocumented numeric zero as a refund period" do
+        seller.refund_policy.update!(max_refund_period_in_days: 30)
+
+        put :update, params: { access_token: token.token, refund_period: "0" }
+
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "message" => "Refund period must be one of: none, 7, 14, 30, 183."
+        )
+        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
+      end
+
+      it "rejects a missing refund period" do
+        seller.refund_policy.update!(max_refund_period_in_days: 30)
+
+        put :update, params: { access_token: token.token }
+
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "message" => "Refund period is required."
+        )
+        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
+      end
+
       it "rejects fine print over 3000 characters" do
         seller.refund_policy.update!(max_refund_period_in_days: 30, fine_print: "Existing fine print")
 
