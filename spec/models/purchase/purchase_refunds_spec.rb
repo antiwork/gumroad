@@ -356,7 +356,7 @@ describe "PurchaseRefunds", :vcr do
         expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id,
                                                           amount_cents: nil, merchant_account: purchase.merchant_account,
                                                           reverse_transfer: false, paypal_order_purchase_unit_refund: nil,
-                                                          is_for_fraud: false).and_call_original
+                                                          is_for_fraud: false, purchase:).and_call_original
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
         purchase.refund_and_save!(create(:admin_user).id)
@@ -555,7 +555,8 @@ describe "PurchaseRefunds", :vcr do
                                                amount_cents: 20,
                                                reverse_transfer: false,
                                                merchant_account: @purchase.merchant_account,
-                                               paypal_order_purchase_unit_refund: false)
+                                               paypal_order_purchase_unit_refund: false,
+                                               purchase: @purchase)
                                          .and_call_original
           expect(@purchase).not_to receive(:debit_processor_fee_from_merchant_account!).and_call_original
 
@@ -601,7 +602,8 @@ describe "PurchaseRefunds", :vcr do
                                                amount_cents: 20,
                                                reverse_transfer: false,
                                                merchant_account: @purchase.merchant_account,
-                                               paypal_order_purchase_unit_refund: false).and_call_original
+                                               paypal_order_purchase_unit_refund: false,
+                                               purchase: @purchase).and_call_original
 
           @purchase.refund_gumroad_taxes!(refunding_user_id: nil)
 
@@ -687,7 +689,8 @@ describe "PurchaseRefunds", :vcr do
                                                    amount_cents: 20,
                                                    reverse_transfer: false,
                                                    merchant_account: @paypal_purchase.merchant_account,
-                                                   paypal_order_purchase_unit_refund: true)
+                                                   paypal_order_purchase_unit_refund: true,
+                                                   purchase: @paypal_purchase)
                                              .and_call_original
               end
 
