@@ -25,7 +25,12 @@ describe AnalyticsPresenter do
           name: deleted_with_sales.name
         }
       )
-      expect(presenter.page_props[:country_codes]).to include("United States" => "US")
+      expect(presenter.page_props[:country_codes]).to include(
+        "United States" => "US",
+        "The Netherlands" => "NL",
+        "Russia" => "RU",
+        "Congo Republic" => "CG",
+      )
       expect(presenter.page_props[:state_names].first).to eq("Alabama")
       expect(presenter.page_props[:state_names].last).to eq("Other")
     end

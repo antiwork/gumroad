@@ -10,6 +10,14 @@ module Compliance
       ISO3166::Country.all.to_h { |country| [country.alpha2, country.common_name] }
     end
 
+    def self.alpha2_by_name
+      ISO3166::Country.all.each_with_object(mapping.invert) do |country, result|
+        country.data["gumroad_historical_names"]&.each do |name|
+          result[name] ||= country.alpha2
+        end
+      end
+    end
+
     def self.find_by_name(country_name)
       return if country_name.blank?
       ISO3166::Country.find_country_by_any_name(country_name)

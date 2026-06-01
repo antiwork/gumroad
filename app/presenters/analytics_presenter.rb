@@ -8,7 +8,7 @@ class AnalyticsPresenter
   def page_props
     {
       products: seller.products_for_creator_analytics.map { product_props(_1) },
-      country_codes: Compliance::Countries.mapping.invert,
+      country_codes: Compliance::Countries.alpha2_by_name,
       state_names: STATES_SUPPORTED_BY_ANALYTICS.map { |state_code| Compliance::Countries::USA.subdivisions[state_code]&.name || "Other" }
     }
   end

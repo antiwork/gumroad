@@ -10,6 +10,17 @@ describe Compliance do
       end
     end
 
+    describe ".alpha2_by_name" do
+      it "returns a Hash of common and historical country names to country codes" do
+        expect(Compliance::Countries.alpha2_by_name).to include(
+          "United States" => "US",
+          "The Netherlands" => "NL",
+          "Russia" => "RU",
+          "Congo Republic" => "CG",
+        )
+      end
+    end
+
     describe ".find_by_name" do
       it "returns the country for a country whose name is the same for `countries` gem and `iso_country_codes` gem" do
         expect(Compliance::Countries.find_by_name("Mexico")).to eq(Compliance::Countries::MEX)
