@@ -869,6 +869,7 @@ describe PaypalChargeProcessor, :vcr do
                  paypal_order_id:,
                  price_cents: 1346,
                  total_transaction_cents: 1427,
+                 is_part_of_combined_charge?: true,
                  link: double("Link", unique_permalink: "zmuYY"))
         end
 
@@ -1027,6 +1028,7 @@ describe PaypalChargeProcessor, :vcr do
                    paypal_order_id:,
                    price_cents: 1346,
                    total_transaction_cents: 1427,
+                   is_part_of_combined_charge?: true,
                    link: double("Link", unique_permalink: "no-match"))
           end
 

@@ -703,7 +703,7 @@ class PaypalChargeProcessor
     # at the capture's remaining balance. Otherwise falls back to converting the USD amount,
     # rounded down to never overshoot the capture.
     def refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)
-      if purchase&.paypal_order_id.present?
+      if purchase&.paypal_order_id.present? && purchase.respond_to?(:is_part_of_combined_charge?) && purchase.is_part_of_combined_charge?
         paypal_order = paypal_rest_api.fetch_order(order_id: purchase.paypal_order_id)&.result
         purchase_unit = paypal_order&.purchase_units&.find { |pu| pu.payments&.captures&.any? { |c| c.id == capture_id } }
         if purchase_unit
