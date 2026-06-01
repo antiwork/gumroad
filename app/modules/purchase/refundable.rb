@@ -88,7 +88,8 @@ class Purchase
                                                 merchant_account:,
                                                 reverse_transfer: !chargedback? || !chargeback_reversed,
                                                 paypal_order_purchase_unit_refund:,
-                                                is_for_fraud:)
+                                                is_for_fraud:,
+                                                purchase: self)
         logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
         purchase_event = Event.where(purchase_id: id, event_name: "purchase").last
         unless purchase_event.nil?
@@ -292,7 +293,8 @@ class Purchase
                                               amount_cents: gumroad_tax_refundable_cents,
                                               reverse_transfer: false,
                                               merchant_account:,
-                                              paypal_order_purchase_unit_refund: paypal_order_id.present?)
+                                              paypal_order_purchase_unit_refund: paypal_order_id.present?,
+                                              purchase: self)
       logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
 
       ActiveRecord::Base.transaction do

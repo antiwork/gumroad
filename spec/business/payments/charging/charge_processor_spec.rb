@@ -283,7 +283,8 @@ describe ChargeProcessor do
                                                                                              merchant_account: nil,
                                                                                              paypal_order_purchase_unit_refund: nil,
                                                                                              reverse_transfer: true,
-                                                                                             is_for_fraud: nil)
+                                                                                             is_for_fraud: nil,
+                                                                                             purchase: nil)
         ChargeProcessor.refund!(StripeChargeProcessor.charge_processor_id, "charge-id",)
       end
     end
@@ -294,7 +295,8 @@ describe ChargeProcessor do
                                                                                              merchant_account: nil,
                                                                                              paypal_order_purchase_unit_refund: nil,
                                                                                              reverse_transfer: true,
-                                                                                             is_for_fraud: nil)
+                                                                                             is_for_fraud: nil,
+                                                                                             purchase: nil)
         ChargeProcessor.refund!(StripeChargeProcessor.charge_processor_id, "charge-id", amount_cents: 2_00)
       end
     end

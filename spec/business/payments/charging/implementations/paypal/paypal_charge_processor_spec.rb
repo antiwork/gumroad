@@ -859,6 +859,149 @@ describe PaypalChargeProcessor, :vcr do
           subject.refund!("2CL11631PW424125C", paypal_order_purchase_unit_refund: true, merchant_account:)
         end.to raise_error(ChargeProcessorUnavailableError)
       end
+
+      context "when a purchase context is provided (multi-currency combined-charge refund path)" do
+        let(:gbp_merchant_account) { create(:merchant_account_paypal, currency: "gbp", charge_processor_merchant_id: "MV9KWAJWMZ722") }
+        let(:capture_id) { "5NN998541F917793D" }
+        let(:paypal_order_id) { "0YJ20781U8414554V" }
+        let(:purchase) do
+          double("Purchase",
+                 paypal_order_id:,
+                 price_cents: 1346,
+                 link: double("Link", unique_permalink: "zmuYY"))
+        end
+
+        let(:fake_order) do
+          OpenStruct.new(
+            purchase_units: [
+              OpenStruct.new(
+                items: [
+                  OpenStruct.new(name: "Plating Generator", unit_amount: OpenStruct.new(value: "22.29", currency_code: "GBP"), sku: "BalZT"),
+                  OpenStruct.new(name: "3D Shape Generator", unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), sku: "zmuYY"),
+                ],
+                amount: OpenStruct.new(
+                  currency_code: "GBP",
+                  value: "34.23",
+                  breakdown: OpenStruct.new(tax_total: OpenStruct.new(value: "1.94", currency_code: "GBP"))
+                ),
+                payments: OpenStruct.new(
+                  captures: [OpenStruct.new(id: capture_id, amount: OpenStruct.new(value: "34.23", currency_code: "GBP"))],
+                  refunds: [OpenStruct.new(id: "PRIOR_USD_REFUND", amount: OpenStruct.new(value: "23.64", currency_code: "GBP"))]
+                )
+              )
+            ]
+          )
+        end
+
+        before do
+          allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+            .with(order_id: paypal_order_id)
+            .and_return(OpenStruct.new(result: fake_order))
+        end
+
+        it "uses the PayPal-recorded item amount instead of USD→GBP conversion" do
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          subject.refund!(capture_id,
+                          amount_cents: 1427,
+                          merchant_account: gbp_merchant_account,
+                          paypal_order_purchase_unit_refund: true,
+                          purchase:)
+        end
+
+        it "caps the refund amount at the capture's remaining balance" do
+          allow(fake_order.purchase_units.first.items[1]).to receive(:unit_amount)
+            .and_return(OpenStruct.new(value: "11.00", currency_code: "GBP"))
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          subject.refund!(capture_id,
+                          amount_cents: 1427,
+                          merchant_account: gbp_merchant_account,
+                          paypal_order_purchase_unit_refund: true,
+                          purchase:)
+        end
+
+        it "raises ChargeProcessorAlreadyRefundedError when the capture is fully exhausted" do
+          fake_order.purchase_units.first.payments.refunds <<
+            OpenStruct.new(id: "EXHAUSTING", amount: OpenStruct.new(value: "10.59", currency_code: "GBP"))
+
+          expect do
+            subject.refund!(capture_id,
+                            amount_cents: 1427,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end.to raise_error(ChargeProcessorAlreadyRefundedError, /no remaining balance/)
+        end
+
+        it "scales by the refund ratio for partial refunds" do
+          half_amount_cents = 673
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 5.30)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          subject.refund!(capture_id,
+                          amount_cents: half_amount_cents,
+                          merchant_account: gbp_merchant_account,
+                          paypal_order_purchase_unit_refund: true,
+                          purchase:)
+        end
+
+        context "when the purchase's product has no matching item in the PayPal order" do
+          let(:purchase) do
+            double("Purchase",
+                   paypal_order_id:,
+                   price_cents: 1346,
+                   link: double("Link", unique_permalink: "no-match"))
+          end
+
+          it "falls back to USD→GBP conversion with floor (preventing overshoot)" do
+            allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7426")
+
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            subject.refund!(capture_id,
+                            amount_cents: 1427,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end
+        end
+      end
+    end
+  end
+
+  describe ".format_money_floored" do
+    it "returns 0 for blank input" do
+      expect(PaypalChargeProcessor.format_money_floored(nil, "gbp")).to eq(0)
+      expect(PaypalChargeProcessor.format_money_floored("", "gbp")).to eq(0)
+    end
+
+    it "passes through USD cents unchanged" do
+      expect(PaypalChargeProcessor.format_money_floored(1427, "usd")).to eq(1427)
+    end
+
+    it "rounds down when converting to non-USD" do
+      allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7426")
+      expect(PaypalChargeProcessor.format_money_floored(1427, "gbp")).to eq(1059)
+    end
+
+    it "differs from format_money (.round) on conversions that would round up" do
+      allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7435")
+      expect(PaypalChargeProcessor.format_money_floored(1427, "gbp")).to eq(1060)
+      expect(PaypalChargeProcessor.format_money(1427, "gbp")).to eq(10.61)
     end
   end
 
