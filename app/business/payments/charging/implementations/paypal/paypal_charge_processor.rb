@@ -704,8 +704,8 @@ class PaypalChargeProcessor
     # rounded down to never overshoot the capture.
     def refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)
       if purchase&.paypal_order_id.present?
-        paypal_order = paypal_rest_api.fetch_order(order_id: purchase.paypal_order_id).result
-        purchase_unit = paypal_order.purchase_units.find { |pu| pu.payments&.captures&.any? { |c| c.id == capture_id } }
+        paypal_order = paypal_rest_api.fetch_order(order_id: purchase.paypal_order_id)&.result
+        purchase_unit = paypal_order&.purchase_units&.find { |pu| pu.payments&.captures&.any? { |c| c.id == capture_id } }
         if purchase_unit
           desired = item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
           return [desired, remaining_capture_cents(purchase_unit, capture_id)].min if desired
@@ -719,15 +719,15 @@ class PaypalChargeProcessor
       item = purchase_unit.items&.find { |i| i.sku == purchase.link.unique_permalink }
       return nil unless item
 
-      total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * 100 }
-      this_item_unit_value = BigDecimal(item.unit_amount.value) * 100
+      total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * 100 * i.quantity.to_i }
+      this_item_unit_value = BigDecimal(item.unit_amount.value) * 100 * item.quantity.to_i
       tax_total_value = purchase_unit.amount&.breakdown&.tax_total&.value
       tax_total = tax_total_value.present? ? BigDecimal(tax_total_value) * 100 : BigDecimal(0)
       this_item_tax_share = total_unit_value.positive? ? (this_item_unit_value * tax_total / total_unit_value) : BigDecimal(0)
       this_item_full_value_cents = this_item_unit_value + this_item_tax_share
 
-      ratio = if amount_cents.present? && purchase.price_cents.to_i.positive?
-        [BigDecimal(amount_cents) / purchase.price_cents, BigDecimal(1)].min
+      ratio = if amount_cents.present? && purchase.total_transaction_cents.to_i.positive?
+        [BigDecimal(amount_cents) / purchase.total_transaction_cents, BigDecimal(1)].min
       else
         BigDecimal(1)
       end

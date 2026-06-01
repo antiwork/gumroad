@@ -868,6 +868,7 @@ describe PaypalChargeProcessor, :vcr do
           double("Purchase",
                  paypal_order_id:,
                  price_cents: 1346,
+                 total_transaction_cents: 1427,
                  link: double("Link", unique_permalink: "zmuYY"))
         end
 
@@ -876,8 +877,8 @@ describe PaypalChargeProcessor, :vcr do
             purchase_units: [
               OpenStruct.new(
                 items: [
-                  OpenStruct.new(name: "Plating Generator", unit_amount: OpenStruct.new(value: "22.29", currency_code: "GBP"), sku: "BalZT"),
-                  OpenStruct.new(name: "3D Shape Generator", unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), sku: "zmuYY"),
+                  OpenStruct.new(name: "Plating Generator", unit_amount: OpenStruct.new(value: "22.29", currency_code: "GBP"), quantity: 1, sku: "BalZT"),
+                  OpenStruct.new(name: "3D Shape Generator", unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY"),
                 ],
                 amount: OpenStruct.new(
                   currency_code: "GBP",
@@ -941,16 +942,16 @@ describe PaypalChargeProcessor, :vcr do
           end.to raise_error(ChargeProcessorAlreadyRefundedError, /no remaining balance/)
         end
 
-        it "scales by the refund ratio for partial refunds" do
-          half_amount_cents = 673
+        it "scales by the refund ratio (over gross purchase total) for partial refunds" do
+          half_gross_amount_cents = 713
 
           expect_any_instance_of(PaypalRestApi).to receive(:refund)
-            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 5.30)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 5.29)
             .and_return(OpenStruct.new(status_code: 201,
                                        result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
 
           subject.refund!(capture_id,
-                          amount_cents: half_amount_cents,
+                          amount_cents: half_gross_amount_cents,
                           merchant_account: gbp_merchant_account,
                           paypal_order_purchase_unit_refund: true,
                           purchase:)
@@ -973,11 +974,59 @@ describe PaypalChargeProcessor, :vcr do
           end.not_to raise_error
         end
 
+        it "multiplies unit_amount by quantity when scoring item values" do
+          quantity_two_order = OpenStruct.new(
+            purchase_units: [OpenStruct.new(
+              items: [OpenStruct.new(unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), quantity: 2, sku: "zmuYY")],
+              amount: OpenStruct.new(currency_code: "GBP", value: "20.00", breakdown: nil),
+              payments: OpenStruct.new(
+                captures: [OpenStruct.new(id: capture_id, amount: OpenStruct.new(value: "20.00", currency_code: "GBP"))],
+                refunds: []
+              )
+            )]
+          )
+          allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+            .with(order_id: paypal_order_id)
+            .and_return(OpenStruct.new(result: quantity_two_order))
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 20.00)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          subject.refund!(capture_id,
+                          amount_cents: nil,
+                          merchant_account: gbp_merchant_account,
+                          paypal_order_purchase_unit_refund: true,
+                          purchase:)
+        end
+
+        it "falls back to format_money_floored when fetch_order returns no result (HTTP error)" do
+          allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+            .with(order_id: paypal_order_id)
+            .and_return(OpenStruct.new(status_code: 500, result: nil))
+          allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7426")
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          expect do
+            subject.refund!(capture_id,
+                            amount_cents: 1427,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end.not_to raise_error
+        end
+
         context "when the purchase's product has no matching item in the PayPal order" do
           let(:purchase) do
             double("Purchase",
                    paypal_order_id:,
                    price_cents: 1346,
+                   total_transaction_cents: 1427,
                    link: double("Link", unique_permalink: "no-match"))
           end
 
