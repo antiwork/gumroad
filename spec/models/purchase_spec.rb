@@ -6285,6 +6285,31 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#determine_affiliate_balance_cents" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+
+    it "returns 0 when the affiliate user is the seller (self-affiliate)" do
+      global_affiliate = seller.global_affiliate
+      expect(global_affiliate.affiliate_user_id).to eq(seller.id)
+
+      purchase = create(:purchase, link: product, seller: seller, affiliate: global_affiliate)
+
+      expect(purchase.send(:determine_affiliate_balance_cents)).to eq(0)
+      expect(purchase.affiliate_credit_cents).to eq(0)
+    end
+
+    it "credits the affiliate normally when the affiliate user is not the seller" do
+      affiliate_user = create(:user)
+      direct_affiliate = create(:direct_affiliate, seller: seller, affiliate_user: affiliate_user, affiliate_basis_points: 1000, products: [product])
+
+      purchase = create(:purchase, link: product, seller: seller, affiliate: direct_affiliate)
+
+      expect(purchase.send(:determine_affiliate_balance_cents)).to be > 0
+      expect(purchase.affiliate_credit_cents).to be > 0
+    end
+  end
+
   describe "#gift_purchases_cannot_be_on_installment_plans" do
     it "does not allow gift purchases to be on installment plans" do
       purchase = create(:purchase, is_installment_payment: true, installment_plan: create(:product_installment_plan))

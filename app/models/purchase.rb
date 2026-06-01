@@ -3133,6 +3133,7 @@ class Purchase < ApplicationRecord
 
     def determine_affiliate_balance_cents
       return 0 if affiliate.nil?
+      return 0 if affiliate.affiliate_user_id == seller_id
 
       affiliate_cents = affiliate_cut * displayed_price_usd_cents
       affiliate_cents -= determine_affiliate_fee_cents
