@@ -319,9 +319,9 @@ class Purchase < ApplicationRecord
   # this ensures preorders that require shipping at a later date will pass this validation
   %w[full_name street_address country state zip_code city].each do |f|
     validates f.to_sym, presence: true, on: :create,
-                        if: -> { link.is_physical || (link.require_shipping? && !is_recurring_subscription_charge && !is_preorder_charge?) }
+                        if: -> { !is_applying_plan_change && (link.is_physical || (link.require_shipping? && !is_recurring_subscription_charge && !is_preorder_charge?)) }
     validates f.to_sym, presence: true, on: :update,
-                        if: -> { is_updated_original_subscription_purchase && (link.is_physical || link.require_shipping?) && !is_recurring_subscription_charge && !is_preorder_charge? }
+                        if: -> { !is_applying_plan_change && is_updated_original_subscription_purchase && (link.is_physical || link.require_shipping?) && !is_recurring_subscription_charge && !is_preorder_charge? }
   end
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
