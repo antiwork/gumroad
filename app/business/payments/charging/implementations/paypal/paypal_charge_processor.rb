@@ -315,8 +315,8 @@ class PaypalChargeProcessor
   def self.format_money_floored(money, currency)
     return 0 if money.blank?
     return money if currency.to_s == "usd"
-    rate = get_rate(currency).to_f
-    (BigDecimal(money) * rate).floor.to_i
+    rate = BigDecimal(get_rate(currency).to_s)
+    (BigDecimal(money.to_s) * rate).floor.to_i
   end
 
   def self.formatted_amount_for_paypal(cents, currency)
@@ -724,7 +724,7 @@ class PaypalChargeProcessor
       this_item_tax_share = total_unit_value.positive? ? (this_item_unit_value * tax_total / total_unit_value) : BigDecimal(0)
       this_item_full_value_cents = this_item_unit_value + this_item_tax_share
 
-      ratio = if purchase.price_cents.to_i.positive?
+      ratio = if amount_cents.present? && purchase.price_cents.to_i.positive?
         [BigDecimal(amount_cents) / purchase.price_cents, BigDecimal(1)].min
       else
         BigDecimal(1)

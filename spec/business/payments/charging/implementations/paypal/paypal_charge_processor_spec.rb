@@ -956,6 +956,23 @@ describe PaypalChargeProcessor, :vcr do
                           purchase:)
         end
 
+        it "treats nil amount_cents as a full refund of the item (does not raise TypeError)" do
+          fake_order.purchase_units.first.payments.refunds.clear
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.60)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          expect do
+            subject.refund!(capture_id,
+                            amount_cents: nil,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end.not_to raise_error
+        end
+
         context "when the purchase's product has no matching item in the PayPal order" do
           let(:purchase) do
             double("Purchase",
