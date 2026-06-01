@@ -1020,6 +1020,11 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.format_money_floored(1427, "gbp")).to eq(1060)
       expect(PaypalChargeProcessor.format_money(1427, "gbp")).to eq(10.61)
     end
+
+    it "divides by 100 for single-unit currencies (matches usd_cents_to_currency for JPY/TWD/HUF)" do
+      allow(PaypalChargeProcessor).to receive(:get_rate).with("jpy").and_return("150.0")
+      expect(PaypalChargeProcessor.format_money_floored(1427, "jpy")).to eq(2140)
+    end
   end
 
   describe ".create_order" do

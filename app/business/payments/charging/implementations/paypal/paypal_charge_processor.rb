@@ -316,7 +316,9 @@ class PaypalChargeProcessor
     return 0 if money.blank?
     return money if currency.to_s == "usd"
     rate = BigDecimal(get_rate(currency).to_s)
-    (BigDecimal(money.to_s) * rate).floor.to_i
+    converted = BigDecimal(money.to_s) * rate
+    converted /= 100 if is_currency_type_single_unit?(currency)
+    converted.floor.to_i
   end
 
   def self.formatted_amount_for_paypal(cents, currency)
