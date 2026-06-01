@@ -107,6 +107,23 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to start_with("<!doctype html>")
     end
 
+    it "sticks to primary before fetching the product for the landing page HTML" do
+      steps = []
+      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+        steps << :stick_to_primary
+        method.call(*args)
+      end
+      allow(controller).to receive(:fetch_product_for_show).and_wrap_original do |method, *args|
+        steps << :fetch_product
+        method.call(*args)
+      end
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_product)
+    end
+
     it "applies the strict CSP and iframe-friendly response headers" do
       get :landing_iframe_content, params: { id: product.unique_permalink }
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
@@ -209,32 +226,22 @@ describe LinksController, :vcr, type: :controller do
       expect(product.tags.pluck(:name)).to eq(["launch"])
     end
 
-    it "sanitizes seller-supplied custom_html on the internal update path" do
+    it "rejects publishing custom_html through the internal update path" do
       post :update, params: { id: product.unique_permalink, custom_html: %(<section><script src="https://evil.com/x.js"></script><h1>Hi</h1></section>) }
 
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to eq(true)
-      stored = product.reload.custom_html
-      expect(stored).to include("<h1>Hi</h1>")
-      expect(stored).not_to include("evil.com")
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error_message"]).to match(/use the api.*dashboard only supports removing/i)
+      expect(product.reload.custom_html).to eq("<section><h1>Live landing page</h1></section>")
     end
 
-    it "stores nil when custom_html sanitizes to an empty string" do
-      post :update, params: { id: product.unique_permalink, custom_html: %(<script src="https://evil.com/x.js"></script>) }
+    it "locks the product row before removing custom_html" do
+      expect_any_instance_of(Link).to receive(:with_lock).and_call_original
+
+      post :update, params: { id: product.unique_permalink, custom_html: nil }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(product.reload.custom_html).to be_nil
-    end
-
-    it "locks the product row before updating custom_html" do
-      expect_any_instance_of(Link).to receive(:with_lock).and_call_original
-
-      post :update, params: { id: product.unique_permalink, custom_html: "<section>Updated</section>" }
-
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to eq(true)
-      expect(product.reload.custom_html).to eq("<section>Updated</section>")
     end
 
     it "rejects a mixed custom_html update so it can't reach the destructive partial-update path" do
@@ -249,7 +256,7 @@ describe LinksController, :vcr, type: :controller do
       post :update, params: { id: product.unique_permalink, name: "Renamed", custom_html: "<section>New</section>" }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["error_message"]).to match(/on its own|use the api/i)
+      expect(response.parsed_body["error_message"]).to match(/use the api.*dashboard only supports removing/i)
       product.reload
       expect(product.name).not_to eq("Renamed")
       expect(product.custom_html).to eq("<section><h1>Live landing page</h1></section>")

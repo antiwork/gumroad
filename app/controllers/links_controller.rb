@@ -19,6 +19,7 @@ class LinksController < ApplicationController
   after_action :verify_authorized, except: PUBLIC_ACTIONS
   skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
+  before_action :stick_to_primary_for_landing_iframe, only: :landing_iframe_content
   before_action :fetch_product_for_show, only: %i[show landing_iframe_content]
   before_action :check_banned, only: %i[show landing_iframe_content]
   before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content]
@@ -339,9 +340,9 @@ class LinksController < ApplicationController
   def update
     authorize @product
     begin
-      if custom_html_only_update?
+      if custom_html_removal_update?
         @product.with_lock do
-          @product.update!(custom_html: sanitized_custom_html_param)
+          @product.update!(custom_html: nil)
         end
         return render json: { success: true }
       end
@@ -354,7 +355,7 @@ class LinksController < ApplicationController
       # the API v2 endpoint owns multi-field custom_html writes, guarding each
       # field independently.
       if custom_html_update?
-        return render json: { error_message: "Update custom_html on its own, or use the API to change it alongside other fields." }, status: :unprocessable_entity
+        return render json: { error_message: "Use the API to publish custom_html; the dashboard only supports removing it." }, status: :unprocessable_entity
       end
 
       ActiveRecord::Base.transaction do
@@ -605,6 +606,10 @@ class LinksController < ApplicationController
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end
 
+    def stick_to_primary_for_landing_iframe
+      ActiveRecord::Base.connection.stick_to_primary!
+    end
+
     def fetch_product_by_custom_domain
       @product = product_by_custom_domain
     end
@@ -677,18 +682,12 @@ class LinksController < ApplicationController
       logged_in_user.present? && (logged_in_user == @product.user || logged_in_user.collaborator_for?(@product) || logged_in_user.is_team_member?)
     end
 
-    def custom_html_only_update?
-      product_permitted_params.keys == ["custom_html"]
+    def custom_html_removal_update?
+      product_permitted_params.keys == ["custom_html"] && product_permitted_params[:custom_html].blank?
     end
 
     def custom_html_update?
       product_permitted_params.key?("custom_html")
-    end
-
-    def sanitized_custom_html_param
-      return nil if product_permitted_params[:custom_html].nil?
-
-      Ai::PageSanitizer.sanitize(product_permitted_params[:custom_html]).presence
     end
 
     def prepare_product_page
