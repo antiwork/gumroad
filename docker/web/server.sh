@@ -15,7 +15,7 @@ consul_put() {
 # Set default value for port
 export PORT=3000
 
-# Send notification to Slack on branch app deployment
+# Send notification to Slack on preview app deployment
 if [[ $BRANCH_DEPLOYMENT == "true" ]]; then
   if [[ ! -z "$NOMAD_HOST_PORT_puma" ]]; then
     export PORT=$NOMAD_HOST_PORT_puma

@@ -10,7 +10,7 @@
   - [When deployment goes bad](#when-deployment-goes-bad)
   - [Logs](#logs)
   - [Hotfixing workers only](#hotfixing-workers-only)
-- [Deploying to a branch app](#deploying-to-a-branch-app)
+- [Deploying to a preview app](#deploying-to-a-preview-app)
 - [Deploying to staging](#deploying-to-staging)
 
 ---
@@ -184,8 +184,8 @@ $ dotenv -f ../.env erb sidekiq_worker.nomad.erb > sidekiq_worker.nomad
 $ nomad run sidekiq_worker.nomad
 ```
 
-## Deploying to a branch app
+## Deploying to a preview app
 
-You can deploy a branch-specific deployment (aka branch app) by prefixing the branch name with `deploy-`, e.g., `deploy-bundle-share`.
+You can deploy a branch-specific deployment (aka preview app) from any branch except `main` and `comp-assets-*`. Pushing the branch starts a Buildkite build that waits at the "Approval required for preview app deployment" block; unblock it in Buildkite to provision and deploy the preview app. Nothing is built or provisioned until you approve, and there is no automated approval.
 
 Deployments will be deleted automatically when the associated branches are deleted in the repository.

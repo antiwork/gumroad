@@ -41,7 +41,7 @@ module StripeChargeRadarProcessor
     ProcessEarlyFraudWarningJob.perform_async(early_fraud_warning.id)
   rescue ActiveRecord::RecordNotFound => e
     # Ignore for non-production environments, as the purchase could have been done on one of the many
-    # environments (one of engineer's local, staging, branch app, etc)
+    # environments (one of engineer's local, staging, preview app, etc)
     return unless Rails.env.production?
     # An event that has the `account` attribute is associated with a Stripe Connect account
     # If the purchase cannot be found, it's most likely because it wasn't done on the platform

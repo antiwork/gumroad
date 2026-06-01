@@ -7,7 +7,7 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") deploy_branch.sh: $1${NC}"
 }
 
-# Build branch app nginx image
+# Build preview app nginx image
 AWS_BRANCH_APP_NGINX_REPO=${ECR_REGISTRY}/gumroad/branch_app_nginx
 REVISION=${BUILDKITE_COMMIT}
 
@@ -54,8 +54,8 @@ else
   logger "Image $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG already exists"
 fi
 
-# Deploy branch app
-logger "Starting branch app deployment"
+# Deploy preview app
+logger "Starting preview app deployment"
 
 # Install Nomad
 source .buildkite/scripts/install_nomad.sh
@@ -68,7 +68,7 @@ copy_secrets
 BRANCH=${BUILDKITE_BRANCH}
 DEPLOY_TAG="staging-${WEB_TAG}"
 
-logger "Deploying branch app for ${BRANCH} with tag ${DEPLOY_TAG}"
+logger "Deploying preview app for ${BRANCH} with tag ${DEPLOY_TAG}"
 
 # Ensure necessary directories exist with proper permissions
 logger "Creating required directories"
@@ -76,7 +76,7 @@ sudo mkdir -p nomad/staging/certs
 sudo mkdir -p nomad/certs
 sudo chown -R buildkite-agent:buildkite-agent nomad/
 
-# Deploy branch app
+# Deploy preview app
 cd nomad/staging/deploy_branch
 BRANCH=$BRANCH \
   DEPLOY_TAG=$DEPLOY_TAG \
