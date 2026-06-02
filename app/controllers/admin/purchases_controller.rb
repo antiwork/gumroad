@@ -163,7 +163,10 @@ class Admin::PurchasesController < Admin::BaseController
 
     begin
       result = GdprBuyerErasureService.new(email, performed_by: current_user).perform!
-      render json: { success: true, counts: result[:counts], anonymized_to: result[:anonymized_to] }
+      message = if result[:skipped].present?
+        "Buyer PII erased. Some tables timed out and were skipped (data may remain): #{result[:skipped].join(', ')}. Re-run to retry them."
+      end
+      render json: { success: true, counts: result[:counts], anonymized_to: result[:anonymized_to], skipped: result[:skipped], message: }
     rescue ArgumentError => e
       render json: { success: false, message: e.message }
     rescue => e

@@ -5,12 +5,24 @@ class GdprBuyerErasureService
   ANONYMIZED_NAME = GdprDataErasureService::ANONYMIZED_NAME
   ANONYMIZED_VALUE = GdprDataErasureService::ANONYMIZED_VALUE
 
-  attr_reader :email, :performed_by, :counts
+  # Errors raised when a statement contends for a row lock or exceeds the
+  # configured statement timeout. On very old guest purchases the erasure can
+  # contend with other long-running writers on broadly-shared tables (events,
+  # purchases). We treat these as non-critical and skip the affected step
+  # rather than failing the whole erasure (see #perform!).
+  TIMEOUT_ERRORS = [
+    ActiveRecord::LockWaitTimeout,
+    ActiveRecord::StatementTimeout,
+    ActiveRecord::QueryCanceled,
+  ].freeze
+
+  attr_reader :email, :performed_by, :counts, :skipped
 
   def initialize(email, performed_by:)
     @email = email.to_s.strip.downcase
     @performed_by = performed_by
     @counts = Hash.new(0)
+    @skipped = []
   end
 
   def perform!
@@ -27,36 +39,45 @@ class GdprBuyerErasureService
 
     @anonymized_email = generate_anonymized_email
 
-    ActiveRecord::Base.transaction do
-      purchases = Purchase.where(email: email, purchaser_id: nil)
-      @purchase_ids = purchases.pluck(:id)
-      @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
-      candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
-      shared_browser_guids = candidate_browser_guids.any? ? Purchase.where(browser_guid: candidate_browser_guids).where.not(id: @purchase_ids).distinct.pluck(:browser_guid) : []
-      @browser_guids = candidate_browser_guids - shared_browser_guids
-      @seller_ids = purchases.distinct.pluck(:seller_id)
+    purchases = Purchase.where(email: email, purchaser_id: nil)
+    @purchase_ids = purchases.pluck(:id)
+    @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
+    candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+    shared_browser_guids = candidate_browser_guids.any? ? Purchase.where(browser_guid: candidate_browser_guids).where.not(id: @purchase_ids).distinct.pluck(:browser_guid) : []
+    @browser_guids = candidate_browser_guids - shared_browser_guids
+    @seller_ids = purchases.distinct.pluck(:seller_id)
 
-      anonymize_purchases!
-      anonymize_events!
-      anonymize_audience_members!
-      anonymize_followers!
-      anonymize_carts!
-      anonymize_gifts!
-      anonymize_imported_customers!
-      anonymize_sent_post_emails!
-      anonymize_blocked_customer_objects!
-      anonymize_signup_events!
-      anonymize_charges!
-      anonymize_dispute_evidences!
-      anonymize_purchase_custom_fields!
-      anonymize_credit_cards!
-      anonymize_discover_searches!
-      anonymize_utm_link_visits!
+    # Best-effort, per-step erasure. We intentionally do NOT wrap these in a
+    # single transaction: a lock-wait timeout on one broadly-contended table
+    # (e.g. events) would otherwise roll back every other table too, leaving
+    # the buyer's PII fully intact — the failure mode reported in #438. Each
+    # step runs and commits independently; if a step times out we record it as
+    # skipped and move on. The erasure does its best across everything it can
+    # lock, and the admin sees which (if any) tables were deferred.
+    {
+      purchases: -> { anonymize_purchases! },
+      events: -> { anonymize_events! },
+      audience_members: -> { anonymize_audience_members! },
+      followers: -> { anonymize_followers! },
+      carts: -> { anonymize_carts! },
+      gifts: -> { anonymize_gifts! },
+      imported_customers: -> { anonymize_imported_customers! },
+      sent_post_emails: -> { anonymize_sent_post_emails! },
+      blocked_customer_objects: -> { anonymize_blocked_customer_objects! },
+      signup_events: -> { anonymize_signup_events! },
+      charges: -> { anonymize_charges! },
+      dispute_evidences: -> { anonymize_dispute_evidences! },
+      purchase_custom_fields: -> { anonymize_purchase_custom_fields! },
+      credit_cards: -> { anonymize_credit_cards! },
+      discover_searches: -> { anonymize_discover_searches! },
+      utm_link_visits: -> { anonymize_utm_link_visits! },
+    }.each do |step_name, step|
+      run_step(step_name, &step)
     end
 
     log_erasure!
 
-    { success: true, email: email, anonymized_to: @anonymized_email, counts: counts }
+    { success: true, email: email, anonymized_to: @anonymized_email, counts: counts, skipped: skipped }
   rescue ArgumentError
     raise
   rescue => e
@@ -65,6 +86,15 @@ class GdprBuyerErasureService
   end
 
   private
+    # Runs a single anonymization step, silencing lock-wait/statement timeouts
+    # so one contended table can't abort the rest of the erasure. Non-timeout
+    # errors still propagate (they indicate a real bug, not contention).
+    def run_step(step_name)
+      yield
+    rescue *TIMEOUT_ERRORS => e
+      skipped << step_name
+      Rails.logger.warn("GDPR buyer erasure: step '#{step_name}' timed out for #{@anonymized_email} and was skipped (non-critical): #{e.class}")
+    end
     def generate_anonymized_email
       digest = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, email)[0..15]
       "buyer-#{digest}@#{ANONYMIZED_EMAIL_DOMAIN}"
@@ -280,6 +310,8 @@ class GdprBuyerErasureService
     end
 
     def log_erasure!
+      skipped_note = skipped.any? ? " #{skipped.size} table(s) were skipped due to lock-wait timeouts and may retain data: #{skipped.join(', ')}." : ""
+
       @seller_ids.each do |seller_id|
         seller = User.find_by(id: seller_id)
         next unless seller
@@ -289,7 +321,7 @@ class GdprBuyerErasureService
           author_name: performed_by.name || performed_by.email,
           comment_type: Comment::COMMENT_TYPE_NOTE,
           content: "GDPR buyer erasure performed for a guest buyer. " \
-                   "All buyer PII anonymized across #{counts.values.sum} records. " \
+                   "Buyer PII anonymized across #{counts.values.sum} records.#{skipped_note} " \
                    "Performed by #{performed_by.email}."
         )
       rescue => e

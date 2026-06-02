@@ -384,6 +384,58 @@ describe GdprBuyerErasureService do
           expect(shared_card.reload.visual).to eq("**** 9999")
         end
       end
+
+      describe "best-effort behavior on lock-wait timeouts" do
+        it "skips a timed-out step, still erases the rest, and reports it as skipped" do
+          # Simulate the events table contending for a lock (the #438 failure):
+          # the events step times out, but purchases and everything else must
+          # still be anonymized rather than rolled back.
+          allow_any_instance_of(described_class).to receive(:anonymize_events!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+
+          result = described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(result[:success]).to be(true)
+          expect(result[:skipped]).to eq([:events])
+          # The rest of the erasure still happened.
+          expect(purchase1.reload.email).to eq(result[:anonymized_to])
+          expect(purchase1.full_name).to eq(GdprDataErasureService::ANONYMIZED_NAME)
+          expect(purchase2.reload.email).to eq(result[:anonymized_to])
+        end
+
+        it "treats StatementTimeout and QueryCanceled as non-critical skips too" do
+          allow_any_instance_of(described_class).to receive(:anonymize_carts!).and_raise(ActiveRecord::StatementTimeout, "statement timeout")
+          allow_any_instance_of(described_class).to receive(:anonymize_followers!).and_raise(ActiveRecord::QueryCanceled, "canceling statement")
+
+          result = described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(result[:success]).to be(true)
+          expect(result[:skipped]).to match_array(%i[carts followers])
+          expect(purchase1.reload.email).to eq(result[:anonymized_to])
+        end
+
+        it "records skipped tables in the seller admin comment" do
+          allow_any_instance_of(described_class).to receive(:anonymize_events!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+          seller = purchase1.seller
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          comment = seller.reload.comments.last
+          expect(comment.content).to include("skipped due to lock-wait timeouts")
+          expect(comment.content).to include("events")
+        end
+
+        it "still raises (does NOT silence) a non-timeout error" do
+          allow_any_instance_of(described_class).to receive(:anonymize_purchases!).and_raise(StandardError, "boom")
+
+          expect { described_class.new(buyer_email, performed_by: admin).perform! }.to raise_error(StandardError, /boom/)
+        end
+
+        it "returns an empty skipped list when nothing times out" do
+          result = described_class.new(buyer_email, performed_by: admin).perform!
+
+          expect(result[:skipped]).to eq([])
+        end
+      end
     end
   end
 end
