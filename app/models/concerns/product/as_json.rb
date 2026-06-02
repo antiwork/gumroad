@@ -144,6 +144,8 @@ module Product::AsJson
           "custom_html" => custom_html,
           "rich_content" => rich_content_json,
           "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
+          "main_section_index" => main_section_index || 0,
+          "sections" => Api::ProductSectionsPresenter.new(self).props,
           "files" => ordered_alive_product_files.filter_map do |f|
             {
               id: f.external_id,
