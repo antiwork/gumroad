@@ -169,6 +169,7 @@ build_production:
 		-e DATABASE_PASSWORD="password" \
 		-e RAILS_MASTER_KEY=$$RAILS_PRODUCTION_MASTER_KEY \
 		-e DEVISE_SECRET_KEY="sample_secret_key" \
+		-e BUILDKITE_BRANCH=$(BUILDKITE_BRANCH) \
 		-e REVISION=$(NEW_WEB_TAG) \
 		--label assets_compiled=true \
 		$(NEW_WEB_REPO):web-$(NEW_WEB_TAG) \
