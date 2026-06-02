@@ -54,6 +54,7 @@ For a pay-what-you-want product where the buyer should name their OWN price on t
 
 Then preview, publish, and verify it with the Gumroad CLI:
 - Run the real server-side sanitizer WITHOUT publishing and read what it changed: gumroad products page preview ${uniquePermalink} ./landing.html --json --no-input --non-interactive — inspect .sanitization_report. If it stripped tags or attributes your page needs (a buy element, an <input>, a <script>), fix the HTML and preview again. Do this until the report is clean so you never publish a broken page.
+- Also inspect the top-level .warning from preview/publish. If it says the page has no buy element, add data-gumroad-action="buy" or a gumroad:checkout postMessage before publishing.
 - Publish (or update) the page once preview is clean: gumroad products page publish ${uniquePermalink} ./landing.html --json --no-input --non-interactive — .sanitization_report reflects what actually shipped.
 - Confirm it's live and find the public URL: gumroad products page url ${uniquePermalink} --json --jq '.product.landing_url' --no-input --non-interactive
 - Remove the landing page and restore the default product page: gumroad products page clear ${uniquePermalink} --yes --json --no-input --non-interactive

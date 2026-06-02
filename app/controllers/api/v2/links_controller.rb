@@ -12,6 +12,8 @@ class Api::V2::LinksController < Api::V2::BaseController
   ]).freeze
 
   RESULTS_PER_PAGE = 10
+  MISSING_BUY_AFFORDANCE_WARNING = "The custom landing page does not include a buy element, so buyers may not be able to purchase this product. " \
+                                   'Add an element with data-gumroad-action="buy" or post a gumroad:checkout message.'
 
   SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
     :page,
@@ -424,8 +426,13 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
-    offer_code_warning = check_offer_code_validity
-    additional_info[:warning] = offer_code_warning if offer_code_warning
+    warnings = [check_offer_code_validity]
+    if params[:custom_html].present?
+      # Profiles share the sanitizer, so buy-affordance warnings stay in the product API.
+      warnings << custom_html_buy_affordance_warning(@product.custom_html)
+    end
+    warning = warnings.compact.join(" ").presence
+    additional_info[:warning] = warning if warning
     success_with_object(:product, @product, additional_info)
   end
 
@@ -479,7 +486,10 @@ class Api::V2::LinksController < Api::V2::BaseController
     if errors.any?
       render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)
     else
-      render_response(true, custom_html: sanitized, sanitization_report: result.report)
+      additional_info = { custom_html: sanitized, sanitization_report: result.report }
+      warning = custom_html_buy_affordance_warning(sanitized)
+      additional_info[:warning] = warning if warning
+      render_response(true, additional_info)
     end
   end
 
@@ -490,6 +500,12 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def error_with_product(product = nil)
       error_with_object(:product, product)
+    end
+
+    def custom_html_buy_affordance_warning(html)
+      return unless Pages::BuyAffordance.missing?(html)
+
+      MISSING_BUY_AFFORDANCE_WARNING
     end
 
     # Reject oversized HTML before the sanitizer parses it. Page validates the

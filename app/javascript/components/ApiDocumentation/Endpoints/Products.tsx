@@ -55,8 +55,8 @@ const UpdateProductResponseFields = () => (
         name: "warning",
         type: "string",
         description:
-          "Warning about offer codes that became invalid for the product (currency mismatch or below minimum price).",
-        condition: "present when at least one offer code is invalid after the update",
+          "Warning about offer codes that became invalid for the product, or custom HTML that has no buy element.",
+        condition: "present when there is an advisory warning after the update",
       },
     ])}
   </ApiResponseFields>
@@ -83,6 +83,10 @@ const CustomHtmlDocumentation = () => (
       </li>
       <li>
         Both <code>PUT</code> and preview return a <code>sanitization_report</code> listing what was stripped.
+      </li>
+      <li>
+        Both <code>PUT</code> and preview return a top-level <code>warning</code> if the custom HTML has no{" "}
+        <code>data-gumroad-action="buy"</code> element or <code>gumroad:checkout</code> postMessage.
       </li>
       <li>
         A successful <code>PUT</code> also returns <code>previous_custom_html</code> (the prior value, for one-step

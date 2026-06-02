@@ -184,6 +184,35 @@ describe Api::V2::LinksController do
       expect(report["removed_attributes"]).to include(a_hash_including("attribute" => "href", "reason" => "javascript: URL blocked"))
     end
 
+    it "returns a warning when custom HTML has no buy affordance" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section><h1>Landing page</h1></section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["warning"]).to include("does not include a buy element")
+    end
+
+    it "does not return the buy warning when custom HTML has a buy element" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: %(<section><a data-gumroad-action="buy">Buy now</a></section>) }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body).not_to have_key("warning")
+    end
+
+    it "joins offer-code and buy-affordance warnings in the existing warning string" do
+      @product.update!(price_cents: 2_00)
+      create(:offer_code, user: @user, products: [@product], code: "SAVE100", amount_cents: 1_00, currency_type: @product.price_currency_type)
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, price: 1_50, custom_html: "<section><h1>Landing page</h1></section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["warning"]).to be_a(String)
+      expect(body["warning"]).to include("SAVE100")
+      expect(body["warning"]).to include("does not include a buy element")
+    end
+
     it "applies custom_html alongside other attribute changes without choking on the row lock" do
       put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, name: "Renamed", custom_html: "<section>Combined update</section>" }
 
@@ -288,6 +317,15 @@ describe Api::V2::LinksController do
       expect(body["custom_html"]).to include("<h1>Keep</h1>")
       expect(body["sanitization_report"]["total_removed"]).to eq(1)
       expect(body["sanitization_report"]["removed_tags"].first["reason"]).to eq("script src host not allowed")
+    end
+
+    it "returns a warning when the previewed custom HTML has no buy affordance" do
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section><h1>Landing page</h1></section>" }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["warning"]).to include("does not include a buy element")
+      expect(@product.reload.custom_html).to be_nil
     end
   end
 
