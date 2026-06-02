@@ -1089,6 +1089,23 @@ describe Api::V2::LinksController do
         )
       end
 
+      it "omits featured_product when the referenced product is not owned by the seller" do
+        other_seller_product = create(:product)
+        section = create(
+          :seller_profile_featured_product_section,
+          seller: @user,
+          product: @product,
+          featured_product_id: other_seller_product.id
+        )
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        serialized_section = response.parsed_body["product"]["sections"].sole
+        expect(serialized_section["type"]).to eq("featured_product")
+        expect(serialized_section).not_to have_key("featured_product")
+      end
+
       it "serializes non-scoped section types with only the common fields" do
         section = create(
           :seller_profile_rich_text_section,
@@ -1110,6 +1127,16 @@ describe Api::V2::LinksController do
             "hide_header" => true,
           }
         )
+      end
+
+      it "falls back to friendly type strings for unmapped section classes" do
+        stub_const("Api::ProductSectionsPresenter::SECTION_TYPES", {})
+        section = create(:seller_profile_rich_text_section, seller: @user, product: @product)
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["sections"].sole["type"]).to eq("rich_text")
       end
     end
 

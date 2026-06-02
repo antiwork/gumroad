@@ -49,7 +49,7 @@ class Api::ProductSectionsPresenter
     def serialize(section)
       payload = {
         "id" => section.external_id,
-        "type" => SECTION_TYPES.fetch(section.type),
+        "type" => type_for(section),
         "header" => section.header || "",
         "hide_header" => section.hide_header?,
       }
@@ -63,9 +63,16 @@ class Api::ProductSectionsPresenter
           "add_new_products" => section.add_new_products,
         )
       when SellerProfileFeaturedProductSection
-        payload.merge!("featured_product" => product_external_ids_by_id[section.featured_product_id])
+        featured_product_external_id = product_external_ids_by_id[section.featured_product_id]
+        payload.merge!("featured_product" => featured_product_external_id) if featured_product_external_id.present?
       end
 
       payload
+    end
+
+    def type_for(section)
+      SECTION_TYPES.fetch(section.type) do
+        section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore
+      end
     end
 end
