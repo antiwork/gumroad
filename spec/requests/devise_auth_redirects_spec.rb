@@ -54,4 +54,28 @@ describe "Devise auth path redirects", type: :request do
       expect(response).to redirect_to("/signup?referrer=alice&email=test%40example.com")
     end
   end
+
+  describe "GET /login when already signed in" do
+    let(:user) { create(:user) }
+
+    before { sign_in user }
+
+    it "redirects to the dashboard without 'already signed in' flash" do
+      get "/login"
+      expect(response).to redirect_to(dashboard_url(host: VALID_REQUEST_HOSTS.first))
+      expect(flash[:alert]).to be_nil
+    end
+  end
+
+  describe "GET /signup when already signed in" do
+    let(:user) { create(:user) }
+
+    before { sign_in user }
+
+    it "redirects to the dashboard without 'already signed in' flash" do
+      get "/signup"
+      expect(response).to redirect_to(dashboard_url(host: VALID_REQUEST_HOSTS.first))
+      expect(flash[:alert]).to be_nil
+    end
+  end
 end

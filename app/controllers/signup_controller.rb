@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class SignupController < Devise::RegistrationsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering
+  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect
 
   include PageMeta::Base
 
