@@ -5,6 +5,11 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   # to avoid accidentally re-blasting the same people repeatedly.
   RESEND_THROTTLE = 24.hours
 
+  # Hard lifetime cap on non-opener resends per post. Combined with the 24h throttle
+  # this means at most one resend per day, up to three total — after that the same
+  # unopened recipients are left alone for good.
+  MAX_RESENDS = 3
+
   before_action :authenticate_user!
   before_action :set_installment
   after_action :verify_authorized
@@ -17,6 +22,11 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
   def create
     authorize @installment, :resend_to_non_openers?
+
+    if resend_limit_reached?
+      return render json: { success: false, error: "You can resend to non-openers up to #{MAX_RESENDS} times per email." },
+                    status: :too_many_requests
+    end
 
     if recently_resent?
       return render json: { success: false, error: "You can only resend to non-openers once every 24 hours." },
@@ -47,5 +57,9 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
     def recently_resent?
       @installment.blasts.to_non_openers.where(requested_at: RESEND_THROTTLE.ago..).exists?
+    end
+
+    def resend_limit_reached?
+      @installment.blasts.to_non_openers.count >= MAX_RESENDS
     end
 end

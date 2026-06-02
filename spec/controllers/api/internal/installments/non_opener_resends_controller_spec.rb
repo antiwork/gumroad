@@ -115,5 +115,18 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       post :create, params: { id: "nonexistent" }
       expect(response).to have_http_status(:not_found)
     end
+
+    it "blocks a resend once the lifetime cap is reached, even after the throttle window" do
+      # Three prior resends, all older than the 24h throttle, so only the cap can block.
+      create_list(:blast, 3, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error"]).to include("up to 3 times")
+    end
   end
 end
