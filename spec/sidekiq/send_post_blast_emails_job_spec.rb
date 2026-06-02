@@ -308,6 +308,70 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "resending to non-openers" do
+    let(:product) { create(:product, user: @seller, name: "Product one") }
+    let(:post) { create(:product_post, :published, seller: @seller, link: product, bought_products: [product.unique_permalink]) }
+    let!(:opened_sale) { create(:purchase, link: product, seller: @seller) }
+    let!(:delivered_sale) { create(:purchase, link: product, seller: @seller) }
+    let!(:sent_sale) { create(:purchase, link: product, seller: @seller) }
+
+    before do
+      # Simulate the original blast: every recipient was emailed (recorded in sent_post_emails and
+      # email_infos), one of them opened it.
+      [opened_sale, delivered_sale, sent_sale].each do |sale|
+        SentPostEmail.create!(post:, email: sale.email)
+      end
+      create(:creator_contacting_customers_email_info_opened, installment: post, purchase: opened_sale)
+      create(:creator_contacting_customers_email_info_delivered, installment: post, purchase: delivered_sale)
+      create(:creator_contacting_customers_email_info_sent, installment: post, purchase: sent_sale)
+    end
+
+    it "sends only to original recipients who have not opened the email" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 2
+      expect(PostSendgridApi.mails[delivered_sale.email]).to be_present
+      expect(PostSendgridApi.mails[sent_sale.email]).to be_present
+      expect(PostSendgridApi.mails[opened_sale.email]).to be_blank
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "bypasses the already-emailed guard so it can re-send to people in sent_post_emails" do
+      expect(SentPostEmail.where(post:).count).to eq(3)
+
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      described_class.new.perform(blast.id)
+
+      # All recipients were already in sent_post_emails, yet the resend still goes out to non-openers.
+      expect_sent_count 2
+      # The resend does not add new sent_post_emails records.
+      expect(SentPostEmail.where(post:).count).to eq(3)
+    end
+
+    it "sends nothing when everyone who was emailed has already opened" do
+      create(:creator_contacting_customers_email_info_opened, installment: post, purchase: delivered_sale)
+      create(:creator_contacting_customers_email_info_opened, installment: post, purchase: sent_sale)
+
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "does not delete sent_post_emails when a resend raises an error" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect(SentPostEmail.where(post:).count).to eq(3)
+    end
+  end
+
   describe "error handling" do
     it "deletes sent_post_emails records if PostEmailApi.process raises an error" do
       # Setup post and blast

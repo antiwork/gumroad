@@ -139,6 +139,29 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
   };
 }
 
+export async function getNonOpenerCount(externalId: string) {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_installment_non_opener_resend_path(externalId),
+  });
+
+  if (!response.ok) throw new ResponseError();
+  return typia.assert<{ count: number }>(await response.json());
+}
+
+export async function resendToNonOpeners(externalId: string) {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_installment_non_opener_resend_path(externalId),
+  });
+
+  const json: unknown = await response.json();
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ count: number }>(json);
+}
+
 export async function previewInstallment(externalId: string) {
   const response = await request({
     method: "POST",

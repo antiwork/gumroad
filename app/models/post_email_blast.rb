@@ -13,10 +13,23 @@ class PostEmailBlast < ApplicationRecord
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
 
+  # recipient_filter:
+  #   nil       => normal blast, sent to the full computed audience.
+  #   "unopened" => resend targeting only original recipients who have not opened the post yet.
+  RECIPIENT_FILTER_UNOPENED = "unopened"
+
   belongs_to :post, class_name: "Installment"
   belongs_to :seller, class_name: "User"
 
   before_validation -> { self.seller = post.seller }, on: :create
+
+  validates :recipient_filter, inclusion: { in: [RECIPIENT_FILTER_UNOPENED] }, allow_nil: true
+
+  scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
+
+  def to_non_openers?
+    recipient_filter == RECIPIENT_FILTER_UNOPENED
+  end
 
   scope :aggregated, -> {
     select(

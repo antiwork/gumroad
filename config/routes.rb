@@ -1054,6 +1054,7 @@ Rails.application.routes.draw do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
             resource :preview_email, only: [:create], controller: "installments/preview_emails", as: :installment_preview_email
+            resource :non_opener_resend, only: [:show, :create], controller: "installments/non_opener_resends", as: :installment_non_opener_resend
           end
           collection do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count

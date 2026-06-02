@@ -1257,4 +1257,67 @@ const b = 2;</code></pre>
       end
     end
   end
+
+  describe "non-opener queries" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:post) { create(:product_post, :published, seller:, link: product) }
+    let(:opened_purchase) { create(:purchase, link: product, seller:) }
+    let(:delivered_purchase) { create(:purchase, link: product, seller:) }
+    let(:sent_purchase) { create(:purchase, link: product, seller:) }
+
+    before do
+      create(:creator_contacting_customers_email_info_opened, installment: post, purchase: opened_purchase)
+      create(:creator_contacting_customers_email_info_delivered, installment: post, purchase: delivered_purchase)
+      create(:creator_contacting_customers_email_info_sent, installment: post, purchase: sent_purchase)
+    end
+
+    describe "#emailed_recipient_purchase_ids" do
+      it "returns all purchase ids the post was emailed to" do
+        expect(post.emailed_recipient_purchase_ids).to match_array([opened_purchase.id, delivered_purchase.id, sent_purchase.id])
+      end
+    end
+
+    describe "#opened_recipient_purchase_ids" do
+      it "returns only purchase ids that opened the email" do
+        expect(post.opened_recipient_purchase_ids).to eq([opened_purchase.id])
+      end
+    end
+
+    describe "#unopened_recipient_purchase_ids" do
+      it "returns emailed recipients who have not opened the email" do
+        expect(post.unopened_recipient_purchase_ids).to match_array([delivered_purchase.id, sent_purchase.id])
+      end
+
+      it "returns an empty array for follower posts which have no per-recipient open linkage" do
+        follower_post = create(:follower_post, :published, seller:)
+        expect(follower_post.unopened_recipient_purchase_ids).to eq([])
+      end
+    end
+
+    describe "#unopened_recipients_count" do
+      it "counts emailed recipients who have not opened the email" do
+        expect(post.unopened_recipients_count).to eq(2)
+      end
+    end
+
+    describe "#resendable_to_non_openers?" do
+      it "is true for a published customer post that emails" do
+        expect(post.resendable_to_non_openers?).to be(true)
+      end
+
+      it "is false for an unpublished post" do
+        expect(create(:product_post, seller:, link: product).resendable_to_non_openers?).to be(false)
+      end
+
+      it "is false for a follower post" do
+        expect(create(:follower_post, :published, seller:).resendable_to_non_openers?).to be(false)
+      end
+
+      it "is false when the post does not email" do
+        profile_only_post = create(:product_post, :published, seller:, link: product, send_emails: false, shown_on_profile: true)
+        expect(profile_only_post.resendable_to_non_openers?).to be(false)
+      end
+    end
+  end
 end

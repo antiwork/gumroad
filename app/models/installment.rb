@@ -672,6 +672,34 @@ class Installment < ApplicationRecord
     end
   end
 
+  # Purchase ids of recipients this post was emailed to, backed by the open-tracking
+  # CreatorContactingCustomersEmailInfo rows that are created when a post email is sent.
+  def emailed_recipient_purchase_ids
+    email_infos.where.not(purchase_id: nil).distinct.pluck(:purchase_id)
+  end
+
+  # Purchase ids of recipients who have opened this post's email at least once.
+  def opened_recipient_purchase_ids
+    email_infos.where(state: "opened").where.not(purchase_id: nil).distinct.pluck(:purchase_id)
+  end
+
+  # Purchase ids of original recipients who have not opened this post's email yet.
+  # Only purchase-backed posts (customer/seller/product/variant) have per-recipient open
+  # linkage, so this returns an empty array for follower/affiliate posts.
+  def unopened_recipient_purchase_ids
+    return [] unless seller_or_product_or_variant_type?
+    emailed_recipient_purchase_ids - opened_recipient_purchase_ids
+  end
+
+  def unopened_recipients_count
+    unopened_recipient_purchase_ids.size
+  end
+
+  # Whether a "resend to non-openers" blast is applicable to this post.
+  def resendable_to_non_openers?
+    published? && send_emails? && seller_or_product_or_variant_type?
+  end
+
   def unique_click_count
     Rails.cache.fetch(key_for_cache(:unique_click_count)) do
       summary = CreatorEmailClickSummary.where(installment_id: id).last

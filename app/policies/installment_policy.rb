@@ -63,4 +63,8 @@ class InstallmentPolicy < ApplicationPolicy
     create? ||
     user.role_support_for?(seller)
   end
+
+  def resend_to_non_openers?
+    create?
+  end
 end

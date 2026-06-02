@@ -1,0 +1,119 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+require "shared_examples/authorize_called"
+require "shared_examples/authentication_required"
+
+describe Api::Internal::Installments::NonOpenerResendsController do
+  let(:seller) { create(:user) }
+
+  include_context "with user signed in as admin for seller"
+
+  let(:product) { create(:product, user: seller, name: "Product one") }
+  let(:installment) do
+    create(:product_post, :published, seller:, link: product, bought_products: [product.unique_permalink])
+  end
+  let!(:opened_sale) { create(:purchase, link: product, seller:) }
+  let!(:unopened_sale) { create(:purchase, link: product, seller:) }
+
+  before do
+    # Original blast: both recipients emailed, only one opened.
+    [opened_sale, unopened_sale].each { |sale| SentPostEmail.create!(post: installment, email: sale.email) }
+    create(:creator_contacting_customers_email_info_opened, installment: installment, purchase: opened_sale)
+    create(:creator_contacting_customers_email_info_sent, installment: installment, purchase: unopened_sale)
+  end
+
+  describe "GET show" do
+    it_behaves_like "authentication required for action", :get, :show do
+      let(:request_params) { { id: installment.external_id } }
+    end
+
+    it_behaves_like "authorize called for action", :get, :show do
+      let(:record) { installment }
+      let(:policy_method) { :resend_to_non_openers? }
+      let(:request_params) { { id: installment.external_id } }
+    end
+
+    it "returns the number of recipients who have not opened the post yet" do
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "count" => 1 })
+    end
+
+    it "returns 404 when the installment is not found" do
+      get :show, params: { id: "nonexistent" }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for a post type that has no per-recipient open tracking (follower)" do
+      follower_post = create(:follower_post, :published, seller:)
+      get :show, params: { id: follower_post.external_id }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for an unpublished post" do
+      draft = create(:product_post, seller:, link: product, bought_products: [product.unique_permalink])
+      get :show, params: { id: draft.external_id }
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "POST create" do
+    it_behaves_like "authentication required for action", :post, :create do
+      let(:request_params) { { id: installment.external_id } }
+    end
+
+    it_behaves_like "authorize called for action", :post, :create do
+      let(:record) { installment }
+      let(:policy_method) { :resend_to_non_openers? }
+      let(:request_params) { { id: installment.external_id } }
+    end
+
+    it "creates an unopened-filtered blast and enqueues the send job" do
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+        .and change { SendPostBlastEmailsJob.jobs.size }.by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "success" => true, "count" => 1 })
+    end
+
+    it "returns 422 when everyone who was emailed has already opened" do
+      create(:creator_contacting_customers_email_info_opened, installment: installment, purchase: unopened_sale)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to eq(false)
+    end
+
+    it "throttles a second resend within the window" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(response.parsed_body["success"]).to eq(false)
+    end
+
+    it "allows a resend once the throttle window has passed" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+
+      expect(response).to be_successful
+    end
+
+    it "returns 404 when the installment is not found" do
+      post :create, params: { id: "nonexistent" }
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+end
