@@ -24,6 +24,8 @@ export const LandingPageEditor = () => {
 
 Design a unique, conversion-focused page tailored to this product — fully responsive, accessible, and supporting light and dark mode. Save it as one self-contained file, landing.html. The page is sanitized and runs sandboxed: inline CSS/JS (animations, scroll effects, modals) and a Tailwind CDN work. For images and media, use only your product's own assets (run gumroad products view ${uniquePermalink} for its cover and thumbnail URLs), inline data: URIs, or CSS — external image/media hosts are blocked, and the page can't fetch external URLs or read the buyer's account.
 
+IMPORTANT: a custom landing page REPLACES the entire product page, including the native price and "I want this!" button. Your HTML must include at least one buy element (see below) or the product becomes unpurchasable. Always end by loading the live page and clicking through to checkout to confirm the buy flow works.
+
 Mark live values and buy buttons with data attributes that Gumroad fills in server-side:
 - data-gumroad-field="name|price|description" — interpolated with the product's current values.
 - data-gumroad-action="buy" — wired up to launch the Gumroad checkout. Use on any element (<a>, <button>, <div>).
@@ -31,7 +33,7 @@ Mark live values and buy buttons with data attributes that Gumroad fills in serv
 For products with selection state, set the choice directly on the buy element so the checkout opens pre-selected (an invalid value silently falls back to the product defaults — it won't break the page):
 - data-gumroad-option="<variant name>" — for products with variants/versions/tiers.
 - data-gumroad-quantity="<integer>" — for products with quantity enabled.
-- data-gumroad-price="<decimal>" — for pay-what-you-want products (major units, e.g. "9.99").
+- data-gumroad-price="<decimal>" — for pay-what-you-want products (major units, e.g. "9.99"). This sets ONE fixed price and sends the buyer straight to checkout.
 - data-gumroad-recurrence="monthly|quarterly|biannually|yearly|every_two_years" — for membership/subscription products.
 
 Example buy buttons:
@@ -39,10 +41,23 @@ Example buy buttons:
   <a data-gumroad-action="buy" data-gumroad-option="Pro" data-gumroad-recurrence="yearly">Buy Pro – $99/year</a>
   <button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>
 
+For a pay-what-you-want product where the buyer should name their OWN price on the page, render a price <input> and post the chosen amount to checkout yourself (do NOT put data-gumroad-action="buy" on this button — Gumroad would overwrite your click handler with the fixed-price one). The page is allowed to post a "gumroad:checkout" message to its parent with any of: option, quantity, price, recurrence. An empty price falls back to Gumroad's own price-entry step, so there is no dead end:
+  <input id="gr-price" type="number" min="0" placeholder="9.99" />
+  <button id="gr-buy">I want this</button>
+  <noscript><a data-gumroad-action="buy">I want this</a></noscript>
+  <script>
+    document.getElementById("gr-buy").onclick = function () {
+      var v = (document.getElementById("gr-price").value || "").trim(), params = {};
+      if (v !== "") { var n = parseFloat(v); if (!isNaN(n) && n >= 0) params.price = String(n); }
+      parent.postMessage({ type: "gumroad:checkout", params: params }, "*");
+    };
+  </script>
+
 Then publish it with the Gumroad CLI:
-- Preview without publishing (check the sanitization report first): gumroad products page preview ${uniquePermalink} ./landing.html --json --no-input
-- Publish: gumroad products page push ${uniquePermalink} ./landing.html --json --no-input
-- Print the live URL: gumroad products page url ${uniquePermalink} --json --no-input
+- Publish (or update) the page: gumroad products update ${uniquePermalink} --custom-html ./landing.html --json --non-interactive
+- Preview the request without sending it: add --dry-run to the command above.
+- Remove the landing page and restore the default product page: gumroad products update ${uniquePermalink} --custom-html '' --json --non-interactive
+- Confirm it's live and find the public URL: gumroad products view ${uniquePermalink} --json
 
 If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -fsSL https://gumroad.com/install-cli.sh | bash), then run gumroad auth login.`;
 
