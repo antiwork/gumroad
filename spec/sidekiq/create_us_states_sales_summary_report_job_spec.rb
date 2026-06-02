@@ -107,6 +107,24 @@ describe CreateUsStatesSalesSummaryReportJob do
       expect(@purchase7.purchase_taxjar_info).to be_present
     end
 
+    it "retries and completes the report when TaxJar raises a transient connection error" do
+      expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+
+      raised = false
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction).and_wrap_original do |original, **kwargs|
+        unless raised
+          raised = true
+          raise HTTP::ConnectionError, "failed to connect: Connection reset by peer - SSL_connect"
+        end
+        original.call(**kwargs)
+      end
+      allow_any_instance_of(described_class).to receive(:sleep)
+
+      expect { described_class.new.perform(subdivision_codes, month, year) }.not_to raise_error
+
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+    end
+
     it "creates a summary CSV file with correct totals for each state without submitting transactions to TaxJar when push_to_taxjar is false" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
       expect_any_instance_of(TaxjarApi).not_to receive(:create_order_transaction)

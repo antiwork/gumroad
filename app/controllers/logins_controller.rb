@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class LoginsController < Devise::SessionsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering
+  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect
 
   include PageMeta::Base
 

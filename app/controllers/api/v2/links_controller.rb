@@ -16,6 +16,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
     :page,
     :ordered_alive_product_files,
+    :seller_profile_sections,
     :alive_rich_contents,
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze

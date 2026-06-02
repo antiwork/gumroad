@@ -66,6 +66,8 @@ describe Api::V2::LinksController do
         create(:product_file, link: versioned_product, url: "#{S3_BASE_URL}specs/test.pdf")
         create(:rich_content, entity: versioned_product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
         create(:rich_content, entity: versioned_product.alive_variants.first, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant" }] }])
+        section = create(:seller_profile_rich_text_section, seller: @user, product: versioned_product)
+        versioned_product.update!(sections: [section.id])
 
         get @action, params: @params
 
@@ -74,6 +76,8 @@ describe Api::V2::LinksController do
         expect(product).not_to have_key("rich_content")
         expect(product).not_to have_key("has_same_rich_content_for_all_variants")
         expect(product).not_to have_key("files")
+        expect(product).not_to have_key("main_section_index")
+        expect(product).not_to have_key("sections")
         expect(product["variants"].first["options"].first).not_to have_key("rich_content")
       end
 
@@ -993,6 +997,146 @@ describe Api::V2::LinksController do
         first_option = options.find { |o| o["rich_content"].any? }
         expect(first_option).to be_present
         expect(first_option["rich_content"].first["description"]).to eq({ "type" => "doc", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant content" }] }] })
+      end
+
+      it "includes an empty sections array and main_section_index for products with no sections" do
+        get :show, params: @params
+
+        product = response.parsed_body["product"]
+        expect(product["sections"]).to eq([])
+        expect(product["main_section_index"]).to eq(0)
+      end
+
+      it "returns sections in the product display order with main_section_index" do
+        first_section = create(:seller_profile_rich_text_section, seller: @user, product: @product, header: "First")
+        second_section = create(:seller_profile_rich_text_section, seller: @user, product: @product, header: "Second")
+        @product.update!(sections: [second_section.id, first_section.id], main_section_index: 1)
+
+        get :show, params: @params
+
+        product = response.parsed_body["product"]
+        expect(product["main_section_index"]).to eq(1)
+        expect(product["sections"].map { _1["id"] }).to eq([second_section.external_id, first_section.external_id])
+        expect(product["sections"].map { _1["type"] }).to eq(["rich_text", "rich_text"])
+      end
+
+      it "reorders sections when product.sections changes" do
+        first_section = create(:seller_profile_rich_text_section, seller: @user, product: @product, header: "First")
+        second_section = create(:seller_profile_rich_text_section, seller: @user, product: @product, header: "Second")
+        @product.update!(sections: [first_section.id, second_section.id])
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["sections"].map { _1["id"] }).to eq([first_section.external_id, second_section.external_id])
+
+        @product.update!(sections: [second_section.id, first_section.id])
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["sections"].map { _1["id"] }).to eq([second_section.external_id, first_section.external_id])
+      end
+
+      it "serializes product sections with shown product external IDs and display settings" do
+        shown_product1 = create(:product, user: @user)
+        shown_product2 = create(:product, user: @user)
+        section = create(
+          :seller_profile_products_section,
+          seller: @user,
+          product: @product,
+          header: "Featured picks",
+          shown_products: [shown_product2.id, shown_product1.id],
+          default_product_sort: "highest_rated",
+          show_filters: true,
+          add_new_products: false
+        )
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["sections"].sole).to eq(
+          {
+            "id" => section.external_id,
+            "type" => "products",
+            "header" => "Featured picks",
+            "hide_header" => false,
+            "shown_products" => [shown_product2.external_id, shown_product1.external_id],
+            "default_product_sort" => "highest_rated",
+            "show_filters" => true,
+            "add_new_products" => false,
+          }
+        )
+      end
+
+      it "serializes featured product sections with the featured product external ID" do
+        featured_product = create(:product, user: @user)
+        section = create(
+          :seller_profile_featured_product_section,
+          seller: @user,
+          product: @product,
+          header: "Don't miss this",
+          featured_product_id: featured_product.id
+        )
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["sections"].sole).to eq(
+          {
+            "id" => section.external_id,
+            "type" => "featured_product",
+            "header" => "Don't miss this",
+            "hide_header" => false,
+            "featured_product" => featured_product.external_id,
+          }
+        )
+      end
+
+      it "omits featured_product when the referenced product is not owned by the seller" do
+        other_seller_product = create(:product)
+        section = create(
+          :seller_profile_featured_product_section,
+          seller: @user,
+          product: @product,
+          featured_product_id: other_seller_product.id
+        )
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        serialized_section = response.parsed_body["product"]["sections"].sole
+        expect(serialized_section["type"]).to eq("featured_product")
+        expect(serialized_section).not_to have_key("featured_product")
+      end
+
+      it "serializes non-scoped section types with only the common fields" do
+        section = create(
+          :seller_profile_rich_text_section,
+          seller: @user,
+          product: @product,
+          header: "About",
+          hide_header: true,
+          text: { "type" => "doc", "content" => [{ "type" => "paragraph" }] }
+        )
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["sections"].sole).to eq(
+          {
+            "id" => section.external_id,
+            "type" => "rich_text",
+            "header" => "About",
+            "hide_header" => true,
+          }
+        )
+      end
+
+      it "falls back to friendly type strings for unmapped section classes" do
+        stub_const("Api::ProductSectionsPresenter::SECTION_TYPES", {})
+        section = create(:seller_profile_rich_text_section, seller: @user, product: @product)
+        @product.update!(sections: [section.id])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["sections"].sole["type"]).to eq("rich_text")
       end
     end
 
