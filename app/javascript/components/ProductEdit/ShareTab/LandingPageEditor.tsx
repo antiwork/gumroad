@@ -41,23 +41,23 @@ Example buy buttons:
   <a data-gumroad-action="buy" data-gumroad-option="Pro" data-gumroad-recurrence="yearly">Buy Pro – $99/year</a>
   <button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>
 
-For a pay-what-you-want product where the buyer should name their OWN price on the page, render a price <input> and post the chosen amount to checkout yourself (do NOT put data-gumroad-action="buy" on this button — Gumroad would overwrite your click handler with the fixed-price one). The page is allowed to post a "gumroad:checkout" message to its parent with any of: option, quantity, price, recurrence. An empty price falls back to Gumroad's own price-entry step, so there is no dead end:
-  <input id="gr-price" type="number" min="0" placeholder="9.99" />
-  <button id="gr-buy">I want this</button>
-  <noscript><a data-gumroad-action="buy">I want this</a></noscript>
+For a pay-what-you-want product where the buyer should name their OWN price on the page, render a price <input> and post the chosen amount to checkout yourself (do NOT put data-gumroad-action="buy" on this button — Gumroad's delegated buy handler would intercept it before your custom price is added). The page is allowed to post a "gumroad:checkout" message to its parent with any of: variant, quantity, price, recurrence. Use variant for a variant/version/tier name. An empty price falls back to Gumroad's own price-entry step, so there is no dead end:
+  <input id="gr-price" type="number" min="0" step="0.01" placeholder="9.99" />
+  <button id="gr-buy" type="button">I want this</button>
   <script>
-    document.getElementById("gr-buy").onclick = function () {
+    document.getElementById("gr-buy").addEventListener("click", function () {
       var v = (document.getElementById("gr-price").value || "").trim(), params = {};
       if (v !== "") { var n = parseFloat(v); if (!isNaN(n) && n >= 0) params.price = String(n); }
       parent.postMessage({ type: "gumroad:checkout", params: params }, "*");
-    };
+    });
   </script>
 
 Then publish it with the Gumroad CLI:
-- Publish (or update) the page: gumroad products update ${uniquePermalink} --custom-html ./landing.html --json --non-interactive
-- Preview the request without sending it: add --dry-run to the command above.
-- Remove the landing page and restore the default product page: gumroad products update ${uniquePermalink} --custom-html '' --json --non-interactive
-- Confirm it's live and find the public URL: gumroad products view ${uniquePermalink} --json
+- Preview the local request without publishing: gumroad products update ${uniquePermalink} --custom-html ./landing.html --dry-run --json --no-input --non-interactive
+- Publish (or update) the page: gumroad products update ${uniquePermalink} --custom-html ./landing.html --json --no-input --non-interactive
+- Inspect .result.sanitization_report in the publish response; if Gumroad removed tags or attributes, edit and publish again.
+- Remove the landing page and restore the default product page: gumroad products update ${uniquePermalink} --custom-html '' --json --no-input --non-interactive
+- Confirm it's live and find the public URL: gumroad products view ${uniquePermalink} --json --jq '.product.landing_url' --no-input --non-interactive
 
 If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -fsSL https://gumroad.com/install-cli.sh | bash), then run gumroad auth login.`;
 
