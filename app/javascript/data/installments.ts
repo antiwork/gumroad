@@ -147,7 +147,7 @@ export async function getNonOpenerCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return typia.assert<{ count: number }>(await response.json());
+  return typia.assert<{ count: number; recently_resent: boolean }>(await response.json());
 }
 
 export async function resendToNonOpeners(externalId: string) {

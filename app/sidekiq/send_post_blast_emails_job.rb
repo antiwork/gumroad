@@ -19,12 +19,9 @@ class SendPostBlastEmailsJob
     @members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
 
     if @blast.to_non_openers?
-      # This is a resend to the subset of original recipients who haven't opened the post yet.
-      # Every recipient was already emailed, so the `sent_post_emails` exclusion below would
-      # drop everyone. Instead we keep only the original purchase-backed recipients who are
-      # still in the audience and have not opened the email.
       keep = @post.unopened_recipient_purchase_ids.to_set
       @members.select! { _1.purchase_id.present? && keep.include?(_1.purchase_id) }
+      remove_members_already_sent_in_this_blast
     else
       # We will check each batch of emails to see if they were already messaged,
       # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
@@ -41,11 +38,10 @@ class SendPostBlastEmailsJob
 
       begin
         PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
+        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
       rescue => e
         # Delete the sent_post_emails records if there's an error with PostEmailApi.process
         # We cannot use `transaction` here because it exceeds the lock timeout.
-        # For a non-openers resend we never insert sent_post_emails (they already exist from the
-        # original blast), so there's nothing to roll back here.
         unless @blast.to_non_openers?
           emails = members.map(&:email)
           SentPostEmail.where(post: @post, email: emails).delete_all
@@ -71,6 +67,27 @@ class SendPostBlastEmailsJob
       return if already_sent_emails.empty?
 
       @members.delete_if { _1.email.in?(already_sent_emails) }
+    end
+
+    BLAST_DEDUPE_TTL = 7.days
+
+    def remove_members_already_sent_in_this_blast
+      already_sent = $redis.smembers(RedisKey.blast_sent_emails(@blast.id))
+      return if already_sent.empty?
+
+      already_sent_set = already_sent.to_set
+      @members.delete_if { already_sent_set.include?(_1.email) }
+    end
+
+    def mark_members_sent_in_this_blast(members)
+      emails = members.map(&:email)
+      return if emails.empty?
+
+      key = RedisKey.blast_sent_emails(@blast.id)
+      $redis.pipelined do |pipe|
+        pipe.sadd(key, emails)
+        pipe.expire(key, BLAST_DEDUPE_TTL.to_i)
+      end
     end
 
     def enrich_with_gathered_records(members_with_specifics)
@@ -154,8 +171,6 @@ class SendPostBlastEmailsJob
     # "Unlikely situation" because we've already filtered the sent emails beforehand with `remove_already_emailed_members`,
     # this behavior only helps if an email is sent by something else in parallel, between the start and the end of this job.
     def store_recipients_as_sent(members)
-      # A non-openers resend re-sends to people already in `sent_post_emails`, so we must not
-      # gate on it here (every email would be treated as a duplicate and dropped).
       return members if @blast.to_non_openers?
 
       emails = Set.new(SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email)))

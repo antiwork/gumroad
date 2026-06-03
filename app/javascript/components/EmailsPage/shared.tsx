@@ -106,14 +106,16 @@ export const formatAudienceCount = (audienceCounts: AudienceCounts, installmentI
 export const ResendToNonOpenersButton = ({ installment }: { installment: SavedInstallment }) => {
   const [confirming, setConfirming] = React.useState(false);
   const [count, setCount] = React.useState<number | null>(null);
+  const [recentlyResent, setRecentlyResent] = React.useState(false);
   const [resending, setResending] = React.useState(false);
 
   const openConfirmation = asyncVoid(async () => {
     setConfirming(true);
     setCount(null);
     try {
-      const { count: nonOpenerCount } = await getNonOpenerCount(installment.external_id);
+      const { count: nonOpenerCount, recently_resent } = await getNonOpenerCount(installment.external_id);
       setCount(nonOpenerCount);
+      setRecentlyResent(recently_resent);
     } catch (error) {
       assertResponseError(error);
       setConfirming(false);
@@ -129,6 +131,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
         `Resending to ${formatStatNumber({ value: sentCount })} people who haven't opened this yet.`,
         "success",
       );
+      setRecentlyResent(true);
       setConfirming(false);
     } catch (error) {
       assertResponseError(error);
@@ -137,6 +140,8 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
       setResending(false);
     }
   });
+
+  const disableResend = resending || recentlyResent || count === null || count === 0;
 
   return (
     <>
@@ -155,7 +160,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
               <Button disabled={resending} onClick={() => setConfirming(false)}>
                 Cancel
               </Button>
-              <Button color="accent" disabled={resending || count === null || count === 0} onClick={handleResend}>
+              <Button color="accent" disabled={disableResend} onClick={handleResend}>
                 {resending ? "Resending..." : "Resend"}
               </Button>
             </>
@@ -164,9 +169,11 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
           <h4>
             {count === null
               ? "Counting recipients who haven't opened this yet..."
-              : count === 0
-                ? "Everyone who was emailed has already opened this."
-                : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
+              : recentlyResent
+                ? "You've already resent this to non-openers recently. Try again in 24 hours."
+                : count === 0
+                  ? "Everyone who was emailed has already opened this."
+                  : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
           </h4>
         </Modal>
       ) : null}

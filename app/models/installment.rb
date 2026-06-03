@@ -688,11 +688,26 @@ class Installment < ApplicationRecord
   # linkage, so this returns an empty array for follower/affiliate posts.
   def unopened_recipient_purchase_ids
     return [] unless seller_or_product_or_variant_type?
-    emailed_recipient_purchase_ids - opened_recipient_purchase_ids
+    email_infos
+      .where.not(purchase_id: nil)
+      .where.not(state: "opened")
+      .distinct.pluck(:purchase_id)
+  end
+
+  def resendable_to_non_openers_purchase_ids
+    candidate_ids = unopened_recipient_purchase_ids
+    return [] if candidate_ids.empty?
+
+    candidates = candidate_ids.to_set
+    AudienceMember
+      .filter(seller_id:, params: audience_members_filter_params)
+      .pluck(:purchase_id)
+      .uniq
+      .select { _1.present? && candidates.include?(_1) }
   end
 
   def unopened_recipients_count
-    unopened_recipient_purchase_ids.size
+    resendable_to_non_openers_purchase_ids.size
   end
 
   # Whether a "resend to non-openers" blast is applicable to this post.

@@ -37,7 +37,14 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     it "returns the number of recipients who have not opened the post yet" do
       get :show, params: { id: installment.external_id }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq({ "count" => 1 })
+      expect(response.parsed_body).to eq({ "count" => 1, "recently_resent" => false })
+    end
+
+    it "reports recently_resent when an unopened blast was created within the throttle window" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago, completed_at: 50.minutes.ago)
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body["recently_resent"]).to eq(true)
     end
 
     it "returns 404 when the installment is not found" do
@@ -91,18 +98,39 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     end
 
     it "throttles a second resend within the window" do
-      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago)
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago, completed_at: 1.hour.ago)
 
       expect do
         post :create, params: { id: installment.external_id }
       end.not_to change { PostEmailBlast.where(post: installment).count }
 
-      expect(response).to have_http_status(:too_many_requests)
+      expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error"]).to include("once every 24 hours")
     end
 
     it "allows a resend once the throttle window has passed" do
-      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago)
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago, completed_at: 25.hours.ago)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+
+      expect(response).to be_successful
+    end
+
+    it "blocks a second resend while a prior one is still in flight" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 5.minutes.ago, started_at: 5.minutes.ago, completed_at: nil)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "allows a retry after a failed (never-completed) resend" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.hours.ago, started_at: 3.hours.ago, completed_at: nil)
 
       expect do
         post :create, params: { id: installment.external_id }
@@ -117,16 +145,25 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     end
 
     it "blocks a resend once the lifetime cap is reached, even after the throttle window" do
-      # Three prior resends, all older than the 24h throttle, so only the cap can block.
-      create_list(:blast, 3, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago)
+      create_list(:blast, 3, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago, completed_at: 25.hours.ago)
 
       expect do
         post :create, params: { id: installment.external_id }
       end.not_to change { PostEmailBlast.where(post: installment).count }
 
-      expect(response).to have_http_status(:too_many_requests)
+      expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to eq(false)
       expect(response.parsed_body["error"]).to include("up to 3 times")
+    end
+
+    it "does not count failed (never-completed) prior resends toward the lifetime cap" do
+      create_list(:blast, 3, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago, completed_at: nil, started_at: 25.hours.ago)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+
+      expect(response).to be_successful
     end
   end
 end

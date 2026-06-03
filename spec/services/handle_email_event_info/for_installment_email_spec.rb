@@ -158,6 +158,29 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       expect(click_event.click_timestamps.first.to_i).to eq now.to_i
     end
 
+    it "marks the per-purchase email_info as opened when a click event arrives" do
+      email_info = create(:creator_contacting_customers_email_info_sent, installment: @installment, purchase: @purchase)
+      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
+
+      HandleSendgridEventJob.new.perform(params)
+
+      expect(email_info.reload).to be_opened
+      expect(email_info.opened_at).to be_present
+    end
+
+    it "leaves an already-opened email_info untouched on a click event" do
+      email_info = create(:creator_contacting_customers_email_info_opened, installment: @installment, purchase: @purchase)
+      original_opened_at = email_info.opened_at
+
+      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
+      HandleSendgridEventJob.new.perform(params)
+
+      expect(email_info.reload).to be_opened
+      expect(email_info.opened_at.to_i).to eq(original_opened_at.to_i)
+    end
+
     it "registers two unique clicks for two different users clicking the same url for the same installment" do
       now = Time.current
       params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",

@@ -136,6 +136,9 @@ class HandleEmailEventInfo::ForInstallmentEmail
 
         update_installment_cache(email_event_info.installment_id, :unique_open_count)
       end
+
+      email_info = pull_creator_contacting_customers_email_info(email_event_info)
+      email_info.mark_opened!(email_event_info.created_at) if email_info&.persisted? && !email_info.opened?
     end
 
     def handle_spamreport_event!

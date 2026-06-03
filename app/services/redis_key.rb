@@ -28,6 +28,7 @@ class RedisKey
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"
     def recommended_products_associated_product_ids_limit = "recommended_products_associated_product_ids_limit"
     def blast_recipients_slice_size = "blast:recipients_slice_size"
+    def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def impersonated_user(admin_user_id) = "impersonated_user_by_admin_#{admin_user_id}"
     def gumroad_day_date = "gumroad_day_date"
     def update_cached_srpis_job_delay_hours = "update_cached_srpis_job_delay_hours"
