@@ -66,6 +66,9 @@ class InstallmentPresenter
         full_url: installment.full_url,
         has_been_blasted: installment.has_been_blasted?,
         shown_in_profile_sections: seller.seller_profile_posts_sections.filter_map { _1.external_id if _1.shown_posts.include?(installment.id) },
+        non_opener_resends: installment.blasts.to_non_openers.order(:requested_at).map do |blast|
+          { requested_at: blast.requested_at, delivery_count: blast.delivery_count, completed: blast.completed_at.present? }
+        end,
       )
 
       unless installment.published?

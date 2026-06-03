@@ -175,6 +175,23 @@ export default function EmailsPublished() {
                       placeholder: "n/a",
                     })}
                   </CardContent>
+                  {selectedInstallment.non_opener_resends.length > 0 ? (
+                    <CardContent>
+                      <h5 className="font-bold">Resends to non-openers</h5>
+                      <ul className="mt-1 grid gap-1">
+                        {selectedInstallment.non_opener_resends.map((resend, i) => (
+                          <li key={i} className="text-sm">
+                            {new Date(resend.requested_at).toLocaleString(userAgentInfo.locale, {
+                              timeZone: currentSeller.timeZone.name,
+                            })}
+                            {resend.completed
+                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} delivered`
+                              : " — in progress"}
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  ) : null}
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
