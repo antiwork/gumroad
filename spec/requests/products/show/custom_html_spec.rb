@@ -36,4 +36,39 @@ describe "Custom HTML product page", type: :system, js: true do
       expect(page).to have_text("Qty: 2")
     end
   end
+
+  context "when a seller script reads sandbox-restricted storage on load" do
+    let(:product) do
+      create(
+        :product,
+        user: seller,
+        custom_html: <<~HTML
+          <main>
+            <h1>Custom landing</h1>
+            <div id="reveal-ls" style="display:none">localStorage reveal worked</div>
+            <div id="reveal-ck" style="display:none">cookie reveal worked</div>
+            <button type="button" data-gumroad-action="buy">Buy</button>
+          </main>
+          <script>
+            if (localStorage.getItem("theme") !== "never") {
+              document.getElementById("reveal-ls").style.display = "block";
+            }
+          </script>
+          <script>
+            var cookie = document.cookie;
+            document.getElementById("reveal-ck").style.display = "block";
+          </script>
+        HTML
+      )
+    end
+
+    it "reveals content gated behind localStorage and document.cookie instead of blanking" do
+      visit short_link_path(product)
+
+      within_frame(find("iframe#gumroad-landing-frame")) do
+        expect(page).to have_text("localStorage reveal worked")
+        expect(page).to have_text("cookie reveal worked")
+      end
+    end
+  end
 end
