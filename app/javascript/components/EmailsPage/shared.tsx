@@ -104,6 +104,7 @@ export const formatAudienceCount = (audienceCounts: AudienceCounts, installmentI
 };
 
 export const ResendToNonOpenersButton = ({ installment }: { installment: SavedInstallment }) => {
+  const [loadingCount, setLoadingCount] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [count, setCount] = React.useState<number | null>(null);
   const [recentlyResent, setRecentlyResent] = React.useState(false);
@@ -111,9 +112,8 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   const [resending, setResending] = React.useState(false);
 
   const openConfirmation = asyncVoid(async () => {
-    setConfirming(true);
-    setCount(null);
-    setAudienceFilteredOut(false);
+    if (loadingCount || confirming) return;
+    setLoadingCount(true);
     try {
       const {
         count: nonOpenerCount,
@@ -123,10 +123,12 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
       setCount(nonOpenerCount);
       setRecentlyResent(recently_resent);
       setAudienceFilteredOut(audience_filtered_out);
+      setConfirming(true);
     } catch (error) {
       assertResponseError(error);
-      setConfirming(false);
       showAlert("Sorry, something went wrong. Please try again.", "error");
+    } finally {
+      setLoadingCount(false);
     }
   });
 
@@ -152,11 +154,11 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
 
   return (
     <>
-      <Button onClick={openConfirmation}>
+      <Button disabled={loadingCount} onClick={openConfirmation}>
         <Envelope pack="filled" className="size-5" />
-        Resend to non-openers
+        {loadingCount ? "Loading..." : "Resend to non-openers"}
       </Button>
-      {confirming ? (
+      {confirming && count !== null ? (
         <Modal
           open
           allowClose={!resending}
@@ -174,15 +176,13 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
           }
         >
           <h4>
-            {count === null
-              ? "Counting recipients who haven't opened this yet..."
-              : recentlyResent
-                ? "You've already resent this to non-openers recently. Try again in 24 hours."
-                : count === 0
-                  ? audienceFilteredOut
-                    ? "The remaining unopened recipients are no longer eligible for this email's audience."
-                    : "Everyone who was emailed has already opened this."
-                  : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
+            {recentlyResent
+              ? "You've already resent this to non-openers recently. Try again in 24 hours."
+              : count === 0
+                ? audienceFilteredOut
+                  ? "The remaining unopened recipients are no longer eligible for this email's audience."
+                  : "Everyone who was emailed has already opened this."
+                : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
           </h4>
         </Modal>
       ) : null}
