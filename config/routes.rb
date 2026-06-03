@@ -1127,7 +1127,8 @@ Rails.application.routes.draw do
     get "/secure_url_redirect", to: "secure_redirect#new", as: :secure_url_redirect
     post "/secure_url_redirect", to: "secure_redirect#create"
 
-    # TODO (chris): review and replace usage of routes below with UserCustomDomainConstraint routes
+    # Root-domain profile routes. Subdomain and custom-domain equivalents live in UserCustomDomainConstraint below.
+    get "/:username/edit", to: "users#edit", as: nil
     get "/:username", to: "users#show", as: "user"
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
@@ -1217,6 +1218,7 @@ Rails.application.routes.draw do
     get "/subscribe", to: "users#subscribe", as: :custom_domain_subscribe
     get "/follow", to: redirect("/subscribe")
     get "/coffee", to: "users#coffee", as: :custom_domain_coffee
+    get "/edit", to: "users#edit", as: nil
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :custom_domain_url_redirect_expired_page

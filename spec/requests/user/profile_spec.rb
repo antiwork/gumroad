@@ -189,7 +189,7 @@ describe "User profile page", type: :system, js: true do
 
       it "shows the subscribe block when there are no sections" do
         visit seller.subdomain_with_protocol
-        expect(page).to have_link("Edit profile")
+        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
         expect(page).to have_text "Subscribe to receive email updates from #{seller.name}"
         submit_follow_form(with: "hello@example.com")
         expect(page).to have_alert(text: "As the creator of this profile, you can't follow yourself!")
@@ -207,7 +207,7 @@ describe "User profile page", type: :system, js: true do
         section = create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id, @product2.id, @product3.id, @product4.id])
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
         visit seller.subdomain_with_protocol
-        expect(page).to have_link("Edit profile")
+        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
 
         select_disclosure "Edit section" do
           click_on "Name"

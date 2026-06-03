@@ -379,6 +379,60 @@ describe UsersController do
     end
   end
 
+  describe "#edit" do
+    let(:seller) { create(:named_user) }
+
+    before do
+      stub_const("ROOT_DOMAIN", "test.gumroad.com")
+    end
+
+    it "redirects the profile owner from the subdomain shortcut to profile settings" do
+      sign_in seller
+      @request.host = "#{seller.username}.test.gumroad.com"
+
+      get :edit
+
+      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+    end
+
+    context "with user signed in as admin for seller" do
+      include_context "with user signed in as admin for seller"
+
+      it "redirects the selected seller's subdomain shortcut to profile settings" do
+        @request.host = "#{seller.username}.test.gumroad.com"
+
+        get :edit
+
+        expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+      end
+    end
+
+    it "404s when the current seller is not the profile owner" do
+      sign_in create(:user)
+      @request.host = "#{seller.username}.test.gumroad.com"
+
+      expect { get :edit }.to raise_error(ActionController::RoutingError)
+    end
+
+    it "redirects from the root-domain username shortcut to profile settings" do
+      sign_in seller
+
+      get :edit, params: { username: seller.username }
+
+      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+    end
+
+    it "redirects from a custom domain shortcut to profile settings" do
+      create(:custom_domain, domain: "example.com", user: seller)
+      sign_in seller
+      @request.host = "example.com"
+
+      get :edit
+
+      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+    end
+  end
+
   describe "GET coffee", inertia: true do
     let(:seller) { create(:user, :eligible_for_service_products) }
 

@@ -1,4 +1,4 @@
-import { TwitterX } from "@boxicons/react";
+import { Pencil, TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -6,6 +6,8 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
@@ -22,8 +24,11 @@ type LayoutProps = {
 
 export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps) => {
   const cartItemsCount = useCartItemsCount();
+  const appDomain = useAppDomain();
+  const currentSeller = useCurrentSeller();
   const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
+  const canEditProfile = currentSeller?.id === creatorProfile.external_id;
 
   const headerButtons =
     creatorProfile.twitter_handle || cartItemsCount ? (
@@ -39,6 +44,20 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   return (
     <div className="flex min-h-screen flex-col">
+      {canEditProfile ? (
+        <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
+          <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
+            <NavigationButton
+              color="filled"
+              size="icon"
+              href={Routes.settings_profile_url({ host: appDomain })}
+              aria-label="Edit profile"
+            >
+              <Pencil className="size-5" />
+            </NavigationButton>
+          </WithTooltip>
+        </div>
+      ) : null}
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex grow items-center gap-3 border-b border-border p-4 lg:flex-1 lg:border-0 lg:p-0">

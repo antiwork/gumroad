@@ -1,4 +1,4 @@
-import { Pencil, Trash } from "@boxicons/react";
+import { Trash } from "@boxicons/react";
 import CharacterCount from "@tiptap/extension-character-count";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { isEqual } from "lodash-es";
@@ -10,8 +10,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
 import AutoLink from "$app/components/AutoLink";
-import { Button, NavigationButton } from "$app/components/Button";
-import { useAppDomain } from "$app/components/DomainSettings";
+import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
 import { SectionLayout } from "$app/components/Profile/Sections";
@@ -20,9 +19,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
   Action,
@@ -109,8 +106,6 @@ const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>
 TabList.displayName = "TabList";
 
 export const EditProfile = (props: Props) => {
-  const appDomain = useAppDomain();
-
   const [sections, setSections] = React.useState(props.sections);
   const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
   const updateTab = (tab: TabWithId) => setTabs(tabs.map((existing) => (existing.id === tab.id ? tab : existing)));
@@ -193,7 +188,6 @@ export const EditProfile = (props: Props) => {
   const reducer = React.useMemo(() => [{ ...props, sections: visibleSections }, dispatch] as const, [visibleSections]);
 
   const imageUploadSettings = useSectionImageUploadSettings();
-  const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
     <SectionReducerContext.Provider value={reducer}>
@@ -252,18 +246,6 @@ export const EditProfile = (props: Props) => {
           </Tabs>
         </div>
       </header>
-      <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
-        <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
-          <NavigationButton
-            color="filled"
-            size="icon"
-            href={Routes.settings_profile_url({ host: appDomain })}
-            aria-label="Edit profile"
-          >
-            <Pencil className="size-5" />
-          </NavigationButton>
-        </WithTooltip>
-      </div>
       {visibleSections.length ? (
         visibleSections.map((section, i) => (
           <SectionLayout
