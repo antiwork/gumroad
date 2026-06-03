@@ -39,7 +39,12 @@ class GdprBuyerErasureService
 
     @anonymized_email = generate_anonymized_email
 
-    purchases = Purchase.where(email: email, purchaser_id: nil)
+    # Match the anonymized email too, so a re-run after a partial failure can
+    # still rebuild @purchase_ids: anonymize_purchases! rewrites the buyer's
+    # purchase email to @anonymized_email (deterministic), and the downstream
+    # steps that key off purchase ids (events, charges, custom fields) would
+    # otherwise have no way to locate those purchases on a second run.
+    purchases = Purchase.where(purchaser_id: nil, email: [email, @anonymized_email])
     @purchase_ids = purchases.pluck(:id)
     @credit_card_ids = purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id)
     candidate_browser_guids = purchases.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
@@ -95,6 +100,7 @@ class GdprBuyerErasureService
       skipped << step_name
       Rails.logger.warn("GDPR buyer erasure: step '#{step_name}' timed out for #{@anonymized_email} and was skipped (non-critical): #{e.class}")
     end
+
     def generate_anonymized_email
       digest = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, email)[0..15]
       "buyer-#{digest}@#{ANONYMIZED_EMAIL_DOMAIN}"
@@ -129,7 +135,9 @@ class GdprBuyerErasureService
     end
 
     def anonymize_events!
-      counts[:events] = Event.where(email: email).update_all(
+      return if @purchase_ids.empty?
+
+      counts[:events] = Event.where(purchase_id: @purchase_ids).update_all(
         email: nil,
         ip_address: nil,
         ip_country: nil,

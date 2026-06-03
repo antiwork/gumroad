@@ -95,9 +95,8 @@ describe GdprBuyerErasureService do
         expect(unrelated_purchase.email).to eq("other@example.com")
       end
 
-      it "anonymizes all PII columns on matching events rows" do
-        event = Event.new(
-          email: buyer_email,
+      def build_event(attrs)
+        Event.new({
           ip_address: "9.9.9.9",
           ip_country: "US",
           ip_state: "NY",
@@ -109,8 +108,11 @@ describe GdprBuyerErasureService do
           browser_plugins: "Flash, Java",
           browser_guid: "guid_event",
           event_name: "purchase",
-        )
-        event.save!(validate: false)
+        }.merge(attrs)).tap { _1.save!(validate: false) }
+      end
+
+      it "anonymizes all PII columns on events tied to the buyer's purchases" do
+        event = build_event(purchase_id: purchase1.id, email: buyer_email)
 
         described_class.new(buyer_email, performed_by: admin).perform!
 
@@ -125,6 +127,45 @@ describe GdprBuyerErasureService do
         expect(event.fingerprint).to be_nil
         expect(event.browser_fingerprint).to be_nil
         expect(event.browser_plugins).to be_nil
+        expect(event.browser_guid).to be_nil
+      end
+
+      it "anonymizes events located by purchase even when the email column is empty" do
+        event = build_event(purchase_id: purchase2.id, email: nil)
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        event.reload
+        expect(event.ip_address).to be_nil
+        expect(event.browser_guid).to be_nil
+      end
+
+      it "leaves events tied to unrelated purchases untouched" do
+        event = build_event(purchase_id: unrelated_purchase.id, email: "other@example.com")
+
+        described_class.new(buyer_email, performed_by: admin).perform!
+
+        event.reload
+        expect(event.ip_address).to eq("9.9.9.9")
+        expect(event.browser_guid).to eq("guid_event")
+      end
+
+      it "anonymizes events on a re-run after the events step was skipped, even though purchases were already anonymized" do
+        event = build_event(purchase_id: purchase1.id, email: buyer_email)
+
+        first_run = described_class.new(buyer_email, performed_by: admin)
+        allow(first_run).to receive(:anonymize_events!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+        first_result = first_run.perform!
+
+        expect(first_result[:skipped]).to include(:events)
+        expect(purchase1.reload.email).to end_with("@deleted.gumroad.com")
+        expect(event.reload.ip_address).to eq("9.9.9.9")
+
+        second_result = described_class.new(buyer_email, performed_by: admin).perform!
+
+        expect(second_result[:skipped]).to be_empty
+        expect(second_result[:counts][:events]).to eq(1)
+        expect(event.reload.ip_address).to be_nil
         expect(event.browser_guid).to be_nil
       end
 
