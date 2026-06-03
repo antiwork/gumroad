@@ -46,6 +46,44 @@ describe ForfeitBalanceService do
           expect(user.reload.credits.last).to be nil
         end
       end
+
+      context "when the only unpaid balance is a zero-USD-value FX residual" do
+        before do
+          @residual = create(:balance, user:, merchant_account:, amount_cents: 0,
+                                       holding_currency: Currency::IDR, holding_amount_cents: -1_906_118)
+        end
+
+        it "forfeits the residual so it stops blocking future payouts" do
+          @service.process
+
+          expect(@residual.reload.state).to eq("forfeited")
+        end
+
+        it "adds a comment recording the $0 forfeiture" do
+          @service.process
+
+          comment = user.reload.comments.last
+          expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_BALANCE_FORFEITED)
+          expect(comment.content).to include("Balance of $0 has been forfeited")
+          expect(comment.content).to include(@residual.id.to_s)
+        end
+      end
+
+      context "when a zero-value residual sits alongside a negative balance" do
+        before do
+          @residual = create(:balance, user:, merchant_account:, amount_cents: 0,
+                                       holding_currency: Currency::IDR, holding_amount_cents: -100)
+          @negative = create(:balance, user:, merchant_account:, amount_cents: -500,
+                                       holding_currency: Currency::USD, holding_amount_cents: -500)
+        end
+
+        it "forfeits only the residual and leaves the negative balance untouched" do
+          @service.process
+
+          expect(@residual.reload.state).to eq("forfeited")
+          expect(@negative.reload.state).to eq("unpaid")
+        end
+      end
     end
 
     describe "#balance_amount_cents_to_forfeit" do

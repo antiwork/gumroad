@@ -7,6 +7,7 @@ module Payment::FailureReason
   DEBIT_CARD_LIMIT = "debit_card_limit"
   INSUFFICIENT_FUNDS = "insufficient_funds"
   BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
+  CURRENCY_MISMATCH = "currency_mismatch"
 
   PAYPAL_MASS_PAY = {
     "PAYPAL 1000" => "Unknown error",
@@ -94,6 +95,10 @@ module Payment::FailureReason
     "cannot_pay" => {
       reason: "Stripe is unable to create payouts to this account",
       solution: "Complete any outstanding requirements in payout settings. If the issue persists, contact Gumroad Support",
+    },
+    "currency_mismatch" => {
+      reason: "a leftover balance held in a currency that no longer matches the payout account is blocking this payout",
+      solution: "Gumroad needs to reconcile a residual balance from a previous payout currency before payouts can resume. Contact Gumroad Support",
     },
     "could_not_process" => {
       reason: "the bank could not process this payout",

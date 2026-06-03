@@ -11,15 +11,24 @@ class ForfeitBalanceService
   end
 
   def process
-    return unless balance_amount_cents_to_forfeit > 0
+    candidates = balances_to_forfeit.to_a
+    return if candidates.empty?
 
-    balances_to_forfeit.each(&:mark_forfeited!)
+    # When the abandoned-account balances carry net positive value, forfeit the whole set — the seller
+    # is giving up funds that can't follow them to the new account. When they don't, still forfeit any
+    # zero-USD-value rows: these are FX residuals that carry no value of their own but otherwise sit
+    # `unpaid` forever and block every future payout via StripePayoutProcessor's cross-currency guard.
+    # A negative balance is never forfeited on its own, so we don't write off a seller's debt.
+    forfeiting = candidates.sum(&:amount_cents) > 0 ? candidates : candidates.select { |balance| balance.amount_cents.zero? }
+    return if forfeiting.empty?
 
-    balance_ids = balances_to_forfeit.ids.join(", ")
+    forfeiting.each(&:mark_forfeited!)
+
     user.comments.create!(
       author_id: GUMROAD_ADMIN_ID,
       comment_type: Comment::COMMENT_TYPE_BALANCE_FORFEITED,
-      content: "Balance of #{balance_amount_formatted} has been forfeited. Reason: #{reason_comment}. Balance IDs: #{balance_ids}"
+      content: "Balance of #{formatted_dollar_amount(forfeiting.sum(&:amount_cents))} has been forfeited. " \
+               "Reason: #{reason_comment}. Balance IDs: #{forfeiting.map(&:id).join(', ')}"
     )
   end
 

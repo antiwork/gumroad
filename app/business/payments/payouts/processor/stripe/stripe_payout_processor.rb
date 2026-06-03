@@ -174,8 +174,10 @@ class StripePayoutProcessor
     mismatched_gumroad_balances = balances_held_by_gumroad.reject { |b| b.holding_currency == Currency::USD }
     if mismatched_stripe_balances.any? || mismatched_gumroad_balances.any?
       mismatched_ids = (mismatched_stripe_balances + mismatched_gumroad_balances).map(&:id)
-      payment.mark_failed!
-      return ["Cannot process payout: balances #{mismatched_ids} have holding_currency that does not match the payout currency."]
+      message = "Cannot process payout: balances #{mismatched_ids} have holding_currency that does not match the payout currency."
+      payment.error_message = message.truncate(1000)
+      payment.mark_failed!(Payment::FailureReason::CURRENCY_MISMATCH)
+      return [message]
     end
 
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id

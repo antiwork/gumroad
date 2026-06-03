@@ -597,6 +597,13 @@ describe StripePayoutProcessor, :vcr do
         expect(payment.reload.state).to eq("failed")
       end
 
+      it "records the failure reason and message so the failure is not silent" do
+        described_class.prepare_payment_and_set_amount(payment, [vnd_balance, usd_balance])
+
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
+        expect(payment.error_message).to include("does not match the payout currency")
+      end
+
       it "does not silently produce a $9.45 wire amount from $126.72 of seller balance" do
         described_class.prepare_payment_and_set_amount(payment, [vnd_balance, usd_balance])
 
@@ -626,6 +633,8 @@ describe StripePayoutProcessor, :vcr do
         expect(errors.first).to match(/holding_currency that does not match the payout currency/)
         expect(errors.first).to include(mismatched_balance.id.to_s)
         expect(payment.reload.state).to eq("failed")
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
+        expect(payment.error_message).to include("does not match the payout currency")
       end
     end
   end
