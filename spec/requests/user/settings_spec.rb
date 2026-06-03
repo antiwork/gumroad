@@ -37,21 +37,6 @@ describe "User profile settings page", type: :system, js: true do
   end
 
   describe "saving profile updates" do
-    it "normalizes input and saves the username" do
-      visit settings_profile_path
-      raw_username = "Katsuya 123 !@#"
-      normalized_username = "katsuya123"
-      within_section "Profile", section_element: :section do
-        expect(page).to have_link(@user.subdomain, href: @user.subdomain_with_protocol)
-        fill_in("Username", with: raw_username)
-        new_subdomain = Subdomain.from_username(normalized_username)
-        expect(page).to have_link(new_subdomain, href: "#{PROTOCOL}://#{new_subdomain}")
-      end
-      click_on("Update settings")
-      expect(page).to have_alert(text: "Changes saved!")
-      expect(@user.reload.username).to eq normalized_username
-    end
-
     it "saves the name and bio" do
       visit settings_profile_path
       fill_in "Name", with: "Creator name"

@@ -23,7 +23,6 @@ class Settings::ProfilePolicy < ApplicationPolicy
 
   def permitted_attributes
     user_attributes = [:name, :bio]
-    user_attributes << :username if update_username?
     [
       :profile_picture_blob_id,
       {

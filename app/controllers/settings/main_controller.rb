@@ -70,6 +70,7 @@ class Settings::MainController < Settings::BaseController
         :show_nsfw_products,
         :disable_affiliate_requests,
       ]
+      permitted_params << :username if policy([:settings, :main, current_seller]).update_username?
 
       params.require(:user).permit(permitted_params)
     end

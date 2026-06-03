@@ -39,31 +39,11 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
     end
 
     it "submits the form successfully" do
-      put :update, params: { user: { name: "New name", username: "gum" } }
+      put :update, params: { user: { name: "New name" } }
       expect(response).to redirect_to(settings_profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.name).to eq("New name")
-      expect(seller.username).to eq("gum")
-    end
-
-    it "converts a blank username to nil" do
-      seller.username = "oldusername"
-      seller.save
-
-      expect { put :update, params: { user: { username: "" } } }.to change {
-        seller.reload.read_attribute(:username)
-      }.from("oldusername").to(nil)
-      expect(response).to redirect_to(settings_profile_path)
-      expect(response).to have_http_status :see_other
-      expect(flash[:notice]).to eq("Changes saved!")
-    end
-
-    it "performs model validations" do
-      put :update, params: { user: { username: "ab" } }
-      expect(response).to redirect_to(settings_profile_path)
-      expect(response).to have_http_status :found
-      expect(flash[:alert]).to eq("Username is too short (minimum is 3 characters)")
     end
 
     describe "when the user has not confirmed their email address" do

@@ -11,11 +11,11 @@ describe("Main Settings Scenario", type: :system, js: true) do
   end
 
   describe "sub navigation" do
-    it "displays main, profile, payments, password, and advanced sections" do
+    it "displays main, payments, password, and advanced sections" do
       visit settings_main_path
 
       expect(page).to have_tab_button "Settings"
-      expect(page).to have_tab_button "Profile"
+      expect(page).not_to have_tab_button "Profile"
       expect(page).to have_tab_button "Payments"
       expect(page).to have_tab_button "Password and authentication"
       expect(page).to have_tab_button "Advanced"
@@ -33,6 +33,21 @@ describe("Main Settings Scenario", type: :system, js: true) do
 
       expect(page).to have_alert(text: "Your account has been updated!")
       expect(user.reload.unconfirmed_email).to eq new_email
+    end
+
+    it "normalizes input and saves the username" do
+      visit settings_main_path
+      raw_username = "Katsuya 123 !@#"
+      normalized_username = "katsuya123"
+      within_section "User details", section_element: :section do
+        expect(page).to have_link(user.subdomain, href: user.subdomain_with_protocol)
+        fill_in("Username", with: raw_username)
+        new_subdomain = Subdomain.from_username(normalized_username)
+        expect(page).to have_link(new_subdomain, href: "#{PROTOCOL}://#{new_subdomain}")
+      end
+      click_on("Update settings")
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(user.reload.username).to eq normalized_username
     end
   end
 

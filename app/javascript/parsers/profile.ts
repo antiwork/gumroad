@@ -9,7 +9,6 @@ export type CreatorProfile = {
 
 export type Tab = { name: string; sections: string[] };
 export type ProfileSettings = {
-  username: string;
   name: string | null;
   bio: string | null;
   font: string;

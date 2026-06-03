@@ -19,6 +19,7 @@ import {
   HomeAlt2,
   MessageBubble,
   Search,
+  Store,
   Workflow,
 } from "@boxicons/react";
 import { type LinkPrefetchOption } from "@inertiajs/core";
@@ -131,6 +132,15 @@ export const Nav = (props: Props) => {
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
+        {currentSeller ? (
+          <ClientNavLink
+            text="Profile"
+            icon={<Store pack="filled" className="size-5" />}
+            href={Routes.root_url({ ...routeParams, host: currentSeller.subdomain ?? routeParams.host })}
+            exactHrefMatch
+            prefetch={false}
+          />
+        ) : null}
         <ClientNavLink
           text="Products"
           icon={<ArchiveAlt pack="filled" className="size-5" />}

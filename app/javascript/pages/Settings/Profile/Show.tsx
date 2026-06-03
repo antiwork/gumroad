@@ -12,7 +12,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -22,7 +21,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
-import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -46,7 +45,6 @@ export default function SettingsPage() {
   const { creator_profile, profile_settings, settings_pages, ...profileProps } = typia.assert<ProfilePageProps>(
     usePage().props,
   );
-  const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
@@ -87,8 +85,6 @@ export default function SettingsPage() {
     }
   });
 
-  const subdomain = `${profileSettings.username}.${rootDomain}`;
-
   return (
     <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>
       <Head>
@@ -108,27 +104,6 @@ export default function SettingsPage() {
             <header>
               <h2>Profile</h2>
             </header>
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-username`}>Username</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-username`}
-                type="text"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                disabled={!loggedInUser?.policies.settings_profile.update_username}
-                value={profileSettings.username}
-                onChange={(evt) =>
-                  updateProfileSettings({ username: evt.target.value.replace(/[^a-z0-9]/giu, "").toLowerCase() })
-                }
-              />
-              <FieldsetDescription>
-                View your profile at: <a href={`${scheme}://${subdomain}`}>{subdomain}</a>
-              </FieldsetDescription>
-            </Fieldset>
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-name`}>Name</Label>

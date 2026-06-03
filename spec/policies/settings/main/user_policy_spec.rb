@@ -45,7 +45,7 @@ describe Settings::Main::UserPolicy do
     end
   end
 
-  permissions :update?, :resend_confirmation_email?, :invalidate_active_sessions? do
+  permissions :update?, :resend_confirmation_email?, :invalidate_active_sessions?, :update_username? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)
