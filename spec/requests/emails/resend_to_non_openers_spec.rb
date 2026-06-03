@@ -82,4 +82,14 @@ describe("Resend to non-openers flow", :js, type: :system) do
     expect(page).to have_button("View email")
     expect(page).to_not have_button("Resend to non-openers")
   end
+
+  it "lists each prior non-opener resend on the email sheet" do
+    create(:post_email_blast, post: installment, recipient_filter: "unopened", requested_at: 2.hours.ago, started_at: 2.hours.ago, completed_at: 1.hour.ago, delivery_count: 2)
+
+    visit emails_path
+    find(:table_row, { "Subject" => "Product update" }).click
+
+    expect(page).to have_text("Resends to non-openers")
+    expect(page).to have_text("2 emailed")
+  end
 end

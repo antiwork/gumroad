@@ -194,10 +194,26 @@ describe InstallmentPresenter do
         send_emails: true,
         shown_on_profile: true,
         has_been_blasted: false,
+        non_opener_resends: [],
         shown_in_profile_sections: [section.external_id]
       ))
       expect(props.keys).to_not include(:published_once_already, :member_cancellation, :new_customers_only, :delayed_delivery_time_duration, :delayed_delivery_time_period, :displayed_delayed_delivery_time_period)
       expect(props.keys).to_not include(:recipient_description, :to_be_published_at)
+    end
+
+    context "when the installment has non-opener resends" do
+      it "returns each unopened blast in non_opener_resends ordered by requested_at" do
+        older = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 2.days.ago, started_at: 2.days.ago, completed_at: 2.days.ago, delivery_count: 5)
+        newer = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago, started_at: 1.hour.ago, completed_at: nil, delivery_count: 0)
+        create(:blast, post: installment, requested_at: 3.days.ago) # not an unopened resend, must be excluded
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: older.requested_at, delivery_count: 5, completed: true },
+                                                   { requested_at: newer.requested_at, delivery_count: 0, completed: false }
+                                                 ])
+      end
     end
 
     context "when installment is of type `product`" do
