@@ -70,10 +70,10 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
       scope = @installment.blasts.to_non_openers
       return true if scope.where(completed_at: nil).where(requested_at: IN_FLIGHT_GRACE.ago..).exists?
 
-      scope.where(completed_at: RESEND_THROTTLE.ago..).exists?
+      scope.where(completed_at: RESEND_THROTTLE.ago..).where(delivery_count: 1..).exists?
     end
 
     def resend_limit_reached?
-      @installment.blasts.to_non_openers.where.not(completed_at: nil).count >= MAX_RESENDS
+      @installment.blasts.to_non_openers.where.not(completed_at: nil).where(delivery_count: 1..).count >= MAX_RESENDS
     end
 end

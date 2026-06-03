@@ -198,5 +198,25 @@ describe Api::Internal::Installments::NonOpenerResendsController do
 
       expect(response).to be_successful
     end
+
+    it "does not count zero-delivered resends toward the lifetime cap" do
+      create_list(:blast, 3, post: installment, recipient_filter: "unopened", requested_at: 25.hours.ago, started_at: 25.hours.ago, completed_at: 25.hours.ago, delivery_count: 0)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+
+      expect(response).to be_successful
+    end
+
+    it "does not let a zero-delivered resend trigger the 24h throttle" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 2.hours.ago, started_at: 2.hours.ago, completed_at: 1.hour.ago, delivery_count: 0)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+
+      expect(response).to be_successful
+    end
   end
 end
