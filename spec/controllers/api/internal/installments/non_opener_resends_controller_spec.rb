@@ -152,6 +152,16 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       expect(response).to have_http_status(:unprocessable_entity)
     end
 
+    it "blocks a second resend while a prior one is pending (queued but Sidekiq hasn't started it yet)" do
+      create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.minute.ago, started_at: nil, completed_at: nil)
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
     it "allows a retry after a failed (never-completed) resend" do
       create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.hours.ago, started_at: 3.hours.ago, completed_at: nil)
 

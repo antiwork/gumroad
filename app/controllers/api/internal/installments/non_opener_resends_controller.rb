@@ -68,8 +68,7 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
     def recently_resent?
       scope = @installment.blasts.to_non_openers
-      in_flight = scope.where(completed_at: nil).where(started_at: IN_FLIGHT_GRACE.ago..).exists?
-      return true if in_flight
+      return true if scope.where(completed_at: nil).where(requested_at: IN_FLIGHT_GRACE.ago..).exists?
 
       scope.where(completed_at: RESEND_THROTTLE.ago..).exists?
     end
