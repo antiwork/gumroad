@@ -1299,6 +1299,14 @@ const b = 2;</code></pre>
       it "counts emailed recipients who have not opened the email" do
         expect(post.unopened_recipients_count).to eq(2)
       end
+
+      it "still counts a buyer whose audience row's max(purchase_id) is a newer purchase than the one emailed" do
+        # Same email/buyer, second purchase later than the one we emailed.
+        newer = create(:purchase, link: product, seller:, email: delivered_purchase.email)
+        expect(newer.id).to be > delivered_purchase.id
+        # delivered_purchase has email_info state=delivered (unopened). The buyer should still count.
+        expect(post.unopened_recipients_count).to eq(2)
+      end
     end
 
     describe "#resendable_to_non_openers?" do

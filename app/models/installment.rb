@@ -691,20 +691,35 @@ class Installment < ApplicationRecord
     emailed_recipient_purchase_ids - opened_recipient_purchase_ids
   end
 
-  def resendable_to_non_openers_purchase_ids
-    candidate_ids = unopened_recipient_purchase_ids
-    return [] if candidate_ids.empty?
+  # Emails of original recipients who haven't opened. Matching on email (rather than
+  # purchase_id) is the right key because AudienceMember collapses a buyer's multiple
+  # purchases into one row keyed by (seller_id, email), so the email_info purchase
+  # may not match the audience row's max(purchase_id).
+  def unopened_recipient_emails
+    return [] unless seller_or_product_or_variant_type?
 
-    candidates = candidate_ids.to_set
+    emailed_ids = emailed_recipient_purchase_ids
+    return [] if emailed_ids.empty?
+
+    emailed_emails = Purchase.where(id: emailed_ids).distinct.pluck(:email).compact.map(&:downcase)
+    opened_emails = Purchase.where(id: opened_recipient_purchase_ids).distinct.pluck(:email).compact.map(&:downcase)
+    emailed_emails - opened_emails
+  end
+
+  def resendable_to_non_openers_emails
+    candidates = unopened_recipient_emails.to_set
+    return [] if candidates.empty?
+
     AudienceMember
-      .filter(seller_id:, params: audience_members_filter_params, with_ids: true)
-      .pluck(Arel.sql("purchase_id"))
+      .filter(seller_id:, params: audience_members_filter_params)
+      .pluck(:email)
+      .map(&:downcase)
       .uniq
-      .select { _1.present? && candidates.include?(_1) }
+      .select { candidates.include?(_1) }
   end
 
   def unopened_recipients_count
-    resendable_to_non_openers_purchase_ids.size
+    resendable_to_non_openers_emails.size
   end
 
   # Whether a "resend to non-openers" blast is applicable to this post.

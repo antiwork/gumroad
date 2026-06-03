@@ -19,8 +19,8 @@ class SendPostBlastEmailsJob
     @members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
 
     if @blast.to_non_openers?
-      keep = @post.unopened_recipient_purchase_ids.to_set
-      @members.select! { _1.purchase_id.present? && keep.include?(_1.purchase_id) }
+      keep_emails = @post.unopened_recipient_emails.to_set
+      @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
     else
       # We will check each batch of emails to see if they were already messaged,

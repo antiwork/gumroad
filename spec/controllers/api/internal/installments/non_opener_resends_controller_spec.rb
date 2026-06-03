@@ -95,6 +95,19 @@ describe Api::Internal::Installments::NonOpenerResendsController do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error"]).to include("already opened")
+    end
+
+    it "returns a distinct 422 message when unopened recipients exist but no longer match the audience filter" do
+      not_bought_product = create(:product, user: seller)
+      installment.update!(not_bought_products: [product.unique_permalink], bought_products: [not_bought_product.unique_permalink])
+
+      expect do
+        post :create, params: { id: installment.external_id }
+      end.not_to change { PostEmailBlast.where(post: installment).count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("no longer eligible")
     end
 
     it "throttles a second resend within the window" do

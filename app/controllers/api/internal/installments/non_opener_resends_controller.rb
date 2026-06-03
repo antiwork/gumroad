@@ -33,7 +33,12 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
       @count = @installment.unopened_recipients_count
       if @count.zero?
-        error_response = [{ success: false, error: "Everyone who was emailed has already opened this." }, :unprocessable_entity]
+        message = if @installment.unopened_recipient_emails.any?
+          "There are no non-openers left to email — the remaining unopened recipients are no longer eligible for this email's audience."
+        else
+          "Everyone who was emailed has already opened this."
+        end
+        error_response = [{ success: false, error: message }, :unprocessable_entity]
         next
       end
 
