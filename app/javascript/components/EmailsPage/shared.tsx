@@ -1,5 +1,5 @@
 import { Envelope, FileDetail } from "@boxicons/react";
-import { useForm } from "@inertiajs/react";
+import { router, useForm } from "@inertiajs/react";
 import React from "react";
 
 import { SavedInstallment, getAudienceCount, getNonOpenerCount, resendToNonOpeners } from "$app/data/installments";
@@ -142,6 +142,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
       );
       setRecentlyResent(true);
       setConfirming(false);
+      router.reload();
     } catch (error) {
       assertResponseError(error);
       showAlert(error.message, "error");
