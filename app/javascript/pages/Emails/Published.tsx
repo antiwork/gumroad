@@ -185,7 +185,7 @@ export default function EmailsPublished() {
                               timeZone: currentSeller.timeZone.name,
                             })}
                             {resend.completed
-                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} delivered`
+                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} emailed`
                               : " — in progress"}
                           </li>
                         ))}
