@@ -688,10 +688,7 @@ class Installment < ApplicationRecord
   # linkage, so this returns an empty array for follower/affiliate posts.
   def unopened_recipient_purchase_ids
     return [] unless seller_or_product_or_variant_type?
-    email_infos
-      .where.not(purchase_id: nil)
-      .where.not(state: "opened")
-      .distinct.pluck(:purchase_id)
+    emailed_recipient_purchase_ids - opened_recipient_purchase_ids
   end
 
   def resendable_to_non_openers_purchase_ids
