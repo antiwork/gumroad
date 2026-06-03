@@ -107,15 +107,22 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   const [confirming, setConfirming] = React.useState(false);
   const [count, setCount] = React.useState<number | null>(null);
   const [recentlyResent, setRecentlyResent] = React.useState(false);
+  const [audienceFilteredOut, setAudienceFilteredOut] = React.useState(false);
   const [resending, setResending] = React.useState(false);
 
   const openConfirmation = asyncVoid(async () => {
     setConfirming(true);
     setCount(null);
+    setAudienceFilteredOut(false);
     try {
-      const { count: nonOpenerCount, recently_resent } = await getNonOpenerCount(installment.external_id);
+      const {
+        count: nonOpenerCount,
+        recently_resent,
+        audience_filtered_out,
+      } = await getNonOpenerCount(installment.external_id);
       setCount(nonOpenerCount);
       setRecentlyResent(recently_resent);
+      setAudienceFilteredOut(audience_filtered_out);
     } catch (error) {
       assertResponseError(error);
       setConfirming(false);
@@ -172,7 +179,9 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
               : recentlyResent
                 ? "You've already resent this to non-openers recently. Try again in 24 hours."
                 : count === 0
-                  ? "Everyone who was emailed has already opened this."
+                  ? audienceFilteredOut
+                    ? "The remaining unopened recipients are no longer eligible for this email's audience."
+                    : "Everyone who was emailed has already opened this."
                   : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
           </h4>
         </Modal>

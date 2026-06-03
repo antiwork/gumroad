@@ -37,7 +37,17 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     it "returns the number of recipients who have not opened the post yet" do
       get :show, params: { id: installment.external_id }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq({ "count" => 1, "recently_resent" => false })
+      expect(response.parsed_body).to eq({ "count" => 1, "recently_resent" => false, "audience_filtered_out" => false })
+    end
+
+    it "flags audience_filtered_out when unopened recipients exist but are no longer in the audience" do
+      not_bought_product = create(:product, user: seller)
+      installment.update!(not_bought_products: [product.unique_permalink], bought_products: [not_bought_product.unique_permalink])
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body["count"]).to eq(0)
+      expect(response.parsed_body["audience_filtered_out"]).to eq(true)
     end
 
     it "reports recently_resent when an unopened blast was created within the throttle window" do

@@ -12,7 +12,9 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   def show
     authorize @installment, :resend_to_non_openers?
 
-    render json: { count: @installment.unopened_recipients_count, recently_resent: recently_resent? }
+    count = @installment.unopened_recipients_count
+    audience_filtered_out = count.zero? && @installment.unopened_recipient_emails.any?
+    render json: { count:, recently_resent: recently_resent?, audience_filtered_out: }
   end
 
   def create
