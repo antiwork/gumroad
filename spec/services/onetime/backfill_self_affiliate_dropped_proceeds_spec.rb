@@ -125,6 +125,37 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
       expect(second_run[:stats][:unexpected_bt_count]).to eq(1)
       expect(purchase.balance_transactions.count).to eq(2)
     end
+
+    it "acquires Purchase.lock during eligibility + BT insert to serialize concurrent runs" do
+      purchase = build_affected_purchase
+      lock_relation = double("lock_relation")
+      expect(Purchase).to receive(:lock).at_least(:once).and_return(lock_relation)
+      expect(lock_relation).to receive(:find).with(purchase.id).at_least(:once).and_return(purchase)
+
+      described_class.new(dry_run: false, purchase_ids: [purchase.id]).process
+      expect(purchase.balance_transactions.count).to eq(2)
+    end
+
+    it "calls update_balance! outside the Purchase-row lock to avoid Balance/Purchase deadlock" do
+      purchase = build_affected_purchase
+      transaction_open = false
+      saw_balance_lock_inside_transaction = false
+
+      allow(ApplicationRecord).to receive(:transaction).and_wrap_original do |orig, *args, &blk|
+        transaction_open = true
+        result = orig.call(*args, &blk)
+        transaction_open = false
+        result
+      end
+
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_wrap_original do |orig, *args|
+        saw_balance_lock_inside_transaction = true if transaction_open
+        orig.call(*args)
+      end
+
+      described_class.new(dry_run: false, purchase_ids: [purchase.id]).process
+      expect(saw_balance_lock_inside_transaction).to eq(false)
+    end
   end
 
   describe "skip conditions" do

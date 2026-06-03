@@ -76,21 +76,39 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
     def process_one(purchase_id)
       @stats[:scanned] += 1
 
-      purchase = Purchase.find(purchase_id)
-      reason = check_eligibility(purchase)
+      new_bt = nil
+      purchase = nil
 
-      if reason == :eligible
-        credit!(purchase) unless @dry_run
-        @stats[:credited] += 1
-        @credited << credit_summary(purchase)
-      else
-        @stats[reason] += 1
-        @skipped[reason] << purchase_id if @verbose
+      ApplicationRecord.transaction do
+        purchase = Purchase.lock.find(purchase_id)
+        reason = check_eligibility(purchase)
+
+        if reason != :eligible
+          @stats[reason] += 1
+          @skipped[reason] << purchase_id if @verbose
+          next
+        end
+
+        if @dry_run
+          @stats[:credited] += 1
+          @credited << credit_summary(purchase)
+          next
+        end
+
+        new_bt = insert_seller_bt!(purchase)
       end
+
+      return unless new_bt
+
+      new_bt.update_balance!
+      Purchase.where(id: purchase_id).update_all(purchase_success_balance_id: new_bt.balance_id)
+      @stats[:credited] += 1
+      @credited << credit_summary(purchase)
     rescue => e
       @stats[:error] += 1
-      @skipped[:error] << { purchase_id:, error: "#{e.class}: #{e.message}" }
-      @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message}"
+      @skipped[:error] << { purchase_id:, error: "#{e.class}: #{e.message}", orphan_bt_id: new_bt&.id }
+      @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message}" \
+                    "#{" — orphan BT #{new_bt.id} created without balance update (manual recovery needed)" if new_bt}"
     end
 
     def check_eligibility(p)
@@ -128,7 +146,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       :eligible
     end
 
-    def credit!(p)
+    def insert_seller_bt!(p)
       existing_bt = p.balance_transactions.first
       missing_net_cents = p.payment_cents.to_i - p.affiliate_credit_cents.to_i
 
@@ -143,16 +161,14 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         net_cents: missing_net_cents,
       )
 
-      new_bt = BalanceTransaction.create!(
+      BalanceTransaction.create!(
         user: p.seller,
         merchant_account: p.merchant_account,
         purchase: p,
         issued_amount: issued,
         holding_amount: holding,
-        update_user_balance: true,
+        update_user_balance: false,
       )
-
-      p.update_columns(purchase_success_balance_id: new_bt.balance_id)
     end
 
     def credit_summary(p)
