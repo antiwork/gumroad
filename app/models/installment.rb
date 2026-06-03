@@ -700,8 +700,8 @@ class Installment < ApplicationRecord
 
     candidates = candidate_ids.to_set
     AudienceMember
-      .filter(seller_id:, params: audience_members_filter_params)
-      .pluck(:purchase_id)
+      .filter(seller_id:, params: audience_members_filter_params, with_ids: true)
+      .pluck(Arel.sql("purchase_id"))
       .uniq
       .select { _1.present? && candidates.include?(_1) }
   end
