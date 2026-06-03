@@ -18,6 +18,7 @@ class ProfilePresenter
       twitter_handle: seller.twitter_handle,
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
+      can_edit: can_edit_profile?,
     }
   end
 
@@ -55,5 +56,11 @@ class ProfilePresenter
 
     def profile_sections_presenter
       ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile)
+    end
+
+    def can_edit_profile?
+      pundit_user.user.present? &&
+        pundit_user.seller == seller &&
+        Pundit.policy!(pundit_user, [:settings, :profile]).show?
     end
 end

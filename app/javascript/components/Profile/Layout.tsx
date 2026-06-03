@@ -6,7 +6,6 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
@@ -25,10 +24,8 @@ type LayoutProps = {
 export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps) => {
   const cartItemsCount = useCartItemsCount();
   const appDomain = useAppDomain();
-  const currentSeller = useCurrentSeller();
   const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
-  const canEditProfile = currentSeller?.id === creatorProfile.external_id;
 
   const headerButtons =
     creatorProfile.twitter_handle || cartItemsCount ? (
@@ -44,7 +41,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   return (
     <div className="flex min-h-screen flex-col">
-      {canEditProfile ? (
+      {creatorProfile.can_edit ? (
         <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
           <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
             <NavigationButton

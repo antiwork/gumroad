@@ -42,8 +42,20 @@ describe ProfilePresenter do
           twitter_handle: nil,
           subdomain: seller.subdomain,
           is_verified: false,
+          can_edit: true,
         }
       )
+    end
+
+    it "sets can_edit to false when viewing as another seller" do
+      other_seller = create(:user)
+      pundit_user = SellerContext.new(user: logged_in_user, seller: other_seller)
+
+      expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
+    end
+
+    it "sets can_edit to false when logged out" do
+      expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile[:can_edit]).to eq(false)
     end
   end
 
