@@ -51,7 +51,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
     log "Window: #{BUG_INTRODUCED_AT.iso8601} → #{BUG_FIXED_AT.iso8601}"
 
     candidate_ids.each do |purchase_id|
-      ReplicaLagWatcher.watch
+      ReplicaLagWatcher.watch unless @dry_run
       process_one(purchase_id)
     end
 
@@ -76,6 +76,19 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
     def process_one(purchase_id)
       @stats[:scanned] += 1
 
+      if @dry_run
+        purchase = Purchase.find(purchase_id)
+        reason = check_eligibility(purchase)
+        if reason == :eligible
+          @stats[:credited] += 1
+          @credited << credit_summary(purchase)
+        else
+          @stats[reason] += 1
+          @skipped[reason] << purchase_id if @verbose
+        end
+        return
+      end
+
       new_bt = nil
       purchase = nil
 
@@ -86,12 +99,6 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         if reason != :eligible
           @stats[reason] += 1
           @skipped[reason] << purchase_id if @verbose
-          next
-        end
-
-        if @dry_run
-          @stats[:credited] += 1
-          @credited << credit_summary(purchase)
           next
         end
 

@@ -271,20 +271,188 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
       result = described_class.new(dry_run: false).process
       expect(result[:stats][:scanned]).to eq(0)
     end
+
+    it "skips when affiliate_credit_cents is 0" do
+      purchase = build_affected_purchase
+      purchase.update_columns(affiliate_credit_cents: 0)
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:no_affiliate_credit]).to eq(1)
+      expect(result[:stats][:credited]).to eq(0)
+      expect(result[:skipped][:no_affiliate_credit]).to eq([purchase.id])
+    end
+
+    it "skips when affiliate_credit_cents equals payment_cents (nothing to credit)" do
+      build_affected_purchase(price_cents: 1000, fee_cents: 209, affiliate_credit_cents: 791)
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:nothing_to_credit]).to eq(1)
+      expect(result[:stats][:credited]).to eq(0)
+    end
+
+    it "skips when affiliate_credit_cents exceeds payment_cents (negative missing)" do
+      build_affected_purchase(price_cents: 1000, fee_cents: 209, affiliate_credit_cents: 900)
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:nothing_to_credit]).to eq(1)
+      expect(result[:stats][:credited]).to eq(0)
+    end
+
+    it "skips when total_transaction_cents is 0" do
+      purchase = build_affected_purchase
+      purchase.update_columns(total_transaction_cents: 0)
+      result = described_class.new(dry_run: false, verbose: true, purchase_ids: [purchase.id]).process
+      expect(result[:stats][:invalid_total_transaction_cents]).to eq(1)
+    end
+
+    it "skips when the existing BT has a missing currency" do
+      purchase = build_affected_purchase
+      purchase.balance_transactions.first.update_columns(issued_amount_currency: nil)
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:bt_currency_missing]).to eq(1)
+    end
+
+    it "skips when the existing BT belongs to a different user" do
+      purchase = build_affected_purchase
+      other = create(:user)
+      purchase.balance_transactions.first.update_columns(user_id: other.id)
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:bt_wrong_user]).to eq(1)
+    end
+
+    it "skips when no balance_transactions exist at all" do
+      purchase = build_affected_purchase
+      purchase.balance_transactions.first.destroy!
+      result = described_class.new(dry_run: false, verbose: true).process
+      expect(result[:stats][:unexpected_bt_count]).to eq(1)
+    end
+
+    it "skips Brazilian Stripe Connect / non-Gumroad-merchant purchases" do
+      purchase = build_affected_purchase
+      seller_stripe_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      allow_any_instance_of(MerchantAccount).to receive(:is_managed_by_gumroad?).and_return(false)
+      allow_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).and_return(true)
+      purchase.update_columns(merchant_account_id: seller_stripe_account.id)
+      result = described_class.new(dry_run: false, verbose: true, purchase_ids: [purchase.id]).process
+      expect(result[:stats][:not_gumroad_merchant]).to eq(1)
+      expect(result[:stats][:credited]).to eq(0)
+    end
+
+    it "skips Bruno's allow-listed purchases even when supplied via explicit purchase_ids" do
+      purchase = build_affected_purchase
+      stub_const("#{described_class.name}::ALREADY_CREDITED_PURCHASE_IDS", [purchase.id].freeze)
+      result = described_class.new(dry_run: false, verbose: true, purchase_ids: [purchase.id]).process
+      expect(result[:stats][:already_credited]).to eq(1)
+      expect(result[:stats][:credited]).to eq(0)
+      expect(purchase.balance_transactions.count).to eq(1)
+    end
   end
 
-  describe "with explicit purchase_ids" do
-    it "processes only the specified purchases and applies all safety checks" do
-      eligible = build_affected_purchase
+  describe "purchase variations preserved by the bug" do
+    it "credits subscription / recurring purchases the same way" do
+      subscription = create(:subscription, link: product, user: seller)
+      purchase = build_affected_purchase
+      purchase.update_columns(subscription_id: subscription.id)
+      expect do
+        described_class.new(dry_run: false).process
+      end.to change { purchase.balance_transactions.count }.from(1).to(2)
+    end
+
+    it "credits gift-sender purchases the same way" do
+      purchase = build_affected_purchase
+      purchase.update_columns(flags: purchase.flags | Purchase.flag_mapping["flags"][:is_gift_sender_purchase])
+      result = described_class.new(dry_run: false).process
+      expect(result[:stats][:credited]).to eq(1)
+    end
+
+    it "credits combined-charge purchases with gross_cents == total_transaction_cents (the per-purchase share)" do
+      purchase = build_affected_purchase(price_cents: 4000, fee_cents: 596, affiliate_credit_cents: 340,
+                                         total_transaction_cents: 4000)
+      purchase.update_columns(flags: purchase.flags | Purchase.flag_mapping["flags"][:is_part_of_combined_charge])
+
+      described_class.new(dry_run: false).process
+
+      seller_leg = purchase.balance_transactions.order(:id).last
+      expect(seller_leg.issued_amount_gross_cents).to eq(purchase.total_transaction_cents)
+      expect(seller_leg.issued_amount_net_cents).to eq(purchase.payment_cents - purchase.affiliate_credit_cents.to_i)
+    end
+
+    it "credits a Collaborator-typed self-affiliate the same way" do
+      collaborator = create(:collaborator, seller:, affiliate_user: seller)
+      purchase = build_affected_purchase(affiliate: collaborator)
+      expect do
+        described_class.new(dry_run: false).process
+      end.to change { purchase.balance_transactions.count }.from(1).to(2)
+    end
+  end
+
+  describe "result shape" do
+    it "verbose: false (default) leaves @skipped empty for non-error skips" do
+      purchase = build_affected_purchase
+      purchase.update!(stripe_refunded: true)
+      result = described_class.new(dry_run: false).process
+      expect(result[:stats][:refunded]).to eq(1)
+      expect(result[:skipped]).to be_empty
+    end
+
+    it "credit_summary captures purchase id, seller id, prices, fee, affiliate credit, and the credit amount" do
+      purchase = build_affected_purchase(price_cents: 1000, fee_cents: 209, affiliate_credit_cents: 79)
+      result = described_class.new(dry_run: false).process
+      summary = result[:credited].first
+      expect(summary[:purchase_id]).to eq(purchase.id)
+      expect(summary[:seller_id]).to eq(seller.id)
+      expect(summary[:price_cents]).to eq(1000)
+      expect(summary[:fee_cents]).to eq(209)
+      expect(summary[:affiliate_credit_cents]).to eq(79)
+      expect(summary[:credited_cents]).to eq(1000 - 209 - 79)
+    end
+
+    it "across a mixed batch, credits eligible purchases and tags every skip with a reason" do
+      eligible_1 = build_affected_purchase
+      eligible_2 = build_affected_purchase
       refunded = build_affected_purchase
       refunded.update!(stripe_refunded: true)
+      build_affected_purchase(affiliate: create(:direct_affiliate, seller:, affiliate_user: create(:user)))
+      zero_credit = build_affected_purchase
+      zero_credit.update_columns(affiliate_credit_cents: 0)
 
-      result = described_class.new(dry_run: false, purchase_ids: [eligible.id, refunded.id]).process
+      result = described_class.new(dry_run: false, verbose: true).process
 
-      expect(result[:stats][:scanned]).to eq(2)
-      expect(result[:stats][:credited]).to eq(1)
+      expect(result[:stats][:credited]).to eq(2)
+      expect(result[:credited].map { |c| c[:purchase_id] }).to match_array([eligible_1.id, eligible_2.id])
       expect(result[:stats][:refunded]).to eq(1)
-      expect(result[:credited].first[:purchase_id]).to eq(eligible.id)
+      expect(result[:stats][:no_affiliate_credit]).to eq(1)
+      # not_self is excluded by the SQL scope (affiliate_user_id != seller_id), so :scanned == 4
+      expect(result[:stats][:scanned]).to eq(4)
+    end
+
+    it "dry run does not touch any Balance or Purchase row" do
+      purchase = build_affected_purchase
+      original_balance_amount = purchase.balance_transactions.first.balance.amount_cents
+      original_fk = purchase.purchase_success_balance_id
+
+      result = described_class.new(dry_run: true).process
+
+      expect(result[:stats][:credited]).to eq(1)
+      expect(purchase.balance_transactions.count).to eq(1)
+      expect(purchase.balance_transactions.first.balance.reload.amount_cents).to eq(original_balance_amount)
+      expect(purchase.reload.purchase_success_balance_id).to eq(original_fk)
+    end
+
+    it "dry run skips ReplicaLagWatcher.watch so it works when run against a replica connection" do
+      build_affected_purchase
+      expect(ReplicaLagWatcher).not_to receive(:watch)
+      described_class.new(dry_run: true).process
+    end
+
+    it "live run calls ReplicaLagWatcher.watch per purchase to throttle replica lag" do
+      build_affected_purchase
+      expect(ReplicaLagWatcher).to receive(:watch).at_least(:once)
+      described_class.new(dry_run: false).process
+    end
+
+    it "dry run does NOT acquire Purchase.lock or open a transaction (safe to run on a read replica)" do
+      build_affected_purchase
+      expect(Purchase).not_to receive(:lock)
+      expect(ApplicationRecord).not_to receive(:transaction)
+      described_class.new(dry_run: true).process
     end
   end
 end
