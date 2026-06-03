@@ -731,7 +731,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_30_000005) do
     t.text "reason"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
-    t.index ["user_id", "created_at", "id"], name: "index_credits_on_user_id_and_created_at"
+    t.index ["user_id", "created_at", "id"], name: "index_credits_on_user_id_and_created_at_and_id"
   end
 
   create_table "custom_domains", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
