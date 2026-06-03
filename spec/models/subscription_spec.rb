@@ -492,13 +492,13 @@ describe Subscription, :vcr do
       @subscription.charge!
     end
 
-    it "creates a purchase event", :vcr do
+    it "creates a purchase event without copying the original buyer email forward", :vcr do
       create(:event, purchase_id: @purchase.id, email: @purchase.email)
       recurring_purchase = @subscription.charge!
       purchase_event = Event.last
       expect(purchase_event.is_recurring_subscription_charge).to be(true)
       expect(purchase_event.purchase_id).to eq recurring_purchase.id
-      expect(purchase_event.email).to eq @purchase.email
+      expect(purchase_event.email).to be_nil
     end
 
     it "uses the previously saved payment instrument to charge an unregistered user's subscription" do

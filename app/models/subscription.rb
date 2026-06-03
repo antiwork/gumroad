@@ -1148,7 +1148,8 @@ class Subscription < ApplicationRecord
         price_cents: purchase.price_cents,
         card_visual: purchase.card_visual,
         card_type: purchase.card_type,
-        billing_zip: purchase.zip_code
+        billing_zip: purchase.zip_code,
+        email: nil
       )
 
       purchase_event.save!
