@@ -362,6 +362,7 @@ Rails.application.routes.draw do
               get :related
               get :suspension
               get :unpaid_balance
+              get :credits
               post :reset_password
               post :update_email
               post :two_factor_authentication

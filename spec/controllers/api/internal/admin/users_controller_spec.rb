@@ -2173,6 +2173,116 @@ describe Api::Internal::Admin::UsersController do
                      extra_params: { expected_purchase_count: 0, expected_total_amount_cents: 0 }
   end
 
+  describe "GET credits" do
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+    let(:user) { create(:user) }
+
+    include_examples "admin api authorization required", :get, :credits
+
+    def credit_ids
+      response.parsed_body["credits"].map { _1["id"] }
+    end
+
+    it "returns bad request when neither user_id nor email is provided" do
+      get :credits
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :credits, params: { user_id: "missing" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns an empty list with cursor pagination metadata" do
+      get :credits, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "credits" => [],
+        "pagination" => { "next" => nil, "limit" => 20 }
+      )
+    end
+
+    it "looks up soft-deleted users" do
+      deleted_user = create(:user, :deleted)
+
+      get :credits, params: { user_id: deleted_user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(deleted_user.external_id)
+    end
+
+    it "lists credits newest first with the crediting user, amount, and reason" do
+      older = Credit.create_for_credit!(user:, amount_cents: 500, crediting_user: admin_user, reason: "Older goodwill")
+      older.update_columns(created_at: 2.hours.ago)
+      newer = Credit.create_for_credit!(user:, amount_cents: 1500, crediting_user: admin_user, reason: "Newer goodwill")
+
+      get :credits, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(credit_ids).to eq([newer.id.to_s, older.id.to_s])
+      expect(response.parsed_body["credits"].first).to eq(
+        "id" => newer.id.to_s,
+        "amount_cents" => 1500,
+        "reason" => "Newer goodwill",
+        "crediting_user_id" => admin_user.external_id,
+        "created_at" => newer.created_at.iso8601
+      )
+    end
+
+    it "surfaces zero-amount and system-generated credits, with a null crediting_user_id for the latter" do
+      zero = Credit.create_for_credit!(user:, amount_cents: 0, crediting_user: admin_user, reason: "Engineering script leftover")
+      system_credit = Credit.create_for_credit!(user:, amount_cents: 250, crediting_user: admin_user, reason: nil)
+      system_credit.update_columns(crediting_user_id: nil)
+
+      get :credits, params: { user_id: user.external_id }
+
+      payloads = response.parsed_body["credits"].index_by { _1["id"] }
+      expect(payloads[zero.id.to_s]).to include("amount_cents" => 0, "crediting_user_id" => admin_user.external_id)
+      expect(payloads[system_credit.id.to_s]).to include("crediting_user_id" => nil, "reason" => nil)
+    end
+
+    it "returns bad request when the cursor is invalid" do
+      get :credits, params: { user_id: user.external_id, cursor: "invalid" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "invalid cursor" }.as_json)
+    end
+
+    it "preloads crediting users instead of issuing one query per credit" do
+      3.times do |index|
+        crediting_user = create(:admin_user, name: "Admin #{index}")
+        Credit.create_for_credit!(user:, amount_cents: 100, crediting_user:, reason: "Goodwill #{index}")
+      end
+      select_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s.squish
+        next if payload[:name] == "SCHEMA"
+        next unless sql.start_with?("SELECT")
+        next if sql.include?("`admin_api_tokens`")
+        next if sql.include?("`oauth_access_tokens`")
+
+        select_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :credits, params: { user_id: user.external_id }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["credits"].length).to eq(3)
+      expect(select_queries.length).to be <= 4, "expected at most 4 SELECTs but got #{select_queries.length}:\n#{select_queries.join("\n")}"
+    end
+
+    include_examples "supports user lookup by user_id", :credits, method: :get
+  end
+
   describe "POST add_credit" do
     let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
     let(:user) { create(:user) }
@@ -2246,7 +2356,8 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["credit"]).to include(
         "id" => credit.id.to_s,
         "amount_cents" => 1000,
-        "reason" => reason
+        "reason" => reason,
+        "crediting_user_id" => admin_user.external_id
       )
       expect(user.comments.reload.last.content).to eq("issued $10 credit — #{reason}.")
     end

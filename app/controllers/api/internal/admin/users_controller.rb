@@ -138,6 +138,21 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     render json: internal_admin_user_success_payload(user, unpaid_balance_payload(RefundUnpaidPurchasesWorker.unpaid_balance_summary_for(user)))
   end
 
+  def credits
+    user = find_internal_admin_user_for_read_or_render(include_deleted: true)
+    return unless user
+
+    records, pagination = paginate_with_cursor(
+      user.credits.includes(:crediting_user),
+      order: [[:created_at, :desc], [:id, :desc]]
+    )
+
+    render json: internal_admin_user_success_payload(user, {
+                                                       credits: records.map { serialize_credit(_1) },
+                                                       pagination:,
+                                                     })
+  end
+
   def reset_password
     user = find_internal_admin_user_for_write_or_render
     return unless user
@@ -826,6 +841,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         id: credit.id.to_s,
         amount_cents: credit.amount_cents,
         reason: credit.reason,
+        crediting_user_id: credit.crediting_user&.external_id,
         created_at: credit.created_at.iso8601
       }
     end

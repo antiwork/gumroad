@@ -20,6 +20,7 @@ describe "internal admin API routing" do
     expect(route_for("/internal/admin/users/related", :get)).to include(controller: "api/internal/admin/users", action: "related")
     expect(route_for("/internal/admin/users/suspension", :get)).to include(controller: "api/internal/admin/users", action: "suspension")
     expect(route_for("/internal/admin/users/unpaid_balance", :get)).to include(controller: "api/internal/admin/users", action: "unpaid_balance")
+    expect(route_for("/internal/admin/users/credits", :get)).to include(controller: "api/internal/admin/users", action: "credits")
     expect(route_for("/internal/admin/payouts", :get)).to include(controller: "api/internal/admin/payouts", action: "index")
   end
 
