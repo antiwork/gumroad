@@ -106,9 +106,36 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       @credited << credit_summary(purchase)
     rescue => e
       @stats[:error] += 1
-      @skipped[:error] << { purchase_id:, error: "#{e.class}: #{e.message}", orphan_bt_id: new_bt&.id }
-      @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message}" \
-                    "#{" — orphan BT #{new_bt.id} created without balance update (manual recovery needed)" if new_bt}"
+      if new_bt&.balance_id.present?
+        @skipped[:error] << {
+          purchase_id:,
+          error: "#{e.class}: #{e.message}",
+          bt_id: new_bt.id,
+          balance_id: new_bt.balance_id,
+          recovery: "balance already credited; set purchases.purchase_success_balance_id=#{new_bt.balance_id}. " \
+                    "DO NOT re-run update_balance! — it would double-credit.",
+        }
+        @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message} " \
+                      "— BT #{new_bt.id} already linked to balance #{new_bt.balance_id} " \
+                      "(seller credited). Only the purchase_success_balance_id FK update failed. " \
+                      "Recovery: UPDATE purchases SET purchase_success_balance_id=#{new_bt.balance_id} " \
+                      "WHERE id=#{purchase_id}. Do NOT call update_balance! again."
+      elsif new_bt
+        @skipped[:error] << {
+          purchase_id:,
+          error: "#{e.class}: #{e.message}",
+          orphan_bt_id: new_bt.id,
+          recovery: "BT inserted but balance not linked. Inspect seller's Balance for the purchase date " \
+                    "before deciding whether to call update_balance! (partial increments may have applied).",
+        }
+        @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message} " \
+                      "— orphan BT #{new_bt.id} (balance_id IS NULL). " \
+                      "Inspect seller_id=#{purchase&.seller_id} Balance for purchase date before recovering."
+      else
+        @skipped[:error] << { purchase_id:, error: "#{e.class}: #{e.message}" }
+        @logger.error "[backfill] error on purchase #{purchase_id}: #{e.class}: #{e.message} " \
+                      "(no BT created; safe to retry)"
+      end
     end
 
     def check_eligibility(p)

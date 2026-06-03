@@ -136,6 +136,39 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
       expect(purchase.balance_transactions.count).to eq(2)
     end
 
+    it "differentiates rescue messaging when update_balance! succeeded but purchase FK update failed" do
+      purchase = build_affected_purchase
+      allow(Purchase).to receive(:where).and_wrap_original do |orig, *args, &blk|
+        rel = orig.call(*args, &blk)
+        allow(rel).to receive(:update_all).and_raise(ActiveRecord::ConnectionNotEstablished, "boom")
+        rel
+      end
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id], verbose: true).process
+
+      expect(result[:stats][:error]).to eq(1)
+      err = result[:skipped][:error].first
+      expect(err[:bt_id]).to be_present
+      expect(err[:balance_id]).to be_present
+      expect(err[:recovery]).to include("DO NOT re-run update_balance!")
+      expect(purchase.balance_transactions.count).to eq(2)
+      expect(purchase.balance_transactions.order(:id).last.balance_id).to be_present
+    end
+
+    it "differentiates rescue messaging when BT was inserted but update_balance! failed" do
+      purchase = build_affected_purchase
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_raise(StandardError, "boom")
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id], verbose: true).process
+
+      expect(result[:stats][:error]).to eq(1)
+      err = result[:skipped][:error].first
+      expect(err[:orphan_bt_id]).to be_present
+      expect(err[:recovery]).to include("Inspect seller's Balance")
+      expect(purchase.balance_transactions.count).to eq(2)
+      expect(purchase.balance_transactions.order(:id).last.balance_id).to be_nil
+    end
+
     it "calls update_balance! outside the Purchase-row lock to avoid Balance/Purchase deadlock" do
       purchase = build_affected_purchase
       transaction_open = false
