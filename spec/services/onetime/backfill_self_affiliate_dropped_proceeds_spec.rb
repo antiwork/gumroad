@@ -76,7 +76,7 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
       expect(new_bt.holding_amount_net_cents).to eq(expected_net)
     end
 
-    it "attaches the new seller-leg BT to the same Balance as the affiliate-leg BT" do
+    it "attaches the new seller-leg BT to the same Balance as the affiliate-leg BT when it is still unpaid" do
       purchase = build_affected_purchase
       affiliate_bt = purchase.balance_transactions.first
       original_balance_id = affiliate_bt.balance_id
@@ -88,6 +88,31 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
 
       new_bt = purchase.balance_transactions.order(:id).last
       expect(new_bt.balance_id).to eq(original_balance_id)
+      expect(purchase.reload.purchase_success_balance_id).to eq(original_balance_id)
+    end
+
+    it "creates a fresh unpaid balance and repoints purchase_success_balance_id when the original balance has been paid out" do
+      purchase = build_affected_purchase
+      affiliate_bt = purchase.balance_transactions.first
+      original_balance = Balance.find(affiliate_bt.balance_id)
+      purchase.update_columns(purchase_success_balance_id: original_balance.id)
+      original_balance.mark_processing!
+      original_balance.mark_paid!
+
+      expect do
+        described_class.new(dry_run: false).process
+      end.to change { purchase.balance_transactions.count }.from(1).to(2)
+
+      new_bt = purchase.balance_transactions.order(:id).last
+      expect(new_bt.balance_id).not_to eq(original_balance.id)
+
+      new_balance = Balance.find(new_bt.balance_id)
+      expect(new_balance.state).to eq("unpaid")
+      expect(new_balance.user_id).to eq(seller.id)
+      expect(new_balance.amount_cents).to eq(purchase.payment_cents - purchase.affiliate_credit_cents.to_i)
+
+      expect(purchase.reload.purchase_success_balance_id).to eq(new_balance.id)
+      expect(original_balance.reload.state).to eq("paid")
     end
 
     it "is idempotent: a second run does not credit again" do

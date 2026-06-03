@@ -76,18 +76,16 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
     def process_one(purchase_id)
       @stats[:scanned] += 1
 
-      ApplicationRecord.transaction do
-        purchase = Purchase.lock.find(purchase_id)
-        reason = check_eligibility(purchase)
+      purchase = Purchase.find(purchase_id)
+      reason = check_eligibility(purchase)
 
-        if reason == :eligible
-          credit!(purchase) unless @dry_run
-          @stats[:credited] += 1
-          @credited << credit_summary(purchase)
-        else
-          @stats[reason] += 1
-          @skipped[reason] << purchase_id if @verbose
-        end
+      if reason == :eligible
+        credit!(purchase) unless @dry_run
+        @stats[:credited] += 1
+        @credited << credit_summary(purchase)
+      else
+        @stats[reason] += 1
+        @skipped[reason] << purchase_id if @verbose
       end
     rescue => e
       @stats[:error] += 1
@@ -145,7 +143,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         net_cents: missing_net_cents,
       )
 
-      BalanceTransaction.create!(
+      new_bt = BalanceTransaction.create!(
         user: p.seller,
         merchant_account: p.merchant_account,
         purchase: p,
@@ -153,6 +151,8 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         holding_amount: holding,
         update_user_balance: true,
       )
+
+      p.update_columns(purchase_success_balance_id: new_bt.balance_id)
     end
 
     def credit_summary(p)
