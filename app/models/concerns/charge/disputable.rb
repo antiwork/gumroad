@@ -222,17 +222,17 @@ module Charge::Disputable
     # PayPal can resolve a dispute as non-seller-favour while only partially refunding the buyer
     # (e.g. INCORRECT_AMOUNT settled with a partial refund). The purchase stays successful and
     # partially_refunded, so the chargeback flag set at formalization must be lifted to restore access.
-    purchases_to_restore = disputed_purchases.select do |purchase|
-      purchase.successful? && !purchase.stripe_refunded && purchase.stripe_partially_refunded
-    end
+    # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
+    # so a pre-dispute partial refund there does not mean the buyer is net-paying.
+    disputed_purchases.each do |purchase|
+      next unless purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id
+      next unless purchase.successful?
+      next if purchase.stripe_refunded
+      next unless purchase.stripe_partially_refunded
 
-    if purchases_to_restore.any?
-      mark_as_dispute_reversed!(dispute_reversed_at: event.created_at)
-      purchases_to_restore.each do |purchase|
-        purchase.update!(chargeback_reversed: true)
-        purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
-        purchase.mark_product_purchases_as_chargeback_reversed!
-      end
+      purchase.update!(chargeback_reversed: true)
+      purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
+      purchase.mark_product_purchases_as_chargeback_reversed!
     end
 
     resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")

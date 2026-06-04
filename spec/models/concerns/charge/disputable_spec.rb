@@ -1199,6 +1199,31 @@ describe Charge::Disputable, :vcr do
             end.not_to change { unrefunded_purchase.reload.chargeback_reversed }
           end
         end
+
+        context "when a Stripe purchase is partially refunded and the dispute is lost" do
+          let!(:stripe_partially_refunded_purchase) do
+            create(
+              :purchase,
+              link: product,
+              seller:,
+              stripe_transaction_id: "ch_stripe_partial_refund_lost",
+              price_cents: 100,
+              total_transaction_cents: 100,
+              fee_cents: 30,
+              chargeback_date: 1.day.ago,
+              stripe_partially_refunded: true,
+              stripe_refunded: false,
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            )
+          end
+          let(:stripe_event) { build(:charge_event_dispute_lost, charge_id: "ch_stripe_partial_refund_lost") }
+
+          it "does not restore access (Stripe-lost disputes pull funds via the bank)" do
+            expect do
+              Purchase.handle_charge_event(stripe_event)
+            end.not_to change { stripe_partially_refunded_purchase.reload.chargeback_reversed }
+          end
+        end
       end
     end
 
