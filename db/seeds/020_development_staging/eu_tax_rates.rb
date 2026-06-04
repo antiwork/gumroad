@@ -34,7 +34,7 @@ ZipTaxRate.find_or_create_by(country: "GB").update(combined_rate: 0.20)
 # https://www.amazon.com/gp/help/customer/display.html?nodeId=GSF5MREL4MX7PTVG
 ZipTaxRate.find_or_create_by(country: "AT", flags: 2).update(combined_rate: 0.10) # Austria
 ZipTaxRate.find_or_create_by(country: "BE", flags: 2).update(combined_rate: 0.06) # Belgium
-ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.20) # Bulgaria (reduced rate is for print books only; e-books at standard rate)
+ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.09) # Bulgaria
 ZipTaxRate.find_or_create_by(country: "HR", flags: 2).update(combined_rate: 0.05) # Croatia
 ZipTaxRate.find_or_create_by(country: "CY", flags: 2).update(combined_rate: 0.03) # Cyprus
 ZipTaxRate.find_or_create_by(country: "CZ", flags: 2).update(combined_rate: 0.00) # Czech Republic (zero rate since 2024-01-01)
