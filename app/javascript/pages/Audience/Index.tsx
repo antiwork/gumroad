@@ -18,7 +18,6 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
 
@@ -48,13 +47,12 @@ function Audience() {
           <div className="flex w-full gap-2">
             <Popover>
               <PopoverAnchor>
-                <WithTooltip tip="Export" position="bottom">
-                  <PopoverTrigger aria-label="Export" asChild>
-                    <Button size="icon">
-                      <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
-                    </Button>
-                  </PopoverTrigger>
-                </WithTooltip>
+                <PopoverTrigger aria-label="Export" asChild>
+                  <Button>
+                    <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
+                    Export
+                  </Button>
+                </PopoverTrigger>
               </PopoverAnchor>
               <PopoverContent sideOffset={4}>
                 <ExportSubscribersPopover />

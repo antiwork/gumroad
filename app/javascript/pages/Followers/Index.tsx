@@ -17,7 +17,6 @@ import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/followers.png";
 
@@ -90,19 +89,18 @@ export default function FollowersPage() {
     <EmailsLayout
       selectedTab="subscribers"
       actions={
-        <>
+        <div className="flex flex-wrap gap-2">
           {isSearchVisible.current ? (
             <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
           ) : null}
           <Popover>
             <PopoverAnchor>
-              <WithTooltip tip="Export" position="bottom">
-                <PopoverTrigger aria-label="Export" asChild>
-                  <Button size="icon">
-                    <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
-                  </Button>
-                </PopoverTrigger>
-              </WithTooltip>
+              <PopoverTrigger aria-label="Export" asChild>
+                <Button>
+                  <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
+                  Export
+                </Button>
+              </PopoverTrigger>
             </PopoverAnchor>
             <PopoverContent sideOffset={4}>
               <ExportSubscribersPopover />
@@ -115,12 +113,12 @@ export default function FollowersPage() {
               text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
             >
               <Button>
-                <Link className="size-5" />
+                <Link aria-hidden="true" className="size-5" />
                 Share subscribe page
               </Button>
             </CopyToClipboard>
           ) : null}
-        </>
+        </div>
       }
     >
       <div className="space-y-4 p-4 md:p-8">

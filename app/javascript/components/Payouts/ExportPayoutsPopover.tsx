@@ -152,9 +152,10 @@ const ExportPayoutsPopoverContent = () => {
 export const ExportPayoutsPopover = () => (
   <Popover>
     <PopoverAnchor>
-      <PopoverTrigger aria-label="Bulk export" asChild>
-        <Button size="icon">
-          <ArrowInDownSquareHalf className="size-5" />
+      <PopoverTrigger aria-label="Export all" asChild>
+        <Button>
+          <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
+          Export all
         </Button>
       </PopoverTrigger>
     </PopoverAnchor>

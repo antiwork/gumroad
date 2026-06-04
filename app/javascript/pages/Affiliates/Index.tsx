@@ -362,15 +362,14 @@ export default function AffiliatesIndex() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         Affiliates
                         <div className="text-base">
-                          <WithTooltip tip="Export" position="top">
-                            <a
-                              href={Routes.export_affiliates_path()}
-                              className={buttonVariants({ size: "default", color: "primary" })}
-                              aria-label="Export"
-                            >
-                              <ArrowInDownSquareHalf className="size-5" />
-                            </a>
-                          </WithTooltip>
+                          <a
+                            href={Routes.export_affiliates_path()}
+                            className={buttonVariants({ size: "default", color: "primary" })}
+                            aria-label="Export"
+                          >
+                            <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
+                            Export
+                          </a>
                         </div>
                       </div>
                     </TableCaption>

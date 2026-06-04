@@ -196,7 +196,7 @@ const CustomersPage = ({
       <PageHeader
         title="Sales"
         actions={
-          <>
+          <div className="flex flex-wrap gap-2">
             <Search value={searchQuery ?? ""} onSearch={(query) => updateQuery({ query })} placeholder="Search sales" />
             <Popover>
               <PopoverAnchor>
@@ -357,13 +357,12 @@ const CustomersPage = ({
             </Popover>
             <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
               <PopoverAnchor>
-                <WithTooltip tip="Export">
-                  <PopoverTrigger aria-label="Export" asChild>
-                    <Button size="icon">
-                      <ArrowInDownSquareHalf className="size-5" />
-                    </Button>
-                  </PopoverTrigger>
-                </WithTooltip>
+                <PopoverTrigger aria-label="Export" asChild>
+                  <Button>
+                    <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
+                    Export
+                  </Button>
+                </PopoverTrigger>
               </PopoverAnchor>
               <PopoverContent>
                 <div className="flex flex-col gap-4">
@@ -394,7 +393,7 @@ const CustomersPage = ({
                 </div>
               </PopoverContent>
             </Popover>
-          </>
+          </div>
         }
       />
       <section className="p-4 md:p-8">
