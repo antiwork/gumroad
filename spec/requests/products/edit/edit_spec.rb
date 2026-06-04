@@ -119,14 +119,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_combo_box_option "Version 2", from: "Select a version"
     expect(page).to have_text("Enter the content you want to sell.")
     rich_text_editor = find("[contenteditable=true]")
-    # Dispatch text into ProseMirror's view directly. send_keys races
-    # ProseMirror's mount after the variant swap and the first character lands
-    # in a stale doc, producing "ext!T". A view.dispatch transaction is atomic.
+    # Wait for ProseMirror's view to attach to the contenteditable, then
+    # dispatch text via a view transaction. send_keys races ProseMirror's
+    # mount on the variant swap and the first character lands in a stale doc
+    # ("ext!T" pattern); a view.dispatch is atomic.
+    Timeout.timeout(10) do
+      loop do
+        break if page.evaluate_script('!!document.querySelector(\'[aria-label="Content editor"]\')?.pmViewDesc')
+        sleep 0.1
+      end
+    end
     page.execute_script(<<~JS, rich_text_editor)
       const el = arguments[0]
       el.focus()
-      const view = el.pmViewDesc?.view
-      if (!view) throw new Error("ProseMirror view not attached yet")
+      const view = el.pmViewDesc.view
       view.dispatch(view.state.tr.insertText("Text!"))
     JS
     expect(rich_text_editor).to have_text("Text!")
