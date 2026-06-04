@@ -2011,6 +2011,24 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
     end
 
+    it "opens a Stripe AccountLink when Stripe still has future_requirements.eventually_due (volume-threshold case)" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => ["individual.id_number"] }
+        )
+      )
+      expect(Stripe::AccountLink).to receive(:create).and_call_original
+
+      get :remediation
+
+      expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+    end
+
     it "falls back to the 'Thanks' redirect when Stripe::Account.retrieve raises and local has no pending requests" do
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_raise(

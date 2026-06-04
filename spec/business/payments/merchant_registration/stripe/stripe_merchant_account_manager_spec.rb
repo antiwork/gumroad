@@ -11961,5 +11961,16 @@ describe StripeMerchantAccountManager, :vcr do
                                             ))
       end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
     end
+
+    it "still emails when an outstanding currently_due field remains alongside a new soft eventually_due field" do
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Business::TAX_ID)
+
+      expect do
+        described_class.handle_stripe_event(stripe_event(
+                                              currently_due: ["business.tax_id"],
+                                              eventually_due: ["individual.id_number"]
+                                            ))
+      end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+    end
   end
 end

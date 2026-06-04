@@ -904,7 +904,7 @@ module StripeMerchantAccountManager
     return if all_fields_needed.empty?
 
     document_verification_error = verification_errors.select { |_field, error| error[:code].starts_with?("verification_document") }.first
-    skip_more_kyc_email = requirements_only_soft_future?(requirements, new_requests, requirements_due_at)
+    skip_more_kyc_email = requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
     email_sent = if document_verification_error.present?
       ContactingCreatorMailer.stripe_document_verification_failed(user.id, document_verification_error[1][:reason]).deliver_later(queue: "critical")
     elsif verification_errors.present?
@@ -942,7 +942,7 @@ module StripeMerchantAccountManager
   SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days
 
   private_class_method
-  def self.requirements_only_soft_future?(requirements, new_requests, requirements_due_at)
+  def self.requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
     return false if new_requests.blank?
     return false unless requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
 
@@ -956,6 +956,9 @@ module StripeMerchantAccountManager
       StripeUserComplianceInfoFieldMap.map(normalized).presence || normalized
     end
 
-    new_requests.all? { |request| soft_field_names.include?(request.field_needed) }
+    return false unless new_requests.all? { |request| soft_field_names.include?(request.field_needed) }
+    return false unless Array(all_fields_needed).all? { |field| soft_field_names.include?(field) }
+
+    true
   end
 end

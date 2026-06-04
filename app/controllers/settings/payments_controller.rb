@@ -289,6 +289,7 @@ class Settings::PaymentsController < Settings::BaseController
         requirements["eventually_due"],
         future_requirements["currently_due"],
         future_requirements["past_due"],
+        future_requirements["eventually_due"],
       ].any?(&:present?)
     rescue Stripe::StripeError => e
       ErrorNotifier.notify(e, context: { user_id: current_seller.id })
