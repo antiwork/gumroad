@@ -943,7 +943,7 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
-    return false if new_requests.blank?
+    return false if Array(all_fields_needed).empty?
     return false unless requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
 
     eventually_due_only = (requirements["eventually_due"] || []) -
@@ -956,7 +956,9 @@ module StripeMerchantAccountManager
       StripeUserComplianceInfoFieldMap.map(normalized).presence || normalized
     end
 
-    return false unless new_requests.all? { |request| soft_field_names.include?(request.field_needed) }
+    if new_requests.present?
+      return false unless new_requests.all? { |request| soft_field_names.include?(request.field_needed) }
+    end
     return false unless Array(all_fields_needed).all? { |field| soft_field_names.include?(field) }
 
     true

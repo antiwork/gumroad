@@ -11972,5 +11972,13 @@ describe StripeMerchantAccountManager, :vcr do
                                             ))
       end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
     end
+
+    it "does not re-notify on the monthly path when every outstanding requested field is soft" do
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID, created_at: 2.months.ago)
+
+      expect do
+        described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+    end
   end
 end
