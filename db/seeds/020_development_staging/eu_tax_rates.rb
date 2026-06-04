@@ -38,7 +38,7 @@ ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.09
 ZipTaxRate.find_or_create_by(country: "HR", flags: 2).update(combined_rate: 0.25) # Croatia
 ZipTaxRate.find_or_create_by(country: "CY", flags: 2).update(combined_rate: 0.05) # Cyprus
 ZipTaxRate.find_or_create_by(country: "CZ", flags: 2).update(combined_rate: 0.10) # Czech Republic
-ZipTaxRate.find_or_create_by(country: "DK", flags: 2).update(combined_rate: 0.00) # Denmark (effective 2026-07-01)
+ZipTaxRate.find_or_create_by(country: "DK", flags: 2).update(combined_rate: 0.25) # Denmark
 ZipTaxRate.find_or_create_by(country: "EE", flags: 2).update(combined_rate: 0.20) # Estonia
 ZipTaxRate.find_or_create_by(country: "FI", flags: 2).update(combined_rate: 0.10) # Finland
 ZipTaxRate.find_or_create_by(country: "FR", flags: 2).update(combined_rate: 0.055) # France
