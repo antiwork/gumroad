@@ -34,7 +34,7 @@ export const updateSubscription = async (
   data: UpdateSubscriptionPayload,
 ): Promise<
   | { type: "done"; message: string; next: string | null }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; restartAtCheckoutUrl?: string }
   | {
       type: "requires_card_action";
       client_secret: string;
@@ -67,12 +67,18 @@ export const updateSubscription = async (
         purchase: responseData.purchase,
       };
     }
-    return { type: "error", message: responseData.error_message };
+    return {
+      type: "error",
+      message: responseData.error_message,
+      ...("restart_at_checkout_url" in responseData && responseData.restart_at_checkout_url
+        ? { restartAtCheckoutUrl: responseData.restart_at_checkout_url }
+        : {}),
+    };
   }
   return { type: "error", message: "Sorry, something went wrong." };
 };
 type UpdateSubscriptionResponse =
-  | { success: false; error_message: string }
+  | { success: false; error_message: string; restart_at_checkout_url?: string }
   | { success: true; success_message: string; next?: string | null }
   | {
       success: true;

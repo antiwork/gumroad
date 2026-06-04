@@ -288,6 +288,13 @@ export default function SubscriptionsManage() {
           router.reload();
         }
       });
+    } else if (result.restartAtCheckoutUrl) {
+      const escape = (s: string) => s.replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
+      showAlert(
+        `${escape(result.message)} <a href="${escape(result.restartAtCheckoutUrl)}">Subscribe from the product page</a>`,
+        "error",
+        { html: true },
+      );
     } else {
       showAlert(result.message, "error", { html: true });
     }

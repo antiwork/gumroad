@@ -47,8 +47,11 @@ class Subscription::UpdaterService
     end
 
     if is_resubscribing && subscription.cancelled_by_seller? && use_existing_card?
-      checkout_link = "<a href=\"#{ERB::Util.html_escape(product.long_url)}\">subscribe again from the product page</a>"
-      return { success: false, error_message: "This membership was cancelled by the creator. To continue, please #{checkout_link}." }
+      return {
+        success: false,
+        error_message: "This membership was cancelled by the creator. To continue, please subscribe again from the product page.",
+        restart_at_checkout_url: product.long_url,
+      }
     end
 
     if is_resubscribing && subscription.is_installment_plan? && subscription.charges_completed?

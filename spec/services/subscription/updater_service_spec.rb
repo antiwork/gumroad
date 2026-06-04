@@ -590,7 +590,7 @@ describe Subscription::UpdaterService, :vcr do
         end
 
         context "when the membership was cancelled by the creator" do
-          it "blocks restarting with the existing card and surfaces a link to the product checkout" do
+          it "blocks restarting with the existing card and surfaces the product checkout URL alongside a plain text message" do
             @subscription.update!(cancelled_by_buyer: false)
 
             result = Subscription::UpdaterService.new(
@@ -602,9 +602,9 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(result[:success]).to eq false
-            expect(result[:error_message]).to include("This membership was cancelled by the creator.")
-            expect(result[:error_message]).to include("subscribe again from the product page")
-            expect(result[:error_message]).to include("href=\"#{@product.long_url}\"")
+            expect(result[:error_message]).to eq "This membership was cancelled by the creator. To continue, please subscribe again from the product page."
+            expect(result[:error_message]).not_to include("<")
+            expect(result[:restart_at_checkout_url]).to eq @product.long_url
             expect(@subscription.reload).not_to be_alive
           end
 
