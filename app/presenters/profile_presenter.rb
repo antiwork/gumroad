@@ -59,7 +59,7 @@ class ProfilePresenter
     end
 
     def can_edit_profile?
-      pundit_user.user.present? &&
+      pundit_user&.user.present? &&
         pundit_user.seller == seller &&
         Pundit.policy!(pundit_user, [:settings, :profile]).show?
     end

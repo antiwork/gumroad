@@ -27,8 +27,9 @@ describe "User profile page", type: :system, js: true do
       expect(page).to have_current_path("/products")
       select_disclosure "#{creator.display_name}" do
         expect(page).to have_menuitem("Unbecome")
-        click_on "Profile"
       end
+      toggle_disclosure "#{creator.display_name}", expand: false
+      click_on "Profile"
 
       logout
       sleep 1 # Since logout doesn't seem to immediately invalidate the session
