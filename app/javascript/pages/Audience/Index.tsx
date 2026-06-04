@@ -47,7 +47,7 @@ function Audience() {
           <div className="flex w-full gap-2">
             <Popover>
               <PopoverAnchor>
-                <PopoverTrigger aria-label="Export" asChild>
+                <PopoverTrigger asChild>
                   <Button>
                     <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
                     Export

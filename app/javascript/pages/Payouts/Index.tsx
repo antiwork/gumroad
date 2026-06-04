@@ -110,7 +110,6 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             className="shrink-0"
             disabled={isCSVDownloadInProgress}
             onClick={handleRequestPayoutCSV}
-            aria-label="Export"
           >
             <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
             Export

@@ -365,7 +365,6 @@ export default function AffiliatesIndex() {
                           <a
                             href={Routes.export_affiliates_path()}
                             className={buttonVariants({ size: "default", color: "primary" })}
-                            aria-label="Export"
                           >
                             <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
                             Export

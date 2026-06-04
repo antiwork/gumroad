@@ -95,7 +95,7 @@ export default function FollowersPage() {
           ) : null}
           <Popover>
             <PopoverAnchor>
-              <PopoverTrigger aria-label="Export" asChild>
+              <PopoverTrigger asChild>
                 <Button>
                   <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
                   Export

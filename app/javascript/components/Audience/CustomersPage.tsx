@@ -357,7 +357,7 @@ const CustomersPage = ({
             </Popover>
             <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
               <PopoverAnchor>
-                <PopoverTrigger aria-label="Export" asChild>
+                <PopoverTrigger asChild>
                   <Button>
                     <ArrowInDownSquareHalf aria-hidden="true" className="size-5" />
                     Export
