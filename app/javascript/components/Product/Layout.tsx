@@ -345,7 +345,7 @@ const EditButton = ({ product }: { product: Product }) => {
       color="filled"
       href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
     >
-      <Pencil className="size-5" />
+      <Pencil className="size-5" aria-hidden="true" />
       Edit product
     </NavigationButton>
   );
