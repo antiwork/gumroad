@@ -53,6 +53,15 @@ describe "OAuth device authorizations", type: :request do
       expect(response.parsed_body).to include("error" => "invalid_scope")
     end
 
+    it "uses the application's scopes when scope is omitted" do
+      expect do
+        post oauth_device_code_path, params: { client_id: oauth_application.uid }
+      end.to change { OauthDeviceAuthorization.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(OauthDeviceAuthorization.last).to have_attributes(scopes: "view_profile edit_products")
+    end
+
     it "rejects non-scalar scopes" do
       expect do
         post oauth_device_code_path, params: { client_id: oauth_application.uid, scope: { bad: "1" } }
@@ -175,9 +184,22 @@ describe "OAuth device authorizations", type: :request do
       )
       expect(access_token).to have_attributes(application_id: oauth_application.id, resource_owner_id: user.id)
       expect(access_token.scopes.to_s).to eq("view_profile")
-      expect(Doorkeeper::AccessGrant.where(application_id: oauth_application.id, resource_owner_id: user.id, scopes: "view_profile")).to exist
+      expect(Doorkeeper::AccessGrant.where(
+        application_id: oauth_application.id,
+        resource_owner_id: user.id,
+        scopes: "view_profile",
+        redirect_uri: OauthDeviceAuthorization::DEVICE_REDIRECT_URI
+      )).to exist
       expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED, access_token:)
       expect(OauthApplication.authorized_for(user)).to include(oauth_application)
+
+      consumed_authorization = OauthDeviceAuthorization.last
+      consumed_poll_count = consumed_authorization.poll_count
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "expired_token")
+      expect(consumed_authorization.reload).to have_attributes(poll_count: consumed_poll_count)
 
       oauth_application.revoke_access_for(user)
 
@@ -209,6 +231,32 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.body).to include("Choose whether to authorize or deny this application.")
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
+    it "does not show approval success when the approval transition loses a race" do
+      body = create_device_code
+      sign_in user
+      allow_any_instance_of(OauthDeviceAuthorization).to receive(:approve!).and_return(false)
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
+    it "does not show denial success when the denial transition loses a race" do
+      body = create_device_code
+      sign_in user
+      allow_any_instance_of(OauthDeviceAuthorization).to receive(:deny!).and_return(false)
+
+      submit_device_authorization(body["user_code"], decision: "deny")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization denied")
       expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
     end
 
@@ -248,13 +296,33 @@ describe "OAuth device authorizations", type: :request do
       expect(Doorkeeper::AccessToken.count).to eq(0)
     end
 
+    it "exchanges approved codes when the device application has no browser redirect URI" do
+      oauth_application.update_column(:redirect_uri, "")
+      body = create_device_code
+      sign_in user
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect do
+        post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(Doorkeeper::AccessGrant.where(
+        application_id: oauth_application.id,
+        resource_owner_id: user.id,
+        scopes: "view_profile",
+        redirect_uri: OauthDeviceAuthorization::DEVICE_REDIRECT_URI
+      )).to exist
+    end
+
     it "returns expired_token for expired codes" do
-      create(:oauth_device_authorization, oauth_application:, device_code: "expired-device-code", expires_at: 1.second.ago)
+      device_authorization = create(:oauth_device_authorization, oauth_application:, device_code: "expired-device-code", expires_at: 1.second.ago)
 
       post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: "expired-device-code" }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "expired_token")
+      expect(device_authorization.reload).to have_attributes(poll_count: 0, last_polled_at: nil)
     end
   end
 

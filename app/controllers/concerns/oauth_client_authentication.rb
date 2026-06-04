@@ -21,7 +21,7 @@ module OauthClientAuthentication
       return requested_scope if requested_scope.is_a?(String) && requested_scope.present?
       return if requested_scope.present?
 
-      (Doorkeeper.configuration.default_scopes & oauth_application_scopes(oauth_application)).to_s
+      oauth_application_scopes(oauth_application).to_s
     end
 
     def valid_oauth_scope?(oauth_application, scopes)

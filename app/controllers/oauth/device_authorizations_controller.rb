@@ -30,11 +30,19 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
     case params[:decision]
     when "deny"
-      @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
-      @decision = :denied
+      if @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
+        @decision = :denied
+      else
+        @error_message = "This code is invalid or expired."
+        return render :new, status: :unprocessable_entity
+      end
     when "approve"
-      @device_authorization.approve!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
-      @decision = :approved
+      if @device_authorization.approve!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
+        @decision = :approved
+      else
+        @error_message = "This code is invalid or expired."
+        return render :new, status: :unprocessable_entity
+      end
     else
       @error_message = "Choose whether to authorize or deny this application."
       return render :new, status: :unprocessable_entity

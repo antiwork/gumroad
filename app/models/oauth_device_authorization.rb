@@ -4,6 +4,7 @@ require "digest"
 
 class OauthDeviceAuthorization < ApplicationRecord
   GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+  DEVICE_REDIRECT_URI = GRANT_TYPE
   EXPIRES_IN = 10.minutes
   POLL_INTERVAL = 5.seconds
   SLOW_DOWN_INTERVAL = 10.seconds
@@ -125,15 +126,15 @@ class OauthDeviceAuthorization < ApplicationRecord
     result = nil
 
     with_lock do
-      update_poll_metadata!(ip_address:, user_agent:)
-
       result = if oauth_application != self.oauth_application || expired? || consumed?
         [POLL_EXPIRED_TOKEN, nil]
       elsif denied?
         [POLL_ACCESS_DENIED, nil]
       elsif pending?
+        update_poll_metadata!(ip_address:, user_agent:)
         polled_too_recently? ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
       else
+        update_poll_metadata!(ip_address:, user_agent:)
         access_token = issue_access_token!
         update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
         [POLL_APPROVED, access_token]
@@ -182,7 +183,7 @@ class OauthDeviceAuthorization < ApplicationRecord
       oauth_application.access_grants.where(
         resource_owner_id:,
         scopes:,
-        redirect_uri: oauth_application.redirect_uri
+        redirect_uri: DEVICE_REDIRECT_URI
       ).first_or_create! { |access_grant| access_grant.expires_in = 60.years }
     end
 end
