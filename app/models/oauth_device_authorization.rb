@@ -8,6 +8,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   EXPIRES_IN = 10.minutes
   POLL_INTERVAL = 5.seconds
   SLOW_DOWN_INTERVAL = 10.seconds
+  MAX_CODE_GENERATION_ATTEMPTS = 3
 
   STATUS_PENDING = "pending"
   STATUS_APPROVED = "approved"
@@ -29,22 +30,28 @@ class OauthDeviceAuthorization < ApplicationRecord
   validates :status, inclusion: { in: [STATUS_PENDING, STATUS_APPROVED, STATUS_DENIED, STATUS_CONSUMED] }
 
   def self.create_for!(oauth_application:, scopes:, ip_address:, user_agent:)
-    device_code = generate_device_code
-    user_code = generate_user_code
+    attempts = 0
 
-    device_authorization = create!(
-      oauth_application:,
-      scopes:,
-      device_code_digest: digest(device_code),
-      user_code_digest: digest(normalize_user_code(user_code)),
-      expires_at: EXPIRES_IN.from_now,
-      created_ip_address: ip_address,
-      created_user_agent: user_agent
-    )
+    begin
+      attempts += 1
+      device_code = generate_device_code
+      user_code = generate_user_code
 
-    [device_authorization, device_code, user_code]
-  rescue ActiveRecord::RecordNotUnique
-    retry
+      device_authorization = create!(
+        oauth_application:,
+        scopes:,
+        device_code_digest: digest(device_code),
+        user_code_digest: digest(normalize_user_code(user_code)),
+        expires_at: EXPIRES_IN.from_now,
+        created_ip_address: ip_address,
+        created_user_agent: user_agent
+      )
+
+      [device_authorization, device_code, user_code]
+    rescue ActiveRecord::RecordNotUnique
+      retry if attempts < MAX_CODE_GENERATION_ATTEMPTS
+      raise
+    end
   end
 
   def self.find_by_device_code(device_code)
@@ -131,8 +138,8 @@ class OauthDeviceAuthorization < ApplicationRecord
       elsif denied?
         [POLL_ACCESS_DENIED, nil]
       elsif pending?
-        update_poll_metadata!(ip_address:, user_agent:)
-        polled_too_recently? ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
+        previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
+        polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
       else
         update_poll_metadata!(ip_address:, user_agent:)
         access_token = issue_access_token!
@@ -154,17 +161,18 @@ class OauthDeviceAuthorization < ApplicationRecord
     end
 
     def update_poll_metadata!(ip_address:, user_agent:)
-      @previous_last_polled_at = last_polled_at
+      previous_last_polled_at = last_polled_at
       update!(
         last_polled_at: Time.current,
         last_poll_ip_address: ip_address,
         last_poll_user_agent: user_agent,
         poll_count: poll_count + 1
       )
+      previous_last_polled_at
     end
 
-    def polled_too_recently?
-      @previous_last_polled_at.present? && @previous_last_polled_at > POLL_INTERVAL.ago
+    def polled_too_recently?(previous_last_polled_at)
+      previous_last_polled_at.present? && previous_last_polled_at > POLL_INTERVAL.ago
     end
 
     def issue_access_token!

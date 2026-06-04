@@ -10,7 +10,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   def new
     load_device_authorization
 
-    if @device_authorization.present? && !user_signed_in?
+    if @device_authorization.present? && @error_message.blank? && !user_signed_in?
       redirect_to login_path(next: oauth_device_authorization_path(user_code: @user_code))
     end
   end
@@ -18,7 +18,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   def create
     load_device_authorization
 
-    if @device_authorization.blank? || !@device_authorization.approvable?
+    if @device_authorization.blank? || @error_message.present? || !@device_authorization.approvable?
       @error_message ||= "This code is invalid or expired."
       return render :new, status: :unprocessable_entity
     end
@@ -62,6 +62,10 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         @error_message = "This code is invalid."
       elsif @device_authorization.expired?
         @error_message = "This code has expired."
+      elsif !@device_authorization.oauth_application.alive? || !@device_authorization.oauth_application.device_authorization_enabled?
+        @error_message = "This code is invalid."
+      elsif !@device_authorization.pending?
+        @error_message = "This code is invalid or expired."
       elsif user_signed_in? && impersonating?
         @error_message = "Stop impersonating before authorizing an OAuth application."
       end

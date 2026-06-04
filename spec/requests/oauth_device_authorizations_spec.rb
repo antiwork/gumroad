@@ -130,6 +130,17 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).to include("See your profile data.")
     end
 
+    it "shows expired codes without redirecting to login" do
+      device_authorization = create(:oauth_device_authorization, oauth_application:, user_code: "GRD-EXPR-0001", expires_at: 1.second.ago)
+
+      get oauth_device_authorization_path, params: { user_code: "GRD-EXPR-0001" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response).not_to be_redirect
+      expect(response.body).to include("This code has expired.")
+      expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
     it "blocks approval while the signed-in admin is impersonating another user" do
       body = create_device_code
       admin = create(:admin_user)
@@ -257,6 +268,44 @@ describe "OAuth device authorizations", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.body).to include("This code is invalid or expired.")
       expect(response.body).not_to include("Authorization denied")
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
+    it "does not approve a code after device authorization is disabled for the client" do
+      body = create_device_code
+      oauth_application.update!(device_authorization_enabled: false)
+      sign_in user
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid.")
+      expect(response.body).not_to include("This application will be able to:")
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid.")
+      expect(response.body).not_to include("Authorization complete")
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
+    it "does not approve a code after the client is deleted" do
+      body = create_device_code
+      oauth_application.mark_deleted!
+      sign_in user
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid.")
+      expect(response.body).not_to include("This application will be able to:")
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid.")
+      expect(response.body).not_to include("Authorization complete")
       expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
     end
 
