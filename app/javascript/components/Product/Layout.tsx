@@ -37,7 +37,6 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 
@@ -353,16 +352,10 @@ const EditButton = ({ product }: { product: Product }) => {
         zIndex: "var(--z-index-overlay)",
       }}
     >
-      <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
-        <NavigationButton
-          color="filled"
-          size="icon"
-          href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
-          aria-label="Edit product"
-        >
-          <Pencil className="size-5" />
-        </NavigationButton>
-      </WithTooltip>
+      <NavigationButton color="filled" href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}>
+        <Pencil className="size-5" />
+        Edit product
+      </NavigationButton>
     </div>
   );
 };
