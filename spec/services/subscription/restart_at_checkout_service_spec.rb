@@ -530,7 +530,7 @@ describe Subscription::RestartAtCheckoutService do
           )
         end
 
-        it "returns an error" do
+        it "returns a seller-cancelled error when no new payment method is being attached" do
           result = described_class.new(
             subscription: subscription,
             product: product,
@@ -539,7 +539,7 @@ describe Subscription::RestartAtCheckoutService do
           ).perform
 
           expect(result[:success]).to be false
-          expect(result[:error_message]).to eq("This subscription cannot be restarted.")
+          expect(result[:error_message]).to eq("This membership was cancelled by the creator. To continue, please subscribe again from the product page.")
         end
       end
 
@@ -559,7 +559,7 @@ describe Subscription::RestartAtCheckoutService do
           product.update!(deleted_at: 1.hour.ago)
         end
 
-        it "returns an error" do
+        it "returns a product-unavailable error" do
           result = described_class.new(
             subscription: subscription,
             product: product,
@@ -568,7 +568,7 @@ describe Subscription::RestartAtCheckoutService do
           ).perform
 
           expect(result[:success]).to be false
-          expect(result[:error_message]).to eq("This subscription cannot be restarted.")
+          expect(result[:error_message]).to eq("This product is no longer available, so this membership can't be restarted.")
         end
       end
     end
