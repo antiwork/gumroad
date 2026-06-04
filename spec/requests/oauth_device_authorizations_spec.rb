@@ -250,6 +250,31 @@ describe "OAuth device authorizations", type: :request do
       expect(response.parsed_body).to include("error" => "access_denied")
     end
 
+    it "does not return a successful token response when the issued token is revoked before rendering" do
+      body = create_device_code
+      sign_in user
+      submit_device_authorization(body["user_code"], decision: "approve")
+      allow_any_instance_of(OauthDeviceAuthorization).to receive(:poll!).and_wrap_original do |method, *args, **kwargs|
+        kwargs = args.pop if kwargs.empty? && args.last.is_a?(Hash)
+        status, access_token = method.call(*args, **kwargs)
+        access_token.update!(revoked_at: Time.current) if status == OauthDeviceAuthorization::POLL_APPROVED
+        [status, access_token]
+      end
+
+      expect do
+        post oauth_token_path,
+             params: {
+               grant_type: OauthDeviceAuthorization::GRANT_TYPE,
+               client_id: oauth_application.uid,
+               device_code: body["device_code"]
+             }
+      end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "access_denied")
+      expect(Doorkeeper::AccessToken.last).to be_revoked
+    end
+
     it "does not exchange an approved code after device authorization is disabled for the client" do
       body = create_device_code
       sign_in user
@@ -378,6 +403,20 @@ describe "OAuth device authorizations", type: :request do
       sign_in user
 
       submit_device_authorization(body["user_code"], decision: "deny")
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "access_denied")
+      expect(Doorkeeper::AccessToken.count).to eq(0)
+    end
+
+    it "returns access_denied for denied codes after they expire" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "deny")
+      OauthDeviceAuthorization.last.update!(expires_at: 1.second.ago)
+
       post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
 
       expect(response).to have_http_status(:bad_request)

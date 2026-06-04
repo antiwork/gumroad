@@ -133,10 +133,12 @@ class OauthDeviceAuthorization < ApplicationRecord
     result = nil
 
     with_lock do
-      result = if oauth_application != self.oauth_application || expired? || consumed?
+      result = if oauth_application != self.oauth_application || consumed?
         [POLL_EXPIRED_TOKEN, nil]
       elsif denied?
         [POLL_ACCESS_DENIED, nil]
+      elsif expired?
+        [POLL_EXPIRED_TOKEN, nil]
       elsif pending?
         previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
         polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]

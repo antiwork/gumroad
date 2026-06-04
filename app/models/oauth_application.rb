@@ -70,9 +70,8 @@ class OauthApplication < Doorkeeper::Application
   def revoke_access_for(user)
     revoked_at = Time.current
 
-    transaction do
-      # Deny device authorizations before revoking tokens so in-flight polls either see the denial
-      # or mint a token that the following revoke sweep catches.
+    with_lock do
+      # Coordinate with device token polling on this application row before revoking tokens.
       device_authorizations
         .where(
           resource_owner_id: user.id,
