@@ -119,7 +119,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_combo_box_option "Version 2", from: "Select a version"
     expect(page).to have_text("Enter the content you want to sell.")
     rich_text_editor = find("[contenteditable=true]")
-    rich_text_editor.click
+    page.execute_script("arguments[0].focus()", rich_text_editor)
     rich_text_editor.send_keys "Text!"
     expect(rich_text_editor).to have_text("Text!")
     save_change
