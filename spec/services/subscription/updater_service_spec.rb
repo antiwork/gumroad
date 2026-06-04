@@ -590,7 +590,7 @@ describe Subscription::UpdaterService, :vcr do
         end
 
         context "when the membership was cancelled by the creator" do
-          it "does not allow restarting the membership" do
+          it "blocks restarting with the existing card and surfaces a link to the product checkout" do
             @subscription.update!(cancelled_by_buyer: false)
 
             result = Subscription::UpdaterService.new(
@@ -602,8 +602,27 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(result[:success]).to eq false
-            expect(result[:error_message]).to eq "This subscription cannot be restarted."
+            expect(result[:error_message]).to include("This membership was cancelled by the creator.")
+            expect(result[:error_message]).to include("subscribe again from the product page")
+            expect(result[:error_message]).to include("href=\"#{@product.long_url}\"")
             expect(@subscription.reload).not_to be_alive
+          end
+
+          it "allows restart-at-checkout to proceed past the seller-cancelled guard when a new payment method is being attached" do
+            @subscription.update!(cancelled_by_buyer: false)
+            allow(CardParamsHelper).to receive(:build_chargeable).and_return(nil)
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: existing_card_params.merge(use_existing_card: false, paypal_order_id: "PAYID-TEST"),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq false
+            expect(result[:error_message]).not_to include("This membership was cancelled by the creator.")
+            expect(result[:error_message]).to include("couldn't charge")
           end
         end
 
@@ -620,8 +639,23 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(result[:success]).to eq false
-            expect(result[:error_message]).to eq "This subscription cannot be restarted."
+            expect(result[:error_message]).to eq "This product is no longer available, so this membership can't be restarted."
             expect(@subscription.reload).not_to be_alive
+          end
+
+          it "blocks restart even when a new payment method is being attached" do
+            @product.mark_deleted!
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: existing_card_params.merge(use_existing_card: false, paypal_order_id: "PAYID-TEST"),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq false
+            expect(result[:error_message]).to eq "This product is no longer available, so this membership can't be restarted."
           end
         end
       end
