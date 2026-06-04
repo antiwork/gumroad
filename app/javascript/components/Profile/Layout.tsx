@@ -43,16 +43,10 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     <div className="flex min-h-screen flex-col">
       {creatorProfile.can_edit ? (
         <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
-          <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
-            <NavigationButton
-              color="filled"
-              size="icon"
-              href={Routes.settings_profile_url({ host: appDomain })}
-              aria-label="Edit profile"
-            >
-              <Pencil className="size-5" />
-            </NavigationButton>
-          </WithTooltip>
+          <NavigationButton color="filled" href={Routes.settings_profile_url({ host: appDomain })}>
+            <Pencil className="size-5" />
+            Edit profile
+          </NavigationButton>
         </div>
       ) : null}
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">

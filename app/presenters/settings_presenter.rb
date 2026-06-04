@@ -9,6 +9,7 @@ class SettingsPresenter
 
   ALL_PAGES = %w(
     main
+    profile
     team
     payments
     billing
@@ -30,7 +31,7 @@ class SettingsPresenter
       case page
       when "main", "payments", "password", "third_party_analytics", "advanced"
         Pundit.policy!(pundit_user, [:settings, page.to_sym, seller]).show?
-      when "billing"
+      when "profile", "billing"
         Pundit.policy!(pundit_user, [:settings, page.to_sym]).show?
       when "team"
         Pundit.policy!(pundit_user, [:settings, :team, seller]).show?

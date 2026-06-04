@@ -35,7 +35,7 @@ describe "Main Navigation", type: :system, js: true do
         toggle_disclosure("Gum")
         within "div[role='menu']" do
           expect(page).not_to have_text(user.display_name)
-          expect(page).to have_menuitem("Profile")
+          expect(page).not_to have_menuitem("Profile")
           expect(page).to have_menuitem("Settings")
           expect(page).to have_menuitem("Teams")
           expect(page).not_to have_menuitem("Affiliates")
