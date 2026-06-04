@@ -42,7 +42,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
   return (
     <div className="flex min-h-screen flex-col">
       {creatorProfile.can_edit ? (
-        <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
+        <div className="mx-auto w-full max-w-6xl p-4 pb-0 lg:px-4">
           <NavigationButton color="filled" href={Routes.settings_profile_url({ host: appDomain })}>
             <Pencil className="size-5" />
             Edit profile
