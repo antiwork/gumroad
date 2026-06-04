@@ -906,7 +906,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
                                      { "type" => "licenseKey" },
                                      { "type" => "fileEmbed", "attrs" => { "id" => @video_file.external_id, "uid" => SecureRandom.uuid } }
                                    ])
-      create(:rich_content, entity: @product, title: "Page 2", description: [{ "type" => "paragraph", "content" => [{ "type" => "fileEmbed", "attrs" => { "id" => @audio_file.external_id, "uid" => SecureRandom.uuid } }] }])
+      create(:rich_content, entity: @product, title: "Page 2", description: [{ "type" => "fileEmbed", "attrs" => { "id" => @audio_file.external_id, "uid" => SecureRandom.uuid } }])
       @product.update!(is_licensed: true, is_multiseat_license: true)
       @purchase.update!(is_multiseat_license: true)
 
