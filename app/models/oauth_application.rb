@@ -77,10 +77,11 @@ class OauthApplication < Doorkeeper::Application
 
     with_lock do
       # Coordinate with device token polling on this application row before revoking tokens.
+      # Pending codes have no owner yet; approve! rejects codes created before this revocation.
       device_authorizations
         .where(
           resource_owner_id: user.id,
-          status: [OauthDeviceAuthorization::STATUS_PENDING, OauthDeviceAuthorization::STATUS_APPROVED]
+          status: OauthDeviceAuthorization::STATUS_APPROVED
         )
         .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: revoked_at, updated_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)

@@ -272,8 +272,8 @@ describe OauthApplication do
       expect(@oauth_application.resource_subscriptions.where(user: @subscriber_2).alive.count).to eq(1)
     end
 
-    it "denies outstanding device authorizations for the user" do
-      pending_authorization = create(
+    it "denies approved device authorizations for the user" do
+      pending_authorization_with_owner = create(
         :oauth_device_authorization,
         oauth_application: @oauth_application,
         resource_owner: @subscriber_1,
@@ -307,7 +307,7 @@ describe OauthApplication do
 
       @oauth_application.revoke_access_for(@subscriber_1)
 
-      expect(pending_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present)
+      expect(pending_authorization_with_owner.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, denied_at: nil)
       expect(approved_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present)
       expect(other_user_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_APPROVED, denied_at: nil)
       expect(unauthenticated_pending_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, denied_at: nil)
