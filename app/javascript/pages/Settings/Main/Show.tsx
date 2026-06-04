@@ -95,7 +95,7 @@ export default function MainPage() {
   });
 
   const isFormDisabled = props.is_form_disabled || form.processing;
-  const canUpdateUsername = Boolean(loggedInUser?.policies.settings_profile.update_username) && !isFormDisabled;
+  const canUpdateUsername = Boolean(loggedInUser?.policies.settings_main_user.update_username) && !isFormDisabled;
 
   const updateUserSettings = (settings: Partial<typeof form.data.user>) =>
     form.setData("user", { ...form.data.user, ...settings });
