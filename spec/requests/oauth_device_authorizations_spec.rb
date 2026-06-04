@@ -403,7 +403,7 @@ describe "OAuth device authorizations", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.body).to include("This code is invalid.")
       expect(response.body).not_to include("Authorization complete")
-      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present, resource_owner: nil)
     end
 
     it "returns authorization_pending and slow_down while the user has not approved the code" do

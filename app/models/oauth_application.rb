@@ -30,11 +30,16 @@ class OauthApplication < Doorkeeper::Application
   end
 
   def mark_deleted!
-    transaction do
-      access_grants.where(revoked_at: nil).update_all(revoked_at: Time.current)
-      access_tokens.where(revoked_at: nil).update_all(revoked_at: Time.current)
-      resource_subscriptions.alive.update_all(deleted_at: Time.current)
-      update!(deleted_at: Time.current)
+    deleted_at = Time.current
+
+    with_lock do
+      access_grants.where(revoked_at: nil).update_all(revoked_at: deleted_at)
+      access_tokens.where(revoked_at: nil).update_all(revoked_at: deleted_at)
+      device_authorizations
+        .where(status: [OauthDeviceAuthorization::STATUS_PENDING, OauthDeviceAuthorization::STATUS_APPROVED])
+        .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: deleted_at, updated_at: deleted_at)
+      resource_subscriptions.alive.update_all(deleted_at:)
+      update!(deleted_at:)
     end
   end
 

@@ -200,6 +200,45 @@ describe OauthApplication do
 
       expect(@oauth_application.access_tokens).to all be_revoked
     end
+
+    it "denies outstanding device authorizations" do
+      pending_authorization = create(
+        :oauth_device_authorization,
+        oauth_application: @oauth_application,
+        status: OauthDeviceAuthorization::STATUS_PENDING,
+        device_code: "pending-deleted-app",
+        user_code: "GRD-PEND-DEL1"
+      )
+      approved_authorization = create(
+        :oauth_device_authorization,
+        oauth_application: @oauth_application,
+        status: OauthDeviceAuthorization::STATUS_APPROVED,
+        device_code: "approved-deleted-app",
+        user_code: "GRD-APPR-DEL1"
+      )
+      consumed_authorization = create(
+        :oauth_device_authorization,
+        oauth_application: @oauth_application,
+        status: OauthDeviceAuthorization::STATUS_CONSUMED,
+        device_code: "consumed-deleted-app",
+        user_code: "GRD-CONS-DEL1"
+      )
+      denied_authorization = create(
+        :oauth_device_authorization,
+        oauth_application: @oauth_application,
+        status: OauthDeviceAuthorization::STATUS_DENIED,
+        denied_at: 1.day.ago,
+        device_code: "denied-deleted-app",
+        user_code: "GRD-DENY-DEL1"
+      )
+
+      @oauth_application.mark_deleted!
+
+      expect(pending_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present)
+      expect(approved_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present)
+      expect(consumed_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED, denied_at: nil)
+      expect(denied_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: be_present)
+    end
   end
 
   describe "#revoke_access_for" do
