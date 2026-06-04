@@ -84,11 +84,12 @@ describe ProfilePresenter do
   describe "#profile_settings_props" do
     it "returns profile settings props object" do
       Link.import(force: true, refresh: true)
-      expect(presenter.profile_settings_props(request:)).to match(
+      props = presenter.profile_settings_props(request:)
+
+      expect(props).to match(
         {
           profile_settings: {
             name: seller.name,
-            username: seller.username,
             bio: seller.bio,
             background_color: "#ffffff",
             highlight_color: "#ff90e8",
@@ -99,6 +100,7 @@ describe ProfilePresenter do
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
         }
       )
+      expect(props[:profile_settings]).not_to have_key(:username)
     end
   end
 end
