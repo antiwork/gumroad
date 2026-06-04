@@ -202,15 +202,24 @@ class Settings::PaymentsController < Settings::BaseController
     safe_redirect_to settings_payments_path and return if current_seller.stripe_account.blank?
 
     stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+    requirements = stripe_account["requirements"] || {}
+    future_requirements = stripe_account["future_requirements"] || {}
 
-    if stripe_account["requirements"]["currently_due"].blank? && stripe_account["requirements"]["past_due"].blank?
+    hard_requirements_clear = requirements["currently_due"].blank? && requirements["past_due"].blank?
+    if hard_requirements_clear
       # We're marking the pending compliance request as provided on our end here if it is no longer due on Stripe.
       # We'll get a account.updated webhook event and mark these requests as provided there as well,
       # but doing it here instead of waiting on the webhook, so that the respective compliance request notice is removed
       # from the page immediately.
       current_seller.user_compliance_info_requests.requested.each(&:mark_provided!)
-      flash[:notice] = "Thanks! You're all set."
     end
+
+    nothing_open_on_stripe = hard_requirements_clear &&
+                             requirements["eventually_due"].blank? &&
+                             future_requirements["currently_due"].blank? &&
+                             future_requirements["past_due"].blank? &&
+                             future_requirements["eventually_due"].blank?
+    flash[:notice] = "Thanks! You're all set." if nothing_open_on_stripe
 
     safe_redirect_to settings_payments_path
   end

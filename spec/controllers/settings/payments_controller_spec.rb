@@ -2158,5 +2158,39 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to eq("Thanks! You're all set.")
     end
+
+    it "does not show the 'Thanks' notice when Stripe still lists eventually_due requirements" do
+      pending_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => ["individual.id_number"] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+        )
+      )
+
+      get :verify_stripe_remediation
+
+      expect(response).to redirect_to settings_payments_url
+      expect(flash[:notice]).to be_nil
+      expect(pending_request.reload).to be_provided
+    end
+
+    it "does not show the 'Thanks' notice when Stripe still lists future_requirements.eventually_due" do
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => ["individual.id_number"] }
+        )
+      )
+
+      get :verify_stripe_remediation
+
+      expect(response).to redirect_to settings_payments_url
+      expect(flash[:notice]).to be_nil
+    end
   end
 end
