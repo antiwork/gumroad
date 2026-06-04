@@ -108,7 +108,7 @@ class Rack::Attack
     req.params # test that params are valid
 
     false
-  rescue Rack::QueryParser::InvalidParameterError
+  rescue Rack::QueryParser::InvalidParameterError, Rack::Multipart::EmptyContentError
     "#{req.path}:#{req.remote_ip}"
   end
 
