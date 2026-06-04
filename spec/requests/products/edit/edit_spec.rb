@@ -119,8 +119,19 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_combo_box_option "Version 2", from: "Select a version"
     expect(page).to have_text("Enter the content you want to sell.")
     rich_text_editor = find("[contenteditable=true]")
-    page.execute_script("arguments[0].focus()", rich_text_editor)
-    rich_text_editor.send_keys "Text!"
+    # Wait for TipTap to finish binding event handlers after the page swap, then
+    # focus + type. Without the focus + dispatch dance the first character races
+    # against ProseMirror's mount and lands in stale state, producing "ext!T".
+    page.execute_script(<<~JS, rich_text_editor)
+      arguments[0].focus()
+      const sel = window.getSelection()
+      const range = document.createRange()
+      range.selectNodeContents(arguments[0])
+      range.collapse(false)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    JS
+    "Text!".each_char { |c| rich_text_editor.send_keys c }
     expect(rich_text_editor).to have_text("Text!")
     save_change
 
