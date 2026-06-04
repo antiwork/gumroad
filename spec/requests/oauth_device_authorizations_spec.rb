@@ -217,6 +217,39 @@ describe "OAuth device authorizations", type: :request do
       expect(access_token.reload).to be_revoked
     end
 
+    it "does not exchange an approved code after the user revokes the application" do
+      access_token = create(
+        "doorkeeper/access_token",
+        application: oauth_application,
+        resource_owner_id: user.id,
+        scopes: "view_profile"
+      )
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      device_authorization = OauthDeviceAuthorization.last
+      oauth_application.revoke_access_for(user)
+
+      expect(access_token.reload).to be_revoked
+      expect(device_authorization.reload).to have_attributes(
+        status: OauthDeviceAuthorization::STATUS_DENIED,
+        denied_at: be_present,
+        access_token: nil
+      )
+      expect do
+        post oauth_token_path,
+             params: {
+               grant_type: OauthDeviceAuthorization::GRANT_TYPE,
+               client_id: oauth_application.uid,
+               device_code: body["device_code"]
+             }
+      end.not_to change { Doorkeeper::AccessToken.count }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "access_denied")
+    end
+
     it "does not exchange an approved code after device authorization is disabled for the client" do
       body = create_device_code
       sign_in user

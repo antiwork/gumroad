@@ -68,8 +68,20 @@ class OauthApplication < Doorkeeper::Application
   end
 
   def revoke_access_for(user)
-    Doorkeeper::AccessToken.revoke_all_for(id, user)
-    resource_subscriptions.where(user:).alive.update_all(deleted_at: Time.current)
+    revoked_at = Time.current
+
+    transaction do
+      # Deny device authorizations before revoking tokens so in-flight polls either see the denial
+      # or mint a token that the following revoke sweep catches.
+      device_authorizations
+        .where(
+          resource_owner_id: user.id,
+          status: [OauthDeviceAuthorization::STATUS_PENDING, OauthDeviceAuthorization::STATUS_APPROVED]
+        )
+        .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: revoked_at, updated_at: revoked_at)
+      Doorkeeper::AccessToken.revoke_all_for(id, user)
+      resource_subscriptions.where(user:).alive.update_all(deleted_at: revoked_at)
+    end
   end
 
   def icon_url
