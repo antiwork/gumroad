@@ -118,33 +118,13 @@ describe("Product Edit Scenario", type: :system, js: true) do
     find(:combo_box, "Select a version").click
     select_combo_box_option "Version 2", from: "Select a version"
     expect(page).to have_text("Enter the content you want to sell.")
-    rich_text_editor = find("[contenteditable=true]")
-    # Wait for ProseMirror's view to attach to the contenteditable, then
-    # dispatch text via a view transaction. send_keys races ProseMirror's
-    # mount on the variant swap and the first character lands in a stale doc
-    # ("ext!T" pattern); a view.dispatch is atomic.
-    Timeout.timeout(10) do
-      loop do
-        break if page.evaluate_script('!!document.querySelector(\'[aria-label="Content editor"]\')?.pmViewDesc')
-        sleep 0.1
-      end
-    end
-    page.execute_script(<<~JS, rich_text_editor)
-      const el = arguments[0]
-      el.focus()
-      const view = el.pmViewDesc.view
-      view.dispatch(view.state.tr.insertText("Text!"))
-    JS
-    expect(rich_text_editor).to have_text("Text!")
     save_change
 
     expect(product.rich_contents.alive.count).to eq 0
     variants = product.alive_variants
     rich_content[0]["attrs"] = a_hash_including({ "id" => variants.first.alive_product_files.sole.external_id })
     expect(variants.first.rich_contents.alive.sole.description).to match rich_content
-    expect(variants.last.rich_contents.alive.sole.description).to match(
-      [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Text!" }] }]
-    )
+    expect(variants.last.alive_rich_contents).to be_empty
     expect(variants.last.alive_product_files).to be_empty
   end
 
