@@ -89,7 +89,7 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     unless current_seller.update(
-      params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :show_buyer_local_currency)
+      params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency)
     )
       return redirect_with_error(current_seller.errors.full_messages.first)
     end

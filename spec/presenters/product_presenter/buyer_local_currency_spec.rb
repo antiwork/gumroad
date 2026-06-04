@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe "ProductPresenter buyer local currency props" do
-  let(:seller) { create(:user, show_buyer_local_currency: true) }
+  let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
 
   let(:request) do
@@ -40,7 +40,7 @@ describe "ProductPresenter buyer local currency props" do
   end
 
   describe ProductPresenter::ProductProps do
-    it "includes buyer local price when the creator opts in and the buyer currency is non-primary" do
+    it "includes buyer local price when the creator has not opted out and the buyer currency is non-primary" do
       allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
 
       props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
@@ -59,7 +59,7 @@ describe "ProductPresenter buyer local currency props" do
       )
     end
 
-    it "includes buyer local price and original price for an opted-in discounted product" do
+    it "includes buyer local price and original price for an enabled discounted product" do
       set_default_offer_code(product)
       allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
 
@@ -71,8 +71,8 @@ describe "ProductPresenter buyer local currency props" do
       expect(props[:buyer_local_original_price_cents]).to eq(800)
     end
 
-    it "omits buyer local price when the creator has not opted in" do
-      seller.update!(show_buyer_local_currency: false)
+    it "omits buyer local price when the creator has opted out" do
+      seller.update!(disable_buyer_local_currency: true)
       set_default_offer_code(product)
       allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
 

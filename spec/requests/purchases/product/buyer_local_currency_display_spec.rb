@@ -72,11 +72,11 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     before do
       Feature.deactivate(:buyer_local_currency)
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 
-    it "shows the seller's set currency even though the seller has opted in" do
+    it "shows the seller's set currency even though the feature is on by default" do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
@@ -84,10 +84,10 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     end
   end
 
-  context "when an opted-in seller's USD product is viewed from a EUR country" do
+  context "when an enabled seller's USD product is viewed from a EUR country" do
     before do
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true, google_analytics_id: "G-TESTGA1234")
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false, google_analytics_id: "G-TESTGA1234")
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 
@@ -132,10 +132,10 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     end
   end
 
-  context "when an opted-in seller's pay-what-you-want product is viewed from a EUR country" do
+  context "when an enabled seller's pay-what-you-want product is viewed from a EUR country" do
     before do
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
       @product = create(:product, user: @seller, price_cents: 10_00, customizable_price: true, suggested_price_cents: 12_00)
     end
 
@@ -156,10 +156,10 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     end
   end
 
-  context "when an opted-in seller's installment-plan product is viewed from a EUR country" do
+  context "when an enabled seller's installment-plan product is viewed from a EUR country" do
     before do
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
       @product = create(:product, user: @seller, price_cents: 10_00)
       create(:product_installment_plan, link: @product, number_of_installments: 3)
     end
@@ -173,10 +173,10 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     end
   end
 
-  context "when the same opted-in product is viewed from the US" do
+  context "when the same enabled product is viewed from the US" do
     before do
       allow(GeoIp).to receive(:lookup).and_return(united_states)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true, google_analytics_id: "G-TESTGA1234")
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false, google_analytics_id: "G-TESTGA1234")
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 
@@ -201,10 +201,10 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     end
   end
 
-  context "when the seller has not opted in" do
+  context "when the seller has opted out" do
     before do
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: false)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: true)
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 
@@ -220,7 +220,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     before do
       currency_namespace.del("EUR")
       allow(GeoIp).to receive(:lookup).and_return(france)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 
@@ -237,7 +237,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
   # both sees the EUR-localized price AND pays VAT, proving the two systems
   # compose correctly and the USD charge invariant survives a VAT surcharge.
   # IT fixtures mirror spec/requests/purchases/product/taxes_spec.rb exactly.
-  context "when an opted-in seller's USD product is bought from an EU VAT country" do
+  context "when an enabled seller's USD product is bought from an EU VAT country" do
     let(:italy) do
       GeoIp::Result.new(
         country_name: "Italy", country_code: "IT", region_name: "Lazio",
@@ -251,7 +251,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       # VAT path geolocates off remote_ip (not GeoIp.lookup), so set both.
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("2.47.255.255") # Italy
       create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
-      @seller = create(:user_with_compliance_info, show_buyer_local_currency: true)
+      @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
       @product = create(:product, user: @seller, price_cents: 10_00)
     end
 

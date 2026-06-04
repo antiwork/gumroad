@@ -132,7 +132,7 @@ export type BuyerLocalCurrencyContext = {
 };
 
 // Formats a price for product-page display: the buyer's approximate local currency when the
-// seller has opted in and a rate is available, otherwise the seller's set currency. The rate
+// seller has not opted out and a rate is available, otherwise the seller's set currency. The rate
 // is a minor-unit rate (set-currency cents -> buyer-currency minor units), so it applies to
 // any amount denominated in the product's currency. Use only for visible browsing prices —
 // never for amounts the buyer enters/pays or for schema.org microdata, which stay set-currency.

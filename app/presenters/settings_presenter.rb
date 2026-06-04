@@ -255,7 +255,7 @@ class SettingsPresenter
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
       buyer_local_currency_enabled: Feature.active?(:buyer_local_currency, seller),
-      show_buyer_local_currency: seller.show_buyer_local_currency?,
+      disable_buyer_local_currency: seller.disable_buyer_local_currency?,
       can_manage_beneficial_owners: payments_policy.update? && StripeBeneficialOwnersManager.eligible?(seller),
     }
   end

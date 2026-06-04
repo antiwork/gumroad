@@ -112,13 +112,22 @@ describe CurrencyHelper do
     let(:product) do
       user = build_stubbed(:user)
       build_stubbed(:product, user:, price_currency_type: "usd").tap do |p|
-        allow(p.user).to receive(:show_buyer_local_currency?).and_return(true)
+        allow(p.user).to receive(:disable_buyer_local_currency?).and_return(false)
         allow(p).to receive(:external_id).and_return("prod_abc")
       end
     end
 
-    it "returns the static default when the feature is disabled even though the seller opted in" do
+    it "returns the static default when the feature is disabled even though the seller has not opted out" do
       Feature.deactivate(:buyer_local_currency)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", rate: nil)
+    end
+
+    it "returns the static default when the seller has opted out even though the feature is active" do
+      allow(product.user).to receive(:disable_buyer_local_currency?).and_return(true)
       allow(helper).to receive(:buyer_currency_for_ip).and_return("eur")
 
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
@@ -128,7 +137,7 @@ describe CurrencyHelper do
 
     it "returns a safe static default without re-raising when an operation raises" do
       # The rescue must NOT re-run the operations that may have thrown
-      # (show_buyer_local_currency?, price_currency_type) — regression for the
+      # (disable_buyer_local_currency?, price_currency_type) — regression for the
       # rescue-handler-re-executes-failed-operations finding.
       allow(helper).to receive(:buyer_currency_for_ip).and_raise(StandardError)
 

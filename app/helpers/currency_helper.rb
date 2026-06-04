@@ -98,7 +98,7 @@ module CurrencyHelper
 
   def buyer_currency_display_props(product:, price_cents:, ip:)
     product_currency = product.price_currency_type.to_s.downcase
-    creator_opted_in = product.user.show_buyer_local_currency? &&
+    creator_opted_in = !product.user.disable_buyer_local_currency? &&
       Feature.active?(:buyer_local_currency, product.user)
 
     default_props = {

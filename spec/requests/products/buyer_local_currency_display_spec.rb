@@ -25,13 +25,13 @@ describe "Buyer-local currency end-to-end display (#5281)", type: :request, iner
 
   describe "GET /l/:permalink (product page Inertia props)" do
     let(:seller) do
-      create(:user, show_buyer_local_currency: true, google_analytics_id: "G-TESTGA1234")
+      create(:user, disable_buyer_local_currency: false, google_analytics_id: "G-TESTGA1234")
     end
     let(:product) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
 
     before { host! URI.parse(seller.subdomain_with_protocol).host }
 
-    context "when an opted-in seller's USD product is viewed from a EUR country" do
+    context "when an enabled seller's USD product is viewed from a EUR country" do
       it "renders the EUR-localized buyer_currency_display in the Inertia props" do
         get short_link_path(id: product.unique_permalink),
             headers: { "X-Inertia" => "true", "REMOTE_ADDR" => eur_ip }
@@ -79,8 +79,8 @@ describe "Buyer-local currency end-to-end display (#5281)", type: :request, iner
       end
     end
 
-    context "when the seller has NOT opted in" do
-      let(:seller) { create(:user, show_buyer_local_currency: false) }
+    context "when the seller has opted out" do
+      let(:seller) { create(:user, disable_buyer_local_currency: true) }
 
       it "renders the default variant even for an EU buyer" do
         get short_link_path(id: product.unique_permalink),
@@ -112,7 +112,7 @@ describe "Buyer-local currency end-to-end display (#5281)", type: :request, iner
 
   describe "GET /r/:token (receipt page seller_analytics)" do
     let(:seller) do
-      create(:user, show_buyer_local_currency: true, google_analytics_id: "G-TESTGA9999")
+      create(:user, disable_buyer_local_currency: false, google_analytics_id: "G-TESTGA9999")
     end
     let(:product) { create(:product, user: seller, price_cents: 1000) }
     let(:purchase) do
@@ -161,7 +161,7 @@ describe "Buyer-local currency end-to-end display (#5281)", type: :request, iner
     end
 
     context "when the seller has no third-party analytics configured" do
-      let(:seller) { create(:user, show_buyer_local_currency: true) }
+      let(:seller) { create(:user, disable_buyer_local_currency: false) }
 
       it "omits seller_analytics entirely (no GA/Pixel/TikTok IDs set)" do
         get url_redirect_download_page_path(id: url_redirect.token),
