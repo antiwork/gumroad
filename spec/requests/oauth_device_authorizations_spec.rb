@@ -333,6 +333,13 @@ describe "OAuth device authorizations", type: :request do
       expect(device_authorization.reload).to have_attributes(poll_count: 0, last_polled_at: nil)
     end
 
+    it "returns expired_token for unknown device codes" do
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: "unknown-device-code" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "expired_token")
+    end
+
     it "returns access_denied after the user denies the code" do
       body = create_device_code
       sign_in user
