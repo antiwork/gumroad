@@ -1972,8 +1972,51 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
     end
 
-    it "does noting and redirects to payments settings page if there's no pending stripe information request" do
-      StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+    it "does nothing and redirects to payments settings page if there's no pending stripe information request and Stripe agrees" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+        Stripe::Account.construct_from(
+          id: merchant_account.charge_processor_merchant_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
+
+      get :remediation
+
+      expect(response).to redirect_to settings_payments_url
+    end
+
+    it "opens a Stripe AccountLink when local has no pending requests but Stripe still has open requirements" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => ["individual.id_number"] },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
+      expect(Stripe::AccountLink).to receive(:create).with({
+                                                             account: stripe_connect_account_id,
+                                                             refresh_url: remediation_settings_payments_url,
+                                                             return_url: verify_stripe_remediation_settings_payments_url,
+                                                             type: "account_update",
+                                                           }).and_call_original
+
+      get :remediation
+
+      expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+    end
+
+    it "falls back to the 'Thanks' redirect when Stripe::Account.retrieve raises and local has no pending requests" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_raise(
+        Stripe::APIConnectionError.new("Stripe is down")
+      )
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIConnectionError), context: { user_id: user.id })
 
       get :remediation
 

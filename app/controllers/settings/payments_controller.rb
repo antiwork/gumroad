@@ -177,7 +177,12 @@ class Settings::PaymentsController < Settings::BaseController
   def remediation
     authorize
 
-    if current_seller.stripe_account.blank? || current_seller.user_compliance_info_requests.requested.blank?
+    if current_seller.stripe_account.blank?
+      redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
+    end
+
+    has_local_requests = current_seller.user_compliance_info_requests.requested.exists?
+    if !has_local_requests && !stripe_account_has_open_requirements?(current_seller.stripe_account)
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
     end
 
@@ -272,5 +277,21 @@ class Settings::PaymentsController < Settings::BaseController
       disabled_reason = stripe_account["requirements"]["disabled_reason"]
       merchant_account.update!(stripe_disabled_reason: disabled_reason) if disabled_reason.present?
     rescue Stripe::StripeError, ActiveRecord::ActiveRecordError
+    end
+
+    def stripe_account_has_open_requirements?(merchant_account)
+      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+      requirements = stripe_account["requirements"] || {}
+      future_requirements = stripe_account["future_requirements"] || {}
+      [
+        requirements["currently_due"],
+        requirements["past_due"],
+        requirements["eventually_due"],
+        future_requirements["currently_due"],
+        future_requirements["past_due"],
+      ].any?(&:present?)
+    rescue Stripe::StripeError => e
+      ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+      false
     end
 end

@@ -11905,4 +11905,61 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
   end
+
+  describe "soft-future requirement skip" do
+    let(:user) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user:) }
+
+    before { create(:user_compliance_info, user:, country: Compliance::Countries::USA.common_name) }
+
+    def stripe_event(eventually_due:, currently_due: [], past_due: [], deadline: 90.days.from_now.to_i)
+      {
+        "api_version" => API_VERSION,
+        "type" => "account.updated",
+        "id" => "stripe-event-id-soft",
+        "account" => merchant_account.charge_processor_merchant_id,
+        "user_id" => merchant_account.charge_processor_merchant_id,
+        "data" => {
+          "object" => {
+            "object" => "account",
+            "id" => merchant_account.charge_processor_merchant_id,
+            "business_type" => "individual",
+            "charges_enabled" => true,
+            "payouts_enabled" => true,
+            "requirements" => {
+              "current_deadline" => deadline,
+              "currently_due" => currently_due,
+              "eventually_due" => eventually_due,
+              "past_due" => past_due
+            }
+          }
+        }
+      }
+    end
+
+    it "records the request but does not email when the only new field is in eventually_due with a far-future deadline" do
+      expect do
+        described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+      expect(user.user_compliance_info_requests.requested.count).to eq(1)
+    end
+
+    it "emails as usual when the new field is currently_due even if other fields are eventually_due" do
+      expect do
+        described_class.handle_stripe_event(stripe_event(
+                                              currently_due: ["individual.id_number"],
+                                              eventually_due: ["company.tax_id"]
+                                            ))
+      end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+    end
+
+    it "emails as usual when the eventually_due field has a near-term deadline" do
+      expect do
+        described_class.handle_stripe_event(stripe_event(
+                                              eventually_due: ["individual.id_number"],
+                                              deadline: 7.days.from_now.to_i
+                                            ))
+      end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+    end
+  end
 end

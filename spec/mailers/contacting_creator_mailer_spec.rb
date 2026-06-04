@@ -1920,6 +1920,18 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "#more_kyc_needed" do
+    let!(:seller) { create(:named_seller) }
+
+    it "links the call-to-action to the remediation endpoint so sellers reach Stripe's hosted upload flow" do
+      mail = ContactingCreatorMailer.more_kyc_needed(seller.id, %w[individual_tax_id])
+
+      expect(mail.to).to eq([seller.email])
+      expect(mail.body.encoded).to have_link("Provide your information", href: remediation_settings_payments_url)
+      expect(mail.body.encoded).not_to have_link("Provide your information", href: settings_payments_url)
+    end
+  end
+
   describe "#suspended_due_to_stripe_risk" do
     let(:seller) { create(:named_seller) }
 

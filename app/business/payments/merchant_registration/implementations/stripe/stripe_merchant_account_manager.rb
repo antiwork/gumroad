@@ -904,10 +904,13 @@ module StripeMerchantAccountManager
     return if all_fields_needed.empty?
 
     document_verification_error = verification_errors.select { |_field, error| error[:code].starts_with?("verification_document") }.first
+    skip_more_kyc_email = requirements_only_soft_future?(requirements, new_requests, requirements_due_at)
     email_sent = if document_verification_error.present?
       ContactingCreatorMailer.stripe_document_verification_failed(user.id, document_verification_error[1][:reason]).deliver_later(queue: "critical")
     elsif verification_errors.present?
       ContactingCreatorMailer.stripe_identity_verification_failed(user.id, verification_errors.first[1][:reason]).deliver_later(queue: "critical")
+    elsif skip_more_kyc_email
+      nil
     else
       ContactingCreatorMailer.more_kyc_needed(user.id, all_fields_needed).deliver_later(queue: "critical")
     end
@@ -934,5 +937,25 @@ module StripeMerchantAccountManager
     return unless user_has_stripe_connect_merchant_account?(bank_account.user)
 
     update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+  end
+
+  SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days
+
+  private_class_method
+  def self.requirements_only_soft_future?(requirements, new_requests, requirements_due_at)
+    return false if new_requests.blank?
+    return false unless requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
+
+    eventually_due_only = (requirements["eventually_due"] || []) -
+                          (requirements["currently_due"] || []) -
+                          (requirements["past_due"] || [])
+    return false if eventually_due_only.empty?
+
+    soft_field_names = eventually_due_only.map do |raw_field|
+      normalized = raw_field.gsub(/^person_\w+\./, "individual.")
+      StripeUserComplianceInfoFieldMap.map(normalized).presence || normalized
+    end
+
+    new_requests.all? { |request| soft_field_names.include?(request.field_needed) }
   end
 end
