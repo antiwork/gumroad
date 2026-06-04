@@ -22,6 +22,16 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "POST /oauth/token device grant throttle with malformed params" do
+    it "does not raise when the params parser rejects malformed form params" do
+      post "/oauth/token",
+           params: "grant_type=#{Rack::Utils.escape(OauthDeviceAuthorization::GRANT_TYPE)}&grant_type[bad]=1",
+           headers: { "CONTENT_TYPE" => "application/x-www-form-urlencoded" }
+
+      expect(response.status).not_to eq(500)
+    end
+  end
+
   describe "PUT /api/v2/products/:id per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

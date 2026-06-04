@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 class Rack::Attack
   redis_url    = ENV.fetch("RACK_ATTACK_REDIS_HOST")
   redis_client = Redis.new(url: "redis://#{redis_url}")
@@ -173,7 +175,19 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
+  throttle_by_ip path: "/oauth/device/code", method: :post, requests: 20, period: 60.seconds
+  throttle_by_ip path: "/oauth/device", method: :post, requests: 10, period: 60.seconds
   throttle_by_ip path: "/oauth/token", requests: 3000, period: 60.seconds # Initial: 3000rpm, Max: 15000 requests/9 hours
+  throttle("oauth_device_token/ip/device_code", limit: 120, period: 60.seconds) do |req|
+    if req.path == "/oauth/token" && req.post?
+      request_params = req.params
+      if request_params["grant_type"] == "urn:ietf:params:oauth:grant-type:device_code"
+        "#{req.remote_ip}:#{Digest::SHA256.hexdigest(request_params["device_code"].to_s)}"
+      end
+    end
+  rescue Rack::QueryParser::InvalidParameterError, TypeError
+    nil
+  end
 
   # Spammers have been abusing follower's endpoints. This degrades our email reputation since we send confirmation email to each follower.
   # The following rules impose stricter and per-creator rate-limiting to prevent spammers from creating followers through a distributed attack.

@@ -1,0 +1,65 @@
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <% if @decision == :approved %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Authorization complete</h2>
+      <p>Return to the application that requested access.</p>
+    </header>
+  <% elsif @decision == :denied %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Authorization denied</h2>
+      <p>The application will not receive access to your account.</p>
+    </header>
+  <% elsif @error_message.blank? && @device_authorization.present? && @device_authorization.approvable? && user_signed_in? && !impersonating? %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <div>
+        <%= image_tag @device_authorization.oauth_application.icon_url || image_path("gumroad_app.png"), size: "72" %>
+      </div>
+      <h2>
+        Authorize
+        <strong><%= @device_authorization.oauth_application.name %></strong>
+        to use your account?
+      </h2>
+      <p>Code <strong><%= @user_code %></strong></p>
+    </header>
+    <% if @device_authorization.scope_list.present? %>
+      <div class="flex flex-col gap-4 p-4">
+        <h4 class="font-bold">This application will be able to:</h4>
+        <ul>
+          <% @device_authorization.scope_list.each do |scope| %>
+            <li><%= oauth_scope_description(scope) %></li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+    <footer class="flex flex-col gap-4 p-4 text-center">
+      <%= form_tag oauth_device_authorization_path, method: :post, style: "display: contents" do %>
+        <%= hidden_field_tag :user_code, @user_code %>
+        <%= button_tag "Authorize", name: "decision", value: "approve", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
+      <% end %>
+      <%= form_tag oauth_device_authorization_path, method: :post, style: "display: contents" do %>
+        <%= hidden_field_tag :user_code, @user_code %>
+        <%= button_tag "Deny", name: "decision", value: "deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
+      <% end %>
+    </footer>
+  <% else %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Enter device code</h2>
+      <p>Paste the code shown by the application requesting access.</p>
+    </header>
+    <div class="flex flex-col gap-4 p-4">
+      <% if @error_message.present? %>
+        <p><%= @error_message %></p>
+      <% end %>
+      <%= form_tag oauth_device_authorization_path, method: :get, class: "flex flex-col gap-4" do %>
+        <%= text_field_tag :user_code, @user_code, autofocus: true, placeholder: "GRD-ABCD-1234", class: "w-full rounded border border-border bg-background p-3" %>
+        <%= button_tag "Continue", type: "submit", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
+      <% end %>
+    </div>
+  <% end %>
+</main>
+
+<% if user_signed_in? %>
+  <% content_for :footer do %>
+    <%= render("doorkeeper/authorizations/footer", logged_in_user: logged_in_user) %>
+  <% end %>
+<% end %>

@@ -28,6 +28,10 @@ Rails.application.routes.draw do
     controllers tokens: "oauth/tokens"
   end
 
+  post "/oauth/device/code" => "oauth/device_codes#create", as: :oauth_device_code
+  get "/oauth/device" => "oauth/device_authorizations#new", as: :oauth_device_authorization
+  post "/oauth/device" => "oauth/device_authorizations#create"
+
   namespace :oauth do
     resource :mobile_pre_authorization, only: [:new] do
       get :switch_account, on: :member

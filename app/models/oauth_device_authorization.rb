@@ -1,0 +1,188 @@
+# frozen_string_literal: true
+
+require "digest"
+
+class OauthDeviceAuthorization < ApplicationRecord
+  GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+  EXPIRES_IN = 10.minutes
+  POLL_INTERVAL = 5.seconds
+  SLOW_DOWN_INTERVAL = 10.seconds
+
+  STATUS_PENDING = "pending"
+  STATUS_APPROVED = "approved"
+  STATUS_DENIED = "denied"
+  STATUS_CONSUMED = "consumed"
+
+  POLL_AUTHORIZATION_PENDING = "authorization_pending"
+  POLL_SLOW_DOWN = "slow_down"
+  POLL_EXPIRED_TOKEN = "expired_token"
+  POLL_ACCESS_DENIED = "access_denied"
+  POLL_APPROVED = "approved"
+
+  belongs_to :oauth_application, class_name: "OauthApplication"
+  belongs_to :resource_owner, class_name: "User", optional: true
+  belongs_to :access_token, class_name: "Doorkeeper::AccessToken", optional: true
+
+  validates :device_code_digest, :user_code_digest, :scopes, :status, :expires_at, presence: true
+  validates :device_code_digest, :user_code_digest, uniqueness: true
+  validates :status, inclusion: { in: [STATUS_PENDING, STATUS_APPROVED, STATUS_DENIED, STATUS_CONSUMED] }
+
+  def self.create_for!(oauth_application:, scopes:, ip_address:, user_agent:)
+    device_code = generate_device_code
+    user_code = generate_user_code
+
+    device_authorization = create!(
+      oauth_application:,
+      scopes:,
+      device_code_digest: digest(device_code),
+      user_code_digest: digest(normalize_user_code(user_code)),
+      expires_at: EXPIRES_IN.from_now,
+      created_ip_address: ip_address,
+      created_user_agent: user_agent
+    )
+
+    [device_authorization, device_code, user_code]
+  rescue ActiveRecord::RecordNotUnique
+    retry
+  end
+
+  def self.find_by_device_code(device_code)
+    return if device_code.blank?
+
+    find_by(device_code_digest: digest(device_code))
+  end
+
+  def self.find_by_user_code(user_code)
+    normalized_user_code = normalize_user_code(user_code)
+    return if normalized_user_code.blank?
+
+    find_by(user_code_digest: digest(normalized_user_code))
+  end
+
+  def self.digest(value)
+    Digest::SHA256.hexdigest(value.to_s)
+  end
+
+  def self.normalize_user_code(user_code)
+    user_code.to_s.upcase.gsub(/[^A-Z0-9]/, "")
+  end
+
+  def self.format_user_code(user_code)
+    normalized_user_code = normalize_user_code(user_code)
+    return "" if normalized_user_code.blank?
+    return "GRD-#{normalized_user_code.delete_prefix("GRD").scan(/.{1,4}/).join("-")}" if normalized_user_code.start_with?("GRD")
+
+    normalized_user_code.scan(/.{1,4}/).join("-")
+  end
+
+  def pending? = status == STATUS_PENDING
+  def approved? = status == STATUS_APPROVED
+  def denied? = status == STATUS_DENIED
+  def consumed? = status == STATUS_CONSUMED
+  def expired? = expires_at <= Time.current
+  def approvable? = pending? && !expired?
+  def scope_list = scopes.split
+
+  def approve!(resource_owner:, ip_address:, user_agent:)
+    approved = false
+
+    with_lock do
+      if approvable?
+        update!(
+          resource_owner:,
+          status: STATUS_APPROVED,
+          approved_at: Time.current,
+          approved_ip_address: ip_address,
+          approved_user_agent: user_agent
+        )
+        approved = true
+      end
+    end
+
+    approved
+  end
+
+  def deny!(resource_owner:, ip_address:, user_agent:)
+    denied = false
+
+    with_lock do
+      if approvable?
+        update!(
+          resource_owner:,
+          status: STATUS_DENIED,
+          denied_at: Time.current,
+          denied_ip_address: ip_address,
+          denied_user_agent: user_agent
+        )
+        denied = true
+      end
+    end
+
+    denied
+  end
+
+  def poll!(oauth_application:, ip_address:, user_agent:)
+    result = nil
+
+    with_lock do
+      update_poll_metadata!(ip_address:, user_agent:)
+
+      result = if oauth_application != self.oauth_application || expired? || consumed?
+        [POLL_EXPIRED_TOKEN, nil]
+      elsif denied?
+        [POLL_ACCESS_DENIED, nil]
+      elsif pending?
+        polled_too_recently? ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
+      else
+        access_token = issue_access_token!
+        update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
+        [POLL_APPROVED, access_token]
+      end
+    end
+
+    result
+  end
+
+  private
+    def self.generate_device_code
+      SecureRandom.urlsafe_base64(32)
+    end
+
+    def self.generate_user_code
+      "GRD-#{SecureRandom.alphanumeric(8).upcase.scan(/.{1,4}/).join("-")}"
+    end
+
+    def update_poll_metadata!(ip_address:, user_agent:)
+      @previous_last_polled_at = last_polled_at
+      update!(
+        last_polled_at: Time.current,
+        last_poll_ip_address: ip_address,
+        last_poll_user_agent: user_agent,
+        poll_count: poll_count + 1
+      )
+    end
+
+    def polled_too_recently?
+      @previous_last_polled_at.present? && @previous_last_polled_at > POLL_INTERVAL.ago
+    end
+
+    def issue_access_token!
+      ensure_access_grant_exists!
+
+      Doorkeeper.config.access_token_model.create_for(
+        application: oauth_application,
+        resource_owner: resource_owner_id,
+        scopes:,
+        expires_in: Doorkeeper.config.access_token_expires_in,
+        use_refresh_token: Doorkeeper.config.refresh_token_enabled?
+      )
+    end
+
+    def ensure_access_grant_exists!
+      oauth_application.access_grants.where(
+        resource_owner_id:,
+        scopes:,
+        redirect_uri: oauth_application.redirect_uri
+      ).first_or_create! { |access_grant| access_grant.expires_in = 60.years }
+    end
+end

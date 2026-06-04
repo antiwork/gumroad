@@ -8,6 +8,7 @@ class OauthApplication < Doorkeeper::Application
   has_many :resource_subscriptions, dependent: :destroy
   has_many :affiliate_credits
   has_many :links, foreign_key: :affiliate_application_id
+  has_many :device_authorizations, class_name: "OauthDeviceAuthorization", foreign_key: :oauth_application_id, dependent: :destroy
 
   belongs_to :owner, class_name: "User", optional: true
 
