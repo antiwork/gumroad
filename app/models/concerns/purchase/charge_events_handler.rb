@@ -10,7 +10,7 @@ module Purchase::ChargeEventsHandler
       chargeable = Charge::Chargeable.find_by_stripe_event(event)
 
       if chargeable.nil?
-        ErrorNotifier.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
+        logger.info("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
                   "charge reference: #{event.charge_reference} for event id: #{event.charge_event_id}.")
         return
       end

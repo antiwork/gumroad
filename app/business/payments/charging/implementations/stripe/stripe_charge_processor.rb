@@ -817,6 +817,11 @@ class StripeChargeProcessor
       # we will know about the purchase at that point.
       return if stripe_event["type"] == "charge.succeeded" && stripe_event["data"]["object"]["metadata"]["twitter_username"].present?
 
+      # Ignore charge events for charges not originated by Gumroad (no purchase metadata and no combined charge
+      # transfer_group). These are charges created outside of Gumroad's checkout flow (e.g. Stripe-initiated
+      # retries, connected-account charges) for which we have no internal record.
+      return if get_charge_reference(stripe_event["data"]["object"]).blank?
+
       raise "Stripe Event #{stripe_event['id']} has no charge id." if stripe_event["data"]["object"]["id"].nil?
       raise "Stripe Event #{stripe_event['id']} has no created date." if stripe_event["created"].nil?
 
