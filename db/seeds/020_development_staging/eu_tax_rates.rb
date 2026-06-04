@@ -35,7 +35,7 @@ ZipTaxRate.find_or_create_by(country: "GB").update(combined_rate: 0.20)
 ZipTaxRate.find_or_create_by(country: "AT", flags: 2).update(combined_rate: 0.10) # Austria
 ZipTaxRate.find_or_create_by(country: "BE", flags: 2).update(combined_rate: 0.06) # Belgium
 ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.09) # Bulgaria
-ZipTaxRate.find_or_create_by(country: "HR", flags: 2).update(combined_rate: 0.25) # Croatia
+ZipTaxRate.find_or_create_by(country: "HR", flags: 2).update(combined_rate: 0.05) # Croatia
 ZipTaxRate.find_or_create_by(country: "CY", flags: 2).update(combined_rate: 0.19) # Cyprus
 ZipTaxRate.find_or_create_by(country: "CZ", flags: 2).update(combined_rate: 0.10) # Czech Republic
 ZipTaxRate.find_or_create_by(country: "DK", flags: 2).update(combined_rate: 0.25) # Denmark
