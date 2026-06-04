@@ -54,6 +54,14 @@ describe ProfilePresenter do
       expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
     end
 
+    it "sets can_edit to false for profile view-only team members" do
+      support_user = create(:user)
+      create(:team_membership, user: support_user, seller:, role: TeamMembership::ROLE_SUPPORT)
+      pundit_user = SellerContext.new(user: support_user, seller:)
+
+      expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
+    end
+
     it "sets can_edit to false when logged out" do
       expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile[:can_edit]).to eq(false)
     end
