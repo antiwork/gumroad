@@ -37,7 +37,6 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 
@@ -269,7 +268,6 @@ const CtaBar = ({
         bottom: isDesktop ? undefined : 0,
         left: 0,
         right: 0,
-        // Render above the product edit button
         zIndex: "var(--z-index-menubar)",
         marginTop: hasHero ? "var(--border-width)" : undefined,
       }}
@@ -338,31 +336,17 @@ const CtaBar = ({
 
 const EditButton = ({ product }: { product: Product }) => {
   const appDomain = useAppDomain();
-  const isDesktop = useIsAboveBreakpoint("lg");
 
   if (!product.can_edit) return null;
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
-        right: isDesktop ? undefined : "var(--spacer-4)",
-        left: isDesktop ? "var(--spacer-3)" : undefined,
-        // Render above the product `article`
-        zIndex: "var(--z-index-overlay)",
-      }}
+    <NavigationButton
+      className="mb-4"
+      color="filled"
+      href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
     >
-      <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
-        <NavigationButton
-          color="filled"
-          size="icon"
-          href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
-          aria-label="Edit product"
-        >
-          <Pencil className="size-5" />
-        </NavigationButton>
-      </WithTooltip>
-    </div>
+      <Pencil className="size-5" />
+      Edit product
+    </NavigationButton>
   );
 };
