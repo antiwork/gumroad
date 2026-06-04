@@ -503,6 +503,40 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   const [showUpsellModal, setShowUpsellModal] = React.useState(false);
   const [showReviewModal, setShowReviewModal] = React.useState(false);
+  const [copyFromOpen, setCopyFromOpen] = React.useState(false);
+
+  const variantsWithContent = selectedVariant
+    ? product.variants.filter((v) => v.id !== selectedVariant.id && v.rich_content.length > 0)
+    : [];
+
+  const copyContentFromVariant = (sourceVariantId: string) => {
+    const source = product.variants.find((v) => v.id === sourceVariantId);
+    if (!source) return;
+    const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+      value !== null && typeof value === "object" && !Array.isArray(value);
+    const stripUpsellIds = (node: unknown): unknown => {
+      if (Array.isArray(node)) return node.map(stripUpsellIds);
+      if (!isPlainObject(node)) return node;
+      const cloned: Record<string, unknown> = { ...node };
+      if (cloned.type === "upsellCard" && isPlainObject(cloned.attrs)) {
+        cloned.attrs = { ...cloned.attrs, id: null };
+      }
+      if ("content" in cloned) cloned.content = stripUpsellIds(cloned.content);
+      return cloned;
+    };
+    const cloned = source.rich_content.map((page) => {
+      const stripped = stripUpsellIds(page.description);
+      return {
+        id: GuidGenerator.generate(),
+        title: page.title,
+        description: isPlainObject(stripped) ? stripped : page.description,
+        updated_at: new Date().toISOString(),
+      };
+    });
+    updatePages(cloned);
+    if (cloned[0]) setSelectedPageId(cloned[0].id);
+    setCopyFromOpen(false);
+  };
 
   const onInsertUpsell = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     if (!editor) return;
@@ -987,6 +1021,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         />
                       </PopoverContent>
                     </Popover>
+                    {variantsWithContent.length > 0 ? (
+                      <Button size="sm" className="pointer-events-auto" onClick={() => setCopyFromOpen(true)}>
+                        Copy from another version
+                      </Button>
+                    ) : null}
                     <span>or start typing.</span>
                   </p>
                 </div>
@@ -1077,6 +1116,31 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           productId={id}
         />
       ) : null}
+      <Modal
+        open={copyFromOpen}
+        onClose={() => setCopyFromOpen(false)}
+        title="Copy content from another version"
+        footer={<Button onClick={() => setCopyFromOpen(false)}>Cancel</Button>}
+      >
+        <p>Select a version to copy content from. This will replace any content in the current version.</p>
+        <Rows role="listbox" className="overflow-auto" style={{ maxHeight: "20rem", textAlign: "initial" }}>
+          {variantsWithContent.map((variant) => (
+            <Row key={variant.id} role="option" className="cursor-pointer" asChild>
+              <button type="button" onClick={() => copyContentFromVariant(variant.id)}>
+                <RowContent>
+                  <div className="flex-1">
+                    <h4>{variant.name || "Untitled"}</h4>
+                    <small className="block text-muted">
+                      {variant.rich_content.length} {variant.rich_content.length === 1 ? "page" : "pages"}
+                    </small>
+                  </div>
+                  <ChevronRight className="ml-auto size-5" />
+                </RowContent>
+              </button>
+            </Row>
+          ))}
+        </Rows>
+      </Modal>
     </>
   );
 };
@@ -1098,11 +1162,12 @@ export const ContentTab = () => {
     } else {
       updateProduct((product) => {
         product.has_same_rich_content_for_all_variants = false;
-        if (product.rich_content.length > 0) {
-          for (const variant of product.variants) variant.rich_content = product.rich_content;
-          product.rich_content = [];
-        }
+        const [firstVariant, ...restVariants] = product.variants;
+        if (firstVariant) firstVariant.rich_content = product.rich_content;
+        for (const variant of restVariants) variant.rich_content = [];
+        product.rich_content = [];
       });
+      if (product.variants[0]) setSelectedVariantId(product.variants[0].id);
     }
   };
 

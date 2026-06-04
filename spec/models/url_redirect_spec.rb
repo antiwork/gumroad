@@ -796,6 +796,21 @@ describe UrlRedirect do
             expect(@url_redirect.alive_product_files).to eq([@product_file1, @product_file2, @product_file3, @product_file4])
           end
         end
+
+        context "when the variant HABTM is a superset of its rich content embeds" do
+          before do
+            @category_1_option_a.product_files = [@product_file1, @product_file2, @product_file3, @product_file4]
+            @category_1_option_a.alive_rich_contents.first.update!(description: [
+                                                                     { "type" => "fileEmbed", "attrs" => { "id" => @product_file1.external_id, "uid" => SecureRandom.uuid } },
+                                                                     { "type" => "fileEmbed", "attrs" => { "id" => @product_file2.external_id, "uid" => SecureRandom.uuid } },
+                                                                   ])
+            @url_redirect.instance_variable_set(:@cached_alive_product_files, nil)
+          end
+
+          it "intersects the HABTM with the rich content embeds to avoid over-delivering files" do
+            expect(@url_redirect.alive_product_files).to eq([@product_file1, @product_file2])
+          end
+        end
       end
 
       context "when the purchase does not have variants" do

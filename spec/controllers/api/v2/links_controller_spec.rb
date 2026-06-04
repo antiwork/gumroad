@@ -1909,7 +1909,7 @@ describe Api::V2::LinksController do
           expect(@product.reload.has_same_rich_content_for_all_variants?).to eq false
         end
 
-        it "allows switching back to shared when all variants have identical content (round-trip)" do
+        it "allows switching back to shared after migrating to per-variant (round-trip)" do
           variant1
           variant2
           @product.update!(has_same_rich_content_for_all_variants: true)
@@ -1918,7 +1918,7 @@ describe Api::V2::LinksController do
           put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
           expect(response.parsed_body["success"]).to be(true)
           expect(variant1.reload.alive_rich_contents.count).to eq 1
-          expect(variant2.reload.alive_rich_contents.count).to eq 1
+          expect(variant2.reload.alive_rich_contents.count).to eq 0
 
           put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
           expect(response.parsed_body["success"]).to be(true)
@@ -1942,7 +1942,7 @@ describe Api::V2::LinksController do
           expect(@product.reload.has_same_rich_content_for_all_variants?).to eq false
         end
 
-        it "copies product content to all variants when switching to per-variant (false)" do
+        it "moves product content to first variant only when switching to per-variant (false)" do
           variant1
           variant2
           @product.update!(has_same_rich_content_for_all_variants: true)
@@ -1954,8 +1954,23 @@ describe Api::V2::LinksController do
           expect(@product.alive_rich_contents.count).to eq 0
           expect(variant1.reload.alive_rich_contents.count).to eq 1
           expect(variant1.alive_rich_contents.first.title).to eq "Shared Page"
-          expect(variant2.reload.alive_rich_contents.count).to eq 1
-          expect(variant2.alive_rich_contents.first.title).to eq "Shared Page"
+          expect(variant2.reload.alive_rich_contents.count).to eq 0
+        end
+
+        it "does not seed non-first variants with the product file HABTM when switching to per-variant" do
+          variant1
+          variant2
+          product_file = create(:product_file, link: @product)
+          Aws::S3::Resource.new.bucket(S3_BUCKET).object(product_file.s3_key).put(body: "test content")
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          create(:rich_content, entity: @product, title: "Page with file", description: [
+                   { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
+                 ], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+          expect(response.parsed_body["success"]).to be(true)
+          expect(variant1.reload.product_files).to include(product_file)
+          expect(variant2.reload.product_files).to be_empty
         end
 
         it "rejects switching to per-variant when product has no variants" do

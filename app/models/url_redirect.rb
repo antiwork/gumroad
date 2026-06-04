@@ -108,7 +108,12 @@ class UrlRedirect < ApplicationRecord
       if installment.present? && installment.has_files?
         installment.product_files.alive.in_order
       elsif rich_content_provider.present?
-        rich_content_provider.product_files.alive.ordered_by_ids(rich_content_provider.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order))
+        embedded_ids = rich_content_provider.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order).uniq
+        if embedded_ids.any?
+          rich_content_provider.product_files.alive.where(id: embedded_ids).ordered_by_ids(embedded_ids)
+        else
+          rich_content_provider.product_files.alive.in_order
+        end
       elsif purchase.present? && has_purchased_variants_from_categories_with_files?
         file_ids = purchase.variant_attributes.reduce([]) do |all_file_ids, version_option|
           all_file_ids + version_option.product_files.alive.pluck(:id)

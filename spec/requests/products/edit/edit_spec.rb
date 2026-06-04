@@ -125,8 +125,10 @@ describe("Product Edit Scenario", type: :system, js: true) do
     variants = product.alive_variants
     rich_content[0]["attrs"] = a_hash_including({ "id" => variants.first.alive_product_files.sole.external_id })
     expect(variants.first.rich_contents.alive.sole.description).to match rich_content
-    rich_content[1]["content"] = [{ "type" => "text", "text" => "Text!" }]
-    expect(variants.last.rich_contents.alive.sole.description).to match rich_content
+    expect(variants.last.rich_contents.alive.sole.description).to match(
+      [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Text!" }] }]
+    )
+    expect(variants.last.alive_product_files).to be_empty
   end
 
   it "allows creating and deleting an upsell in the product description" do

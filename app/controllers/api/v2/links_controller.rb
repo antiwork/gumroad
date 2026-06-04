@@ -792,29 +792,23 @@ class Api::V2::LinksController < Api::V2::BaseController
       product_pages = @product.alive_rich_contents.sort_by(&:position)
       return if product_pages.empty?
 
-      if @product.alive_variants.empty?
+      variants = @product.alive_variants
+      if variants.empty?
         raise Link::LinkInvalid, "Cannot switch to per-variant content: the product has no variants to migrate content to."
       end
 
-      @product.alive_variants.each do |variant|
+      destination_variant = variants.first
+      variants.each do |variant|
         variant.alive_rich_contents.each(&:mark_deleted!)
         variant.product_files = []
-
-        created = product_pages.each_with_index.map do |rc, index|
-          cloned_description = strip_upsell_ids(rc.description)
-          cloned_description = SaveContentUpsellsService.new(
-            seller: @product.user,
-            content: cloned_description,
-            old_content: []
-          ).from_rich_content
-          variant.alive_rich_contents.create!(title: rc.title, description: cloned_description, position: index)
-        end
-
-        file_ids = created.flat_map { _1.embedded_product_file_ids_in_order }.uniq
-        variant.product_files = file_ids.any? ? @product.product_files.alive.where(id: file_ids) : []
       end
 
-      retire_upsells_from_rich_contents!(product_pages)
+      created = product_pages.each_with_index.map do |rc, index|
+        destination_variant.alive_rich_contents.create!(title: rc.title, description: rc.description, position: index)
+      end
+      file_ids = created.flat_map { _1.embedded_product_file_ids_in_order }.uniq
+      destination_variant.product_files = file_ids.any? ? @product.product_files.alive.where(id: file_ids) : []
+
       product_pages.each(&:mark_deleted!)
     end
 
