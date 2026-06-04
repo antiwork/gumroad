@@ -34,13 +34,13 @@ ZipTaxRate.find_or_create_by(country: "GB").update(combined_rate: 0.20)
 # https://www.amazon.com/gp/help/customer/display.html?nodeId=GSF5MREL4MX7PTVG
 ZipTaxRate.find_or_create_by(country: "AT", flags: 2).update(combined_rate: 0.10) # Austria
 ZipTaxRate.find_or_create_by(country: "BE", flags: 2).update(combined_rate: 0.06) # Belgium
-ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.09) # Bulgaria
+ZipTaxRate.find_or_create_by(country: "BG", flags: 2).update(combined_rate: 0.20) # Bulgaria (reduced rate is for print books only; e-books at standard rate)
 ZipTaxRate.find_or_create_by(country: "HR", flags: 2).update(combined_rate: 0.05) # Croatia
 ZipTaxRate.find_or_create_by(country: "CY", flags: 2).update(combined_rate: 0.03) # Cyprus
-ZipTaxRate.find_or_create_by(country: "CZ", flags: 2).update(combined_rate: 0.10) # Czech Republic
+ZipTaxRate.find_or_create_by(country: "CZ", flags: 2).update(combined_rate: 0.00) # Czech Republic (zero rate since 2024-01-01)
 ZipTaxRate.find_or_create_by(country: "DK", flags: 2).update(combined_rate: 0.25) # Denmark
-ZipTaxRate.find_or_create_by(country: "EE", flags: 2).update(combined_rate: 0.20) # Estonia
-ZipTaxRate.find_or_create_by(country: "FI", flags: 2).update(combined_rate: 0.10) # Finland
+ZipTaxRate.find_or_create_by(country: "EE", flags: 2).update(combined_rate: 0.09) # Estonia
+ZipTaxRate.find_or_create_by(country: "FI", flags: 2).update(combined_rate: 0.135) # Finland (effective 2026-01-01)
 ZipTaxRate.find_or_create_by(country: "FR", flags: 2).update(combined_rate: 0.055) # France
 ZipTaxRate.find_or_create_by(country: "DE", flags: 2).update(combined_rate: 0.07) # Germany
 ZipTaxRate.find_or_create_by(country: "GR", flags: 2).update(combined_rate: 0.06) # Greece
@@ -54,7 +54,7 @@ ZipTaxRate.find_or_create_by(country: "MT", flags: 2).update(combined_rate: 0.05
 ZipTaxRate.find_or_create_by(country: "NL", flags: 2).update(combined_rate: 0.09) # Netherlands
 ZipTaxRate.find_or_create_by(country: "PL", flags: 2).update(combined_rate: 0.05) # Poland
 ZipTaxRate.find_or_create_by(country: "PT", flags: 2).update(combined_rate: 0.06) # Portugal
-ZipTaxRate.find_or_create_by(country: "RO", flags: 2).update(combined_rate: 0.05) # Romania
+ZipTaxRate.find_or_create_by(country: "RO", flags: 2).update(combined_rate: 0.11) # Romania
 ZipTaxRate.find_or_create_by(country: "SK", flags: 2).update(combined_rate: 0.05) # Slovakia
 ZipTaxRate.find_or_create_by(country: "SI", flags: 2).update(combined_rate: 0.05) # Slovenia
 ZipTaxRate.find_or_create_by(country: "ES", flags: 2).update(combined_rate: 0.04) # Spain
