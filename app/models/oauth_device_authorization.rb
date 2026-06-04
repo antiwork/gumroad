@@ -91,19 +91,37 @@ class OauthDeviceAuthorization < ApplicationRecord
   def approvable? = pending? && !expired?
   def scope_list = scopes.split
 
+  def access_revoked_after_creation_for?(resource_owner)
+    revocation_cutoff = created_at.change(usec: 0)
+
+    oauth_application.access_tokens
+      .where(resource_owner_id: resource_owner.id)
+      .where("revoked_at >= ?", revocation_cutoff)
+      .exists? &&
+      !oauth_application.access_tokens
+        .where(resource_owner_id: resource_owner.id, revoked_at: nil)
+        .exists?
+  end
+
   def approve!(resource_owner:, ip_address:, user_agent:)
     approved = false
 
-    with_lock do
-      if approvable?
-        update!(
-          resource_owner:,
-          status: STATUS_APPROVED,
-          approved_at: Time.current,
-          approved_ip_address: ip_address,
-          approved_user_agent: user_agent
-        )
-        approved = true
+    oauth_application.with_lock do
+      with_lock do
+        if approvable?
+          if access_revoked_after_creation_for?(resource_owner)
+            mark_denied!(resource_owner:, ip_address:, user_agent:)
+          else
+            update!(
+              resource_owner:,
+              status: STATUS_APPROVED,
+              approved_at: Time.current,
+              approved_ip_address: ip_address,
+              approved_user_agent: user_agent
+            )
+            approved = true
+          end
+        end
       end
     end
 
@@ -113,16 +131,12 @@ class OauthDeviceAuthorization < ApplicationRecord
   def deny!(resource_owner:, ip_address:, user_agent:)
     denied = false
 
-    with_lock do
-      if approvable?
-        update!(
-          resource_owner:,
-          status: STATUS_DENIED,
-          denied_at: Time.current,
-          denied_ip_address: ip_address,
-          denied_user_agent: user_agent
-        )
-        denied = true
+    oauth_application.with_lock do
+      with_lock do
+        if approvable?
+          mark_denied!(resource_owner:, ip_address:, user_agent:)
+          denied = true
+        end
       end
     end
 
@@ -132,21 +146,23 @@ class OauthDeviceAuthorization < ApplicationRecord
   def poll!(oauth_application:, ip_address:, user_agent:)
     result = nil
 
-    with_lock do
-      result = if oauth_application != self.oauth_application || consumed?
-        [POLL_EXPIRED_TOKEN, nil]
-      elsif denied?
-        [POLL_ACCESS_DENIED, nil]
-      elsif expired?
-        [POLL_EXPIRED_TOKEN, nil]
-      elsif pending?
-        previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
-        polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
-      else
-        update_poll_metadata!(ip_address:, user_agent:)
-        access_token = issue_access_token!
-        update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
-        [POLL_APPROVED, access_token]
+    oauth_application.with_lock do
+      with_lock do
+        result = if oauth_application != self.oauth_application || consumed?
+          [POLL_EXPIRED_TOKEN, nil]
+        elsif denied?
+          [POLL_ACCESS_DENIED, nil]
+        elsif expired?
+          [POLL_EXPIRED_TOKEN, nil]
+        elsif pending?
+          previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
+          polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
+        else
+          update_poll_metadata!(ip_address:, user_agent:)
+          access_token = issue_access_token!
+          update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
+          [POLL_APPROVED, access_token]
+        end
       end
     end
 
@@ -175,6 +191,16 @@ class OauthDeviceAuthorization < ApplicationRecord
 
     def polled_too_recently?(previous_last_polled_at)
       previous_last_polled_at.present? && previous_last_polled_at > POLL_INTERVAL.ago
+    end
+
+    def mark_denied!(resource_owner:, ip_address:, user_agent:)
+      update!(
+        resource_owner:,
+        status: STATUS_DENIED,
+        denied_at: Time.current,
+        denied_ip_address: ip_address,
+        denied_user_agent: user_agent
+      )
     end
 
     def issue_access_token!

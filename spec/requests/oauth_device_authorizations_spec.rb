@@ -250,6 +250,45 @@ describe "OAuth device authorizations", type: :request do
       expect(response.parsed_body).to include("error" => "access_denied")
     end
 
+    it "does not approve a pending code after the user revokes the application" do
+      access_token = create(
+        "doorkeeper/access_token",
+        application: oauth_application,
+        resource_owner_id: user.id,
+        scopes: "view_profile"
+      )
+      body = create_device_code
+      device_authorization = OauthDeviceAuthorization.last
+      oauth_application.revoke_access_for(user)
+      sign_in user
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("This application will be able to:")
+
+      expect do
+        submit_device_authorization(body["user_code"], decision: "approve")
+      end.not_to change { Doorkeeper::AccessToken.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+      expect(access_token.reload).to be_revoked
+      expect(device_authorization.reload).to have_attributes(
+        status: OauthDeviceAuthorization::STATUS_DENIED,
+        denied_at: be_present,
+        resource_owner: user,
+        access_token: nil
+      )
+
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "access_denied")
+    end
+
     it "does not return a successful token response when the issued token is revoked before rendering" do
       body = create_device_code
       sign_in user

@@ -9,6 +9,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
   def new
     load_device_authorization
+    set_revoked_access_error
 
     if @device_authorization.present? && @error_message.blank? && !user_signed_in?
       redirect_to login_path(next: oauth_device_authorization_path(user_code: @user_code))
@@ -69,6 +70,13 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       elsif user_signed_in? && impersonating?
         @error_message = "Stop impersonating before authorizing an OAuth application."
       end
+    end
+
+    def set_revoked_access_error
+      return if @device_authorization.blank? || @error_message.present? || !user_signed_in?
+      return unless @device_authorization.access_revoked_after_creation_for?(current_user)
+
+      @error_message = "This code is invalid or expired."
     end
 
     def oauth_scope_description(scope)

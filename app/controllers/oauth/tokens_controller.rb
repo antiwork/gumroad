@@ -24,8 +24,10 @@ class Oauth::TokensController < Doorkeeper::TokensController
       device_authorization = OauthDeviceAuthorization.find_by_device_code(params[:device_code])
       return render_oauth_json_error(:expired_token, "Device code is invalid or expired") if device_authorization.blank?
 
-      oauth_application.with_lock do
-        status, value = device_authorization.poll!(oauth_application:, ip_address: request.remote_ip, user_agent: oauth_request_user_agent)
+      status, value = device_authorization.poll!(oauth_application:, ip_address: request.remote_ip, user_agent: oauth_request_user_agent)
+      if status == OauthDeviceAuthorization::POLL_APPROVED
+        oauth_application.with_lock { render_device_access_token_response(status, value) }
+      else
         render_device_access_token_response(status, value)
       end
     end
