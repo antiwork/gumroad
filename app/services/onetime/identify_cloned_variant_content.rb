@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
+require "csv"
+
 module Onetime
   class IdentifyClonedVariantContent
     BATCH_SIZE = 500
+    HEADERS = %w[product_id permalink seller_email variant_count files_per_variant rich_content_pages].freeze
 
     def self.process(start_link_id: 0, end_link_id: nil, batch_size: BATCH_SIZE, output_path: nil)
       new.process(start_link_id:, end_link_id:, batch_size:, output_path:)
@@ -10,9 +13,10 @@ module Onetime
 
     def process(start_link_id: 0, end_link_id: nil, batch_size: BATCH_SIZE, output_path: nil)
       output = output_path ? File.open(output_path, "w") : $stdout
-      output.puts(%w[product_id permalink seller_email variant_count files_per_variant rich_content_pages].join(","))
+      csv = CSV.new(output)
+      csv << HEADERS
 
-      scope = Link.where(Link.set_flag_sql(:has_same_rich_content_for_all_variants, false))
+      scope = Link.alive.where(Link.set_flag_sql(:has_same_rich_content_for_all_variants, false))
       scope = scope.where("links.id >= ?", start_link_id)
       scope = scope.where("links.id <= ?", end_link_id) if end_link_id
 
@@ -29,14 +33,14 @@ module Onetime
           next if canonical.empty? || canonical.size == 1
           next unless variants_with_content.all? { |v| file_id_signature(v) == canonical }
 
-          output.puts([
+          csv << [
             product.id,
             product.unique_permalink,
             product.user&.email,
             variants_with_content.size,
             canonical.size,
             variants_with_content.first.alive_rich_contents.size,
-          ].join(","))
+          ]
           output.flush
           total_suspect += 1
         end

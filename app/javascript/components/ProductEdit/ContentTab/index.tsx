@@ -526,10 +526,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     };
     const cloned = source.rich_content.map((page) => {
       const stripped = stripUpsellIds(page.description);
+      const description = stripped !== null && typeof stripped === "object" ? stripped : page.description;
       return {
         id: GuidGenerator.generate(),
         title: page.title,
-        description: isPlainObject(stripped) ? stripped : page.description,
+        description,
         updated_at: new Date().toISOString(),
       };
     });

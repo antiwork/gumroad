@@ -117,8 +117,11 @@ describe("Product Edit Scenario", type: :system, js: true) do
     uncheck "Use the same content for all versions"
     find(:combo_box, "Select a version").click
     select_combo_box_option "Version 2", from: "Select a version"
+    expect(page).to have_text("Enter the content you want to sell.")
     rich_text_editor = find("[contenteditable=true]")
+    rich_text_editor.click
     rich_text_editor.send_keys "Text!"
+    expect(rich_text_editor).to have_text("Text!")
     save_change
 
     expect(product.rich_contents.alive.count).to eq 0
