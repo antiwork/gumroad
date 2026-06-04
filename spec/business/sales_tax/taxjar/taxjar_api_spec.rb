@@ -299,6 +299,22 @@ describe TaxjarApi, :vcr do
       end.to raise_error(Taxjar::Error::BadRequest)
     end
 
+    it "propagates a TaxJar UnprocessableEntity error without notifying error tracker" do
+      expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::UnprocessableEntity)
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        described_class.new.calculate_tax_for_order(origin:,
+                                                    destination:,
+                                                    nexus_address:,
+                                                    quantity: 1,
+                                                    product_tax_code: nil,
+                                                    unit_price_dollars: 100.0,
+                                                    shipping_dollars: 20.0)
+      end.to raise_error(Taxjar::Error::UnprocessableEntity)
+    end
+
     it "notifies error tracker and propagates other TaxJar client errors" do
       expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::Unauthorized)
 

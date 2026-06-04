@@ -80,7 +80,7 @@ class TaxjarApi
       raise e
     rescue *TaxjarErrors::CLIENT => e
       Rails.logger.error "TaxJar Client Error: #{e.inspect}"
-      ErrorNotifier.notify(e) unless e.is_a?(Taxjar::Error::BadRequest) || e.is_a?(Taxjar::Error::NotFound)
+      ErrorNotifier.notify(e) unless e.is_a?(Taxjar::Error::BadRequest) || e.is_a?(Taxjar::Error::NotFound) || e.is_a?(Taxjar::Error::UnprocessableEntity)
       raise e
     rescue *TaxjarErrors::SERVER => e
       Rails.logger.error "TaxJar Server Error: #{e.inspect}"
