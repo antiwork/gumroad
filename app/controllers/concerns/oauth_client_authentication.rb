@@ -36,7 +36,12 @@ module OauthClientAuthentication
 
     def render_oauth_json_error(error, description, status: :bad_request, extra: {})
       headers.merge!("Cache-Control" => "no-store, no-cache")
+      headers["WWW-Authenticate"] = %(Basic realm="Doorkeeper") if basic_oauth_authentication_failure?(status)
       render json: { error:, error_description: description }.merge(extra), status:
+    end
+
+    def basic_oauth_authentication_failure?(status)
+      status == :unauthorized && ActionController::HttpAuthentication::Basic.has_basic_credentials?(request)
     end
 
     def oauth_request_user_agent

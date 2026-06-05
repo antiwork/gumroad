@@ -107,6 +107,16 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:ok)
     end
+
+    it "sets a Basic challenge when Basic client authentication fails" do
+      confidential_application = create(:oauth_application, owner: user, scopes: "view_profile", confidential: true, secret: "client-secret", device_authorization_enabled: true)
+
+      post oauth_device_code_path, params: { scope: "view_profile" }, headers: basic_authorization_header(confidential_application.uid, "wrong-secret")
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.headers["WWW-Authenticate"]).to eq(%(Basic realm="Doorkeeper"))
+      expect(response.parsed_body).to include("error" => "invalid_client")
+    end
   end
 
   describe "GET /oauth/device" do
@@ -591,6 +601,16 @@ describe "OAuth device authorizations", type: :request do
       expect(response.parsed_body).to include("error" => "expired_token")
     end
 
+    it "sets a Basic challenge when device grant Basic client authentication fails" do
+      confidential_application = create(:oauth_application, owner: user, scopes: "view_profile", confidential: true, secret: "client-secret", device_authorization_enabled: true)
+
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE }, headers: basic_authorization_header(confidential_application.uid, "wrong-secret")
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.headers["WWW-Authenticate"]).to eq(%(Basic realm="Doorkeeper"))
+      expect(response.parsed_body).to include("error" => "invalid_client")
+    end
+
     it "returns access_denied after the user denies the code" do
       body = create_device_code
       sign_in user
@@ -650,6 +670,10 @@ describe "OAuth device authorizations", type: :request do
   def create_device_code
     post oauth_device_code_path, params: { client_id: oauth_application.uid, scope: "view_profile" }
     response.parsed_body
+  end
+
+  def basic_authorization_header(client_id, client_secret)
+    { "Authorization" => ActionController::HttpAuthentication::Basic.encode_credentials(client_id, client_secret) }
   end
 
   def submit_device_authorization(user_code, decision:)
