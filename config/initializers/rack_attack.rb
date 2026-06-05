@@ -190,6 +190,8 @@ class Rack::Attack
   throttle("oauth_device_token/ip/device_code", limit: 120, period: 60.seconds) do |req|
     if req.path == "/oauth/token" && req.post?
       request_params = req.params
+      json_params = req.json_params if req.media_type&.include?("json")
+      request_params = json_params.merge(request_params) if json_params.is_a?(Hash)
       if request_params["grant_type"] == "urn:ietf:params:oauth:grant-type:device_code"
         "#{req.remote_ip}:#{Digest::SHA256.hexdigest(request_params["device_code"].to_s)}"
       end
