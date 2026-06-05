@@ -265,8 +265,21 @@ describe "OAuth device authorizations", type: :request do
       get oauth_device_authorization_path, params: { user_code: body["user_code"] }
 
       expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This application will be able to:")
+      expect(device_authorization.reload).to have_attributes(
+        status: OauthDeviceAuthorization::STATUS_PENDING,
+        denied_at: nil,
+        resource_owner: nil,
+        access_token: nil
+      )
+
+      expect do
+        submit_device_authorization(body["user_code"], decision: "approve")
+      end.not_to change { Doorkeeper::AccessToken.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
       expect(response.body).to include("This code is invalid or expired.")
-      expect(response.body).not_to include("This application will be able to:")
+      expect(response.body).not_to include("Authorization complete")
       expect(device_authorization.reload).to have_attributes(
         status: OauthDeviceAuthorization::STATUS_DENIED,
         denied_at: be_present,
@@ -278,14 +291,37 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "access_denied")
+      expect(access_token.reload).to be_revoked
+    end
 
-      expect do
-        submit_device_authorization(body["user_code"], decision: "approve")
-      end.not_to change { Doorkeeper::AccessToken.count }
+    it "does not deny another user's pending code when a revoked user views it" do
+      revoked_user = create(:user)
+      access_token = create(
+        "doorkeeper/access_token",
+        application: oauth_application,
+        resource_owner_id: revoked_user.id,
+        scopes: "view_profile"
+      )
+      body = create_device_code
+      device_authorization = OauthDeviceAuthorization.last
+      oauth_application.revoke_access_for(revoked_user)
+      sign_in revoked_user
 
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.body).to include("This code is invalid or expired.")
-      expect(response.body).not_to include("Authorization complete")
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This application will be able to:")
+      expect(device_authorization.reload).to have_attributes(
+        status: OauthDeviceAuthorization::STATUS_PENDING,
+        denied_at: nil,
+        resource_owner: nil,
+        access_token: nil
+      )
+
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "authorization_pending")
       expect(access_token.reload).to be_revoked
     end
 

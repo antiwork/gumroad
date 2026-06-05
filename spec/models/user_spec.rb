@@ -2772,6 +2772,22 @@ describe User, :vcr do
       end
     end
 
+    it "denies approved device authorizations for the mobile application" do
+      device_authorization = create(
+        :oauth_device_authorization,
+        oauth_application:,
+        resource_owner: user,
+        status: OauthDeviceAuthorization::STATUS_APPROVED
+      )
+
+      user.invalidate_active_sessions!
+
+      expect(device_authorization.reload).to have_attributes(
+        status: OauthDeviceAuthorization::STATUS_DENIED,
+        denied_at: be_present,
+        access_token: nil
+      )
+    end
   end
 
   describe "#invalidate_browser_sessions!" do

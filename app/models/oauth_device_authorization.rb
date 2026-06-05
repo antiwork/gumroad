@@ -96,6 +96,8 @@ class OauthDeviceAuthorization < ApplicationRecord
   def scope_list = scopes.split
 
   def access_revoked_after_creation_for?(resource_owner)
+    return false if resource_owner.blank?
+
     # oauth_access_tokens.revoked_at is second precision, so same-second revokes must invalidate the code.
     revocation_cutoff = created_at.change(usec: 0)
 
@@ -163,10 +165,15 @@ class OauthDeviceAuthorization < ApplicationRecord
           previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
           polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
         else
-          update_poll_metadata!(ip_address:, user_agent:)
-          access_token = issue_access_token!
-          update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
-          [POLL_APPROVED, access_token]
+          if access_revoked_after_creation_for?(resource_owner)
+            mark_denied!(resource_owner:, ip_address:, user_agent:)
+            [POLL_ACCESS_DENIED, nil]
+          else
+            update_poll_metadata!(ip_address:, user_agent:)
+            access_token = issue_access_token!
+            update!(status: STATUS_CONSUMED, consumed_at: Time.current, access_token:)
+            [POLL_APPROVED, access_token]
+          end
         end
       end
     end

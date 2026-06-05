@@ -10,7 +10,6 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   def new
     load_device_authorization
     set_approved_decision
-    set_revoked_access_error
 
     if @device_authorization.present? && @error_message.blank? && !user_signed_in?
       redirect_to login_path(next: oauth_device_authorization_path(user_code: @user_code))
@@ -78,15 +77,6 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       return unless approved_by_current_user?
 
       @decision = :approved
-    end
-
-    def set_revoked_access_error
-      return if @device_authorization.blank? || @error_message.present? || !user_signed_in?
-      return unless @device_authorization.pending?
-      return unless @device_authorization.access_revoked_after_creation_for?(current_user)
-
-      @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
-      @error_message = "This code is invalid or expired."
     end
 
     def approved_by_current_user?

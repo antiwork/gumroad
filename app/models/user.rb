@@ -852,7 +852,7 @@ class User < ApplicationRecord
 
     application = OauthApplication.find_by(uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
     if application.present?
-      Doorkeeper::AccessToken.revoke_all_for(application.id, self)
+      application.revoke_access_tokens_for(self)
     end
   end
 

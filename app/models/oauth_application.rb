@@ -78,14 +78,18 @@ class OauthApplication < Doorkeeper::Application
     with_lock do
       # Coordinate with device token polling on this application row before revoking tokens.
       # Pending codes have no owner yet; approve! rejects codes created before this revocation.
-      device_authorizations
-        .where(
-          resource_owner_id: user.id,
-          status: OauthDeviceAuthorization::STATUS_APPROVED
-        )
-        .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: revoked_at, updated_at: revoked_at)
+      deny_approved_device_authorizations_for(user, denied_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)
       resource_subscriptions.where(user:).alive.update_all(deleted_at: revoked_at)
+    end
+  end
+
+  def revoke_access_tokens_for(user)
+    revoked_at = Time.current
+
+    with_lock do
+      deny_approved_device_authorizations_for(user, denied_at: revoked_at)
+      Doorkeeper::AccessToken.revoke_all_for(id, user)
     end
   end
 
@@ -96,6 +100,15 @@ class OauthApplication < Doorkeeper::Application
   end
 
   private
+    def deny_approved_device_authorizations_for(user, denied_at:)
+      device_authorizations
+        .where(
+          resource_owner_id: user.id,
+          status: OauthDeviceAuthorization::STATUS_APPROVED
+        )
+        .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at:, updated_at: denied_at)
+    end
+
     def ensure_access_grant_exists
       access_grants.where(resource_owner_id: owner.id,
                           scopes: Doorkeeper.configuration.public_scopes.join(" "),
