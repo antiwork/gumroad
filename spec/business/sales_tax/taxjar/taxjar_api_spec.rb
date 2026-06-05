@@ -299,10 +299,28 @@ describe TaxjarApi, :vcr do
       end.to raise_error(Taxjar::Error::BadRequest)
     end
 
-    it "propagates a TaxJar UnprocessableEntity error without notifying error tracker" do
-      expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::UnprocessableEntity)
+    it "propagates an 'already imported' UnprocessableEntity error without notifying error tracker" do
+      expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order)
+        .and_raise(Taxjar::Error::UnprocessableEntity.new("Provider tranx already imported for your user account", 422))
 
       expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        described_class.new.calculate_tax_for_order(origin:,
+                                                    destination:,
+                                                    nexus_address:,
+                                                    quantity: 1,
+                                                    product_tax_code: nil,
+                                                    unit_price_dollars: 100.0,
+                                                    shipping_dollars: 20.0)
+      end.to raise_error(Taxjar::Error::UnprocessableEntity)
+    end
+
+    it "notifies error tracker and propagates other UnprocessableEntity errors" do
+      expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order)
+        .and_raise(Taxjar::Error::UnprocessableEntity.new("to_zip is not a valid postal code", 422))
+
+      expect(ErrorNotifier).to receive(:notify).exactly(:once)
 
       expect do
         described_class.new.calculate_tax_for_order(origin:,

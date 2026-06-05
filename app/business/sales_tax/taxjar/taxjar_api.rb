@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TaxjarApi
+  TRANSACTION_ALREADY_IMPORTED_ERROR_MESSAGE = "already imported"
+
   def initialize
     @client = Taxjar::Client.new(api_key: TAXJAR_API_KEY, headers: { "x-api-version" => "2022-01-24" }, api_url: TAXJAR_ENDPOINT)
     @cache = Redis::Namespace.new(:taxjar_calculations, redis: $redis)
@@ -80,10 +82,15 @@ class TaxjarApi
       raise e
     rescue *TaxjarErrors::CLIENT => e
       Rails.logger.error "TaxJar Client Error: #{e.inspect}"
-      ErrorNotifier.notify(e) unless e.is_a?(Taxjar::Error::BadRequest) || e.is_a?(Taxjar::Error::NotFound) || e.is_a?(Taxjar::Error::UnprocessableEntity)
+      ErrorNotifier.notify(e) unless e.is_a?(Taxjar::Error::BadRequest) || e.is_a?(Taxjar::Error::NotFound) || transaction_already_imported?(e)
       raise e
     rescue *TaxjarErrors::SERVER => e
       Rails.logger.error "TaxJar Server Error: #{e.inspect}"
       raise e
+    end
+
+    def transaction_already_imported?(error)
+      error.is_a?(Taxjar::Error::UnprocessableEntity) &&
+        error.message.to_s.include?(TRANSACTION_ALREADY_IMPORTED_ERROR_MESSAGE)
     end
 end
