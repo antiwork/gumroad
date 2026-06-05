@@ -583,7 +583,9 @@ Rails.application.routes.draw do
         post :confirm
         post :regenerate_recovery_codes
       end
-      resource :profile, only: %i[show update], controller: "profile"
+      resource :profile, only: %i[show update], controller: "profile" do
+        resources :products, only: :show, controller: "profile/products"
+      end
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
       resource :billing, only: %i[show update], controller: "billing"
@@ -1263,12 +1265,6 @@ Rails.application.routes.draw do
           get :join_server
           get :leave_server
         end
-      end
-    end
-
-    namespace :settings do
-      resource :profile, only: %i[update], controller: "profile" do
-        resources :products, only: :show, controller: "profile/products"
       end
     end
 

@@ -37,6 +37,7 @@ export const WishlistsSectionView = ({
     dispatch({ type: "update-section", updated: { ...section, ...updated } });
 
   const wishlistIds = wishlists.map((wishlist) => wishlist.id);
+  const visibleWishlistIds = controls ? wishlistIds : section.shown_wishlists;
   React.useEffect(
     () =>
       updateSection({
@@ -111,7 +112,9 @@ export const WishlistsSectionView = ({
         <DummyCardGrid count={section.shown_wishlists.length} />
       ) : (
         <WishlistsView
-          wishlists={loadedWishlists ? sortBy(loadedWishlists, (wishlist) => wishlistIds.indexOf(wishlist.id)) : []}
+          wishlists={
+            loadedWishlists ? sortBy(loadedWishlists, (wishlist) => visibleWishlistIds.indexOf(wishlist.id)) : []
+          }
         />
       )}
     </SectionLayout>

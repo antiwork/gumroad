@@ -508,23 +508,23 @@ describe "User profile page", type: :system, js: true do
         within_section_form "My featured product" do
           select "Product 2", from: "Featured product"
         end
+        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to have_section "Product 2", section_element: :article
           end
         end
-        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product2.id)
 
         within_section_form "My featured product" do
           select "Product 3", from: "Featured product"
         end
+        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to have_section "Product 3", section_element: :article
           end
         end
-        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product3.id)
       end
 
@@ -548,6 +548,7 @@ describe "User profile page", type: :system, js: true do
         within_section_form "My featured product" do
           select "Buy me a coffee", from: "Featured product"
         end
+        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to_not have_section "Buy me a coffee", section_element: :article
@@ -556,7 +557,6 @@ describe "User profile page", type: :system, js: true do
             expect(page).to have_selector("h3", text: "I need caffeine!")
           end
         end
-        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: coffee_product.id)
       end
 
