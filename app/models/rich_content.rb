@@ -67,11 +67,11 @@ class RichContent < ApplicationRecord
   end
 
   def cross_product_file_embed_ids
-    product = owning_product
-    return [] if product.nil?
-
     embedded_ids = embedded_product_file_ids_in_order
     return [] if embedded_ids.empty?
+
+    product = owning_product
+    return [] if product.nil?
 
     ProductFile.where(id: embedded_ids).where.not(link_id: product.id).pluck(:id)
   end
@@ -83,7 +83,7 @@ class RichContent < ApplicationRecord
         decrypted_id = raw_id.present? ? ObfuscateIds.decrypt(raw_id) : nil
         next if decrypted_id.present? && product_file_ids.include?(decrypted_id)
         node
-      elsif node["content"].is_a?(Array)
+      elsif node["content"].is_a?(Array) && node["type"].in?(FILE_EMBED_CONTAINER_NODE_TYPES)
         remaining = reject_file_embeds(node["content"], product_file_ids)
         next if node["type"] == FILE_EMBED_GROUP_NODE_TYPE && remaining.empty?
         node.merge("content" => remaining)

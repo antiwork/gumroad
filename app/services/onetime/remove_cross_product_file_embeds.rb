@@ -17,14 +17,11 @@ module Onetime
           foreign_ids = rich_content.cross_product_file_embed_ids
           next if foreign_ids.empty?
 
-          product = rich_content.owning_product
-          next if product.nil?
-
           cleaned += 1
           puts "[#{self.class.name}] rich_content=#{rich_content.id} entity=#{rich_content.entity_type}##{rich_content.entity_id} removing=#{foreign_ids.sort}"
           next if dry_run
 
-          remediate!(rich_content, product, foreign_ids)
+          remediate!(rich_content, foreign_ids)
         end
       end
 
@@ -33,7 +30,7 @@ module Onetime
     end
 
     private
-      def remediate!(rich_content, product, foreign_ids)
+      def remediate!(rich_content, foreign_ids)
         ApplicationRecord.connection.stick_to_primary!
         ApplicationRecord.transaction do
           rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
