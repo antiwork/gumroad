@@ -314,6 +314,45 @@ describe "OAuth device authorizations", type: :request do
       expect(Doorkeeper::AccessToken.last).to be_revoked
     end
 
+    it "shows completion when the approving user reloads before the client polls" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorization complete")
+      expect(response.body).not_to include("This code is invalid or expired.")
+    end
+
+    it "does not show completion for an approved code to a different user" do
+      body = create_device_code
+      other_user = create(:named_user, name: "Other User", email: "other@example.com")
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      sign_out user
+      sign_in other_user
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+    end
+
+    it "does not show completion when approving an already approved code again" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+    end
+
     it "does not exchange an approved code after device authorization is disabled for the client" do
       body = create_device_code
       sign_in user
