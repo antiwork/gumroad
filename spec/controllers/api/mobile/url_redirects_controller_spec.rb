@@ -405,5 +405,58 @@ describe Api::Mobile::UrlRedirectsController do
       expect(event.event_type).to eq ConsumptionEvent::EVENT_TYPE_DOWNLOAD
       expect(event.platform).to eq Platform::IPHONE
     end
+
+    context "when the redirect points at a fileless installment alongside the purchased product" do
+      let(:fileless_installment) { create(:seller_installment, seller: @product.user) }
+
+      before do
+        allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(100)
+        purchase = create(:purchase, link: @product)
+        @url_redirect = create(:url_redirect, link: @product, purchase:, installment: fileless_installment)
+      end
+
+      it "resolves the file from the purchased product instead of the empty installment" do
+        expect(fileless_installment.has_files?).to be false
+
+        get :download, params: { token: @url_redirect.token,
+                                 product_file_id: @product.product_files.first.external_id,
+                                 mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+        expect(response).to be_redirect
+      end
+    end
+
+    context "when the redirect points at an installment that has its own files" do
+      let(:installment) { create(:product_installment, link: @product) }
+      let(:installment_file) do
+        file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/installment-only.pdf", link: nil)
+        installment.product_files << file
+        file
+      end
+
+      before do
+        allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(100)
+        installment_file
+        @url_redirect = create(:url_redirect, link: @product, installment:, purchase: nil)
+      end
+
+      it "serves the installment's own file" do
+        expect(installment.has_files?).to be true
+
+        get :download, params: { token: @url_redirect.token,
+                                 product_file_id: installment_file.external_id,
+                                 mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+        expect(response).to be_redirect
+      end
+
+      it "returns a 404 for a product file that is not part of the installment" do
+        expect do
+          get :download, params: { token: @url_redirect.token,
+                                   product_file_id: @product.product_files.first.external_id,
+                                   mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+        end.to raise_error(ActionController::RoutingError, "Not Found")
+      end
+    end
   end
 end

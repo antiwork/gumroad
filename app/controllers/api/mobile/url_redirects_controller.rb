@@ -43,7 +43,7 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
 
   private
     def fetch_product_file
-      @product_file = if @url_redirect.installment.present?
+      @product_file = if @url_redirect.installment.present? && @url_redirect.installment.has_files?
         @url_redirect.installment.product_files.find_by_external_id(permitted_params[:product_file_id])
       else
         @url_redirect.product_file(permitted_params[:product_file_id])
