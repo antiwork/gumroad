@@ -38,13 +38,13 @@ export const WishlistsSectionView = ({
 
   const wishlistIds = wishlists.map((wishlist) => wishlist.id);
   const visibleWishlistIds = controls ? wishlistIds : section.shown_wishlists;
-  React.useEffect(
-    () =>
-      updateSection({
-        shown_wishlists: sortBy(section.shown_wishlists, (id) => wishlistIds.indexOf(id)),
-      }),
-    [wishlistIds.join()],
-  );
+  React.useEffect(() => {
+    if (!controls) return;
+
+    updateSection({
+      shown_wishlists: sortBy(section.shown_wishlists, (id) => wishlistIds.indexOf(id)),
+    });
+  }, [controls, wishlistIds.join()]);
 
   const [loadedWishlists, setLoadedWishlists] = React.useState<CardWishlist[] | null>(null);
   React.useEffect(() => {

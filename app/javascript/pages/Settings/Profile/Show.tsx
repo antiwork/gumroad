@@ -136,6 +136,7 @@ export default function SettingsPage() {
               <Textarea
                 id={`${uid}-bio`}
                 value={profileSettings.bio ?? ""}
+                disabled={!canUpdate}
                 onChange={(e) => updateProfileSettings({ bio: e.target.value })}
               />
             </Fieldset>
@@ -183,6 +184,7 @@ export default function SettingsPage() {
               creator_profile={creatorProfile}
               bio={profileSettings.bio}
               onChange={handleProfileEditorChange}
+              disabled={!canUpdate}
             />
           </section>
         </div>

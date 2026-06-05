@@ -44,6 +44,7 @@ type ProfileSectionsFormState = ProfileEditorState & { selectedTabIndex: number 
 
 export type ProfileSectionsFormProps = ProfileEditorProps & {
   onChange?: (state: ProfileSectionsFormState) => void;
+  disabled?: boolean;
 };
 
 const SECTION_TYPE_LABELS: Record<Section["type"], string> = {
@@ -93,6 +94,21 @@ const moveItem = <T,>(items: T[], index: number, direction: -1 | 1) => {
   const [item] = updated.splice(index, 1);
   if (item) updated.splice(nextIndex, 0, item);
   return updated;
+};
+
+const responseErrorMessage = async (response: Response) => {
+  try {
+    const json: unknown = await response.json();
+    if (json && typeof json === "object" && "error" in json && typeof json.error === "string") return json.error;
+  } catch {
+    // Fall back to the generic response error below.
+  }
+
+  return undefined;
+};
+
+const assertResponseOk = async (response: Response) => {
+  if (!response.ok) throw new ResponseError(await responseErrorMessage(response));
 };
 
 const SectionActions = ({
@@ -183,7 +199,7 @@ const useSaveSection = (initialSection: Section) => {
         data: section,
         accept: "json",
       });
-      if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(await response.json()).error);
+      await assertResponseOk(response);
       showAlert("Changes saved!", "success");
       setSavedSection(section);
     } catch (e) {
@@ -710,7 +726,7 @@ const WishlistsSectionFields = ({
   );
 };
 
-export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormProps) => {
+export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: ProfileSectionsFormProps) => {
   const [sections, setSections] = React.useState(props.sections);
   const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
   const [newSectionType, setNewSectionType] = React.useState<Section["type"]>("SellerProfileProductsSection");
@@ -733,6 +749,8 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   );
 
   const saveTabs = async (nextTabs = tabs) => {
+    if (disabled) return;
+
     setTabs(nextTabs);
     if (isEqual(tabsWithoutIds(nextTabs), tabsWithoutIds(savedTabs.current))) return;
     try {
@@ -741,6 +759,10 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
       savedTabs.current = nextTabs;
     } catch (e) {
       assertResponseError(e);
+      const rollbackTabs = savedTabs.current;
+      setTabs(rollbackTabs);
+      const rollbackSelectedTab = rollbackTabs.find((tab) => tab.id === selectedTab?.id) ?? rollbackTabs[0];
+      if (rollbackSelectedTab) setSelectedTab(rollbackSelectedTab);
       showAlert(e.message, "error");
     }
   };
@@ -750,6 +772,8 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const addPage = async () => {
+    if (disabled) return;
+
     const tab = { id: GuidGenerator.generate(), name: "New page", sections: [] };
     const nextTabs = [...tabs, tab];
     setSelectedTab(tab);
@@ -757,25 +781,30 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const updatePageName = (name: string) => {
-    if (!selectedTab) return;
+    if (disabled || !selectedTab) return;
     setTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, name } : tab)));
   };
 
   const commitPageName = async (name: string) => {
-    if (!selectedTab) return;
+    if (disabled || !selectedTab) return;
     await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, name } : tab)));
   };
 
   const removePage = async () => {
-    if (!selectedTab) return;
+    if (disabled || !selectedTab) return;
     const removedSectionIds = new Set(selectedTab.sections);
     try {
       await Promise.all(
         sections
           .filter((section) => removedSectionIds.has(section.id))
-          .map((section) =>
-            request({ method: "DELETE", url: Routes.profile_section_path(section.id), accept: "json" }),
-          ),
+          .map(async (section) => {
+            const response = await request({
+              method: "DELETE",
+              url: Routes.profile_section_path(section.id),
+              accept: "json",
+            });
+            await assertResponseOk(response);
+          }),
       );
       setSections((currentSections) => currentSections.filter((section) => !removedSectionIds.has(section.id)));
       const nextTabs = tabs.filter((tab) => tab.id !== selectedTab.id);
@@ -788,6 +817,8 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const movePage = async (direction: -1 | 1) => {
+    if (disabled) return;
+
     const index = selectedTabIndex;
     const nextTabs = moveItem(tabs, index, direction);
     const nextSelectedTab = nextTabs[index + direction];
@@ -867,6 +898,8 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const addSection = async () => {
+    if (disabled) return;
+
     try {
       const tab = selectedTab ?? { id: GuidGenerator.generate(), name: "New page", sections: [] };
       const baseTabs = selectedTab ? tabs : [tab];
@@ -885,8 +918,11 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const removeSection = async (sectionId: string) => {
+    if (disabled) return;
+
     try {
-      await request({ method: "DELETE", url: Routes.profile_section_path(sectionId), accept: "json" });
+      const response = await request({ method: "DELETE", url: Routes.profile_section_path(sectionId), accept: "json" });
+      await assertResponseOk(response);
       setSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
       await saveTabs(tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })));
     } catch (e) {
@@ -896,7 +932,7 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
   };
 
   const moveSection = async (sectionId: string, direction: -1 | 1) => {
-    if (!selectedTab) return;
+    if (disabled || !selectedTab) return;
     const sectionIndex = selectedTab.sections.indexOf(sectionId);
     const updatedTab = { ...selectedTab, sections: moveItem(selectedTab.sections, sectionIndex, direction) };
     await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? updatedTab : tab)));
@@ -904,7 +940,7 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
 
   return (
     <div className="grid gap-8 px-4 pb-8 md:px-8">
-      <Fieldset>
+      <Fieldset disabled={disabled}>
         <FieldsetTitle>Pages</FieldsetTitle>
         <div className="grid gap-4">
           {tabs.length ? (
@@ -964,7 +1000,7 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
         </div>
       </Fieldset>
 
-      <Fieldset>
+      <Fieldset disabled={disabled}>
         <FieldsetTitle>Sections</FieldsetTitle>
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
