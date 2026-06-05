@@ -32,6 +32,39 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "POST /oauth/device/code issuance throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "shares one throttle bucket across formatted route variants" do
+      travel_to(Time.current) do
+        20.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              i.even? ? "/oauth/device/code" : "/oauth/device/code.json",
+              method: "POST",
+              input: "",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.30"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/oauth/device/code.xml",
+            method: "POST",
+            input: "",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.30"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    end
+  end
+
   describe "GET /oauth/device user code lookup throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

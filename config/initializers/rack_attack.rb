@@ -175,7 +175,9 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
-  throttle_by_ip path: "/oauth/device/code", method: :post, requests: 20, period: 60.seconds
+  throttle_with_exponential_backoff(name: "oauth_device_code/ip", requests: 20, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(%r{\A/oauth/device/code(?:\.[^/]+)?\z}) && req.post?
+  end
   throttle_with_exponential_backoff(name: "oauth_device_authorization_lookup/ip", requests: 30, period: 60.seconds) do |req|
     if req.path.match?(%r{\A/oauth/device(?:\.[^/]+)?\z}) && ["GET", "HEAD"].include?(req.request_method)
       req.remote_ip
