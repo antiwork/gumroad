@@ -372,6 +372,19 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).not_to include("This code is invalid or expired.")
     end
 
+    it "shows expiry when the approving user reloads after the approved code expires before polling" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      OauthDeviceAuthorization.last.update!(expires_at: 1.second.ago)
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code has expired.")
+      expect(response.body).not_to include("Authorization complete")
+    end
+
     it "shows completion when the approving user reloads after the client polls" do
       body = create_device_code
       sign_in user
@@ -384,6 +397,21 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).to include("Authorization complete")
       expect(response.body).not_to include("This code is invalid or expired.")
       expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED)
+    end
+
+    it "shows completion when the approving user reloads after the consumed code expires" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      OauthDeviceAuthorization.last.update!(expires_at: 1.second.ago)
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorization complete")
+      expect(response.body).not_to include("This code has expired.")
+      expect(response.body).not_to include("This code is invalid or expired.")
     end
 
     it "does not show completion for an approved code to a different user" do
@@ -492,6 +520,20 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("Authorization denied")
+      expect(response.body).not_to include("This code is invalid or expired.")
+    end
+
+    it "shows denial when the denying user reloads after the code expires" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "deny")
+      OauthDeviceAuthorization.last.update!(expires_at: 1.second.ago)
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorization denied")
+      expect(response.body).not_to include("This code has expired.")
       expect(response.body).not_to include("This code is invalid or expired.")
     end
 

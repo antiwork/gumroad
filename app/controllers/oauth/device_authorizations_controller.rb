@@ -62,10 +62,10 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
       if @device_authorization.blank?
         @error_message = "This code is invalid."
-      elsif @device_authorization.expired?
-        @error_message = "This code has expired."
       elsif !@device_authorization.oauth_application.alive? || !@device_authorization.oauth_application.device_authorization_enabled?
         @error_message = "This code is invalid."
+      elsif @device_authorization.expired? && !expired_terminal_for_current_user?
+        @error_message = "This code has expired."
       elsif !@device_authorization.pending? && !terminal_for_current_user?
         @error_message = "This code is invalid or expired."
       elsif user_signed_in? && impersonating?
@@ -91,8 +91,20 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       approved_or_consumed_by_current_user? || denied_by_current_user?
     end
 
+    def expired_terminal_for_current_user?
+      consumed_by_current_user? || denied_by_current_user?
+    end
+
     def approved_or_consumed_by_current_user?
-      device_authorization_owned_by_current_user? && (@device_authorization.approved? || @device_authorization.consumed?)
+      approved_by_current_user? || consumed_by_current_user?
+    end
+
+    def approved_by_current_user?
+      device_authorization_owned_by_current_user? && @device_authorization.approved?
+    end
+
+    def consumed_by_current_user?
+      device_authorization_owned_by_current_user? && @device_authorization.consumed?
     end
 
     def denied_by_current_user?
