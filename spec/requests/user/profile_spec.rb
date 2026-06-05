@@ -89,6 +89,20 @@ describe "User profile page", type: :system, js: true do
         expect(page).not_to have_button("Page settings")
       end
     end
+
+    context "with seller logged in" do
+      before { login_as seller }
+
+      it "shows the profile edit button without inline section controls" do
+        create(:seller_profile_products_section, seller:)
+        visit seller.subdomain_with_protocol
+
+        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
+        expect(page).not_to have_disclosure_button("Edit section")
+        expect(page).not_to have_disclosure_button("Add section")
+        expect(page).not_to have_button("Page settings")
+      end
+    end
   end
 
   describe "Tabs and Profile sections" do
@@ -188,12 +202,21 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
       end
 
+      def profile_editor_sections
+        all(:css, "section[aria-label='Profile section editor'] > section")
+      end
+
+      def within_profile_section_editor(&block)
+        within("section[aria-label='Profile section editor']", &block)
+      end
+
+      def expect_profile_editor_product_cards_in_order(products)
+        within_profile_section_editor { expect_product_cards_in_order(products) }
+      end
+
       it "shows the subscribe block when there are no sections" do
-        visit seller.subdomain_with_protocol
-        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
+        visit settings_profile_path
         expect(page).to have_text "Subscribe to receive email updates from #{seller.name}"
-        submit_follow_form(with: "hello@example.com")
-        expect(page).to have_alert(text: "As the creator of this profile, you can't follow yourself!")
 
         add_section "Products"
         expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
@@ -201,14 +224,13 @@ describe "User profile page", type: :system, js: true do
         expect(seller.seller_profile_sections.count).to eq 1
 
         seller.update!(bio: "Hello!")
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
       end
 
       it "allows adding and deleting sections" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id, @product2.id, @product3.id, @product4.id])
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
-        visit seller.subdomain_with_protocol
-        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
+        visit settings_profile_path
 
         select_disclosure "Edit section" do
           click_on "Name"
@@ -247,9 +269,9 @@ describe "User profile page", type: :system, js: true do
         section = create(:seller_profile_products_section, seller:)
         section2 = create(:seller_profile_posts_section, seller:)
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }, { name: "Tab 2", sections: [section2.id] }] })
-        visit "#{seller.subdomain_with_protocol}/?section=#{section2.external_id}"
+        visit "#{settings_profile_path}?section=#{section2.external_id}"
 
-        expect(page).to have_tab_button "Tab 2", open: true
+        within_profile_section_editor { expect(page).to have_tab_button "Tab 2", open: true }
         select_disclosure "Edit section" do
           # This currently cannot be tested properly as `navigator.clipboard` is `undefined` in Selenium.
           # Attempting to use `Browser.grantPermissions` like in Flexile throws an error saying "Permissions can't be granted in current context."
@@ -262,8 +284,8 @@ describe "User profile page", type: :system, js: true do
         unpublished_audience_installment = create(:audience_installment, seller:, shown_on_profile: true)
         published_follower_installment = create(:follower_installment, seller:, shown_on_profile: true, published_at: 1.day.ago)
 
-        visit seller.subdomain_with_protocol
-        expect(page).to_not have_tab_button
+        visit settings_profile_path
+        within_profile_section_editor { expect(page).to_not have_tab_button }
 
         select_disclosure "Page settings" do
           click_on "Pages"
@@ -292,9 +314,11 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
 
-        expect(page).to have_tab_button(count: 2)
-        expect(page).to have_tab_button "Hi! I'm page!", open: true
-        expect(page).to have_tab_button "New page"
+        within_profile_section_editor do
+          expect(page).to have_tab_button(count: 2)
+          expect(page).to have_tab_button "Hi! I'm page!", open: true
+          expect(page).to have_tab_button "New page"
+        end
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
 
         add_section "Products"
@@ -309,7 +333,7 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
 
-        select_tab "New page"
+        within_profile_section_editor { select_tab "New page" }
         add_section "Posts"
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
@@ -327,13 +351,15 @@ describe "User profile page", type: :system, js: true do
 
       it "allows reordering sections" do
         def expect_sections_in_order(*names)
-          names.each_with_index { |name, index| expect(page).to have_selector("section:nth-of-type(#{index + 1}) h2", text: name) }
+          sections = profile_editor_sections
+          expect(sections.count).to be >= names.length
+          names.each_with_index { |name, index| expect(sections[index]).to have_selector("h2", text: name) }
         end
         section1 = create(:seller_profile_products_section, seller:, header: "Section 1")
         section2 = create(:seller_profile_products_section, seller:, header: "Section 2")
         section3 = create(:seller_profile_products_section, seller:, header: "Section 3")
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section1, section2, section3].pluck(:id) }] })
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         expect_sections_in_order("Section 1", "Section 2", "Section 3")
 
@@ -362,7 +388,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating products sections" do
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         add_section "Products"
         click_on "Go back"
@@ -372,16 +398,16 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_unchecked_field "Show product filters"
         expect(page).not_to have_selector("[aria-label='Filters']")
         [@product1, @product2, @product3, @product4].each { check _1.name }
-        expect_product_cards_in_order([@product1, @product2, @product3, @product4])
+        expect_profile_editor_product_cards_in_order([@product1, @product2, @product3, @product4])
         drag_product_row(@product1, to: @product2)
-        expect_product_cards_in_order([@product2, @product1, @product3,  @product4])
+        expect_profile_editor_product_cards_in_order([@product2, @product1, @product3,  @product4])
         drag_product_row(@product3, to: @product2)
         uncheck @product2.name
-        expect_product_cards_in_order([@product3, @product1,  @product4])
+        expect_profile_editor_product_cards_in_order([@product3, @product1,  @product4])
 
         expect(page).to have_select("Default sort order", options: ["Custom", "Newest", "Highest rated", "Most reviewed", "Price (Low to High)", "Price (High to Low)"], selected: "Custom")
         select "Price (Low to High)", from: "Default sort order"
-        expect_product_cards_in_order([@product1, @product4, @product3])
+        expect_profile_editor_product_cards_in_order([@product1, @product4, @product3])
         save_changes
 
         section = seller.seller_profile_products_sections.reload.sole
@@ -397,13 +423,13 @@ describe "User profile page", type: :system, js: true do
         expect(section.reload).to have_attributes(show_filters: true, add_new_products: false)
 
         refresh
-        expect_product_cards_in_order([@product1, @product4, @product3])
+        expect_profile_editor_product_cards_in_order([@product1, @product4, @product3])
       end
 
       it "allows creating posts sections" do
         create(:published_installment, seller:)
         posts = create_list(:audience_installment, 2, published_at: Date.yesterday, seller:, shown_on_profile: true)
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         add_section "Posts"
         save_changes
@@ -423,7 +449,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating rich text sections" do
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         add_section "Rich text"
         save_changes
@@ -466,7 +492,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating subscribe sections" do
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         all(:disclosure_button, "Add section").last.select_disclosure do
           click_on "Subscribe"
@@ -499,7 +525,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating featured product sections" do
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
         add_section "Featured Product"
         expect(page).to have_alert(text: "Changes saved!")
 
@@ -537,7 +563,7 @@ describe "User profile page", type: :system, js: true do
       it "allows creating coffee featured product sections" do
         coffee_product = create(:coffee_product, user: seller, name: "Buy me a coffee", description: "I need caffeine!")
 
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
         add_section "Featured Product"
         expect(page).to have_alert(text: "Changes saved!")
 
@@ -570,7 +596,7 @@ describe "User profile page", type: :system, js: true do
           create(:wishlist, name: "First Wishlist", user: seller),
           create(:wishlist, name: "Second Wishlist", user: seller),
         ]
-        visit seller.subdomain_with_protocol
+        visit settings_profile_path
 
         add_section "Wishlists"
         save_changes
@@ -584,15 +610,15 @@ describe "User profile page", type: :system, js: true do
           click_on "Wishlists"
         end
         wishlists.each { check _1.name }
-        expect_product_cards_in_order(wishlists)
+        expect_profile_editor_product_cards_in_order(wishlists)
         drag_product_row(wishlists.first, to: wishlists.second)
-        expect_product_cards_in_order(wishlists.reverse)
+        expect_profile_editor_product_cards_in_order(wishlists.reverse)
         save_changes
 
         expect(section.reload.shown_wishlists).to eq(wishlists.reverse.map(&:id))
 
         refresh
-        expect_product_cards_in_order(wishlists.reverse)
+        expect_profile_editor_product_cards_in_order(wishlists.reverse)
 
         click_link "First Wishlist"
         expect(page).to have_button("Copy link")

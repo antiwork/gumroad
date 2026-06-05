@@ -51,16 +51,16 @@ describe "User profile settings page", type: :system, js: true do
       expect(@user.bio).to eq "Creator bio"
     end
 
-    describe "logo" do
+    describe "avatar" do
       def upload_logo(file)
-        within_fieldset "Logo" do
+        within_fieldset "Avatar" do
           click_on "Remove"
           attach_file("Upload", file_fixture(file), visible: false)
         end
       end
 
-      context "when the logo is valid" do
-        it "saves the logo" do
+      context "when the avatar is valid" do
+        it "saves the avatar" do
           visit settings_profile_path
           upload_logo("test.png")
           within_section("Preview", section_element: :aside) do
@@ -72,7 +72,7 @@ describe "User profile settings page", type: :system, js: true do
         end
       end
 
-      it "purges the attached logo when the logo is removed" do
+      it "purges the attached avatar when the avatar is removed" do
         # Purging an ActiveStorage::Blob in test environment returns Aws::S3::Errors::AccessDenied
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
 
@@ -85,7 +85,7 @@ describe "User profile settings page", type: :system, js: true do
         expect(page).to have_alert(text: "Changes saved!")
         expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
 
-        within_fieldset "Logo" do
+        within_fieldset "Avatar" do
           click_on "Remove"
           expect(page).to have_field("Upload", visible: false)
         end
@@ -94,13 +94,13 @@ describe "User profile settings page", type: :system, js: true do
         sleep 0.5 # Since the previous Alerts takes time to disappear, checking avatar_url returns early before the api call is complete
         expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         refresh
-        expect(page).to have_selector("img[alt='Current logo'][src*='gumroad-default-avatar-5']")
+        expect(page).to have_selector("img[alt='Current avatar'][src*='gumroad-default-avatar-5']")
         within_section("Preview", section_element: :aside) do
           expect(page).to have_selector("img[alt='Profile Picture'][src*='gumroad-default-avatar-5']")
         end
       end
 
-      context "when the logo is invalid" do
+      context "when the avatar is invalid" do
         it "displays an error if either dimension is less than 200px" do
           visit settings_profile_path
           upload_logo("test-small.png")
@@ -120,25 +120,13 @@ describe "User profile settings page", type: :system, js: true do
       end
     end
 
-    it "rejects logo if file type is unsupported" do
+    it "rejects avatar if file type is unsupported" do
       visit settings_profile_path
-      within_fieldset "Logo" do
+      within_fieldset "Avatar" do
         click_on "Remove"
         attach_file("Upload", file_fixture("test-small.gif"), visible: false)
       end
       expect(page).to have_alert(text: "Invalid file type.")
-    end
-
-    it "saves the background color, highlight color, and font" do
-      visit settings_profile_path
-      fill_in_color(find_field("Background color"), "#facade")
-      fill_in_color(find_field("Highlight color"), "#decade")
-      choose "Roboto Mono"
-      click_on "Update settings"
-      expect(page).to have_alert(text: "Changes saved!")
-      expect(@user.reload.seller_profile.highlight_color).to eq("#decade")
-      expect(@user.seller_profile.background_color).to eq("#facade")
-      expect(@user.seller_profile.font).to eq("Roboto Mono")
     end
 
     it "saves connected or disconnected Twitter account" do

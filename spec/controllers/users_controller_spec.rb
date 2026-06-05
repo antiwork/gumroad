@@ -349,6 +349,24 @@ describe UsersController do
       end
     end
 
+    context "with profile owner signed in", inertia: true do
+      it "renders public profile props without inline section editing data" do
+        product = create(:product, user: seller)
+        section = create(:seller_profile_products_section, seller:, shown_products: [product.id])
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "", sections: [section.id] }] })
+        sign_in seller
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
+        @request.host = "#{seller.username}.test.gumroad.com"
+
+        get :show
+
+        expect(inertia.props[:creator_profile][:can_edit]).to eq(true)
+        expect(inertia.props).not_to have_key(:products)
+        expect(inertia.props).not_to have_key(:posts)
+        expect(inertia.props[:sections].sole).not_to have_key(:shown_products)
+      end
+    end
+
     describe "Elasticsearch queries cache", :sidekiq_inline, :elasticsearch_wait_for_refresh do
       it "caches @search_results and tracks cache hits/misses" do
         metrics_key = "#{ProfileSectionsPresenter::CACHE_KEY_PREFIX}-metrics"

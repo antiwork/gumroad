@@ -1,10 +1,10 @@
+import { isEqual } from "lodash-es";
 import * as React from "react";
 
 import { Tab } from "$app/parsers/profile";
 import GuidGenerator from "$app/utils/guid_generator";
 
 import AutoLink from "$app/components/AutoLink";
-import { EditProfile, Props as EditProps } from "$app/components/Profile/EditPage";
 import { FollowUserFormBlock } from "$app/components/Profile/FollowUserForm";
 import { Layout } from "$app/components/Profile/Layout";
 import { PageProps as SectionsProps, Section, SectionLayout } from "$app/components/Profile/Sections";
@@ -39,6 +39,25 @@ export function useTabs(initial: Tab[]) {
   };
 
   const tabsRef = useRefToLatest(tabs);
+  React.useEffect(() => {
+    setTabs((currentTabs) => {
+      if (
+        isEqual(
+          currentTabs.map(({ id: _id, ...tab }) => tab),
+          initial,
+        )
+      )
+        return currentTabs;
+
+      return initial.map((tab, index) => ({ ...tab, id: currentTabs[index]?.id ?? GuidGenerator.generate() }));
+    });
+  }, [initial]);
+
+  React.useEffect(() => {
+    if (selectedTabId && tabs.some((tab) => tab.id === selectedTabId)) return;
+    setSelectedTabId(tabs[0]?.id);
+  }, [selectedTabId, tabs]);
+
   React.useEffect(() => {
     const listener = () => {
       const tabs = tabsRef.current;
@@ -92,8 +111,8 @@ const PublicProfile = (props: Props) => {
   );
 };
 
-export const Profile = (props: Props | EditProps) => (
+export const Profile = (props: Props) => (
   <Layout creatorProfile={props.creator_profile} hideFollowForm={!props.sections.length}>
-    {"products" in props ? <EditProfile {...props} /> : <PublicProfile {...props} />}
+    <PublicProfile {...props} />
   </Layout>
 );

@@ -237,10 +237,12 @@ export const SectionToolbar = ({ children }: { children: React.ReactNode }) => (
 export const SectionLayout = ({
   section,
   children,
+  controls = true,
   menuItems = [],
 }: {
   section: Section;
   children: React.ReactNode;
+  controls?: boolean;
   menuItems?: React.ReactElement[];
 }) => {
   const [state, dispatch] = useReducer();
@@ -284,57 +286,62 @@ export const SectionLayout = ({
   return (
     <>
       {section.header && !section.hide_header ? <h2>{section.header}</h2> : null}
-      <SectionToolbar>
-        <EditorMenu label="Edit section" onClose={onClose}>
-          <EditorSubmenu heading="Name" text={section.header}>
-            <Fieldset>
-              <Input
-                aria-label="Name"
-                value={section.header}
-                onChange={(e) => updateSection({ header: e.target.value })}
+      {controls ? (
+        <SectionToolbar>
+          <EditorMenu label="Edit section" onClose={onClose}>
+            <EditorSubmenu heading="Name" text={section.header}>
+              <Fieldset>
+                <Input
+                  aria-label="Name"
+                  value={section.header}
+                  onChange={(e) => updateSection({ header: e.target.value })}
+                />
+              </Fieldset>
+              <Switch
+                checked={!section.hide_header}
+                onChange={() => updateSection({ hide_header: !section.hide_header })}
+                label="Display above section"
               />
-            </Fieldset>
-            <Switch
-              checked={!section.hide_header}
-              onChange={() => updateSection({ hide_header: !section.hide_header })}
-              label="Display above section"
-            />
-          </EditorSubmenu>
-          {menuItems}
-          <CardContent asChild>
-            <button className="cursor-pointer all-unset" onClick={copyLink}>
-              <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
-              <Link className="size-5" />
-            </button>
-          </CardContent>
-          <CardContent asChild>
-            <button
-              className="cursor-pointer all-unset"
-              onClick={() => void remove()}
-              style={{ color: "rgb(var(--danger))" }}
-            >
-              <h5 className="grow font-bold">Remove</h5>
-              <Trash className="size-5" />
-            </button>
-          </CardContent>
-        </EditorMenu>
-        <button
-          aria-label="Move section up"
-          disabled={index === 0}
-          onClick={() => move("move-section-up")}
-          className={sectionButtonClasses}
-        >
-          <ArrowUp className="size-5" />
-        </button>
-        <button
-          aria-label="Move section down"
-          disabled={index === state.sections.length - 1}
-          onClick={() => move("move-section-down")}
-          className={sectionButtonClasses}
-        >
-          <ArrowDown className="size-5" />
-        </button>
-      </SectionToolbar>
+            </EditorSubmenu>
+            {menuItems}
+            <CardContent asChild>
+              <button className="cursor-pointer all-unset" onClick={copyLink} type="button">
+                <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
+                <Link className="size-5" />
+              </button>
+            </CardContent>
+            <CardContent asChild>
+              <button
+                className="cursor-pointer all-unset"
+                onClick={() => void remove()}
+                style={{ color: "rgb(var(--danger))" }}
+                type="button"
+              >
+                <h5 className="grow font-bold">Remove</h5>
+                <Trash className="size-5" />
+              </button>
+            </CardContent>
+          </EditorMenu>
+          <button
+            aria-label="Move section up"
+            disabled={index === 0}
+            onClick={() => move("move-section-up")}
+            className={sectionButtonClasses}
+            type="button"
+          >
+            <ArrowUp className="size-5" />
+          </button>
+          <button
+            aria-label="Move section down"
+            disabled={index === state.sections.length - 1}
+            onClick={() => move("move-section-down")}
+            className={sectionButtonClasses}
+            type="button"
+          >
+            <ArrowDown className="size-5" />
+          </button>
+        </SectionToolbar>
+      ) : null}
       <div ref={scrollRef} className="absolute" />
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </>
@@ -438,7 +445,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
   );
 };
 
-const ProductsSectionView = ({ section }: { section: ProductsSection }) => {
+const ProductsSectionView = ({ section, controls = true }: { section: ProductsSection; controls?: boolean }) => {
   const [state] = useReducer();
   const params = {
     sort: section.default_product_sort,
@@ -457,15 +464,22 @@ const ProductsSectionView = ({ section }: { section: ProductsSection }) => {
   return (
     <SectionLayout
       section={section}
-      menuItems={[
-        <EditorSubmenu
-          key="0"
-          heading="Products"
-          text={`${selectedProductsCount}/${totalProductsCount} ${totalProductsCount === 1 ? "product" : "products"}`}
-        >
-          <ProductsSettings section={section} />
-        </EditorSubmenu>,
-      ]}
+      controls={controls}
+      menuItems={
+        controls
+          ? [
+              <EditorSubmenu
+                key="0"
+                heading="Products"
+                text={`${selectedProductsCount}/${totalProductsCount} ${
+                  totalProductsCount === 1 ? "product" : "products"
+                }`}
+              >
+                <ProductsSettings section={section} />
+              </EditorSubmenu>,
+            ]
+          : []
+      }
     >
       <CardGrid
         hideFilters={!section.show_filters}
@@ -486,17 +500,17 @@ const ProductsSectionView = ({ section }: { section: ProductsSection }) => {
   );
 };
 
-const PostsSectionView = ({ section }: { section: PostsSection }) => {
+const PostsSectionView = ({ section, controls = true }: { section: PostsSection; controls?: boolean }) => {
   const [state] = useReducer();
 
   return (
-    <SectionLayout section={section}>
+    <SectionLayout section={section} controls={controls}>
       <PostsView posts={state.posts.filter((post) => section.shown_posts.includes(post.id))} />
     </SectionLayout>
   );
 };
 
-const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
+const RichTextSectionView = ({ section, controls = true }: { section: RichTextSection; controls?: boolean }) => {
   const [_, dispatch] = useReducer();
   const [initialValue] = React.useState(section.text);
   const [focused, setFocused] = React.useState(false);
@@ -512,6 +526,7 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
   const editor = useRichTextEditor({
     initialValue,
     placeholder: "Enter text here",
+    editable: controls,
   });
   const toolbarRef = React.useRef<HTMLDivElement>(null);
   const sectionRef = useRefToLatest(section);
@@ -523,6 +538,7 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
   }, [imageUploadSettings?.isUploading]);
 
   React.useEffect(() => {
+    if (!controls) return;
     if (!editor) return;
     const update = () => {
       if (isUploadingRef.current) return;
@@ -538,10 +554,10 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
       editor.off("blur", update);
       editor.off("update", debouncedUpdate);
     };
-  }, [editor]);
+  }, [controls, editor]);
 
   return (
-    <SectionLayout section={section}>
+    <SectionLayout section={section} controls={controls}>
       {editor ? (
         <div
           ref={toolbarRef}
@@ -562,30 +578,41 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
   );
 };
 
-const SubscribeSectionView = ({ section }: { section: SubscribeSection }) => {
+const SubscribeSectionView = ({ section, controls = true }: { section: SubscribeSection; controls?: boolean }) => {
   const [state, dispatch] = useReducer();
   const updateSection = (updated: Partial<SubscribeSection>) =>
     dispatch({ type: "update-section", updated: { ...section, ...updated } });
   return (
     <SectionLayout
       section={section}
-      menuItems={[
-        <EditorSubmenu key="0" heading="Button Label" text={section.button_label}>
-          <Input
-            type="text"
-            aria-label="Button Label"
-            value={section.button_label}
-            onChange={(evt) => updateSection({ button_label: evt.target.value })}
-          />
-        </EditorSubmenu>,
-      ]}
+      controls={controls}
+      menuItems={
+        controls
+          ? [
+              <EditorSubmenu key="0" heading="Button Label" text={section.button_label}>
+                <Input
+                  type="text"
+                  aria-label="Button Label"
+                  value={section.button_label}
+                  onChange={(evt) => updateSection({ button_label: evt.target.value })}
+                />
+              </EditorSubmenu>,
+            ]
+          : []
+      }
     >
       <SubscribeView creatorProfile={state.creator_profile} buttonLabel={section.button_label} />
     </SectionLayout>
   );
 };
 
-const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSection }) => {
+const FeaturedProductSectionView = ({
+  section,
+  controls = true,
+}: {
+  section: FeaturedProductSection;
+  controls?: boolean;
+}) => {
   const uid = React.useId();
   const [state, dispatch] = useReducer();
   const product = state.products.find(({ id }) => id === section.featured_product_id);
@@ -605,20 +632,25 @@ const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSecti
   return (
     <SectionLayout
       section={section}
-      menuItems={[
-        <EditorSubmenu key="0" heading="Featured Product" text={product?.name}>
-          <Select
-            inputId={uid}
-            options={state.products.map(({ id, name }) => ({ id, label: name }))}
-            value={product ? { id: product.id, label: product.name } : null}
-            onChange={(option) => updateSection(option ? { featured_product_id: option.id } : {})}
-            placeholder="Search products"
-            aria-label="Featured Product"
-            isMulti={false}
-            autoFocus
-          />
-        </EditorSubmenu>,
-      ]}
+      controls={controls}
+      menuItems={
+        controls
+          ? [
+              <EditorSubmenu key="0" heading="Featured Product" text={product?.name}>
+                <Select
+                  inputId={uid}
+                  options={state.products.map(({ id, name }) => ({ id, label: name }))}
+                  value={product ? { id: product.id, label: product.name } : null}
+                  onChange={(option) => updateSection(option ? { featured_product_id: option.id } : {})}
+                  placeholder="Search products"
+                  aria-label="Featured Product"
+                  isMulti={false}
+                  autoFocus
+                />
+              </EditorSubmenu>,
+            ]
+          : []
+      }
     >
       {props ? (
         <FeaturedProductView props={props} />
@@ -694,6 +726,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
             sectionButtonClasses,
             "rounded-b border",
           )}
+          type="button"
         >
           <Plus className="size-5" />
         </button>
@@ -734,19 +767,19 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
   );
 };
 
-export const EditSection = ({ section }: { section: Section }) => {
+export const EditSection = ({ section, controls = true }: { section: Section; controls?: boolean }) => {
   switch (section.type) {
     case "SellerProfileProductsSection":
-      return <ProductsSectionView section={section} />;
+      return <ProductsSectionView section={section} controls={controls} />;
     case "SellerProfilePostsSection":
-      return <PostsSectionView section={section} />;
+      return <PostsSectionView section={section} controls={controls} />;
     case "SellerProfileRichTextSection":
-      return <RichTextSectionView section={section} />;
+      return <RichTextSectionView section={section} controls={controls} />;
     case "SellerProfileSubscribeSection":
-      return <SubscribeSectionView section={section} />;
+      return <SubscribeSectionView section={section} controls={controls} />;
     case "SellerProfileFeaturedProductSection":
-      return <FeaturedProductSectionView section={section} />;
+      return <FeaturedProductSectionView section={section} controls={controls} />;
     case "SellerProfileWishlistsSection":
-      return <WishlistsSectionView section={section} />;
+      return <WishlistsSectionView section={section} controls={controls} />;
   }
 };

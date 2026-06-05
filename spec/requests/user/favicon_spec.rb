@@ -32,7 +32,7 @@ describe "User favicons", type: :system, js: true do
   private
     def upload_profile_photo
       visit settings_profile_path
-      within_fieldset "Logo" do
+      within_fieldset "Avatar" do
         click_on "Remove"
         attach_file("Upload", file_fixture("test.png"), visible: false)
       end

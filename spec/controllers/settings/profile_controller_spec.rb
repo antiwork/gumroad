@@ -30,6 +30,26 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       actual_props = inertia.props.slice(*expected_props.keys)
       expect(actual_props).to eq(expected_props)
     end
+
+    it "includes read-only preview props and owner-only editable profile props" do
+      product = create(:product, user: seller)
+      section = create(:seller_profile_products_section, seller:, shown_products: [product.id])
+      seller.seller_profile.update!(json_data: { tabs: [{ name: "", sections: [section.id] }] })
+
+      get :show
+
+      expect(inertia.props[:creator_profile][:can_edit]).to eq(false)
+      expect(inertia.props).not_to have_key(:products)
+      expect(inertia.props[:sections].sole).not_to have_key(:shown_products)
+
+      expect(inertia.props[:editable_profile][:creator_profile][:can_edit]).to eq(true)
+      expect(inertia.props[:editable_profile][:products]).to include({ id: product.external_id, name: product.name })
+      expect(inertia.props[:editable_profile][:sections].sole).to include(
+        header: section.header || "",
+        hide_header: section.hide_header?,
+        shown_products: [product.external_id],
+      )
+    end
   end
 
   describe "PUT update" do

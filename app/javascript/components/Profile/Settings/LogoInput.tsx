@@ -24,11 +24,11 @@ export const LogoInput = ({
   return (
     <Fieldset>
       <FieldsetTitle>
-        <Label htmlFor={id}>Logo</Label>
+        <Label htmlFor={id}>Avatar</Label>
       </FieldsetTitle>
       <ImageUploader
         id={id}
-        helpText="Your logo will be visible next to your name in your Gumroad profile and product pages. Your image should be at least 200x200px and must be in JPG or PNG format."
+        helpText="Your avatar will be visible next to your name in your Gumroad profile and product pages. Your image must be at least 200x200px and must be in JPG or PNG format."
         allowedExtensions={ALLOWED_EXTENSIONS}
         imageUrl={changing ? null : logoUrl}
         onRemove={() => {
@@ -51,7 +51,7 @@ export const LogoInput = ({
             });
           })
         }
-        imageAlt="Current logo"
+        imageAlt="Current avatar"
         disabled={disabled}
       />
     </Fieldset>

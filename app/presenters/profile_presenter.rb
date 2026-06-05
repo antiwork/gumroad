@@ -23,7 +23,7 @@ class ProfilePresenter
   end
 
   def profile_props(seller_custom_domain_url:, request:)
-    shared_profile_props(seller_custom_domain_url:, request:)
+    shared_profile_props(seller_custom_domain_url:, request:, as_logged_out_user: true).merge(creator_profile:)
   end
 
   def profile_settings_props(request:)
@@ -38,6 +38,7 @@ class ProfilePresenter
           highlight_color: seller.seller_profile.highlight_color,
           profile_picture_blob_id: seller.avatar.signed_id,
         },
+        editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
       }
     )
