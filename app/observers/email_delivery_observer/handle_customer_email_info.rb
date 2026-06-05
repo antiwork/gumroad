@@ -49,7 +49,12 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
     end
 
     def parse_message_headers(message)
-      email_provider = message.header[MailerInfo.header_name(:email_provider)].value
+      email_provider_header = message.header[MailerInfo.header_name(:email_provider)]
+      # Emails not sent through ApplicationMailer (e.g. Devise auth emails) lack our provider header.
+      # They carry no purchase/charge to track, so ignore them instead of treating it as a parse failure.
+      return [nil, nil, nil] if email_provider_header.nil?
+
+      email_provider = email_provider_header.value
 
       case email_provider
       when MailerInfo::EMAIL_PROVIDER_SENDGRID

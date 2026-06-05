@@ -219,5 +219,23 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
         end
       end
     end
+
+    context "when the email provider header is missing" do
+      let(:message) { instance_double(Mail::Message) }
+
+      before do
+        allow(message).to receive(:header).and_return({})
+      end
+
+      it "ignores the email without raising or notifying" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          expect do
+            EmailDeliveryObserver::HandleCustomerEmailInfo.perform(message)
+          end.not_to raise_error
+        end.not_to change { CustomerEmailInfo.count }
+      end
+    end
   end
 end
