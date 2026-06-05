@@ -10,8 +10,8 @@ FactoryBot.define do
     created_user_agent { "RSpec" }
 
     transient do
-      device_code { "device-code" }
-      user_code { "GRD-ABCD-1234" }
+      sequence(:device_code) { |n| "device-code-#{n}" }
+      sequence(:user_code) { |n| "GRD-#{n.to_s.rjust(8, "0").scan(/.{1,4}/).join("-")}" }
     end
 
     device_code_digest { OauthDeviceAuthorization.digest(device_code) }

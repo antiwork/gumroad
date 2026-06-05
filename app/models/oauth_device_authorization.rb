@@ -14,6 +14,8 @@ class OauthDeviceAuthorization < ApplicationRecord
   STATUS_APPROVED = "approved"
   STATUS_DENIED = "denied"
   STATUS_CONSUMED = "consumed"
+  STATUSES = [STATUS_PENDING, STATUS_APPROVED, STATUS_DENIED, STATUS_CONSUMED].freeze
+  EXPIRABLE_STATUSES = [STATUS_PENDING, STATUS_APPROVED, STATUS_CONSUMED].freeze
 
   POLL_AUTHORIZATION_PENDING = "authorization_pending"
   POLL_SLOW_DOWN = "slow_down"
@@ -27,7 +29,9 @@ class OauthDeviceAuthorization < ApplicationRecord
 
   validates :device_code_digest, :user_code_digest, :scopes, :status, :expires_at, presence: true
   validates :device_code_digest, :user_code_digest, uniqueness: true
-  validates :status, inclusion: { in: [STATUS_PENDING, STATUS_APPROVED, STATUS_DENIED, STATUS_CONSUMED] }
+  validates :status, inclusion: { in: STATUSES }
+
+  scope :expired_for_cleanup, -> { where(status: EXPIRABLE_STATUSES).where("expires_at <= ?", Time.current) }
 
   def self.create_for!(oauth_application:, scopes:, ip_address:, user_agent:)
     attempts = 0
@@ -168,6 +172,8 @@ class OauthDeviceAuthorization < ApplicationRecord
     end
 
     result
+  rescue ActiveRecord::RecordNotFound
+    [POLL_EXPIRED_TOKEN, nil]
   end
 
   private

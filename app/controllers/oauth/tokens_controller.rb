@@ -12,7 +12,8 @@ class Oauth::TokensController < Doorkeeper::TokensController
 
   private
     def device_access_token_request?
-      request.path == oauth_token_path && params[:grant_type] == OauthDeviceAuthorization::GRANT_TYPE
+      request.path.match?(%r{\A#{Regexp.escape(oauth_token_path)}(?:\.[^/]+)?\z}) &&
+        params[:grant_type] == OauthDeviceAuthorization::GRANT_TYPE
     end
 
     def create_device_access_token

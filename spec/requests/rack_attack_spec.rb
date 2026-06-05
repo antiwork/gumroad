@@ -38,7 +38,7 @@ describe "Rack::Attack throttle", type: :request do
         120.times do |i|
           request = Rack::Attack::Request.new(
             Rack::MockRequest.env_for(
-              "/oauth/token",
+              i.even? ? "/oauth/token" : "/oauth/token.json",
               method: "POST",
               input: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, device_code: "json-device-code" }.to_json,
               "CONTENT_TYPE" => "application/json",
@@ -51,7 +51,7 @@ describe "Rack::Attack throttle", type: :request do
 
         request = Rack::Attack::Request.new(
           Rack::MockRequest.env_for(
-            "/oauth/token",
+            "/oauth/token.json",
             method: "POST",
             input: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, device_code: "json-device-code" }.to_json,
             "CONTENT_TYPE" => "application/json",
@@ -128,6 +128,42 @@ describe "Rack::Attack throttle", type: :request do
             input: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, device_code: "body-device-code-over" }.to_json,
             "CONTENT_TYPE" => "application/json",
             "HTTP_CF_CONNECTING_IP" => "203.0.113.60"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
+
+    it "uses query params over form body params for the device code throttle key" do
+      reset_rack_attack!
+
+      query = "grant_type=#{Rack::Utils.escape(OauthDeviceAuthorization::GRANT_TYPE)}&device_code=query-device-code"
+
+      travel_to(Time.current) do
+        120.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              "/oauth/token?#{query}",
+              method: "POST",
+              input: "grant_type=#{Rack::Utils.escape(OauthDeviceAuthorization::GRANT_TYPE)}&device_code=body-device-code-#{i}",
+              "CONTENT_TYPE" => "application/x-www-form-urlencoded",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.70"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/oauth/token?#{query}",
+            method: "POST",
+            input: "grant_type=#{Rack::Utils.escape(OauthDeviceAuthorization::GRANT_TYPE)}&device_code=body-device-code-over",
+            "CONTENT_TYPE" => "application/x-www-form-urlencoded",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.70"
           )
         )
 

@@ -186,12 +186,13 @@ class Rack::Attack
   throttle_with_exponential_backoff(name: "oauth_device_authorization_decision/ip", requests: 10, period: 60.seconds) do |req|
     req.remote_ip if req.path.match?(%r{\A/oauth/device(?:\.[^/]+)?\z}) && req.post?
   end
-  throttle_by_ip path: "/oauth/token", requests: 3000, period: 60.seconds # Initial: 3000rpm, Max: 15000 requests/9 hours
+  throttle_with_exponential_backoff(name: "oauth_token/ip", requests: 3000, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(%r{\A/oauth/token(?:\.[^/]+)?\z})
+  end
   throttle("oauth_device_token/ip/device_code", limit: 120, period: 60.seconds) do |req|
-    if req.path == "/oauth/token" && req.post?
-      request_params = req.params
-      json_params = req.json_params if req.media_type&.include?("json")
-      request_params = json_params.merge(req.GET) if json_params.is_a?(Hash)
+    if req.path.match?(%r{\A/oauth/token(?:\.[^/]+)?\z}) && req.post?
+      body_params = req.media_type&.include?("json") ? req.json_params : req.POST
+      request_params = body_params.is_a?(Hash) ? body_params.merge(req.GET) : req.GET
       if request_params["grant_type"] == "urn:ietf:params:oauth:grant-type:device_code"
         "#{req.remote_ip}:#{Digest::SHA256.hexdigest(request_params["device_code"].to_s)}"
       end

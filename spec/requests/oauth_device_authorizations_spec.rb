@@ -469,6 +469,20 @@ describe "OAuth device authorizations", type: :request do
       expect(device_authorization.reload).to have_attributes(poll_count: 0, last_polled_at: nil)
     end
 
+    it "exchanges approved codes on formatted OAuth token routes" do
+      body = create_device_code
+      sign_in user
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect do
+        post "#{oauth_token_path}.json", params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("access_token" => Doorkeeper::AccessToken.last.token)
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED)
+    end
+
     it "returns expired_token for unknown device codes" do
       post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: "unknown-device-code" }
 
