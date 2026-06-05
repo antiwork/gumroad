@@ -100,6 +100,42 @@ describe "Rack::Attack throttle", type: :request do
     ensure
       reset_rack_attack!
     end
+
+    it "uses query params over JSON body params for the device code throttle key" do
+      reset_rack_attack!
+
+      query = "grant_type=#{Rack::Utils.escape(OauthDeviceAuthorization::GRANT_TYPE)}&device_code=query-device-code"
+
+      travel_to(Time.current) do
+        120.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              "/oauth/token?#{query}",
+              method: "POST",
+              input: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, device_code: "body-device-code-#{i}" }.to_json,
+              "CONTENT_TYPE" => "application/json",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.60"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/oauth/token?#{query}",
+            method: "POST",
+            input: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, device_code: "body-device-code-over" }.to_json,
+            "CONTENT_TYPE" => "application/json",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.60"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
   end
 
   describe "POST /oauth/device/code issuance throttle" do
