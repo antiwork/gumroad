@@ -120,12 +120,59 @@ describe "OAuth device authorizations", type: :request do
   end
 
   describe "GET /oauth/device" do
-    it "redirects to login with the code preserved before showing approval details" do
+    it "redirects to login without leaking the code before showing approval details" do
       body = create_device_code
 
       get oauth_device_authorization_path, params: { user_code: body["user_code"] }
 
-      expect(response).to redirect_to(login_path(next: oauth_device_authorization_path(user_code: body["user_code"])))
+      next_path = login_next_path
+      expect(response).to redirect_to(login_path(next: next_path))
+      expect(response.location).not_to include("user_code")
+      expect(next_path).to start_with(oauth_device_authorization_path)
+      expect(next_path).to include("handoff=")
+
+      sign_in user
+      get next_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorize")
+      expect(response.body).to include("Gumroad CLI")
+      expect(response.body).to include("See your profile data.")
+
+      get next_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorize")
+      expect(response.body).to include("Gumroad CLI")
+    end
+
+    it "keeps concurrent logged-out device approval handoffs separate" do
+      first_body = create_device_code
+      other_application = create(:oauth_application, owner: user, name: "Other CLI", scopes: "view_profile", confidential: false, device_authorization_enabled: true)
+      post oauth_device_code_path, params: { client_id: other_application.uid, scope: "view_profile" }
+      second_body = response.parsed_body
+
+      get oauth_device_authorization_path, params: { user_code: first_body["user_code"] }
+      first_next_path = login_next_path
+      get oauth_device_authorization_path, params: { user_code: second_body["user_code"] }
+      second_next_path = login_next_path
+
+      expect(first_next_path).not_to eq(second_next_path)
+      expect(first_next_path).not_to include("user_code")
+      expect(second_next_path).not_to include("user_code")
+
+      sign_in user
+      get first_next_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Gumroad CLI")
+      expect(response.body).not_to include("Other CLI")
+
+      get second_next_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Other CLI")
+      expect(response.body).not_to include("Gumroad CLI")
     end
 
     it "shows the application and scopes after login" do
@@ -725,6 +772,10 @@ describe "OAuth device authorizations", type: :request do
     authenticity_token = authenticity_token_node["value"] || authenticity_token_node["content"]
 
     post oauth_device_authorization_path, params: { user_code:, decision:, authenticity_token: }
+  end
+
+  def login_next_path
+    Rack::Utils.parse_query(URI(response.location).query)["next"]
   end
 
   def stub_vite_layout_helpers

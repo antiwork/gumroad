@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Oauth::DeviceAuthorizationsController < ApplicationController
+  MAX_USER_CODE_HANDOFFS = 20
+  USER_CODE_HANDOFF_SESSION_KEY = :oauth_device_authorization_user_code_handoffs
+
   before_action :hide_layouts
   before_action :hide_from_search_results
   before_action :authenticate_user!, only: :create
@@ -13,7 +16,8 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
     set_denied_decision
 
     if @device_authorization.present? && @error_message.blank? && !user_signed_in?
-      redirect_to login_path(next: oauth_device_authorization_path(user_code: @user_code))
+      handoff = store_user_code_handoff
+      redirect_to login_path(next: oauth_device_authorization_path(handoff:))
     end
   end
 
@@ -25,15 +29,11 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       return render :new, status: :unprocessable_entity
     end
 
-    if impersonating?
-      @error_message = "Stop impersonating before authorizing an OAuth application."
-      return render :new, status: :unprocessable_entity
-    end
-
     case params[:decision]
     when "deny"
       if @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
         @decision = :denied
+        clear_user_code_handoff
       else
         @error_message = "This code is invalid or expired."
         return render :new, status: :unprocessable_entity
@@ -41,6 +41,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
     when "approve"
       if @device_authorization.approve!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
         @decision = :approved
+        clear_user_code_handoff
       else
         @error_message = "This code is invalid or expired."
         return render :new, status: :unprocessable_entity
@@ -55,7 +56,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
   private
     def load_device_authorization
-      @user_code = OauthDeviceAuthorization.format_user_code(params[:user_code])
+      @user_code = OauthDeviceAuthorization.format_user_code(user_code_from_params_or_session)
       return if @user_code.blank?
 
       @device_authorization = OauthDeviceAuthorization.find_by_user_code(@user_code)
@@ -71,6 +72,60 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       elsif user_signed_in? && impersonating?
         @error_message = "Stop impersonating before authorizing an OAuth application."
       end
+    end
+
+    def user_code_from_params_or_session
+      params[:user_code].presence || user_code_from_handoff
+    end
+
+    def store_user_code_handoff
+      handoff = SecureRandom.urlsafe_base64(16)
+      handoffs = pruned_user_code_handoffs
+      handoffs.delete_if { |_key, entry| user_code_from_handoff_entry(entry) == @user_code }
+      handoffs[handoff] = { "user_code" => @user_code, "created_at" => Time.current.to_i }
+      session[USER_CODE_HANDOFF_SESSION_KEY] = handoffs.sort_by { |_key, entry| handoff_created_at(entry) }.last(MAX_USER_CODE_HANDOFFS).to_h
+      handoff
+    end
+
+    def user_code_from_handoff
+      @handoff = params[:handoff].presence
+      return if @handoff.blank?
+
+      handoffs = pruned_user_code_handoffs
+      sync_user_code_handoffs(handoffs)
+      user_code_from_handoff_entry(handoffs[@handoff])
+    end
+
+    def clear_user_code_handoff
+      handoff = params[:handoff].presence
+      return if handoff.blank?
+
+      handoffs = user_code_handoffs
+      handoffs.delete(handoff)
+      sync_user_code_handoffs(handoffs)
+    end
+
+    def pruned_user_code_handoffs
+      cutoff = OauthDeviceAuthorization::EXPIRES_IN.ago.to_i
+      user_code_handoffs.select { |_key, entry| handoff_created_at(entry) >= cutoff && user_code_from_handoff_entry(entry).present? }
+    end
+
+    def user_code_handoffs
+      handoffs = session[USER_CODE_HANDOFF_SESSION_KEY]
+      handoffs.is_a?(Hash) ? handoffs : {}
+    end
+
+    def user_code_from_handoff_entry(entry)
+      entry.is_a?(Hash) ? entry["user_code"] : nil
+    end
+
+    def handoff_created_at(entry)
+      entry.is_a?(Hash) ? entry["created_at"].to_i : 0
+    end
+
+    def sync_user_code_handoffs(handoffs)
+      session[USER_CODE_HANDOFF_SESSION_KEY] = handoffs
+      session.delete(USER_CODE_HANDOFF_SESSION_KEY) if handoffs.blank?
     end
 
     def set_approved_decision

@@ -34,10 +34,12 @@
     <footer class="flex flex-col gap-4 p-4 text-center">
       <%= form_tag oauth_device_authorization_path, method: :post, style: "display: contents" do %>
         <%= hidden_field_tag :user_code, @user_code %>
+        <%= hidden_field_tag :handoff, @handoff if @handoff.present? %>
         <%= button_tag "Authorize", name: "decision", value: "approve", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <% end %>
       <%= form_tag oauth_device_authorization_path, method: :post, style: "display: contents" do %>
         <%= hidden_field_tag :user_code, @user_code %>
+        <%= hidden_field_tag :handoff, @handoff if @handoff.present? %>
         <%= button_tag "Deny", name: "decision", value: "deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
       <% end %>
     </footer>
