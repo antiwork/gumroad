@@ -362,12 +362,42 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).not_to include("This code is invalid or expired.")
     end
 
+    it "shows completion when the approving user reloads after the client polls" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorization complete")
+      expect(response.body).not_to include("This code is invalid or expired.")
+      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED)
+    end
+
     it "does not show completion for an approved code to a different user" do
       body = create_device_code
       other_user = create(:named_user, name: "Other User", email: "other@example.com")
       sign_in user
 
       submit_device_authorization(body["user_code"], decision: "approve")
+      sign_out user
+      sign_in other_user
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+    end
+
+    it "does not show completion for a consumed code to a different user" do
+      body = create_device_code
+      other_user = create(:named_user, name: "Other User", email: "other@example.com")
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "approve")
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
       sign_out user
       sign_in other_user
       get oauth_device_authorization_path, params: { user_code: body["user_code"] }
@@ -441,6 +471,33 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).to include("This code is invalid or expired.")
       expect(response.body).not_to include("Authorization denied")
       expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
+    end
+
+    it "shows denial when the denying user reloads" do
+      body = create_device_code
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "deny")
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorization denied")
+      expect(response.body).not_to include("This code is invalid or expired.")
+    end
+
+    it "does not show denial for a denied code to a different user" do
+      body = create_device_code
+      other_user = create(:named_user, name: "Other User", email: "other@example.com")
+      sign_in user
+
+      submit_device_authorization(body["user_code"], decision: "deny")
+      sign_out user
+      sign_in other_user
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization denied")
     end
 
     it "does not approve a code after device authorization is disabled for the client" do

@@ -10,6 +10,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   def new
     load_device_authorization
     set_approved_decision
+    set_denied_decision
 
     if @device_authorization.present? && @error_message.blank? && !user_signed_in?
       redirect_to login_path(next: oauth_device_authorization_path(user_code: @user_code))
@@ -65,7 +66,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         @error_message = "This code has expired."
       elsif !@device_authorization.oauth_application.alive? || !@device_authorization.oauth_application.device_authorization_enabled?
         @error_message = "This code is invalid."
-      elsif !@device_authorization.pending? && !approved_by_current_user?
+      elsif !@device_authorization.pending? && !terminal_for_current_user?
         @error_message = "This code is invalid or expired."
       elsif user_signed_in? && impersonating?
         @error_message = "Stop impersonating before authorizing an OAuth application."
@@ -74,13 +75,32 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
     def set_approved_decision
       return if @device_authorization.blank? || @error_message.present?
-      return unless approved_by_current_user?
+      return unless approved_or_consumed_by_current_user?
 
       @decision = :approved
     end
 
-    def approved_by_current_user?
-      user_signed_in? && !impersonating? && @device_authorization.approved? && @device_authorization.resource_owner_id == current_user.id
+    def set_denied_decision
+      return if @device_authorization.blank? || @error_message.present?
+      return unless denied_by_current_user?
+
+      @decision = :denied
+    end
+
+    def terminal_for_current_user?
+      approved_or_consumed_by_current_user? || denied_by_current_user?
+    end
+
+    def approved_or_consumed_by_current_user?
+      device_authorization_owned_by_current_user? && (@device_authorization.approved? || @device_authorization.consumed?)
+    end
+
+    def denied_by_current_user?
+      device_authorization_owned_by_current_user? && @device_authorization.denied?
+    end
+
+    def device_authorization_owned_by_current_user?
+      user_signed_in? && !impersonating? && @device_authorization.resource_owner_id == current_user.id
     end
 
     def oauth_scope_description(scope)
