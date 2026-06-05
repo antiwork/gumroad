@@ -63,6 +63,19 @@ describe AuthPresenter do
       end
     end
 
+    context "when disable_signup_recaptcha feature flag is active" do
+      before do
+        allow(Feature).to receive(:active?).with(:disable_login_recaptcha).and_return(false)
+        allow(Feature).to receive(:active?).with(:disable_signup_recaptcha).and_return(true)
+        $redis.del(RedisKey.total_made)
+        $redis.del(RedisKey.number_of_creators)
+      end
+
+      it "returns nil for the reCAPTCHA site key" do
+        expect(presenter.signup_props[:recaptcha_site_key]).to be_nil
+      end
+    end
+
     context "with options passed" do
       let(:referrer) { create(:user, name: "Test Referrer") }
       let(:params) { { referrer: referrer.username } }
