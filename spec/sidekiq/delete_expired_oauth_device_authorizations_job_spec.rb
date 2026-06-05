@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe DeleteExpiredOauthDeviceAuthorizationsWorker do
+describe DeleteExpiredOauthDeviceAuthorizationsJob do
   describe "#perform" do
     it "deletes expired device authorizations in batches" do
       stub_const("#{described_class}::DELETION_BATCH_SIZE", 1)

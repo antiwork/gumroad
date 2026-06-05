@@ -36,7 +36,7 @@ forcefully_finish_long_running_community_chat_recap_runs:
   description: Forcefully finishes long running community chat recap runs
 delete_expired_oauth_device_authorizations:
   cron: "15 * * * *" # Every hour
-  class: DeleteExpiredOauthDeviceAuthorizationsWorker
+  class: DeleteExpiredOauthDeviceAuthorizationsJob
   description: Deletes expired OAuth device authorizations
 
 # Daily in format: [minute] [hour] * * *

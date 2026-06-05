@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class DeleteExpiredOauthDeviceAuthorizationsWorker
+class DeleteExpiredOauthDeviceAuthorizationsJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
