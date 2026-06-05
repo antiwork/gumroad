@@ -8,6 +8,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   EXPIRES_IN = 10.minutes
   POLL_INTERVAL = 5.seconds
   SLOW_DOWN_INTERVAL = 10.seconds
+  SLOW_DOWN_INCREMENT = 5.seconds
   MAX_CODE_GENERATION_ATTEMPTS = 3
 
   STATUS_PENDING = "pending"
@@ -27,7 +28,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   belongs_to :resource_owner, class_name: "User", optional: true
   belongs_to :access_token, class_name: "Doorkeeper::AccessToken", optional: true
 
-  validates :device_code_digest, :user_code_digest, :scopes, :status, :expires_at, presence: true
+  validates :device_code_digest, :user_code_digest, :scopes, :status, :expires_at, :poll_interval_seconds, presence: true
   validates :device_code_digest, :user_code_digest, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
 
@@ -162,8 +163,10 @@ class OauthDeviceAuthorization < ApplicationRecord
         elsif expired?
           [POLL_EXPIRED_TOKEN, nil]
         elsif pending?
-          previous_last_polled_at = update_poll_metadata!(ip_address:, user_agent:)
-          polled_too_recently?(previous_last_polled_at) ? [POLL_SLOW_DOWN, SLOW_DOWN_INTERVAL.to_i] : [POLL_AUTHORIZATION_PENDING, nil]
+          too_recent = polled_too_recently?
+          next_poll_interval_seconds = too_recent ? poll_interval_seconds + SLOW_DOWN_INCREMENT.to_i : poll_interval_seconds
+          update_poll_metadata!(ip_address:, user_agent:, poll_interval_seconds: next_poll_interval_seconds)
+          too_recent ? [POLL_SLOW_DOWN, next_poll_interval_seconds] : [POLL_AUTHORIZATION_PENDING, nil]
         else
           if access_revoked_after_creation_for?(resource_owner)
             mark_denied!(resource_owner:, ip_address:, user_agent:)
@@ -193,19 +196,18 @@ class OauthDeviceAuthorization < ApplicationRecord
   private_class_method :generate_device_code, :generate_user_code
 
   private
-    def update_poll_metadata!(ip_address:, user_agent:)
-      previous_last_polled_at = last_polled_at
+    def update_poll_metadata!(ip_address:, user_agent:, poll_interval_seconds: self.poll_interval_seconds)
       update!(
         last_polled_at: Time.current,
         last_poll_ip_address: ip_address,
         last_poll_user_agent: user_agent,
-        poll_count: poll_count + 1
+        poll_count: poll_count + 1,
+        poll_interval_seconds:
       )
-      previous_last_polled_at
     end
 
-    def polled_too_recently?(previous_last_polled_at)
-      previous_last_polled_at.present? && previous_last_polled_at > POLL_INTERVAL.ago
+    def polled_too_recently?
+      last_polled_at.present? && last_polled_at > poll_interval_seconds.seconds.ago
     end
 
     def mark_denied!(resource_owner:, ip_address:, user_agent:)

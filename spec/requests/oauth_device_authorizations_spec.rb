@@ -488,11 +488,19 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "authorization_pending")
+      expect(OauthDeviceAuthorization.last.poll_interval_seconds).to eq(OauthDeviceAuthorization::POLL_INTERVAL.to_i)
 
       post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "slow_down", "interval" => OauthDeviceAuthorization::SLOW_DOWN_INTERVAL.to_i)
+      expect(OauthDeviceAuthorization.last.poll_interval_seconds).to eq(OauthDeviceAuthorization::SLOW_DOWN_INTERVAL.to_i)
+
+      travel OauthDeviceAuthorization::POLL_INTERVAL + 1.second
+      post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => "slow_down", "interval" => (OauthDeviceAuthorization::SLOW_DOWN_INTERVAL + OauthDeviceAuthorization::SLOW_DOWN_INCREMENT).to_i)
     end
 
     it "does not run the device grant on OAuth token alias routes" do

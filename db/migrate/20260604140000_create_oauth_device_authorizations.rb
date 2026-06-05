@@ -13,6 +13,7 @@ class CreateOauthDeviceAuthorizations < ActiveRecord::Migration[7.1]
       t.datetime :expires_at, null: false
       t.datetime :last_polled_at
       t.integer :poll_count, null: false, default: 0
+      t.integer :poll_interval_seconds, null: false, default: 5
       t.datetime :approved_at
       t.datetime :denied_at
       t.datetime :consumed_at

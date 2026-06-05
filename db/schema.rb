@@ -1308,6 +1308,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_30_000005) do
     t.datetime "expires_at", null: false
     t.datetime "last_polled_at"
     t.integer "poll_count", default: 0, null: false
+    t.integer "poll_interval_seconds", default: 5, null: false
     t.datetime "approved_at"
     t.datetime "denied_at"
     t.datetime "consumed_at"
