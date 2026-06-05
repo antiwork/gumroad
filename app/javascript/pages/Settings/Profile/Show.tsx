@@ -17,6 +17,7 @@ import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSideb
 import { Props as ProfileProps } from "$app/components/Profile";
 import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
@@ -44,14 +45,27 @@ export default function SettingsPage() {
   const previewCreatorProfile = React.useMemo(() => ({ ...creatorProfile, can_edit: false }), [creatorProfile]);
 
   const [editableProfile, setEditableProfile] = React.useState(editable_profile);
+  const [selectedProfilePageIndex, setSelectedProfilePageIndex] = React.useState(0);
   React.useEffect(() => setEditableProfile(editable_profile), [editable_profile]);
-  const handleProfileEditorChange = React.useCallback((updates: ProfileEditorState) => {
+  const handleProfileEditorChange = React.useCallback((updates: ProfileEditorState & { selectedTabIndex: number }) => {
+    setSelectedProfilePageIndex(updates.selectedTabIndex);
     setEditableProfile((prevProfile) =>
       isEqual(prevProfile.sections, updates.sections) && isEqual(prevProfile.tabs, updates.tabs)
         ? prevProfile
         : { ...prevProfile, ...updates },
     );
   }, []);
+  const previewTabs = React.useMemo(() => {
+    const tab = editableProfile.tabs[selectedProfilePageIndex] ?? editableProfile.tabs[0];
+    return tab ? [tab] : [];
+  }, [editableProfile.tabs, selectedProfilePageIndex]);
+  const selectedPreviewSectionIds = React.useMemo(
+    () => new Set(previewTabs.flatMap((tab) => tab.sections)),
+    [previewTabs],
+  );
+  const previewSectionCount = editableProfile.sections.filter((section) =>
+    selectedPreviewSectionIds.has(section.id),
+  ).length;
 
   const form = useForm(profile_settings);
 
@@ -158,7 +172,7 @@ export default function SettingsPage() {
             <header className="px-4 pt-4 md:px-8 md:pt-8">
               <h2>Sections</h2>
             </header>
-            <EditProfile
+            <ProfileSectionsForm
               {...editableProfile}
               creator_profile={creatorProfile}
               bio={profileSettings.bio}
@@ -181,9 +195,10 @@ export default function SettingsPage() {
               border: "var(--border)",
             }}
           >
-            <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!editableProfile.sections.length}>
+            <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
               <EditProfile
                 {...editableProfile}
+                tabs={previewTabs}
                 creator_profile={previewCreatorProfile}
                 bio={profileSettings.bio}
                 controls={false}

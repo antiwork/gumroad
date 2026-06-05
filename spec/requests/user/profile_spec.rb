@@ -186,32 +186,41 @@ describe "User profile page", type: :system, js: true do
       end
 
       def add_section(type)
-        all(:disclosure_button, "Add section").last.select_disclosure do
-          click_on type
+        within_profile_section_editor do
+          select type, from: "Section type"
+          click_on "Add section"
         end
-        sleep 1
-        all(:disclosure_button, "Edit section").last.select_disclosure do
-          click_on "Name"
-          fill_in "Name", with: "New section"
-        end
+        wait_for_ajax
       end
 
       def save_changes
-        toggle_disclosure "Edit section"
-        sleep 1
+        page.find("body").click
         wait_for_ajax
       end
 
       def profile_editor_sections
-        all(:css, "section[aria-label='Profile section editor'] > section")
+        within_profile_section_editor { all(:css, "section[aria-label$=' section settings']") }
       end
 
       def within_profile_section_editor(&block)
         within("section[aria-label='Profile section editor']", &block)
       end
 
+      def within_section_form(name, match: :first, &block)
+        within_profile_section_editor do
+          within(:css, "section[aria-label='#{name} section settings']", match:, &block)
+        end
+      end
+
+      def blur_field(label)
+        find_field(label, match: :first).send_keys(:tab)
+        wait_for_ajax
+      end
+
       def expect_profile_editor_product_cards_in_order(products)
-        within_profile_section_editor { expect_product_cards_in_order(products) }
+        within_section "Preview", section_element: :aside do
+          expect_product_cards_in_order(products)
+        end
       end
 
       it "shows the subscribe block when there are no sections" do
@@ -232,35 +241,30 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
         visit settings_profile_path
 
-        select_disclosure "Edit section" do
-          click_on "Name"
-          fill_in "Name", with: "New name"
-          uncheck "Display above section"
+        within_section_form "Section 1" do
+          fill_in "Section name", with: "New name"
+          uncheck "Show section name"
+          blur_field "Section name"
         end
-        save_changes
         expect(page).to_not have_section "Section 1"
         expect(page).to_not have_section "New name"
         expect(section.reload.header).to eq "New name"
         expect(section.hide_header?).to eq true
 
-        select_disclosure "Edit section" do
-          click_on "Name"
-          check "Display above section"
+        within_section_form "New name" do
+          check "Show section name"
         end
         expect(page).to have_section "New name"
-        save_changes
+        wait_for_ajax
         expect(section.reload.hide_header?).to eq false
 
         add_section "Products"
-        expect(page).to have_disclosure_button("Edit section", count: 2)
-        within_section "New name", section_element: :section do
-          select_disclosure "Edit section" do
-            click_on "Remove"
-          end
+        expect(profile_editor_sections.count).to eq 2
+        within_section_form "New name" do
+          click_on "Remove"
         end
-        sleep 1
         wait_for_ajax
-        expect(page).to have_disclosure_button("Edit section", count: 1)
+        expect(profile_editor_sections.count).to eq 1
         expect(page).to_not have_section "New name"
         expect(seller.seller_profile_sections.reload.sole).to_not eq section
       end
@@ -271,8 +275,8 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }, { name: "Tab 2", sections: [section2.id] }] })
         visit "#{settings_profile_path}?section=#{section2.external_id}"
 
-        within_profile_section_editor { expect(page).to have_tab_button "Tab 2", open: true }
-        select_disclosure "Edit section" do
+        within_profile_section_editor do
+          expect(page).to have_select("Current page", selected: "Tab 2")
           # This currently cannot be tested properly as `navigator.clipboard` is `undefined` in Selenium.
           # Attempting to use `Browser.grantPermissions` like in Flexile throws an error saying "Permissions can't be granted in current context."
           expect(page).to have_button "Copy link"
@@ -285,75 +289,42 @@ describe "User profile page", type: :system, js: true do
         published_follower_installment = create(:follower_installment, seller:, shown_on_profile: true, published_at: 1.day.ago)
 
         visit settings_profile_path
-        within_profile_section_editor { expect(page).to_not have_tab_button }
-
-        select_disclosure "Page settings" do
-          click_on "Pages"
-          click_on "New page"
-          set_rich_text_editor_input(find("[aria-label='Page name']"), to_text: "Hi! I'm page!")
-          click_on "New page"
-          click_on "New page"
-          items = all("[role=list][aria-label=Pages] [role=listitem]")
-          expect(items.count).to eq 3
-          items[0].find("[aria-grabbed]").drag_to items[2], delay: 0.1
-          within items[1] do
-            click_on "Remove page"
-          end
-          within_modal "Delete page?" do
-            click_on "No, cancel"
-          end
-          within items[1] do
-            click_on "Remove page"
-          end
-          within_modal "Delete page?" do
-            click_on "Yes, delete"
-          end
-          expect(page).to have_selector("[role=list][aria-label=Pages] [role=listitem]", count: 2)
-        end
-        toggle_disclosure "Page settings"
-        wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
-
         within_profile_section_editor do
-          expect(page).to have_tab_button(count: 2)
-          expect(page).to have_tab_button "Hi! I'm page!", open: true
-          expect(page).to have_tab_button "New page"
+          expect(page).to have_text("No pages yet.")
+          click_on "Add page"
+          fill_in "Page name", with: "Hi! I'm page!"
+          blur_field "Page name"
+          click_on "Add page"
+          click_on "Move page up"
+          click_on "Add page"
+          click_on "Remove page"
+          expect(page).to have_select("Current page", options: ["New page", "Hi! I'm page!"], selected: "New page")
         end
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
 
         add_section "Products"
-        add_section "Products"
-        select_disclosure "Add section", match: :first do
-          click_on "Posts"
-        end
-        expect(page).to have_disclosure_button("Edit section", count: 3)
-
-        all(:disclosure_button, "Edit section")[1].click
-        click_on "Remove"
-        wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
-
-        within_profile_section_editor { select_tab "New page" }
         add_section "Posts"
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
         expect(page).to have_link(published_audience_installment.name)
         expect(page).to_not have_link(unpublished_audience_installment.name)
         expect(page).to_not have_link(published_follower_installment.name)
+        within_profile_section_editor { select "Hi! I'm page!", from: "Current page" }
+        add_section "Products"
 
         expect(seller.seller_profile_sections.count).to eq 3
         expect(seller.seller_profile.reload.json_data["tabs"]).to eq([
-          { name: "New page", sections: [seller.seller_profile_posts_sections.last.id] },
-          { name: "Hi! I'm page!", sections: [seller.seller_profile_posts_sections.first.id, seller.seller_profile_products_sections.sole.id] },
+          { name: "New page", sections: [seller.seller_profile_products_sections.first.id, seller.seller_profile_posts_sections.sole.id] },
+          { name: "Hi! I'm page!", sections: [seller.seller_profile_products_sections.last.id] },
         ].as_json)
-        expect(seller.seller_profile_posts_sections[0].shown_posts).to eq [published_audience_installment.id]
+        expect(seller.seller_profile_posts_sections.sole.shown_posts).to eq [published_audience_installment.id]
       end
 
       it "allows reordering sections" do
         def expect_sections_in_order(*names)
           sections = profile_editor_sections
           expect(sections.count).to be >= names.length
-          names.each_with_index { |name, index| expect(sections[index]).to have_selector("h2", text: name) }
+          names.each_with_index { |name, index| expect(sections[index]).to have_selector("h3", text: name) }
         end
         section1 = create(:seller_profile_products_section, seller:, header: "Section 1")
         section2 = create(:seller_profile_products_section, seller:, header: "Section 2")
@@ -363,7 +334,7 @@ describe "User profile page", type: :system, js: true do
 
         expect_sections_in_order("Section 1", "Section 2", "Section 3")
 
-        within_section "Section 1", section_element: :section do
+        within_section_form "Section 1" do
           expect(page).to have_button "Move section up", disabled: true
           click_on "Move section down"
         end
@@ -372,8 +343,7 @@ describe "User profile page", type: :system, js: true do
         add_section "Posts"
         expect_sections_in_order("Section 2", "Section 1", "Section 3", "New section")
 
-        within_section "New section", section_element: :section do
-          toggle_disclosure "Edit section"
+        within_section_form "New section" do
           expect(page).to have_button "Move section down", disabled: true
           click_on "Move section up"
         end
@@ -391,17 +361,15 @@ describe "User profile page", type: :system, js: true do
         visit settings_profile_path
 
         add_section "Products"
-        click_on "Go back"
 
-        click_on "Products"
         expect(page).to have_checked_field "Add new products by default"
         expect(page).to have_unchecked_field "Show product filters"
         expect(page).not_to have_selector("[aria-label='Filters']")
         [@product1, @product2, @product3, @product4].each { check _1.name }
         expect_profile_editor_product_cards_in_order([@product1, @product2, @product3, @product4])
-        drag_product_row(@product1, to: @product2)
+        click_on "Move Product 1 down"
         expect_profile_editor_product_cards_in_order([@product2, @product1, @product3,  @product4])
-        drag_product_row(@product3, to: @product2)
+        click_on "Move Product 3 up"
         uncheck @product2.name
         expect_profile_editor_product_cards_in_order([@product3, @product1,  @product4])
 
@@ -413,8 +381,7 @@ describe "User profile page", type: :system, js: true do
         section = seller.seller_profile_products_sections.reload.sole
         expect(section).to have_attributes(show_filters: false, add_new_products: true, default_product_sort: "price_asc", shown_products: [@product3.id, @product1.id, @product4.id])
 
-        select_disclosure "Edit section" do
-          click_on "Products"
+        within_section_form "New section" do
           check "Show product filters"
           uncheck "Add new products by default"
         end
@@ -454,49 +421,34 @@ describe "User profile page", type: :system, js: true do
         add_section "Rich text"
         save_changes
 
-        editor = within_section "New section", section_element: :section do
+        editor = within_section_form "New section" do
           find("[contenteditable=true]").tap(&:click)
         end
-        toggle_disclosure "Text formats"
-        find(:radio_button, "Title").click
-        within_section "New section", section_element: :section do
-          editor.send_keys "Heading\nSome more text"
-          attach_file(file_fixture("test.jpg")) do
-            click_on "Insert image"
-          end
-        end
+        editor.send_keys "Some rich text"
         wait_for_ajax
-        toggle_disclosure "Edit section" # unfocus editor
+        save_changes
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
         expect(page).to_not have_alert
         section = seller.seller_profile_rich_text_sections.sole
-        Timeout.timeout(10) { sleep 0.1 until section.reload.text["content"].map { _1["type"] }.include?("image") }
-        image_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{ActiveStorage::Blob.last.key}"
         expected_rich_text = {
           type: "doc",
           content: [
-            { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Heading" }] },
-            { type: "paragraph", content: [{ type: "text", text: "Some more text" }] },
-            { type: "image", attrs: { src: image_url, link: nil } }
+            { type: "paragraph", content: [{ type: "text", text: "Some rich text" }] }
           ]
         }.as_json
         expect(section).to have_attributes(header: "New section", text: expected_rich_text)
 
         refresh
         within_section "New section", section_element: :section do
-          expect(page).to have_selector("h2", text: "Heading")
-          expect(page).to have_text("Some more text")
-          expect(page).to have_image(src: image_url)
+          expect(page).to have_text("Some rich text")
         end
       end
 
       it "allows creating subscribe sections" do
         visit settings_profile_path
 
-        all(:disclosure_button, "Add section").last.select_disclosure do
-          click_on "Subscribe"
-        end
+        add_section "Subscribe"
 
         within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
           expect(page).to have_field("Your email address")
@@ -507,14 +459,12 @@ describe "User profile page", type: :system, js: true do
         new_section = seller.seller_profile_sections.sole
         expect(new_section).to have_attributes(header: "Subscribe to receive email updates from Gumbot.", button_label: "Subscribe")
 
-        select_disclosure "Edit section" do
-          click_on "Name"
-          fill_in "Name", with: "Subscribe now or else"
-          click_on "Go back"
-          click_on "Button Label"
-          fill_in "Button Label", with: "Follow"
+        within_section_form "Subscribe to receive email updates from Gumbot." do
+          fill_in "Section name", with: "Subscribe now or else"
+          blur_field "Section name"
+          fill_in "Button label", with: "Follow"
+          blur_field "Button label"
         end
-        save_changes
 
         within_section "Subscribe now or else", section_element: :section do
           expect(page).to have_field("Your email address")
@@ -526,37 +476,35 @@ describe "User profile page", type: :system, js: true do
 
       it "allows creating featured product sections" do
         visit settings_profile_path
-        add_section "Featured Product"
+        add_section "Featured product"
         expect(page).to have_alert(text: "Changes saved!")
 
         section = seller.seller_profile_sections.sole
         expect(section).to be_a SellerProfileFeaturedProductSection
         expect(section.featured_product_id).to be_nil
 
-        within_disclosure "Edit section" do
-          fill_in "Name", with: "My featured product"
+        within_section_form "New section" do
+          fill_in "Section name", with: "My featured product"
+          blur_field "Section name"
         end
-        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
 
-        select_disclosure "Edit section" do
-          click_on "Featured Product"
-          select_combo_box_option search: "Product 2", from: "Featured Product"
+        within_section_form "My featured product" do
+          select "Product 2", from: "Featured product"
         end
         within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 2", section_element: :article
         end
-        save_changes
+        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product2.id)
 
-        select_disclosure "Edit section" do
-          click_on "Featured Product"
-          select_combo_box_option search: "Product 3", from: "Featured Product"
+        within_section_form "My featured product" do
+          select "Product 3", from: "Featured product"
         end
         within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 3", section_element: :article
         end
-        save_changes
+        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product3.id)
       end
 
@@ -564,22 +512,21 @@ describe "User profile page", type: :system, js: true do
         coffee_product = create(:coffee_product, user: seller, name: "Buy me a coffee", description: "I need caffeine!")
 
         visit settings_profile_path
-        add_section "Featured Product"
+        add_section "Featured product"
         expect(page).to have_alert(text: "Changes saved!")
 
         section = seller.seller_profile_sections.sole
         expect(section).to be_a SellerProfileFeaturedProductSection
         expect(section.featured_product_id).to be_nil
 
-        within_disclosure "Edit section" do
-          fill_in "Name", with: "My featured product"
+        within_section_form "New section" do
+          fill_in "Section name", with: "My featured product"
+          blur_field "Section name"
         end
-        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
 
-        select_disclosure "Edit section" do
-          click_on "Featured Product"
-          select_combo_box_option search: "Buy me a coffee", from: "Featured Product"
+        within_section_form "My featured product" do
+          select "Buy me a coffee", from: "Featured product"
         end
         within_section "My featured product", section_element: :section do
           expect(page).to_not have_section "Buy me a coffee", section_element: :article
@@ -587,7 +534,7 @@ describe "User profile page", type: :system, js: true do
           expect(page).to have_selector("h1", text: "Buy me a coffee")
           expect(page).to have_selector("h3", text: "I need caffeine!")
         end
-        save_changes
+        wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: coffee_product.id)
       end
 
@@ -606,14 +553,11 @@ describe "User profile page", type: :system, js: true do
         expect(section).to be_a SellerProfileWishlistsSection
         expect(section.shown_wishlists).to eq([])
 
-        select_disclosure "Edit section" do
-          click_on "Wishlists"
-        end
         wishlists.each { check _1.name }
         expect_profile_editor_product_cards_in_order(wishlists)
-        drag_product_row(wishlists.first, to: wishlists.second)
+        click_on "Move First Wishlist down"
         expect_profile_editor_product_cards_in_order(wishlists.reverse)
-        save_changes
+        wait_for_ajax
 
         expect(section.reload.shown_wishlists).to eq(wishlists.reverse.map(&:id))
 

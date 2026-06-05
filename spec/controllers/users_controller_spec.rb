@@ -339,6 +339,7 @@ describe UsersController do
       include_context "with user signed in as admin for seller"
 
       it "assigns the correct instance variables" do
+        allow(ProfilePresenter).to receive(:new).and_call_original
         expect(ProfilePresenter).to receive(:new).with(seller: creator, pundit_user: controller.pundit_user).at_least(:once).and_call_original
 
         stub_const("ROOT_DOMAIN", "test.gumroad.com")
