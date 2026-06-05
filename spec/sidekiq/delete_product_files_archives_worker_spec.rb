@@ -40,8 +40,8 @@ describe DeleteProductFilesArchivesWorker do
 
 
     folder3_id = SecureRandom.uuid
-    product_file_5 = create(:product_file)
-    product_file_6 = create(:product_file)
+    product_file_5 = create(:product_file, link: @product)
+    product_file_6 = create(:product_file, link: @product)
     variant_category = create(:variant_category, title: "versions", link: @product)
     @variant = create(:variant, variant_category:, name: "mac")
     @variant.product_files = [product_file_5, product_file_6]
