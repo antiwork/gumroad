@@ -32,6 +32,72 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "GET /oauth/device user code lookup throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "throttles repeated lookup attempts from the same IP" do
+      travel_to(Time.current) do
+        30.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              i.even? ? "/oauth/device?user_code=GRD-TEST-#{i.to_s.rjust(4, "0")}" : "/oauth/device.json?user_code=GRD-TEST-#{i.to_s.rjust(4, "0")}",
+              method: i.even? ? "GET" : "HEAD",
+              input: "",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.10"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/oauth/device.json?user_code=GRD-TEST-OVER",
+            method: "HEAD",
+            input: "",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.10"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    end
+  end
+
+  describe "POST /oauth/device authorization decision throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "shares one throttle bucket across formatted route variants" do
+      travel_to(Time.current) do
+        10.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              i.even? ? "/oauth/device" : "/oauth/device.json",
+              method: "POST",
+              input: "",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.20"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/oauth/device.xml",
+            method: "POST",
+            input: "",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.20"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    end
+  end
+
   describe "PUT /api/v2/products/:id per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

@@ -92,6 +92,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   def scope_list = scopes.split
 
   def access_revoked_after_creation_for?(resource_owner)
+    # oauth_access_tokens.revoked_at is second precision, so same-second revokes must invalidate the code.
     revocation_cutoff = created_at.change(usec: 0)
 
     oauth_application.access_tokens

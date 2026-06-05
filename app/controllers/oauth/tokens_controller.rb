@@ -26,6 +26,7 @@ class Oauth::TokensController < Doorkeeper::TokensController
 
       status, value = device_authorization.poll!(oauth_application:, ip_address: request.remote_ip, user_agent: oauth_request_user_agent)
       if status == OauthDeviceAuthorization::POLL_APPROVED
+        # Hold the app lock through render so revoke_access_for cannot revoke this token before the response is committed.
         oauth_application.with_lock { render_device_access_token_response(status, value) }
       else
         render_device_access_token_response(status, value)
