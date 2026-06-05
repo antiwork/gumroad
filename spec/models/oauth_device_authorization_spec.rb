@@ -6,6 +6,11 @@ describe OauthDeviceAuthorization do
   describe ".create_for!" do
     let(:oauth_application) { create(:oauth_application, scopes: "view_profile", confidential: false, device_authorization_enabled: true) }
 
+    it "keeps code generation private" do
+      expect(described_class).not_to respond_to(:generate_device_code)
+      expect(described_class).not_to respond_to(:generate_user_code)
+    end
+
     it "retries code collisions before creating the authorization" do
       attempts = 0
       allow(described_class).to receive(:create!) do |attributes|

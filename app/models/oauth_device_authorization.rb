@@ -15,7 +15,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   STATUS_DENIED = "denied"
   STATUS_CONSUMED = "consumed"
   STATUSES = [STATUS_PENDING, STATUS_APPROVED, STATUS_DENIED, STATUS_CONSUMED].freeze
-  EXPIRABLE_STATUSES = [STATUS_PENDING, STATUS_APPROVED, STATUS_CONSUMED].freeze
+  EXPIRABLE_STATUSES = STATUSES
 
   POLL_AUTHORIZATION_PENDING = "authorization_pending"
   POLL_SLOW_DOWN = "slow_down"
@@ -176,15 +176,16 @@ class OauthDeviceAuthorization < ApplicationRecord
     [POLL_EXPIRED_TOKEN, nil]
   end
 
+  def self.generate_device_code
+    SecureRandom.urlsafe_base64(32)
+  end
+
+  def self.generate_user_code
+    "GRD-#{SecureRandom.alphanumeric(8).upcase.scan(/.{1,4}/).join("-")}"
+  end
+  private_class_method :generate_device_code, :generate_user_code
+
   private
-    def self.generate_device_code
-      SecureRandom.urlsafe_base64(32)
-    end
-
-    def self.generate_user_code
-      "GRD-#{SecureRandom.alphanumeric(8).upcase.scan(/.{1,4}/).join("-")}"
-    end
-
     def update_poll_metadata!(ip_address:, user_agent:)
       previous_last_polled_at = last_polled_at
       update!(

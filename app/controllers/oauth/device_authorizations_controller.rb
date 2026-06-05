@@ -85,6 +85,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       return unless @device_authorization.pending?
       return unless @device_authorization.access_revoked_after_creation_for?(current_user)
 
+      @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
       @error_message = "This code is invalid or expired."
     end
 

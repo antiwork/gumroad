@@ -14,11 +14,11 @@ describe DeleteExpiredOauthDeviceAuthorizationsWorker do
 
       expect do
         described_class.new.perform
-      end.to change { OauthDeviceAuthorization.count }.by(-2)
+      end.to change { OauthDeviceAuthorization.count }.by(-3)
 
       expect { expired_pending.reload }.to raise_error(ActiveRecord::RecordNotFound)
       expect { expired_consumed.reload }.to raise_error(ActiveRecord::RecordNotFound)
-      expect(expired_denied.reload).to be_present
+      expect { expired_denied.reload }.to raise_error(ActiveRecord::RecordNotFound)
       expect(active_authorization.reload).to be_present
     end
   end

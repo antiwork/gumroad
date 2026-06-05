@@ -267,15 +267,6 @@ describe "OAuth device authorizations", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("This code is invalid or expired.")
       expect(response.body).not_to include("This application will be able to:")
-
-      expect do
-        submit_device_authorization(body["user_code"], decision: "approve")
-      end.not_to change { Doorkeeper::AccessToken.count }
-
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.body).to include("This code is invalid or expired.")
-      expect(response.body).not_to include("Authorization complete")
-      expect(access_token.reload).to be_revoked
       expect(device_authorization.reload).to have_attributes(
         status: OauthDeviceAuthorization::STATUS_DENIED,
         denied_at: be_present,
@@ -287,6 +278,15 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "access_denied")
+
+      expect do
+        submit_device_authorization(body["user_code"], decision: "approve")
+      end.not_to change { Doorkeeper::AccessToken.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("This code is invalid or expired.")
+      expect(response.body).not_to include("Authorization complete")
+      expect(access_token.reload).to be_revoked
     end
 
     it "does not return a successful token response when the issued token is revoked before rendering" do
