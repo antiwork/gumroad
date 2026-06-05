@@ -407,17 +407,21 @@ describe "User profile page", type: :system, js: true do
         add_section "Posts"
         save_changes
 
-        within_section "New section", section_element: :section do
-          expect(page).to have_link(count: 2)
-          posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
+        within_profile_editor_preview do
+          within_section "New section", section_element: :section do
+            expect(page).to have_link(count: 2)
+            posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
+          end
         end
 
         expect(seller.seller_profile_posts_sections.reload.sole).to have_attributes(header: "New section", shown_posts: posts.pluck(:id))
 
         refresh
-        within_section "New section", section_element: :section do
-          expect(page).to have_link(count: 2)
-          posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
+        within_profile_editor_preview do
+          within_section "New section", section_element: :section do
+            expect(page).to have_link(count: 2)
+            posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
+          end
         end
       end
 
@@ -446,8 +450,10 @@ describe "User profile page", type: :system, js: true do
         expect(section).to have_attributes(header: "New section", text: expected_rich_text)
 
         refresh
-        within_section "New section", section_element: :section do
-          expect(page).to have_text("Some rich text")
+        within_profile_editor_preview do
+          within_section "New section", section_element: :section do
+            expect(page).to have_text("Some rich text")
+          end
         end
       end
 
@@ -456,9 +462,11 @@ describe "User profile page", type: :system, js: true do
 
         add_section "Subscribe"
 
-        within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
-          expect(page).to have_field("Your email address")
-          expect(page).to have_button("Subscribe")
+        within_profile_editor_preview do
+          within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
+            expect(page).to have_field("Your email address")
+            expect(page).to have_button("Subscribe")
+          end
         end
         wait_for_ajax
 
@@ -472,9 +480,11 @@ describe "User profile page", type: :system, js: true do
           blur_field "Button label"
         end
 
-        within_section "Subscribe now or else", section_element: :section do
-          expect(page).to have_field("Your email address")
-          expect(page).to have_button("Follow")
+        within_profile_editor_preview do
+          within_section "Subscribe now or else", section_element: :section do
+            expect(page).to have_field("Your email address")
+            expect(page).to have_button("Follow")
+          end
         end
 
         expect(new_section.reload).to have_attributes(header: "Subscribe now or else", button_label: "Follow")
@@ -498,8 +508,10 @@ describe "User profile page", type: :system, js: true do
         within_section_form "My featured product" do
           select "Product 2", from: "Featured product"
         end
-        within_section "My featured product", section_element: :section do
-          expect(page).to have_section "Product 2", section_element: :article
+        within_profile_editor_preview do
+          within_section "My featured product", section_element: :section do
+            expect(page).to have_section "Product 2", section_element: :article
+          end
         end
         wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product2.id)
@@ -507,8 +519,10 @@ describe "User profile page", type: :system, js: true do
         within_section_form "My featured product" do
           select "Product 3", from: "Featured product"
         end
-        within_section "My featured product", section_element: :section do
-          expect(page).to have_section "Product 3", section_element: :article
+        within_profile_editor_preview do
+          within_section "My featured product", section_element: :section do
+            expect(page).to have_section "Product 3", section_element: :article
+          end
         end
         wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product3.id)
@@ -534,11 +548,13 @@ describe "User profile page", type: :system, js: true do
         within_section_form "My featured product" do
           select "Buy me a coffee", from: "Featured product"
         end
-        within_section "My featured product", section_element: :section do
-          expect(page).to_not have_section "Buy me a coffee", section_element: :article
-          expect(page).to have_section "Buy me a coffee", section_element: :section
-          expect(page).to have_selector("h1", text: "Buy me a coffee")
-          expect(page).to have_selector("h3", text: "I need caffeine!")
+        within_profile_editor_preview do
+          within_section "My featured product", section_element: :section do
+            expect(page).to_not have_section "Buy me a coffee", section_element: :article
+            expect(page).to have_section "Buy me a coffee", section_element: :section
+            expect(page).to have_selector("h1", text: "Buy me a coffee")
+            expect(page).to have_selector("h3", text: "I need caffeine!")
+          end
         end
         wait_for_ajax
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: coffee_product.id)
@@ -562,8 +578,8 @@ describe "User profile page", type: :system, js: true do
         wishlists.each { check _1.name }
         expect_profile_editor_product_cards_in_order(wishlists)
         click_on "Move First Wishlist down"
-        expect_profile_editor_product_cards_in_order(wishlists.reverse)
         wait_for_ajax
+        expect_profile_editor_product_cards_in_order(wishlists.reverse)
 
         expect(section.reload.shown_wishlists).to eq(wishlists.reverse.map(&:id))
 

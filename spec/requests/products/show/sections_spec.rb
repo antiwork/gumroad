@@ -64,6 +64,7 @@ describe "Profile settings on product pages", type: :system, js: true do
     select_disclosure "Add section", match: :first do
       click_on "Products"
     end
+    expect(page).to have_selector(:disclosure_button, "Edit section", count: 1)
     select_disclosure "Edit section" do
       click_on "Products"
       check product2.name
@@ -74,7 +75,7 @@ describe "Profile settings on product pages", type: :system, js: true do
     select_disclosure "Add section", match: :first do
       click_on "Featured Product"
     end
-    sleep 1
+    expect(page).to have_selector(:disclosure_button, "Edit section", count: 2)
     select_disclosure "Edit section", match: :first do
       click_on "Featured Product"
       select_combo_box_option search: product2.name, from: "Featured Product"
@@ -83,7 +84,7 @@ describe "Profile settings on product pages", type: :system, js: true do
     all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Posts"
     end
-    sleep 1
+    expect(page).to have_selector(:disclosure_button, "Edit section", count: 3)
     all(:disclosure_button, "Edit section").last.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Posts!"
@@ -92,12 +93,12 @@ describe "Profile settings on product pages", type: :system, js: true do
     all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Subscribe"
     end
-    sleep 1
+    expect(page).to have_selector(:disclosure_button, "Edit section", count: 4)
 
     all(:disclosure_button, "Add section")[2].select_disclosure do
       click_on "Rich text"
     end
-    sleep 1
+    expect(page).to have_selector(:disclosure_button, "Edit section", count: 5)
     edit_rich_text_disclosure = all(:disclosure_button, "Edit section")[1]
     edit_rich_text_disclosure.select_disclosure do
       click_on "Name"
