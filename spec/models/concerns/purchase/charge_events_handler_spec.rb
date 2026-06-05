@@ -22,6 +22,37 @@ describe Purchase::ChargeEventsHandler, :vcr do
     end
   end
 
+  describe "charge event with no matching chargeable" do
+    context "when the event requires action" do
+      it "notifies for a dispute formalized event" do
+        expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+        Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+
+      it "notifies for a settlement declined event" do
+        expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+        Purchase.handle_charge_event(build(:charge_event_settlement_declined, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+    end
+
+    context "when the event does not require action" do
+      it "ignores an informational event from an unrelated connected account charge" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        Purchase.handle_charge_event(build(:charge_event_informational, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+
+      it "ignores a charge succeeded event from an unrelated connected account charge" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        Purchase.handle_charge_event(build(:charge_event_charge_succeeded, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+
+      it "ignores a payment failed event from an unrelated connected account charge" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        Purchase.handle_charge_event(build(:charge_event_payment_failed, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+    end
+  end
+
   describe "setting the purchase fee from a charge event" do
     before do
       @l = create(:product)

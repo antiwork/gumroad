@@ -3,6 +3,18 @@
 module Purchase::ChargeEventsHandler
   extend ActiveSupport::Concern
 
+  # Event types that require action from us when matched to a Gumroad charge. For all other types (e.g. a
+  # `charge.succeeded` or other informational event) a missing chargeable is benign: it means the charge was not
+  # created by Gumroad. This happens routinely for connected Stripe accounts, where we receive webhooks for every
+  # charge the account processes, including ones unrelated to Gumroad. We ignore those instead of notifying.
+  ACTIONABLE_EVENT_TYPES_WITHOUT_CHARGEABLE = [
+    ChargeEvent::TYPE_DISPUTE_FORMALIZED,
+    ChargeEvent::TYPE_DISPUTE_WON,
+    ChargeEvent::TYPE_DISPUTE_LOST,
+    ChargeEvent::TYPE_SETTLEMENT_DECLINED,
+    ChargeEvent::TYPE_CHARGE_REFUND_UPDATED,
+  ].freeze
+
   class_methods do
     def handle_charge_event(event)
       logger.info("Charge event: #{event.to_h.to_json}")
@@ -10,8 +22,10 @@ module Purchase::ChargeEventsHandler
       chargeable = Charge::Chargeable.find_by_stripe_event(event)
 
       if chargeable.nil?
-        ErrorNotifier.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
-                  "charge reference: #{event.charge_reference} for event id: #{event.charge_event_id}.")
+        if ACTIONABLE_EVENT_TYPES_WITHOUT_CHARGEABLE.include?(event.type)
+          ErrorNotifier.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
+                    "charge reference: #{event.charge_reference} for event id: #{event.charge_event_id}.")
+        end
         return
       end
 
