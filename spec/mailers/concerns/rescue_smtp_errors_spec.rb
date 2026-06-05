@@ -42,5 +42,11 @@ describe RescueSmtpErrors do
 
       expect { mailer_class.welcome.deliver_now }.to_not raise_error
     end
+
+    it "does not raise Net::SMTPFatalError" do
+      allow_any_instance_of(mailer_class).to receive(:welcome).and_raise(Net::SMTPFatalError.new(nil))
+
+      expect { mailer_class.welcome.deliver_now }.to_not raise_error
+    end
   end
 end

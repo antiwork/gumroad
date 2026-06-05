@@ -12,7 +12,7 @@ module RescueSmtpErrors
       end
     end
 
-    rescue_from Net::SMTPAuthenticationError, Net::SMTPSyntaxError do |exception|
+    rescue_from Net::SMTPAuthenticationError, Net::SMTPSyntaxError, Net::SMTPFatalError do |exception|
       Rails.logger.error "Mailer Error: #{exception.inspect}"
     end
   end
