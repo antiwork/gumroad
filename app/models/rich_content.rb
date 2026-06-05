@@ -56,8 +56,41 @@ class RichContent < ApplicationRecord
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
 
+  before_save :strip_cross_product_file_embeds
+
   def embedded_product_file_ids_in_order
     description.flat_map { select_file_embed_ids(_1) }.compact.uniq
+  end
+
+  def owning_product
+    entity.is_a?(Link) ? entity : entity.try(:link)
+  end
+
+  def cross_product_file_embed_ids
+    product = owning_product
+    return [] if product.nil?
+
+    embedded_ids = embedded_product_file_ids_in_order
+    return [] if embedded_ids.empty?
+
+    ProductFile.where(id: embedded_ids).where.not(link_id: product.id).pluck(:id)
+  end
+
+  def self.reject_file_embeds(nodes, product_file_ids)
+    Array(nodes).filter_map do |node|
+      if node["type"] == FILE_EMBED_NODE_TYPE
+        raw_id = node.dig("attrs", "id")
+        decrypted_id = raw_id.present? ? ObfuscateIds.decrypt(raw_id) : nil
+        next if decrypted_id.present? && product_file_ids.include?(decrypted_id)
+        node
+      elsif node["content"].is_a?(Array)
+        remaining = reject_file_embeds(node["content"], product_file_ids)
+        next if node["type"] == FILE_EMBED_GROUP_NODE_TYPE && remaining.empty?
+        node.merge("content" => remaining)
+      else
+        node
+      end
+    end
   end
 
   def custom_field_nodes
@@ -83,6 +116,15 @@ class RichContent < ApplicationRecord
   end
 
   private
+    def strip_cross_product_file_embeds
+      return unless will_save_change_to_description?
+
+      foreign_ids = cross_product_file_embed_ids
+      return if foreign_ids.empty?
+
+      self.description = self.class.reject_file_embeds(description, foreign_ids.to_set)
+    end
+
     def select_file_embed_ids(node)
       if node["type"] == FILE_EMBED_NODE_TYPE
         id = node.dig("attrs", "id")

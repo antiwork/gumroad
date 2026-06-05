@@ -74,6 +74,51 @@ describe RichContent do
     end
   end
 
+  describe "stripping cross-product file embeds on save" do
+    let(:product) { create(:product) }
+    let(:own_file) { create(:product_file, link: product) }
+    let(:foreign_file) { create(:product_file, link: create(:product)) }
+
+    def embed(file)
+      { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+    end
+
+    it "removes embeds for files owned by another product from a product's content" do
+      rich_content = create(:product_rich_content, entity: product, description: [embed(own_file), embed(foreign_file)])
+      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+    end
+
+    it "removes foreign embeds from a variant's content" do
+      variant = create(:variant, variant_category: create(:variant_category, link: product))
+      rich_content = create(:rich_content, entity: variant, description: [embed(own_file), embed(foreign_file)])
+      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+    end
+
+    it "preserves embeds for the product's own files" do
+      another_own_file = create(:product_file, link: product)
+      rich_content = create(:product_rich_content, entity: product, description: [embed(own_file), embed(another_own_file)])
+      expect(rich_content.reload.embedded_product_file_ids_in_order).to match_array([own_file.id, another_own_file.id])
+    end
+
+    it "prunes a file embed group left empty after removing a foreign embed" do
+      description = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(foreign_file)] }]
+      rich_content = create(:product_rich_content, entity: product, description:)
+      expect(rich_content.reload.description).to eq([])
+    end
+
+    it "keeps own-product embeds inside a file embed group while dropping the foreign one" do
+      description = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(own_file), embed(foreign_file)] }]
+      rich_content = create(:product_rich_content, entity: product, description:)
+      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+    end
+
+    it "leaves content without foreign embeds untouched" do
+      description = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }, embed(own_file)]
+      rich_content = create(:product_rich_content, entity: product, description:)
+      expect(rich_content.reload.description).to eq(description)
+    end
+  end
+
   describe "#has_license_key?" do
     let(:product) { create(:product) }
 
@@ -216,5 +261,4 @@ describe RichContent do
       )
     end
   end
-
 end
