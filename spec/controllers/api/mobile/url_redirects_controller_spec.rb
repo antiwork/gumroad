@@ -264,6 +264,27 @@ describe Api::Mobile::UrlRedirectsController do
                                        format: :json }
       end.to change { url_redirect.reload.uses }.from(0).to(1)
     end
+
+    context "when the redirect points at a fileless installment alongside the purchased product" do
+      let(:fileless_installment) { create(:seller_installment, seller: product.user) }
+      let!(:installment_url_redirect) do
+        create(:url_redirect, link: product, purchase: create(:purchase, link: product), installment: fileless_installment)
+      end
+
+      it "resolves the streamable file from the purchased product instead of the empty installment" do
+        expect(fileless_installment.has_files?).to be false
+        expect_any_instance_of(ProductFile).to receive(:hls_playlist).and_return(nil)
+        allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
+        expect_any_instance_of(UrlRedirect).to receive(:signed_video_url).and_return("https://example.com/signed-video")
+        stub_playlist_s3_object_get.call
+
+        get :stream, params: { token: installment_url_redirect.token, product_file_id: file_1.external_id,
+                               mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, format: :json }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq true
+      end
+    end
   end
 
   describe "GET hls_playlist" do
