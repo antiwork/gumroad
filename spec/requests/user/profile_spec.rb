@@ -217,8 +217,12 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
       end
 
+      def within_profile_editor_preview(&block)
+        within_section "Preview", section_element: :aside, &block
+      end
+
       def expect_profile_editor_product_cards_in_order(products)
-        within_section "Preview", section_element: :aside do
+        within_profile_editor_preview do
           expect_product_cards_in_order(products)
         end
       end
@@ -246,15 +250,17 @@ describe "User profile page", type: :system, js: true do
           uncheck "Show section name"
           blur_field "Section name"
         end
-        expect(page).to_not have_section "Section 1"
-        expect(page).to_not have_section "New name"
+        within_profile_editor_preview do
+          expect(page).to_not have_section "Section 1"
+          expect(page).to_not have_section "New name"
+        end
         expect(section.reload.header).to eq "New name"
         expect(section.hide_header?).to eq true
 
         within_section_form "New name" do
           check "Show section name"
         end
-        expect(page).to have_section "New name"
+        within_profile_editor_preview { expect(page).to have_section "New name" }
         wait_for_ajax
         expect(section.reload.hide_header?).to eq false
 
