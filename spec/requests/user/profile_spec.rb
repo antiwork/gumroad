@@ -298,12 +298,17 @@ describe "User profile page", type: :system, js: true do
         within_profile_section_editor do
           expect(page).to have_text("No pages yet.")
           click_on "Add page"
+          wait_for_ajax
           fill_in "Page name", with: "Hi! I'm page!"
           blur_field "Page name"
           click_on "Add page"
+          wait_for_ajax
           click_on "Move page up"
+          wait_for_ajax
           click_on "Add page"
+          wait_for_ajax
           click_on "Remove page"
+          wait_for_ajax
           expect(page).to have_select("Current page", options: ["New page", "Hi! I'm page!"], selected: "New page")
         end
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
@@ -586,7 +591,8 @@ describe "User profile page", type: :system, js: true do
         refresh
         expect_profile_editor_product_cards_in_order(wishlists.reverse)
 
-        click_link "First Wishlist"
+        wishlist_href = within_profile_editor_preview { find_link("First Wishlist")[:href] }
+        visit wishlist_href
         expect(page).to have_button("Copy link")
         expect(page).to have_text("First Wishlist")
         expect(page).to have_text(seller.name)
