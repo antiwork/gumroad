@@ -55,8 +55,7 @@ class RichContent < ApplicationRecord
 
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
-
-  before_save :strip_cross_product_file_embeds
+  validate :embedded_files_belong_to_product, if: :will_save_change_to_description?
 
   def embedded_product_file_ids_in_order
     description.flat_map { select_file_embed_ids(_1) }.compact.uniq
@@ -116,13 +115,14 @@ class RichContent < ApplicationRecord
   end
 
   private
-    def strip_cross_product_file_embeds
-      return unless will_save_change_to_description?
+    def embedded_files_belong_to_product
+      return unless description.is_a?(Array)
 
       foreign_ids = cross_product_file_embed_ids
       return if foreign_ids.empty?
 
-      self.description = self.class.reject_file_embeds(description, foreign_ids.to_set)
+      external_ids = foreign_ids.map { ObfuscateIds.encrypt(_1) }
+      errors.add(:base, "File embeds reference files not belonging to this product: #{external_ids.join(", ")}")
     end
 
     def select_file_embed_ids(node)

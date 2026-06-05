@@ -74,7 +74,7 @@ describe RichContent do
     end
   end
 
-  describe "stripping cross-product file embeds on save" do
+  describe "rejecting cross-product file embeds" do
     let(:product) { create(:product) }
     let(:own_file) { create(:product_file, link: product) }
     let(:foreign_file) { create(:product_file, link: create(:product)) }
@@ -83,39 +83,58 @@ describe RichContent do
       { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
     end
 
-    it "removes embeds for files owned by another product from a product's content" do
-      rich_content = create(:product_rich_content, entity: product, description: [embed(own_file), embed(foreign_file)])
-      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+    it "rejects a product's content embedding a file owned by another product" do
+      rich_content = build(:product_rich_content, entity: product, description: [embed(own_file), embed(foreign_file)])
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
+      expect(rich_content.errors.full_messages.first).to include(foreign_file.external_id)
     end
 
-    it "removes foreign embeds from a variant's content" do
+    it "rejects a variant's content embedding a file owned by another product" do
       variant = create(:variant, variant_category: create(:variant_category, link: product))
-      rich_content = create(:rich_content, entity: variant, description: [embed(own_file), embed(foreign_file)])
-      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+      rich_content = build(:rich_content, entity: variant, description: [embed(own_file), embed(foreign_file)])
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
     end
 
-    it "preserves embeds for the product's own files" do
+    it "rejects a foreign embed nested inside a file embed group" do
+      description = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(foreign_file)] }]
+      rich_content = build(:product_rich_content, entity: product, description:)
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
+    end
+
+    it "allows content that only embeds the product's own files" do
       another_own_file = create(:product_file, link: product)
       rich_content = create(:product_rich_content, entity: product, description: [embed(own_file), embed(another_own_file)])
       expect(rich_content.reload.embedded_product_file_ids_in_order).to match_array([own_file.id, another_own_file.id])
     end
 
-    it "prunes a file embed group left empty after removing a foreign embed" do
-      description = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(foreign_file)] }]
-      rich_content = create(:product_rich_content, entity: product, description:)
-      expect(rich_content.reload.description).to eq([])
+    it "allows content with no file embeds" do
+      rich_content = build(:product_rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }])
+      expect(rich_content).to be_valid
+    end
+  end
+
+  describe ".reject_file_embeds" do
+    let(:product) { create(:product) }
+    let(:keep_file) { create(:product_file, link: product) }
+    let(:drop_file) { create(:product_file, link: product) }
+
+    def embed(file)
+      { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
     end
 
-    it "keeps own-product embeds inside a file embed group while dropping the foreign one" do
-      description = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(own_file), embed(foreign_file)] }]
-      rich_content = create(:product_rich_content, entity: product, description:)
-      expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+    it "removes embeds whose decrypted id is in the rejection set" do
+      nodes = [embed(keep_file), embed(drop_file)]
+      result = described_class.reject_file_embeds(nodes, Set[drop_file.id])
+      expect(result.length).to eq(1)
+      expect(ObfuscateIds.decrypt(result.first.dig("attrs", "id"))).to eq(keep_file.id)
     end
 
-    it "leaves content without foreign embeds untouched" do
-      description = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }, embed(own_file)]
-      rich_content = create(:product_rich_content, entity: product, description:)
-      expect(rich_content.reload.description).to eq(description)
+    it "prunes a file embed group left empty after removal" do
+      nodes = [{ "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid }, "content" => [embed(drop_file)] }]
+      expect(described_class.reject_file_embeds(nodes, Set[drop_file.id])).to eq([])
     end
   end
 
