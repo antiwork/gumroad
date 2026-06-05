@@ -21,7 +21,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { updateProfileSettings } from "$app/data/profile_settings";
-import { PROFILE_SORT_KEYS } from "$app/parsers/product";
+import { PROFILE_SORT_KEYS, type ProfileSortKey } from "$app/parsers/product";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -33,7 +33,6 @@ import { Section, useSectionImageUploadSettings } from "$app/components/Profile/
 import { ImageUploadSettingsContext, useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
-import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -81,6 +80,11 @@ const tabsWithoutIds = (tabs: ReturnType<typeof useTabs>["tabs"]) => tabs.map(({
 
 const parseRichTextFormat = (value: string) =>
   RICH_TEXT_FORMAT_OPTIONS.find((option) => option.id === value)?.id ?? null;
+
+const parseSectionType = (value: string) => SECTION_TYPE_OPTIONS.find((option) => option.id === value)?.id ?? null;
+
+const parseProfileSortKey = (value: string): ProfileSortKey | null =>
+  PROFILE_SORT_KEYS.find((key) => key === value) ?? null;
 
 const moveItem = <T,>(items: T[], index: number, direction: -1 | 1) => {
   const nextIndex = index + direction;
@@ -310,12 +314,20 @@ const ProductsSectionFields = ({
         <FieldsetTitle>
           <Label htmlFor={`${section.id}-default-sort`}>Default sort order</Label>
         </FieldsetTitle>
-        <TypeSafeOptionSelect
+        <Select
           id={`${section.id}-default-sort`}
           value={section.default_product_sort}
-          onChange={(default_product_sort) => commit({ ...section, default_product_sort })}
-          options={PROFILE_SORT_KEYS.map((key) => ({ id: key, label: SORT_BY_LABELS[key] }))}
-        />
+          onChange={(evt) => {
+            const default_product_sort = parseProfileSortKey(evt.target.value);
+            if (default_product_sort) commit({ ...section, default_product_sort });
+          }}
+        >
+          {PROFILE_SORT_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {SORT_BY_LABELS[key]}
+            </option>
+          ))}
+        </Select>
       </Fieldset>
       <Label className="inline-flex items-center gap-2">
         <Checkbox
@@ -960,12 +972,20 @@ export const ProfileSectionsForm = ({ onChange, ...props }: ProfileSectionsFormP
               <FieldsetTitle>
                 <Label htmlFor="new-profile-section-type">Section type</Label>
               </FieldsetTitle>
-              <TypeSafeOptionSelect
+              <Select
                 id="new-profile-section-type"
                 value={newSectionType}
-                onChange={setNewSectionType}
-                options={SECTION_TYPE_OPTIONS}
-              />
+                onChange={(evt) => {
+                  const sectionType = parseSectionType(evt.target.value);
+                  if (sectionType) setNewSectionType(sectionType);
+                }}
+              >
+                {SECTION_TYPE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Fieldset>
             <Button className="self-end" onClick={() => void addSection()}>
               <Plus className="size-5" />

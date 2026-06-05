@@ -5,7 +5,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { unlinkTwitter } from "$app/data/profile_settings";
-import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
+import { CreatorProfile } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -27,8 +27,14 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Textarea } from "$app/components/ui/Textarea";
 
+type ProfileSettingsForm = {
+  name: string | null;
+  bio: string | null;
+  profile_picture_blob_id: string | null;
+};
+
 type ProfilePageProps = {
-  profile_settings: ProfileSettings;
+  profile_settings: ProfileSettingsForm;
   settings_pages: SettingPage[];
   editable_profile: ProfileEditorProps;
 } & ProfileProps;
@@ -70,7 +76,7 @@ export default function SettingsPage() {
   const form = useForm(profile_settings);
 
   const profileSettings = form.data;
-  const updateProfileSettings = (newSettings: Partial<ProfileSettings>) =>
+  const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
     form.setData({ ...form.data, ...newSettings });
 
   const uid = React.useId();
