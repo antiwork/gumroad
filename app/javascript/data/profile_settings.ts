@@ -47,14 +47,13 @@ export type WishlistsSection = Section & {
 };
 
 export const updateProfileSettings = async (profileSettings: Partial<ProfileSettings> & { tabs?: Tab[] }) => {
-  const { background_color, highlight_color, font, profile_picture_blob_id, tabs, ...user } = profileSettings;
+  const { profile_picture_blob_id, tabs, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
     url: Routes.settings_profile_path(),
     accept: "json",
     data: {
       user,
-      seller_profile: { background_color, highlight_color, font },
       profile_picture_blob_id,
       tabs,
     },

@@ -65,11 +65,10 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     form.transform((data) => {
-      const { background_color, highlight_color, font, profile_picture_blob_id, ...user } = data;
+      const { profile_picture_blob_id, ...user } = data;
       return {
         profile_picture_blob_id,
         user,
-        seller_profile: { background_color, highlight_color, font },
       };
     });
     form.put(Routes.settings_profile_path(), {

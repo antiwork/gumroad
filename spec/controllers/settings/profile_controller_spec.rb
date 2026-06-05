@@ -66,6 +66,21 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.reload.name).to eq("New name")
     end
 
+    it "does not allow profile design fields to be updated from profile settings" do
+      seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
+
+      put :update, params: { seller_profile: { background_color: "#000000", highlight_color: "#009a49", font: "Roboto Mono" } }
+
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
+      expect(seller.reload.seller_profile).to have_attributes(
+        background_color: "#ffffff",
+        highlight_color: "#ff90e8",
+        font: "ABC Favorit",
+      )
+    end
+
     describe "when the user has not confirmed their email address" do
       before do
         seller.update!(confirmed_at: nil)

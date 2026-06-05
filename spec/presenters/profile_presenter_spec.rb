@@ -25,6 +25,7 @@ describe ProfilePresenter do
   let!(:section2) { create(:seller_profile_posts_section, header: "Section 2", seller:, shown_posts: [post.id]) }
   let!(:section3) { create(:seller_profile_featured_product_section, header: "Section 3", seller:, featured_product_id: featured_product.id) }
   let(:tabs) { [{ name: "Tab 1", sections: [section.id, section2.id] }, { name: "Tab2", sections: [] }] }
+  let(:encrypted_tabs) { tabs.map { |tab| { **tab, sections: tab[:sections].map { ObfuscateIds.encrypt(_1) } } } }
 
   before do
     seller.seller_profile.json_data[:tabs] = tabs
@@ -78,14 +79,19 @@ describe ProfilePresenter do
         {
           **sections_presenter.props(request:, pundit_user:, seller_custom_domain_url: nil),
           bio: "Bio",
-          tabs: tabs.map { | tab| { **tab, sections: tab[:sections].map { ObfuscateIds.encrypt(_1) } } }
+          tabs: encrypted_tabs
         }
       )
     end
 
-    it "includes data for the edit view when logged in as the seller" do
+    it "returns visitor-style section props when logged in as the seller" do
       props = presenter.profile_props(seller_custom_domain_url: nil, request:)
-      expect(props).to match a_hash_including(ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil))
+
+      expect(props[:creator_profile][:can_edit]).to eq(true)
+      expect(props).not_to have_key(:products)
+      expect(props).not_to have_key(:posts)
+      expect(props).not_to have_key(:wishlist_options)
+      expect(props[:sections].first).not_to have_key(:shown_products)
     end
   end
 
@@ -99,10 +105,12 @@ describe ProfilePresenter do
           profile_settings: {
             name: seller.name,
             bio: seller.bio,
-            background_color: "#ffffff",
-            highlight_color: "#ff90e8",
-            font: "ABC Favorit",
             profile_picture_blob_id: nil,
+          },
+          editable_profile: {
+            **ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil),
+            bio: "Bio",
+            tabs: encrypted_tabs,
           },
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),

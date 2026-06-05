@@ -12,8 +12,5 @@ export type Tab = { name: string; sections: string[] };
 export type ProfileSettings = {
   name: string | null;
   bio: string | null;
-  font: string;
-  background_color: string;
-  highlight_color: string;
   profile_picture_blob_id: string | null;
 };

@@ -27,7 +27,6 @@ class Settings::ProfilePolicy < ApplicationPolicy
       :profile_picture_blob_id,
       {
         user: user_attributes,
-        seller_profile: [:highlight_color, :background_color, :font],
         tabs: [:name, { sections: [] }]
       }
     ]
