@@ -64,7 +64,8 @@ export const GetPublicProductPage = () => (
         {
           name: "ratings",
           type: "object",
-          description: "Average rating and count; null when the creator hides reviews",
+          description:
+            "Average rating, review count, and a five-item percentages array ordered from 1 star through 5 stars; null when the creator hides reviews",
         },
         {
           name: "sales_count",
@@ -115,7 +116,7 @@ export const GetPublicProductPage = () => (
   "summary": "You'll get one PSD file.",
   "covers": [],
   "attributes": [{ "name": "Format", "value": "PSD" }],
-  "ratings": { "count": 12, "average": 4.5 },
+  "ratings": { "count": 12, "average": 4.5, "percentages": [0, 0, 8, 34, 58] },
   "sales_count": null,
   "options": [],
   "quantity_remaining": null,

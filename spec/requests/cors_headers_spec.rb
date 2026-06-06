@@ -33,6 +33,26 @@ describe "CORS support" do
     end
   end
 
+  describe "Request to the public product JSON endpoint" do
+    let(:origin) { "https://storefront.example.com" }
+
+    it "returns a response with CORS headers" do
+      get "/l/product.json", headers: { "HTTP_ORIGIN": origin, "HTTP_HOST": application_domain }
+
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq "*"
+      expect(response.headers["Access-Control-Allow-Methods"]).to eq "GET"
+      expect(response.headers["Access-Control-Max-Age"]).to eq "7200"
+    end
+
+    it "does not add CORS headers to the HTML product page path" do
+      get "/l/product", headers: { "HTTP_ORIGIN": origin, "HTTP_HOST": application_domain }
+
+      expect(response.headers["Access-Control-Allow-Origin"]).to be_nil
+      expect(response.headers["Access-Control-Allow-Methods"]).to be_nil
+      expect(response.headers["Access-Control-Max-Age"]).to be_nil
+    end
+  end
+
   context "when the request is made to a CORS disabled domain" do
     before do
       post oauth_token_path, headers: { "HTTP_ORIGIN": origin_domain, "HTTP_HOST": application_domain }

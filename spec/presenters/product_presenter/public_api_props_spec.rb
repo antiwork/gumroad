@@ -69,6 +69,12 @@ describe ProductPresenter::PublicApiProps do
         product.update!(should_show_sales_count: true)
         expect(props[:sales_count]).to eq(2)
       end
+
+      it "uses the shared cached sales count" do
+        product.update!(should_show_sales_count: true)
+        expect(ProductPresenter).to receive(:cached_sales_count).with(product).and_return(2)
+        expect(props[:sales_count]).to eq(2)
+      end
     end
 
     describe "ratings respect the display_product_reviews toggle" do
@@ -80,6 +86,7 @@ describe ProductPresenter::PublicApiProps do
       it "is the rating stats when reviews are shown" do
         product.update!(display_product_reviews: true)
         expect(props[:ratings]).to eq(product.rating_stats)
+        expect(props[:ratings][:percentages]).to eq(product.rating_percentages.values)
       end
     end
 

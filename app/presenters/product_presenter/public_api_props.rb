@@ -64,7 +64,7 @@ class ProductPresenter::PublicApiProps
 
       # Reviews / social proof (respect creator toggles)
       ratings: product.display_product_reviews? ? product.rating_stats : nil,
-      sales_count: product.should_show_sales_count? ? product.successful_sales_count : nil,
+      sales_count: ProductPresenter.cached_sales_count(product),
 
       # Variants / options / inventory
       options: product.options.as_json,

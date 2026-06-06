@@ -11,6 +11,13 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
   end
 
   allow do
+    origins "*"
+    resource "/l/*.json",
+             headers: :any,
+             methods: [:get]
+  end
+
+  allow do
     origins VALID_CORS_ORIGINS
     resource "/users/session_info",
              headers: :any,
