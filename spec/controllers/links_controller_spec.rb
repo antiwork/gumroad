@@ -3455,6 +3455,43 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "json format" do
+        it "returns the public product JSON representation" do
+          link = create(:product, user: @user, name: "Public API Product", price_cents: 600)
+
+          get :show, params: { id: link.to_param }, format: :json
+
+          expect(response).to be_successful
+          body = response.parsed_body
+          expect(body["api_version"]).to eq(ProductPresenter::PublicApiProps::API_VERSION)
+          expect(body["id"]).to eq(link.external_id)
+          expect(body["permalink"]).to eq(link.unique_permalink)
+          expect(body["name"]).to eq("Public API Product")
+          expect(body["price_cents"]).to eq(600)
+          expect(body["currency_code"]).to eq("usd")
+          expect(body["seller"]["name"]).to eq(@user.name_or_username)
+        end
+
+        it "does not leak buyer, admin, or analytics fields" do
+          link = create(:product, user: @user)
+
+          get :show, params: { id: link.to_param }, format: :json
+
+          body = response.parsed_body
+          %w[purchase buyer wishlists can_edit analytics has_third_party_analytics is_compliance_blocked admin_info].each do |forbidden|
+            expect(body).not_to have_key(forbidden)
+          end
+        end
+
+        it "omits sales_count unless the creator opts in" do
+          link = create(:product, user: @user, should_show_sales_count: false)
+
+          get :show, params: { id: link.to_param }, format: :json
+
+          expect(response.parsed_body["sales_count"]).to be_nil
+        end
+      end
+
       describe "wanted=true parameter" do
         it "passes pay_in_installments parameter to checkout when wanted=true" do
           get :show, params: { id: product.to_param, wanted: "true", pay_in_installments: "true" }

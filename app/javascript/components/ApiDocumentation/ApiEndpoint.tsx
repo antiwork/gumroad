@@ -10,16 +10,18 @@ export const ApiEndpoint = ({
   path,
   description,
   isOAuth,
+  customUrl,
   children,
 }: {
   method: string;
   path: string;
   description: React.ReactNode;
   isOAuth?: boolean;
+  customUrl?: string;
   children?: React.ReactNode;
 }) => {
   const methodId = `${method}-${path}`;
-  const url = isOAuth ? `https://gumroad.com${path}` : `https://api.gumroad.com/v2${path}`;
+  const url = customUrl ?? (isOAuth ? `https://gumroad.com${path}` : `https://api.gumroad.com/v2${path}`);
 
   return (
     <CardContent details id={methodId}>

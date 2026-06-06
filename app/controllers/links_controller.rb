@@ -176,7 +176,7 @@ class LinksController < ApplicationController
           end
         end
       end
-      format.json { render json: @product.as_json }
+      format.json { render json: ProductPresenter::PublicApiProps.new(product: @product).props }
       format.any { e404 }
     end
   end
