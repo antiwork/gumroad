@@ -190,7 +190,7 @@ describe("Custom pages buyer-input round trip", type: :system, js: true) do
     expect(product.sales.successful.last.variant_attributes).to eq([default_variant])
   end
 
-  it "drops an inapplicable quantity prefill on a product that has quantity disabled (no error)" do
+  it "passes an explicit quantity prefill through even when the product's quantity selector is disabled" do
     product = create(:product, price_cents: 100) # quantity_enabled defaults to false
 
     visit "#{product.long_url}?wanted=true&quantity=5"
@@ -200,7 +200,12 @@ describe("Custom pages buyer-input round trip", type: :system, js: true) do
 
     check_out(product)
 
-    # Quantity selection isn't honored when the product disables it -> qty 1.
-    expect(product.sales.successful.last.quantity).to eq(1)
+    # The ?wanted=true redirect forwards the quantity param straight to checkout
+    # (LinksController#show passes params through). quantity_enabled only governs
+    # the on-page quantity *selector*, not an explicitly-prefilled checkout key —
+    # so an explicit quantity=5 is honored, fail-open, never an error.
+    purchase = product.sales.successful.last
+    expect(purchase.quantity).to eq(5)
+    expect(purchase.price_cents).to eq(500)
   end
 end
