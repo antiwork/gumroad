@@ -708,6 +708,8 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
   const [activeCoverId, setActiveCoverId] = React.useState(mainCoverId);
   useOnChange(() => setActiveCoverId(mainCoverId), [mainCoverId]);
 
+  if (covers.length === 0) return null;
+
   return (
     <CoversComponent
       covers={covers}

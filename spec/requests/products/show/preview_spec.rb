@@ -59,6 +59,17 @@ describe("Product page previews", js: true, type: :system) do
     end
   end
 
+  context "when the product has no previews" do
+    let(:product) { create(:product) }
+
+    it "does not render the empty cover placeholder" do
+      visit product.long_url
+
+      expect(page).to have_selector("h1", text: product.name)
+      expect(page).to_not have_selector("[aria-label='Product preview']")
+    end
+  end
+
   describe "scrolling between previews" do
     let(:product) { create(:product) }
 
