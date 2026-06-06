@@ -21,8 +21,35 @@ export type Props = SectionsProps & ProfileProps;
 
 export type TabWithId = Tab & { id: string };
 
+const tabWithoutId = ({ id: _id, ...tab }: TabWithId): Tab => tab;
+
+const sharedSectionCount = (tab: Tab, currentTab: TabWithId) => {
+  const currentSectionIds = new Set(currentTab.sections);
+  return tab.sections.filter((sectionId) => currentSectionIds.has(sectionId)).length;
+};
+
+const tabWithStableIds = (initial: Tab[], currentTabs: TabWithId[] = []) => {
+  const usedTabIds = new Set<string>();
+  const unusedTabs = () => currentTabs.filter((tab) => !usedTabIds.has(tab.id));
+
+  return initial.map((tab) => {
+    const exactMatch = unusedTabs().find((currentTab) => isEqual(tabWithoutId(currentTab), tab));
+    const sectionMatch =
+      exactMatch ??
+      (tab.sections.length
+        ? unusedTabs()
+            .map((currentTab) => ({ tab: currentTab, sharedSections: sharedSectionCount(tab, currentTab) }))
+            .filter(({ sharedSections }) => sharedSections > 0)
+            .sort((a, b) => b.sharedSections - a.sharedSections)[0]?.tab
+        : unusedTabs().find((currentTab) => currentTab.sections.length === 0 && currentTab.name === tab.name));
+    const id = sectionMatch?.id ?? GuidGenerator.generate();
+    usedTabIds.add(id);
+    return { ...tab, id };
+  });
+};
+
 export function useTabs(initial: Tab[]) {
-  const [tabs, setTabs] = React.useState(() => initial.map((tab) => ({ ...tab, id: GuidGenerator.generate() })));
+  const [tabs, setTabs] = React.useState(() => tabWithStableIds(initial));
 
   const location = new URL(useOriginalLocation());
   const urlSection = React.useRef(location.searchParams.get("section"));
@@ -49,7 +76,7 @@ export function useTabs(initial: Tab[]) {
       )
         return currentTabs;
 
-      return initial.map((tab, index) => ({ ...tab, id: currentTabs[index]?.id ?? GuidGenerator.generate() }));
+      return tabWithStableIds(initial, currentTabs);
     });
   }, [initial]);
 
@@ -90,8 +117,8 @@ const PublicProfile = (props: Props) => {
             ) : null}
             {props.tabs.length > 1 ? (
               <UITabs aria-label="Profile Tabs">
-                {tabs.map((tab, i) => (
-                  <UITab key={i} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
+                {tabs.map((tab) => (
+                  <UITab key={tab.id} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
                     {tab.name}
                   </UITab>
                 ))}

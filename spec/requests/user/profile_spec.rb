@@ -246,7 +246,7 @@ describe "User profile page", type: :system, js: true do
         visit settings_profile_path
 
         within_section_form "Section 1" do
-          fill_in "Section name", with: "New name"
+          fill_in "Section name", with: "New name", fill_options: { clear: :backspace }
           uncheck "Show section name"
           blur_field "Section name"
         end

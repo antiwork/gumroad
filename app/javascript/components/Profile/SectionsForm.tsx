@@ -748,15 +748,16 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     [onChange, sections, selectedTabIndex, tabs],
   );
 
-  const saveTabs = async (nextTabs = tabs) => {
-    if (disabled) return;
+  const saveTabs = async (nextTabs = tabs, options: { showSuccess?: boolean } = {}) => {
+    if (disabled) return false;
 
     setTabs(nextTabs);
-    if (isEqual(tabsWithoutIds(nextTabs), tabsWithoutIds(savedTabs.current))) return;
+    if (isEqual(tabsWithoutIds(nextTabs), tabsWithoutIds(savedTabs.current))) return true;
     try {
       await updateProfileSettings({ tabs: tabsWithoutIds(nextTabs) });
-      showAlert("Changes saved!", "success");
+      if (options.showSuccess ?? true) showAlert("Changes saved!", "success");
       savedTabs.current = nextTabs;
+      return true;
     } catch (e) {
       assertResponseError(e);
       const rollbackTabs = savedTabs.current;
@@ -764,6 +765,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
       const rollbackSelectedTab = rollbackTabs.find((tab) => tab.id === selectedTab?.id) ?? rollbackTabs[0];
       if (rollbackSelectedTab) setSelectedTab(rollbackSelectedTab);
       showAlert(e.message, "error");
+      return false;
     }
   };
 
@@ -794,6 +796,11 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     if (disabled || !selectedTab) return;
     const removedSectionIds = new Set(selectedTab.sections);
     try {
+      const nextTabs = tabs.filter((tab) => tab.id !== selectedTab.id);
+      if (nextTabs[0]) setSelectedTab(nextTabs[0]);
+      const tabsSaved = await saveTabs(nextTabs, { showSuccess: false });
+      if (!tabsSaved) return;
+
       await Promise.all(
         sections
           .filter((section) => removedSectionIds.has(section.id))
@@ -807,9 +814,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
           }),
       );
       setSections((currentSections) => currentSections.filter((section) => !removedSectionIds.has(section.id)));
-      const nextTabs = tabs.filter((tab) => tab.id !== selectedTab.id);
-      if (nextTabs[0]) setSelectedTab(nextTabs[0]);
-      await saveTabs(nextTabs);
+      showAlert("Changes saved!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -921,10 +926,16 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     if (disabled) return;
 
     try {
+      const tabsSaved = await saveTabs(
+        tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })),
+        { showSuccess: false },
+      );
+      if (!tabsSaved) return;
+
       const response = await request({ method: "DELETE", url: Routes.profile_section_path(sectionId), accept: "json" });
       await assertResponseOk(response);
       setSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
-      await saveTabs(tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })));
+      showAlert("Changes saved!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");

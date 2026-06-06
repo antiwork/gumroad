@@ -56,6 +56,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             creatorProfile.external_id !== loggedInUser.id ? (
               <NavigationButton
                 href={Routes.admin_impersonate_url({
+                  host: appDomain,
                   user_identifier: creatorProfile.external_id,
                 })}
                 className="left-3"
