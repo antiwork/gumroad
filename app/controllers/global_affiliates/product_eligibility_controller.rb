@@ -32,10 +32,12 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
       raise InvalidUrl unless response.ok?
 
       data = response.to_hash
-      permalink = data["permalink"]
-      raise InvalidUrl if permalink.blank?
+      raise InvalidUrl unless data["api_version"] == ProductPresenter::PublicApiProps::API_VERSION && data["permalink"].present?
 
-      product = Link.find_by(unique_permalink: permalink)
+      id = data["id"]
+      raise InvalidUrl if id.blank?
+
+      product = Link.find_by_external_id(id)
       raise InvalidUrl if product.nil?
 
       {

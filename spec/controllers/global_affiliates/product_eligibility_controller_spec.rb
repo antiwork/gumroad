@@ -29,7 +29,7 @@ describe GlobalAffiliates::ProductEligibilityController do
         # then reads eligibility fields from the model. Stub the HTTP round-trip
         # so the spec doesn't depend on a live request to the app under test.
         stub_request(:get, "#{url}.json")
-          .to_return(status: 200, body: { permalink: product.unique_permalink }.to_json, headers: { "Content-Type" => "application/json" })
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: product.external_id, permalink: product.general_permalink }.to_json, headers: { "Content-Type" => "application/json" })
       end
 
       it "returns the eligibility fields for the resolved product" do
@@ -46,13 +46,53 @@ describe GlobalAffiliates::ProductEligibilityController do
       end
     end
 
-    context "when the resolved permalink does not match a product" do
+    context "with a valid Gumroad product URL using a custom permalink" do
+      let(:product) { create(:product, name: "Eligible Product", custom_permalink: "custom-product") }
+      let(:url) { product.long_url }
+
+      before do
+        stub_request(:get, "#{url}.json")
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: product.external_id, permalink: product.custom_permalink }.to_json, headers: { "Content-Type" => "application/json" })
+      end
+
+      it "returns the eligibility fields for the resolved product" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["product"]).to eq(
+          "name" => product.name,
+          "formatted_price" => product.price_formatted_verbose,
+          "recommendable" => product.recommendable?,
+          "short_url" => product.long_url,
+        )
+      end
+    end
+
+    context "when the resolved product id does not match a product" do
       let(:product) { create(:product) }
       let(:url) { product.long_url }
 
       before do
         stub_request(:get, "#{url}.json")
-          .to_return(status: 200, body: { permalink: "doesnotexist" }.to_json, headers: { "Content-Type" => "application/json" })
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: "doesnotexist", permalink: product.general_permalink }.to_json, headers: { "Content-Type" => "application/json" })
+      end
+
+      it "returns an error" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
+
+    context "when the URL resolves to non-product JSON" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/some-seller" }
+
+      before do
+        stub_request(:get, "#{url}.json")
+          .to_return(status: 200, body: { id: create(:user).external_id }.to_json, headers: { "Content-Type" => "application/json" })
       end
 
       it "returns an error" do

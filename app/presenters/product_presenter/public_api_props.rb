@@ -34,7 +34,7 @@ class ProductPresenter::PublicApiProps
 
       # Identity
       id: product.external_id,
-      permalink: product.unique_permalink,
+      permalink: product.general_permalink,
       name: product.name,
       native_type: product.native_type,
       url: product.long_url,

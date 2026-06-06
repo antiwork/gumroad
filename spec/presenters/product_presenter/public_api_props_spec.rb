@@ -17,12 +17,18 @@ describe ProductPresenter::PublicApiProps do
     it "exposes the documented public identity fields" do
       expect(props[:api_version]).to eq(described_class::API_VERSION)
       expect(props[:id]).to eq(product.external_id)
-      expect(props[:permalink]).to eq(product.unique_permalink)
+      expect(props[:permalink]).to eq(product.general_permalink)
       expect(props[:name]).to eq("My Product")
       expect(props[:native_type]).to eq(product.native_type)
       expect(props[:url]).to eq(product.long_url)
       expect(props[:created_at]).to eq(product.created_at.iso8601)
       expect(props[:updated_at]).to eq(product.updated_at.iso8601)
+    end
+
+    it "uses the public permalink from the product URL" do
+      product.update!(custom_permalink: "custom-product")
+      expect(props[:permalink]).to eq("custom-product")
+      expect(props[:url]).to end_with("/l/custom-product")
     end
 
     it "exposes pricing fields" do
