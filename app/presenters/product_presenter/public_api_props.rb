@@ -22,9 +22,10 @@ class ProductPresenter::PublicApiProps
   # Bump when the public shape changes in a backwards-incompatible way.
   API_VERSION = 1
 
-  def initialize(product:)
+  def initialize(product:, seller_custom_domain_url: nil)
     @product = product
     @seller = product.user
+    @seller_custom_domain_url = seller_custom_domain_url
   end
 
   def props
@@ -42,7 +43,7 @@ class ProductPresenter::PublicApiProps
       updated_at: product.updated_at&.iso8601,
 
       # Seller (public author byline only — no email/PII)
-      seller: UserPresenter.new(user: seller).author_byline_props,
+      seller: seller_props,
 
       # Pricing
       price_cents: product.price_cents,
@@ -52,7 +53,7 @@ class ProductPresenter::PublicApiProps
       suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil,
       is_recurring_billing: product.is_recurring_billing,
       is_tiered_membership: product.is_tiered_membership,
-      recurrences: product.is_recurring_billing ? product.recurrences : nil,
+      recurrences: product.is_recurring_billing ? product.recurrences.as_json : nil,
       free_trial: free_trial_props,
 
       # Content
@@ -66,7 +67,7 @@ class ProductPresenter::PublicApiProps
       sales_count: product.should_show_sales_count? ? product.successful_sales_count : nil,
 
       # Variants / options / inventory
-      options: product.options,
+      options: product.options.as_json,
       quantity_remaining: product.remaining_for_sale_count,
       is_quantity_enabled: product.quantity_enabled,
       is_sales_limited: product.max_purchase_count?,
@@ -79,7 +80,29 @@ class ProductPresenter::PublicApiProps
   end
 
   private
-    attr_reader :product, :seller
+    attr_reader :product, :seller, :seller_custom_domain_url
+
+    # Always an object (never null), mirroring the documented shape. Falls back
+    # to a username-less byline when the seller has no public profile URL, and
+    # honors the request's custom domain so the profile_url matches the byline
+    # the rendered product page shows on a seller custom domain.
+    def seller_props
+      UserPresenter.new(user: seller).author_byline_props(custom_domain_url: seller_custom_domain_url) || {
+        id: seller.external_id,
+        name: seller.name_or_username,
+        avatar_url: seller.avatar_url,
+        profile_url: seller_profile_url,
+        is_verified: !!seller.verified,
+      }
+    end
+
+    # nil-safe: a seller with no username has no subdomain, so profile_url would
+    # raise on URI(nil) unless a custom domain is present.
+    def seller_profile_url
+      return seller.profile_url(custom_domain_url: seller_custom_domain_url) if seller_custom_domain_url.present?
+
+      seller.subdomain_with_protocol && seller.profile_url
+    end
 
     def free_trial_props
       return nil unless product.free_trial_enabled?
@@ -109,7 +132,9 @@ class ProductPresenter::PublicApiProps
 
       {
         title: policy.title,
-        fine_print: policy.fine_print.presence,
+        # Mirror the rendered product page, which wraps the fine print with
+        # simple_format (ProductPresenter::ProductProps) and renders it as HTML.
+        fine_print: policy.fine_print.present? ? ActionController::Base.helpers.simple_format(policy.fine_print) : nil,
         updated_at: policy.updated_at&.to_date&.iso8601,
       }
     end

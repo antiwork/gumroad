@@ -3490,6 +3490,21 @@ describe LinksController, :vcr, inertia: true do
 
           expect(response.parsed_body["sales_count"]).to be_nil
         end
+
+        it "returns JSON (not the custom-HTML landing page) for products with custom HTML" do
+          link = create(:product, user: @user, name: "Custom HTML Product")
+          link.update!(custom_html: "<h1>My custom landing page</h1>")
+          Feature.activate_user(:custom_html_pages, @user)
+
+          get :show, params: { id: link.to_param }, format: :json
+
+          expect(response).to be_successful
+          expect(response.media_type).to eq("application/json")
+          body = response.parsed_body
+          expect(body["api_version"]).to eq(ProductPresenter::PublicApiProps::API_VERSION)
+          expect(body["id"]).to eq(link.external_id)
+          expect(response.body).not_to include("My custom landing page")
+        end
       end
 
       describe "wanted=true parameter" do

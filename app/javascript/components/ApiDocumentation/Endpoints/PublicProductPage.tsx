@@ -116,7 +116,7 @@ export const GetPublicProductPage = () => (
   "covers": [],
   "attributes": [{ "name": "Format", "value": "PSD" }],
   "ratings": { "count": 12, "average": 4.5 },
-  "sales_count": null, # null unless the creator shows the sales count
+  "sales_count": null,
   "options": [],
   "quantity_remaining": null,
   "is_quantity_enabled": false,

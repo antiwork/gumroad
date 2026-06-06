@@ -98,7 +98,7 @@ describe ProductPresenter::PublicApiProps do
       it "exposes recurrence and membership flags" do
         expect(props[:is_recurring_billing]).to be(true)
         expect(props[:is_tiered_membership]).to be(true)
-        expect(props[:recurrences]).to eq(product.recurrences)
+        expect(props[:recurrences]).to eq(product.recurrences.as_json)
       end
     end
 
@@ -110,6 +110,55 @@ describe ProductPresenter::PublicApiProps do
       it "reports is_published false for a draft" do
         product.update!(draft: true)
         expect(props[:is_published]).to be(false)
+      end
+    end
+
+    describe "seller object" do
+      it "is always an object with the documented keys" do
+        seller_props = props[:seller]
+        expect(seller_props).to be_a(Hash)
+        expect(seller_props[:name]).to eq(seller.name_or_username)
+        expect(seller_props).to have_key(:avatar_url)
+        expect(seller_props).to have_key(:profile_url)
+        expect(seller_props).to have_key(:is_verified)
+      end
+
+      it "falls back to a plain object (never nil) when author_byline_props is nil" do
+        allow_any_instance_of(UserPresenter).to receive(:author_byline_props).and_return(nil)
+        seller_props = props[:seller]
+        expect(seller_props).to be_a(Hash)
+        expect(seller_props[:id]).to eq(seller.external_id)
+        expect(seller_props[:name]).to eq(seller.name_or_username)
+        expect(seller_props[:is_verified]).to be(false)
+      end
+
+      it "uses the seller custom domain for the profile_url when present" do
+        custom_domain_url = "https://shop.example.com/"
+        presenter = described_class.new(product:, seller_custom_domain_url: custom_domain_url)
+        expect(presenter.props[:seller][:profile_url]).to eq(seller.profile_url(custom_domain_url:))
+      end
+    end
+
+    describe "refund_policy" do
+      let(:refund_policy) do
+        build(:product_refund_policy, product:, seller:, fine_print: "Line one\nLine two")
+      end
+
+      before do
+        allow_any_instance_of(User).to receive(:account_level_refund_policy_enabled?).and_return(false)
+        allow(product).to receive(:product_refund_policy_enabled?).and_return(true)
+        allow(product).to receive(:product_refund_policy).and_return(refund_policy)
+      end
+
+      it "renders fine_print with simple_format (HTML) to mirror the product page" do
+        # ProductPresenter::ProductProps wraps fine_print with simple_format and
+        # the page renders it via dangerouslySetInnerHTML — the public API must
+        # ship the same HTML, not the raw text.
+        expect(props[:refund_policy][:title]).to eq(refund_policy.title)
+        expect(props[:refund_policy][:fine_print]).to eq(
+          ActionController::Base.helpers.simple_format("Line one\nLine two")
+        )
+        expect(props[:refund_policy][:fine_print]).to include("<p>", "<br />")
       end
     end
   end
