@@ -97,12 +97,36 @@ describe UsersController do
       end
     end
 
-    it "returns user json when json request is sent" do
-      link = create(:product, user: create(:user, username: "creator"), name: "onelolol")
+    describe "json format" do
+      let(:creator_user) { create(:user, username: "creator", name: "Creator Name", bio: "My bio") }
 
-      @request.host = "creator.test.gumroad.com"
-      get :show, params: { username: "creator", format: "json" }
-      expect(response.parsed_body).to eq(link.user.as_json)
+      before { @request.host = "creator.test.gumroad.com" }
+
+      it "returns the public profile API payload" do
+        product = create(:product, user: creator_user, name: "onelolol")
+
+        get :show, params: { username: "creator", format: "json" }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["api_version"]).to eq(ProfilePresenter::PublicApiProps::API_VERSION)
+        expect(body["id"]).to eq(creator_user.external_id)
+        expect(body["username"]).to eq("creator")
+        expect(body["name"]).to eq("Creator Name")
+        expect(body["bio"]).to eq("My bio")
+        expect(body["products"].map { _1["name"] }).to include("onelolol")
+        expect(body["products"].first["id"]).to eq(product.external_id)
+      end
+
+      it "never leaks private seller fields" do
+        create(:product, user: creator_user)
+
+        get :show, params: { username: "creator", format: "json" }
+
+        expect(response.parsed_body.keys).not_to include(
+          "email", "password", "encrypted_password", "unpaid_balance_cents", "payment_address"
+        )
+      end
     end
 
     describe "redirection to subdomain for profile pages" do

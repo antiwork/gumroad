@@ -28,7 +28,7 @@ class UsersController < ApplicationController
         set_favicon_meta_tags(@user)
         render inertia: "Users/Show", props: ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
       end
-      format.json { render json: @user.as_json }
+      format.json { render json: ProfilePresenter::PublicApiProps.new(seller: @user).props }
       format.any { e404 }
     end
   end

@@ -53,6 +53,9 @@ export const Navigation = () => (
             <a href="#user">User</a>
           </li>
           <li>
+            <a href="#public-profile">Public profile</a>
+          </li>
+          <li>
             <a href="#refund-policy">Refund policy</a>
           </li>
           <li>
