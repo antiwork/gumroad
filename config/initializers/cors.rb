@@ -2,12 +2,42 @@
 
 # Allow requests from all origins to API domain
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
+  public_profile_json_request = proc do |env|
+    path = env["PATH_INFO"].to_s
+    host = env["HTTP_HOST"].presence || env["SERVER_NAME"].presence
+
+    if host.blank?
+      false
+    else
+      scheme = env["rack.url_scheme"].presence || PROTOCOL
+      route_params = Rails.application.routes.recognize_path("#{scheme}://#{host}#{path}", method: :get)
+      route_params[:controller] == "users" && route_params[:action] == "show" && route_params[:format] == "json"
+    end
+  rescue ActionController::RoutingError
+    false
+  end
+
   allow do
     origins "*"
     resource "*",
              headers: :any,
              methods: [:get, :post, :put, :delete],
              if: proc { |env| VALID_API_REQUEST_HOSTS.include?(env["HTTP_HOST"]) }
+  end
+
+  allow do
+    origins "*"
+    resource "/l/*.json",
+             headers: :any,
+             methods: [:get]
+    resource "/.json",
+             headers: :any,
+             methods: [:get],
+             if: public_profile_json_request
+    resource "/:username.json",
+             headers: :any,
+             methods: [:get],
+             if: public_profile_json_request
   end
 
   allow do

@@ -104,6 +104,15 @@ describe UsersController do
 
       it "returns the public profile API payload" do
         product = create(:product, user: creator_user, name: "onelolol")
+        section = create(:seller_profile_products_section, seller: creator_user, shown_products: [product.id])
+        creator_user.seller_profile.update!(
+          json_data: {
+            "tabs" => [
+              { "name" => "Products", "sections" => [section.id] },
+            ],
+          },
+        )
+        Link.import(force: true, refresh: true)
 
         get :show, params: { username: "creator", format: "json" }
 
@@ -141,6 +150,13 @@ describe UsersController do
           expect(response).to redirect_to @user.subdomain_with_protocol + "/?sort=price_asc"
           expect(response).to have_http_status(:moved_permanently)
         end
+
+        it "doesn't redirect JSON profile requests" do
+          get :show, params: { username: @user.username, format: "json" }
+
+          expect(response).to be_successful
+          expect(response.parsed_body["username"]).to eq(@user.username)
+        end
       end
 
       context "when the request is for the profile page on the custom domain" do
@@ -153,6 +169,24 @@ describe UsersController do
           get :show, params: { username: @user.username }
 
           expect(response).to be_successful
+        end
+
+        it "uses the custom domain in the public profile API payload" do
+          product = create(:product, user: @user)
+          section = create(:seller_profile_products_section, seller: @user, shown_products: [product.id])
+          @user.seller_profile.update!(
+            json_data: {
+              "tabs" => [
+                { "name" => "Products", "sections" => [section.id] },
+              ],
+            },
+          )
+          Link.import(force: true, refresh: true)
+
+          get :show, params: { username: @user.username, format: "json" }
+
+          expect(response.parsed_body["profile_url"]).to eq("http://example.com/")
+          expect(response.parsed_body["products"].first["url"]).to eq("http://example.com/l/#{product.general_permalink}")
         end
       end
 

@@ -176,7 +176,7 @@ class LinksController < ApplicationController
           end
         end
       end
-      format.json { render json: @product.as_json }
+      format.json { render json: ProductPresenter::PublicApiProps.new(product: @product, seller_custom_domain_url:).props }
       format.any { e404 }
     end
   end
@@ -1014,6 +1014,9 @@ class LinksController < ApplicationController
 
     def render_custom_html_if_present
       return unless custom_html_visible?
+      # The public JSON API (GET /l/:permalink.json) must return the documented
+      # product payload, not the custom-HTML landing page — only intercept HTML.
+      return unless request.format.html?
       # Buyer clicked Buy — fall through to the show action's checkout-bearing
       # product page so the existing ?wanted=true flow handles the redirect.
       return if params[:wanted] == "true"

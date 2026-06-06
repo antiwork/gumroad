@@ -28,7 +28,7 @@ class UsersController < ApplicationController
         set_favicon_meta_tags(@user)
         render inertia: "Users/Show", props: ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
       end
-      format.json { render json: ProfilePresenter::PublicApiProps.new(seller: @user).props }
+      format.json { render json: ProfilePresenter::PublicApiProps.new(seller: @user, seller_custom_domain_url:).props }
       format.any { e404 }
     end
   end
@@ -148,6 +148,8 @@ class UsersController < ApplicationController
 
   private
     def check_if_needs_redirect
+      return if request.format.json?
+
       if !@is_user_custom_domain && @user.subdomain_with_protocol.present?
         redirect_to root_url(host: @user.subdomain_with_protocol, params: request.query_parameters),
                     status: :moved_permanently, allow_other_host: true

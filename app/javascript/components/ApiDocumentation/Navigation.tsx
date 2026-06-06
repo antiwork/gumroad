@@ -29,6 +29,9 @@ export const Navigation = () => (
             <a href="#products">Products</a>
           </li>
           <li>
+            <a href="#public-product-page">Public product page</a>
+          </li>
+          <li>
             <a href="#categories">Categories</a>
           </li>
           <li>

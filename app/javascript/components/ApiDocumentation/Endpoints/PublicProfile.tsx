@@ -7,7 +7,7 @@ import { ApiResponseFields, renderFields } from "../ApiResponseFields";
 
 // Public, unauthenticated, read-only creator profile JSON.
 // Returns the same public information a visitor sees on a creator's profile
-// page — name, bio, avatar, social links, and their published products — so
+// page — name, bio, avatar, social links, and visible profile products — so
 // anyone can build directories, storefronts, and widgets that stay in sync.
 // Never exposes seller-private fields (email, balance, tokens, tax info).
 export const GetPublicProfile = () => (
@@ -18,7 +18,7 @@ export const GetPublicProfile = () => (
     description={
       <>
         Retrieve a creator's public profile — no authentication required. Returns the creator's display information
-        (name, bio, avatar, social links) along with the list of their published products. Append{" "}
+        (name, bio, avatar, social links) along with products visible in their public profile product sections. Append{" "}
         <code className="inline-code">.json</code> to any creator profile URL. Never exposes seller-private fields such
         as email, balance, or tax information.
       </>
@@ -40,7 +40,7 @@ export const GetPublicProfile = () => (
           name: "products",
           type: "array",
           description:
-            "The creator's published products (id, permalink, name, native_type, url, thumbnail_url, price_cents, currency_code, price_formatted, is_pay_what_you_want, is_recurring_billing, ratings, sales_count). Capped at 100, newest first.",
+            "Up to 100 products visible in the creator's public profile product sections, using the section order and filters. Product ratings include count, average, and a five-item percentages array ordered from 1 star through 5 stars.",
         },
       ])}
     </ApiResponseFields>
@@ -73,7 +73,7 @@ export const GetPublicProfile = () => (
       "price_formatted": "$1",
       "is_pay_what_you_want": false,
       "is_recurring_billing": false,
-      "ratings": { "count": 12, "average": 4.5 },
+      "ratings": { "count": 12, "average": 4.5, "percentages": [0, 0, 8, 34, 58] },
       "sales_count": null
     }
   ]

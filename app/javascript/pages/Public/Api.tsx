@@ -43,6 +43,7 @@ import {
   GetProducts,
   UpdateProduct,
 } from "$app/components/ApiDocumentation/Endpoints/Products";
+import { GetPublicProductPage } from "$app/components/ApiDocumentation/Endpoints/PublicProductPage";
 import { GetPublicProfile } from "$app/components/ApiDocumentation/Endpoints/PublicProfile";
 import { GetRefundPolicy, UpdateRefundPolicy } from "$app/components/ApiDocumentation/Endpoints/RefundPolicy";
 import {
@@ -130,6 +131,10 @@ export default function Api() {
                 <DeleteProduct />
                 <EnableProduct />
                 <DisableProduct />
+              </ApiResource>
+
+              <ApiResource name="Public product page" id="public-product-page">
+                <GetPublicProductPage />
               </ApiResource>
 
               <ApiResource name="Categories" id="categories">

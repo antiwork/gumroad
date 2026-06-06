@@ -5,8 +5,8 @@ class ProductPresenter::ProductProps
   include ProductsHelper
   include CurrencyHelper
 
-  SALES_COUNT_CACHE_KEY_REFIX = "product-presenter:sales-count-cache"
-  SALES_COUNT_CACHE_METRICS_KEY = "#{SALES_COUNT_CACHE_KEY_REFIX}-metrics"
+  SALES_COUNT_CACHE_KEY_REFIX = ProductPresenter::SALES_COUNT_CACHE_KEY_REFIX
+  SALES_COUNT_CACHE_METRICS_KEY = ProductPresenter::SALES_COUNT_CACHE_METRICS_KEY
 
   def initialize(product:)
     @product = product
@@ -39,7 +39,7 @@ class ProductPresenter::ProductProps
         is_published: !product.draft && product.alive?,
         is_stream_only: product.has_stream_only_files?,
         streamable: product.streamable?,
-        sales_count: cached_sales_count,
+        sales_count: ProductPresenter.cached_sales_count(product),
         summary: product.custom_summary.presence,
         attributes: attributes_props,
         description_html: product.html_safe_description,
@@ -125,14 +125,6 @@ class ProductPresenter::ProductProps
 
     def collaborator
       @_collaborator ||= product.collaborator_for_display
-    end
-
-    def cached_sales_count
-      return unless product.should_show_sales_count?
-
-      cache_key_digest = Digest::SHA256.hexdigest("#{product.cache_key}-#{product.price_cents}-#{product.sales.order(id: :desc).pick(:id)}")
-      cache_key = "#{SALES_COUNT_CACHE_KEY_REFIX}_#{cache_key_digest}"
-      Rails.cache.fetch(cache_key, expires_in: 1.minute) { product.successful_sales_count }
     end
 
     def bundle_product_props(bundle_product, request:, recommended_by: nil, layout: nil)
