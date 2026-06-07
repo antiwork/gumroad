@@ -10,6 +10,8 @@ class ProductPresenter
 
   SALES_COUNT_CACHE_KEY_REFIX = "product-presenter:sales-count-cache"
   SALES_COUNT_CACHE_METRICS_KEY = "#{SALES_COUNT_CACHE_KEY_REFIX}-metrics"
+  LATEST_SALE_ID_NOT_PROVIDED = Object.new.freeze
+  private_constant :LATEST_SALE_ID_NOT_PROVIDED
 
   attr_reader :product, :editing_page_id, :pundit_user, :request, :ai_generated
 
@@ -54,10 +56,11 @@ class ProductPresenter
     ProductPresenter::Card.new(product:).for_email
   end
 
-  def self.cached_sales_count(product)
+  def self.cached_sales_count(product, latest_sale_id: LATEST_SALE_ID_NOT_PROVIDED)
     return unless product.should_show_sales_count?
 
-    cache_key_digest = Digest::SHA256.hexdigest("#{product.cache_key}-#{product.price_cents}-#{product.sales.order(id: :desc).pick(:id)}")
+    latest_sale_id = product.sales.order(id: :desc).pick(:id) if latest_sale_id.equal?(LATEST_SALE_ID_NOT_PROVIDED)
+    cache_key_digest = Digest::SHA256.hexdigest("#{product.cache_key}-#{product.price_cents}-#{latest_sale_id}")
     cache_key = "#{SALES_COUNT_CACHE_KEY_REFIX}_#{cache_key_digest}"
     Rails.cache.fetch(cache_key, expires_in: 1.minute) { product.successful_sales_count }
   end

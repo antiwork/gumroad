@@ -4,12 +4,13 @@
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   public_profile_json_request = proc do |env|
     path = env["PATH_INFO"].to_s
-    host = env["HTTP_HOST"].presence || env["SERVER_NAME"].presence
+    request = Rack::Request.new(env)
+    host = request.host.presence
 
     if host.blank?
       false
     else
-      scheme = env["rack.url_scheme"].presence || PROTOCOL
+      scheme = request.scheme.presence || PROTOCOL
       route_params = Rails.application.routes.recognize_path("#{scheme}://#{host}#{path}", method: :get)
       route_params[:controller] == "users" && route_params[:action] == "show" && route_params[:format] == "json"
     end

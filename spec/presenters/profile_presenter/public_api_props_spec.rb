@@ -184,7 +184,7 @@ describe ProfilePresenter::PublicApiProps do
 
       it "uses the shared product sales count cache" do
         allow(ProductPresenter).to receive(:cached_sales_count).and_return(nil)
-        allow(ProductPresenter).to receive(:cached_sales_count).with(published).and_return(42)
+        allow(ProductPresenter).to receive(:cached_sales_count).with(published, latest_sale_id: nil).and_return(42)
 
         entry = described_class.new(seller:).props[:products].find { _1[:name] == "Published One" }
         expect(entry[:sales_count]).to eq(42)

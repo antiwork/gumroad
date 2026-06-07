@@ -18,6 +18,7 @@
 #   * Stable, versioned shape (`api_version`) so integrators can depend on it.
 class ProfilePresenter::PublicApiProps
   include Rails.application.routes.url_helpers
+  include ActionView::Helpers::OutputSafetyHelper
   include CurrencyHelper
 
   # Bump when the public shape changes in a backwards-incompatible way.
@@ -60,7 +61,10 @@ class ProfilePresenter::PublicApiProps
     attr_reader :seller, :seller_custom_domain_url
 
     def products_props
-      visible_profile_products.map do |product|
+      products = visible_profile_products
+      latest_sale_ids_by_product_id = latest_sale_ids_by_product_id(products)
+
+      products.map do |product|
         card_props = ProductPresenter.card_for_web(product:, show_seller: false, compute_description: false, compute_inventory: false)
 
         {
@@ -82,9 +86,15 @@ class ProfilePresenter::PublicApiProps
           is_pay_what_you_want: card_props[:is_pay_what_you_want],
           is_recurring_billing: product.is_recurring_billing,
           ratings: product.display_product_reviews? ? product.rating_stats : nil,
-          sales_count: ProductPresenter.cached_sales_count(product),
+          sales_count: ProductPresenter.cached_sales_count(product, latest_sale_id: latest_sale_ids_by_product_id[product.id]),
         }
       end
+    end
+
+    def latest_sale_ids_by_product_id(products)
+      return {} if products.blank?
+
+      Purchase.where(link_id: products.map(&:id)).group(:link_id).maximum(:id)
     end
 
     def product_url(product)

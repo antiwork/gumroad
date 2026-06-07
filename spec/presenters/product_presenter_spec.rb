@@ -7,6 +7,22 @@ describe ProductPresenter do
   include PreorderHelper
   include ProductsHelper
 
+  describe ".cached_sales_count" do
+    it "uses the provided latest sale id without querying sales" do
+      product = instance_double(
+        Link,
+        should_show_sales_count?: true,
+        cache_key: "links/1-#{SecureRandom.hex}",
+        price_cents: 100,
+        successful_sales_count: 7,
+      )
+
+      expect(product).not_to receive(:sales)
+
+      expect(described_class.cached_sales_count(product, latest_sale_id: 123)).to eq(7)
+    end
+  end
+
   describe ".new_page_props" do
     let(:new_seller) { create(:named_seller) }
     let(:existing_seller) { create(:user) }
