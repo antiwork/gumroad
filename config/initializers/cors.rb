@@ -9,6 +9,8 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
     if host.blank?
       false
+    elsif path == "/.json"
+      UserCustomDomainConstraint.matches?(request)
     else
       scheme = request.scheme.presence || PROTOCOL
       route_params = Rails.application.routes.recognize_path("#{scheme}://#{host}#{path}", method: :get)

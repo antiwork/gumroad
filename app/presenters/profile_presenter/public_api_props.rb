@@ -100,7 +100,14 @@ class ProfilePresenter::PublicApiProps
     def product_url(product)
       return product.long_url if seller_custom_domain_url.blank?
 
-      short_link_url(product.general_permalink, host: seller_custom_domain_url.delete_suffix("/"))
+      uri = URI.parse(seller_custom_domain_url)
+      options = {
+        host: uri.host,
+        protocol: "#{uri.scheme}://",
+      }
+      options[:port] = uri.port if uri.port != uri.default_port
+
+      short_link_url(product.general_permalink, **options)
     end
 
     def visible_profile_products
