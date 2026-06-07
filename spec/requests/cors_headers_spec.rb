@@ -89,6 +89,16 @@ describe "CORS support" do
       expect(response.headers["Access-Control-Max-Age"]).to be_nil
     end
 
+    it "does not raise or add CORS headers for malformed hosts" do
+      expect do
+        get "/seller.json", headers: { "HTTP_ORIGIN": origin, "HTTP_HOST": "evil{}host" }
+      end.not_to raise_error
+
+      expect(response.headers["Access-Control-Allow-Origin"]).to be_nil
+      expect(response.headers["Access-Control-Allow-Methods"]).to be_nil
+      expect(response.headers["Access-Control-Max-Age"]).to be_nil
+    end
+
     it "does not add CORS headers to the HTML profile page path" do
       get "/seller", headers: { "HTTP_ORIGIN": origin, "HTTP_HOST": application_domain }
 

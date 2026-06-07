@@ -16,7 +16,7 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
       route_params = Rails.application.routes.recognize_path("#{scheme}://#{host}#{path}", method: :get)
       route_params[:controller] == "users" && route_params[:action] == "show" && route_params[:format] == "json"
     end
-  rescue ActionController::RoutingError
+  rescue ActionController::RoutingError, URI::InvalidURIError
     false
   end
 
