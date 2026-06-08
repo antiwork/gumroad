@@ -19,6 +19,7 @@ Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
+  get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"
 
   use_doorkeeper do

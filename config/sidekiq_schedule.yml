@@ -315,6 +315,10 @@ send_paypal_topup_notification_weekly:
   cron: "0 14 * * 1" # UTC 14:00 (9am ET) MON
   class: SendPaypalTopupNotificationJob
   description: Send a slack notification for the weekly PayPal topup status
+send_stripe_balance_check_notification:
+  cron: "0 14 * * *" # UTC 14:00 (9am ET) daily, ahead of the next day's UTC 10:00 seller payouts
+  class: SendStripeBalanceCheckNotificationJob
+  description: Notify if Gumroad's Stripe balance is too low to cover upcoming seller payouts
 sync_all_paypal_payouts:
   cron: "0 15 * * 4" # UTC 15:00 Thursday
   class: SyncStuckPayoutsJob

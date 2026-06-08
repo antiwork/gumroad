@@ -109,6 +109,47 @@ describe HealthcheckController do
     end
   end
 
+  describe "GET 'stripe_balance'" do
+    context "when Stripe topup is not needed (Redis key is false)" do
+      before do
+        $redis.set(RedisKey.stripe_balance_topup_needed, "false")
+      end
+
+      it "returns HTTP success" do
+        get :stripe_balance
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Stripe balance: topup not required")
+      end
+    end
+
+    context "when Redis key is not set" do
+      before do
+        $redis.del(RedisKey.stripe_balance_topup_needed)
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :stripe_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Stripe balance: topup required")
+      end
+    end
+
+    context "when Stripe topup is needed (Redis key is true)" do
+      before do
+        $redis.set(RedisKey.stripe_balance_topup_needed, "true")
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :stripe_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Stripe balance: topup required")
+      end
+    end
+  end
+
   describe "GET 'purchases'" do
     let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
 

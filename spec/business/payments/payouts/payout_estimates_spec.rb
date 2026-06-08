@@ -53,6 +53,23 @@ describe PayoutEstimates do
     end
   end
 
+  describe "estimate_gumroad_held_stripe_cents" do
+    let(:date) { Date.today }
+    let(:gumroad_ma) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+    let(:seller) { create(:user_with_compliance_info) }
+    let(:seller_ma) { create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+    it "sums unpaid Gumroad-held balances up to the date, excluding Stripe-held, future, and paid balances" do
+      create(:balance, user: seller, date: date - 2, amount_cents: 100_00, merchant_account: gumroad_ma)
+      create(:balance, user: seller, date:,          amount_cents:  50_00, merchant_account: gumroad_ma)
+      create(:balance, user: seller, date: date + 1, amount_cents: 999_00, merchant_account: gumroad_ma)
+      create(:balance, user: seller, date: date - 1, amount_cents: 777_00, merchant_account: seller_ma)
+      create(:balance, user: seller, date: date - 3, amount_cents: 333_00, merchant_account: gumroad_ma, state: "paid")
+
+      expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
+    end
+  end
+
   describe "estimate_payments_for_balances_up_to_date_for_users" do
     describe "common payment cases (ACH via Stripe)" do
       let(:payout_date) { Date.today - 1 }

@@ -25,6 +25,14 @@ class HealthcheckController < ApplicationController
     render plain: "PayPal balance: #{message}", status:
   end
 
+  def stripe_balance
+    topup_not_needed = $redis.get(RedisKey.stripe_balance_topup_needed) == "false"
+    status = topup_not_needed ? :ok : :service_unavailable
+    message = topup_not_needed ? "topup not required" : "topup required"
+
+    render plain: "Stripe balance: #{message}", status:
+  end
+
   def purchases
     threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
     count = Rails.cache.fetch("healthcheck:purchases:successful_last_10_minutes", expires_in: 30.seconds) do
