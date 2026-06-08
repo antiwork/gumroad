@@ -188,10 +188,10 @@ A great bug report includes:
 
 - Any issue with label `help wanted` is open for contributions - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22)
 
-## License
-
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE.md).
-
 ## When you're corrected, fix the docs
 
 If a maintainer corrects your approach in review — a convention, a workflow, a gotcha that isn't written down — don't just fix the code. Propose an edit to this guide in the same PR (or a fast follow-up) so the correction is captured once and never has to be repeated. The contributing guide should get a little smarter every time someone gets corrected.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE.md).
