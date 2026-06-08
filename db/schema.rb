@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_30_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_30_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -294,6 +294,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_30_000005) do
     t.string "currency", default: "usd"
     t.string "holding_currency", default: "usd"
     t.integer "holding_amount_cents", default: 0
+    t.index ["state", "merchant_account_id", "date", "user_id"], name: "index_balances_on_state_merchant_account_date_for_payouts"
     t.index ["user_id", "merchant_account_id", "date"], name: "index_on_user_merchant_account_date"
   end
 
