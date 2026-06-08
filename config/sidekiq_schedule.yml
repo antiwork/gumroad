@@ -81,10 +81,6 @@ send_reminders_for_outstanding_user_compliance_info_requests: # Duration: 5min
   cron: "0 2 * * *" # UTC 02:00
   class: SendRemindersForOutstandingUserComplianceInfoRequestsWorker
   description: Sends reminder emails for outstanding user compliance info requests.
-stripe_transfer_gumroads_available_balances_to_gumroads_bank_account: # Duration: <1sec
-  cron: "0 18 * * *" # UTC 18:00, must run well after the weekly seller payouts (UTC 10:00) so their platform-balance debits clear before we sweep the remainder to Gumroad's bank
-  class: StripeTransferGumroadsAvailableBalancesToGumroadsBankAccountWorker
-  description: Transfers the available balances of Gumroad's Stripe account to the Gumroad bank account
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
