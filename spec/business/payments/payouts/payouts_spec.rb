@@ -581,7 +581,7 @@ describe Payouts do
       end
     end
 
-    describe "slack notification" do
+    describe "notification" do
       before do
         @seller = create(:compliant_user, payment_address: "seller@gr.co")
         create(:balance, user: @seller, date: Date.today - 3, amount_cents: 900)

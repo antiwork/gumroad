@@ -714,7 +714,6 @@ class Link < ApplicationRecord
   #          if not passed, the search will return the earliest product by unique or custom permalink.
   #                         NOTE: a custom permalink can match different products by different sellers,
   #                         this option should only be used to support legacy URLs.
-  #                         Ref: https://gumroad.slack.com/archives/C01B70APF9P/p1627054984386700
   def self.fetch_leniently(general_permalink, user: nil)
     product_via_legacy_permalink = Link.visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink)) if user.blank?
 

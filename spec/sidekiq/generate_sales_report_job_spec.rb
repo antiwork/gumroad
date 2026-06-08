@@ -108,7 +108,7 @@ describe GenerateSalesReportJob do
       expect(csv.map { |row| row["Customer Tax ID"] }).to include("GB123456789")
     end
 
-    it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
+    it "creates a CSV file for sales into the United Kingdom and does not send notification when send_notification is false",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
 
@@ -117,7 +117,7 @@ describe GenerateSalesReportJob do
       expect(InternalNotificationWorker.jobs.size).to eq(0)
     end
 
-    it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is true",
+    it "creates a CSV file for sales into the United Kingdom and sends notification when send_notification is true",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
 
@@ -126,7 +126,7 @@ describe GenerateSalesReportJob do
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
     end
 
-    it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_slack_notification is not provided (default behavior)",
+    it "creates a CSV file for sales into the United Kingdom and sends notification when send_notification is not provided (default behavior)",
        vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
 
