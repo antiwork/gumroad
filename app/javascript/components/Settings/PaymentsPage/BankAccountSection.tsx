@@ -1781,8 +1781,8 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                     <FieldsetDescription>
-                      Your bank's SWIFT/BIC code. An 8-character code is padded to 11 with X (e.g. KACHUZ22 becomes
-                      KACHUZ22XXX).
+                      Your bank's SWIFT/BIC code. Codes shorter than 11 characters are padded to 11 with X (e.g.
+                      KACHUZ22 becomes KACHUZ22XXX); 11-character codes are used as-is.
                     </FieldsetDescription>
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
