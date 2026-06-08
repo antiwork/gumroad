@@ -150,8 +150,6 @@ class PurchasesController < ApplicationController
   end
 
   def update_subscription
-    # TODO (helen): Remove after debugging https://gumroad.slack.com/archives/C01DBV0A257/p1662042866645759
-    Rails.logger.info("purchases#update_subscription - id: #{@subscription.external_id} ; params: #{permitted_subscription_params}")
     result =
       Subscription::UpdaterService.new(subscription: @subscription,
                                        gumroad_guid: cookies[:_gumroad_guid],

@@ -89,8 +89,6 @@ class ForeignWebhooksController < ApplicationController
     notification_message = request.body.read
 
     Rails.logger.info("Incoming SNS (Transcoder): #{notification_message}")
-    # TODO(amir): remove this once elastic transcoder support gets back to us about why it's included and causing the json to be invalid.
-    Rails.logger.info("Incoming SNS from Elastic Transcoder contains the invalid characters? #{notification_message.include?('#012')}")
 
     notification_message.gsub!("#012", "")
     HandleSnsTranscoderEventWorker.perform_in(5.seconds, JSON.parse(notification_message))
