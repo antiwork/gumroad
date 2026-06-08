@@ -128,7 +128,7 @@ class SignupController < Devise::RegistrationsController
         return
       end
 
-      if params[:user] && params[:user][:buyer_signup].blank? && !Feature.active?(:disable_signup_recaptcha)
+      if params[:user] && params[:user][:buyer_signup].blank? && Feature.inactive?(:disable_signup_recaptcha)
         site_key = GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY")
         if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :signup)
           respond_to do |format|
