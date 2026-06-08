@@ -1768,33 +1768,38 @@ const BankAccountSection = ({
                 <>
                   <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                     <FieldsetTitle>
-                      <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
+                      <Label htmlFor={`${uid}-bank-code`}>SWIFT/BIC code</Label>
                     </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
-                      placeholder="AAAAUZUZXXX"
+                      placeholder="KACHUZ22XXX"
                       maxLength={11}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("bank_code")}
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
+                    <FieldsetDescription>
+                      Your bank's SWIFT/BIC code. An 8-character code is padded to 11 with X (e.g. KACHUZ22 becomes
+                      KACHUZ22XXX).
+                    </FieldsetDescription>
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
                     <FieldsetTitle>
-                      <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
+                      <Label htmlFor={`${uid}-branch-code`}>MFO (branch code)</Label>
                     </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
-                      placeholder="00000"
+                      placeholder="01158"
                       maxLength={5}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("branch_code")}
                       onChange={(evt) => updateBankAccount({ branch_code: evt.target.value })}
                     />
+                    <FieldsetDescription>Your bank's 5-digit MFO code.</FieldsetDescription>
                   </Fieldset>
                 </>
               ) : user.country_code === "BO" ? (

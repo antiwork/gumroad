@@ -27,6 +27,23 @@ describe UzbekistanBankAccount do
       expect(ba).to be_valid
       expect(ba.routing_number).to eq("AAAAUZUZXXX-00000")
     end
+
+    it "pads an 8-character SWIFT/BIC to 11 characters with X" do
+      ba = build(:uzbekistan_bank_account, bank_code: "KACHUZ22", branch_code: "01158")
+      expect(ba).to be_valid
+      expect(ba.routing_number).to eq("KACHUZ22XXX-01158")
+    end
+
+    it "pads a partially padded SWIFT/BIC to the full 11 characters" do
+      ba = build(:uzbekistan_bank_account, bank_code: "NBFAUZ2XXX", branch_code: "00450")
+      expect(ba).to be_valid
+      expect(ba.routing_number).to eq("NBFAUZ2XXXX-00450")
+    end
+
+    it "leaves an already 11-character SWIFT/BIC unchanged" do
+      ba = build(:uzbekistan_bank_account, bank_code: "KACHUZ22XXX", branch_code: "01158")
+      expect(ba.routing_number).to eq("KACHUZ22XXX-01158")
+    end
   end
 
   describe "#account_number_visual" do

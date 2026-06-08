@@ -6,7 +6,8 @@ class UzbekistanBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /^([a-zA-Z0-9]){8,11}$/
   BRANCH_CODE_FORMAT_REGEX = /^([0-9]){5}$/
   ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{5,20}$/
-  private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
+  SWIFT_BIC_LENGTH = 11
+  private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX, :SWIFT_BIC_LENGTH
 
   alias_attribute :bank_code, :bank_number
 
@@ -15,7 +16,7 @@ class UzbekistanBankAccount < BankAccount
   validate :validate_account_number
 
   def routing_number
-    "#{bank_code}-#{branch_code}"
+    "#{padded_bank_code}-#{branch_code}"
   end
 
   def bank_account_type
@@ -35,6 +36,10 @@ class UzbekistanBankAccount < BankAccount
   end
 
   private
+    def padded_bank_code
+      bank_code.to_s.ljust(SWIFT_BIC_LENGTH, "X")
+    end
+
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
