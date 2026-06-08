@@ -3695,18 +3695,17 @@ describe LinksController, :vcr, inertia: true do
             expect(Array(query_params["price"])).to all(eq("200"))
           end
 
-          it "ignores an unknown variant name and falls back to a valid checkout" do
+          it "does not resolve an unknown variant name but still redirects to a valid checkout" do
             product = create(:product_with_digital_versions_with_price_difference_cents, user: @user)
 
             get :show, params: { id: product.to_param, wanted: "true", variant: "Does Not Exist" }
 
-            # Unknown name doesn't resolve to an option, so none is echoed in the
-            # URL — but the flow still fails open to a working checkout redirect.
             expect(response).to be_redirect
             redirect_url = URI.parse(response.location)
             expect(redirect_url.path).to eq("/checkout")
             query_params = Rack::Utils.parse_query(redirect_url.query)
             expect(query_params["product"]).to eq(product.unique_permalink)
+            expect(query_params["option"]).to be_nil
           end
         end
       end
