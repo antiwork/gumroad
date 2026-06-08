@@ -4579,8 +4579,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Uzbekistan Creator")
-        fill_in("Bank code", with: "AAAAUZUZXXX")
-        fill_in("Branch code", with: "00000")
+        fill_in("SWIFT/BIC code", with: "AAAAUZUZXXX")
+        fill_in("MFO (branch code)", with: "00000")
         fill_in("Account #", with: "99934500012345670024")
         fill_in("Confirm account #", with: "99934500012345670024")
 
