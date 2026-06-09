@@ -162,17 +162,22 @@ describe Compliance do
     end
 
     describe ".for_select_for_seller_compliance" do
-      it "excludes the six US outlying areas so sellers cannot pick a territory as their country" do
+      it "excludes Puerto Rico so sellers cannot pick the territory we model as a US state" do
         codes = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
-        %w[AS GU MP PR UM VI].each do |territory|
-          expect(codes).not_to include(territory), "expected #{territory} to be excluded but it was present"
+        expect(codes).not_to include("PR")
+      end
+
+      it "keeps the other US outlying areas because they are valid PayPal payout countries" do
+        codes = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
+        %w[AS GU MP UM VI].each do |territory|
+          expect(codes).to include(territory), "expected #{territory} to remain selectable but it was excluded"
         end
       end
 
       it "leaves every other country in place" do
         full = Compliance::Countries.for_select.map(&:first)
         filtered = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
-        expect(full - filtered).to match_array(%w[AS GU MP PR UM VI])
+        expect(full - filtered).to match_array(%w[PR])
       end
     end
 

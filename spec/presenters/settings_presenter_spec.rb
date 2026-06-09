@@ -273,21 +273,21 @@ describe SettingsPresenter do
 
     it "returns the correct props" do
       expect(presenter.third_party_analytics_props).to eq({
-        disable_third_party_analytics: false,
-        google_analytics_id: "",
-        facebook_pixel_id: "",
-        tiktok_pixel_id: "",
-        skip_free_sale_analytics: false,
-        facebook_meta_tag: "",
-        enable_verify_domain_third_party_services: false,
-        snippets: [{
-          id: third_party_analytic.external_id,
-          name: third_party_analytic.name,
-          location: third_party_analytic.location,
-          code: third_party_analytic.analytics_code,
-          product: third_party_analytic.link.unique_permalink,
-        }]
-      })
+                                                            disable_third_party_analytics: false,
+                                                            google_analytics_id: "",
+                                                            facebook_pixel_id: "",
+                                                            tiktok_pixel_id: "",
+                                                            skip_free_sale_analytics: false,
+                                                            facebook_meta_tag: "",
+                                                            enable_verify_domain_third_party_services: false,
+                                                            snippets: [{
+                                                              id: third_party_analytic.external_id,
+                                                              name: third_party_analytic.name,
+                                                              location: third_party_analytic.location,
+                                                              code: third_party_analytic.analytics_code,
+                                                              product: third_party_analytic.link.unique_permalink,
+                                                            }]
+                                                          })
     end
 
     context "when attributes are set" do
@@ -600,10 +600,11 @@ describe SettingsPresenter do
       expect(presenter.payments_props).to eq(@base_props)
     end
 
-    it "excludes US outlying areas from the seller compliance country dropdown" do
+    it "excludes Puerto Rico but keeps the other US outlying areas in the seller compliance country dropdown" do
       countries = presenter.payments_props[:countries]
-      %w[AS GU MP PR UM VI].each do |territory|
-        expect(countries).not_to have_key(territory), "expected #{territory} to be excluded from countries but it was present"
+      expect(countries).not_to have_key("PR")
+      %w[AS GU MP UM VI].each do |territory|
+        expect(countries).to have_key(territory), "expected #{territory} to remain selectable but it was excluded"
       end
       expect(countries).to have_key("US")
     end
