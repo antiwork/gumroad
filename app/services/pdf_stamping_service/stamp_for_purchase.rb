@@ -33,6 +33,7 @@ module PdfStampingService::StampForPurchase
         .alive
         .pdf
         .pdf_stamp_enabled
+        .where(stampable_pdf: [true, nil])
         .where.not(id: url_redirect.alive_stamped_pdfs.pluck(:product_file_id))
     end
 

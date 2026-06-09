@@ -66,6 +66,24 @@ describe PdfStampingService::StampForPurchase do
       end
     end
 
+    context "when a stamp-enabled file has been marked unstampable" do
+      let!(:unstampable_file) { create(:readable_document, pdf_stamp_enabled: true, stampable_pdf: false) }
+
+      before do
+        product.product_files << unstampable_file
+      end
+
+      it "skips the unstampable file without creating a blank stamped PDF" do
+        url_redirect = purchase.url_redirect
+
+        expect do
+          expect(described_class.perform!(purchase)).to be(true)
+        end.not_to change { url_redirect.reload.stamped_pdfs.count }.from(0)
+
+        expect(url_redirect.reload.is_done_pdf_stamping?).to eq(true)
+      end
+    end
+
     context "when the product doesn't have stampable PDFs" do
       it "does nothing" do
         expect(described_class.perform!(purchase)).to eq(nil)
