@@ -7,7 +7,8 @@ module PdfStampingService
 
   ERRORS_TO_RESCUE = [
     PdfStampingService::Stamp::Error,
-    PDF::Reader::MalformedPDFError
+    PDF::Reader::MalformedPDFError,
+    PDF::Reader::EncryptedPDFError
   ].freeze
 
   def can_stamp_file?(product_file:)
