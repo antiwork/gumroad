@@ -40,6 +40,8 @@ class SaveInstallmentService
       end
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
       @error = e.message
+    rescue ActiveRecord::RecordInvalid => e
+      @error = e.record&.errors&.full_messages&.first || e.message
     rescue => e
       @error ||= e.message
       ErrorNotifier.notify(e)
