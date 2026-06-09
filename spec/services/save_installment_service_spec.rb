@@ -184,6 +184,21 @@ describe SaveInstallmentService do
       end
     end
 
+    it "reports unexpected blast setup validation failures to Sentry" do
+      invalid_blast = PostEmailBlast.new.tap { |blast| blast.errors.add(:base, "unexpected failure") }
+      record_invalid = ActiveRecord::RecordInvalid.new(invalid_blast)
+      allow(PostEmailBlast).to receive(:create!).and_raise(record_invalid)
+      expect(ErrorNotifier).to receive(:notify).with(record_invalid)
+
+      service = described_class.new(seller:, installment:, params: params.merge(publish: true), preview_email_recipient:)
+      expect do
+        service.process
+      end.to_not change { Installment.count }
+
+      expect(service.error).to include("unexpected failure")
+      expect(SendPostBlastEmailsJob.jobs).to be_empty
+    end
+
     it "creates and sends a preview email" do
       allow(PostSendgridApi).to receive(:process).and_call_original
 

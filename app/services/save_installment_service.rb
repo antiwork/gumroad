@@ -40,8 +40,6 @@ class SaveInstallmentService
       end
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
       @error = e.message
-    rescue ActiveRecord::RecordInvalid => e
-      @error = e.record&.errors&.full_messages&.first || e.message
     rescue => e
       @error ||= e.message
       ErrorNotifier.notify(e)
@@ -106,7 +104,13 @@ class SaveInstallmentService
     def publish_installment
       return if error.present?
 
-      installment.publish!
+      begin
+        installment.publish!
+      rescue ActiveRecord::RecordInvalid => e
+        @error = e.record&.errors&.full_messages&.first || e.message
+        return
+      end
+
       installment.installment_rule&.mark_deleted!
       if installment.can_be_blasted?
         blast_id = PostEmailBlast.create!(post: installment, requested_at: Time.current).id
