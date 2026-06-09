@@ -13,15 +13,20 @@ describe PdfStampingService::Stamp do
       end
     end
 
-    context "with encrypted PDF" do
+    context "with an encrypted PDF that opens without a password" do
       let(:pdf) { create(:readable_document, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf") }
 
-      it "logs and returns false" do
-        expect(Rails.logger).to receive(:error).with(
-          /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: pdftk/
-        )
-        expect(Rails.logger).to receive(:error).with(/\[PdfStampingService::Stamp.apply_watermark!\] STDOUT: /)
-        expect(Rails.logger).to receive(:error).with(/\[PdfStampingService::Stamp.apply_watermark!\] STDERR: /)
+      it "decrypts it and returns true" do
+        expect(Rails.logger).not_to receive(:error)
+        result = described_class.can_stamp_file?(product_file: pdf)
+        expect(result).to eq(true)
+      end
+    end
+
+    context "with a password-protected PDF that requires a password to open" do
+      let(:pdf) { create(:readable_document, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/password_protected_pdf.pdf") }
+
+      it "returns false" do
         result = described_class.can_stamp_file?(product_file: pdf)
         expect(result).to eq(false)
       end
@@ -77,20 +82,32 @@ describe PdfStampingService::Stamp do
       end
     end
 
+    context "with an encrypted PDF that opens without a password" do
+      let(:pdf_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf" }
+
+      it "decrypts and stamps it without errors" do
+        expect(Rails.logger).not_to receive(:error)
+
+        stamped_path = nil
+        expect do
+          stamped_path = described_class.perform!(product_file:, watermark_text:)
+        end.not_to raise_error
+
+        first_page_text = PDF::Reader.new(stamped_path).page(1).text
+        expect(first_page_text).to include(watermark_text)
+      end
+    end
+
     context "when applying the watermark fails" do
-      context "when the PDF is encrypted" do
-        let(:pdf_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf" }
+      context "when the PDF requires a password to open" do
+        let(:pdf_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/password_protected_pdf.pdf" }
 
-        it "logs and raises PdfStampingService::Stamp::Error" do
-          expect(Rails.logger).to receive(:error).with(
-            /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: pdftk/
-          )
-          expect(Rails.logger).to receive(:error).with(/\[PdfStampingService::Stamp.apply_watermark!\] STDOUT: /)
-          expect(Rails.logger).to receive(:error).with(/\[PdfStampingService::Stamp.apply_watermark!\] STDERR: /)
-
+        it "raises a rescuable PDF::Reader::EncryptedPDFError" do
           expect do
             described_class.perform!(product_file:, watermark_text:)
-          end.to raise_error(PdfStampingService::Stamp::Error).with_message("Error generating stamped PDF: PDF is encrypted.")
+          end.to raise_error(PDF::Reader::EncryptedPDFError)
+
+          expect(PdfStampingService::ERRORS_TO_RESCUE).to include(PDF::Reader::EncryptedPDFError)
         end
       end
 
