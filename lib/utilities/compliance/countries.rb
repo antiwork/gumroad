@@ -177,6 +177,15 @@ module Compliance
     # to Stripe onboarding.
     US_OUTLYING_AREAS_AS_STATES = %w[PR].freeze
 
+    # US territory state codes (as returned by `UsZipCodes.identify_state_code`) that Stripe Connect
+    # rejects, so a seller whose address resolves to one of these has no valid payout path. This is
+    # every US outlying area except the PR subset we can onboard under `country: "US"`.
+    UNSUPPORTED_US_TERRITORY_STATE_CODES = (US_OUTLYING_AREA_ALPHA2 - US_OUTLYING_AREAS_AS_STATES).freeze
+
+    def self.unsupported_us_territory_state_code?(state_code)
+      UNSUPPORTED_US_TERRITORY_STATE_CODES.include?(state_code)
+    end
+
     def self.subdivisions_for_select(alpha2)
       case alpha2
       when Compliance::Countries::USA.alpha2

@@ -595,6 +595,26 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      describe "creator enters a ZIP code in a Stripe-unsupported US territory" do
+        it "rejects a Guam ZIP code with a clear unsupported-territory message" do
+          put :update, params: { user: params.merge(business_zip_code: "96910") }
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("Gumroad can't set up payouts for sellers in US territories like Guam, the US Virgin Islands, American Samoa, and the Northern Mariana Islands, because our payments provider doesn't support them yet. Puerto Rico and the 50 US states are supported.")
+        end
+
+        it "rejects a US Virgin Islands ZIP code" do
+          put :update, params: { user: params.merge(business_zip_code: "00801") }
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("Gumroad can't set up payouts for sellers in US territories like Guam, the US Virgin Islands, American Samoa, and the Northern Mariana Islands, because our payments provider doesn't support them yet. Puerto Rico and the 50 US states are supported.")
+        end
+
+        it "allows a Puerto Rico ZIP code because Stripe onboards PR under country US" do
+          put :update, params: { user: params.merge(business_zip_code: "00601", state: "PR") }
+          expect(session[:inertia_errors]).to be_nil
+        end
+      end
+
       describe "user is verified" do
         before do
           put :update, params: { user: params }

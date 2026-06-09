@@ -50,8 +50,11 @@ class Settings::PaymentsController < Settings::BaseController
     if Compliance::Countries::USA.common_name == compliance_info.legal_entity_country
       zip_code = params.dig(:user, :is_business) ? params.dig(:user, :business_zip_code).presence : params.dig(:user, :zip_code).presence
       if zip_code
-        unless UsZipCodes.identify_state_code(zip_code).present?
+        state_code = UsZipCodes.identify_state_code(zip_code)
+        if state_code.blank?
           return redirect_with_error("You entered a ZIP Code that doesn't exist within your country.")
+        elsif Compliance::Countries.unsupported_us_territory_state_code?(state_code)
+          return redirect_with_error("Gumroad can't set up payouts for sellers in US territories like Guam, the US Virgin Islands, American Samoa, and the Northern Mariana Islands, because our payments provider doesn't support them yet. Puerto Rico and the 50 US states are supported.")
         end
       end
     end
