@@ -1742,6 +1742,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           "VI" => "Virgin Islands, U.S.",
           "AS" => "American Samoa",
           "MP" => "Northern Mariana Islands",
+          "UM" => "United States Minor Outlying Islands",
         }.each do |code, name|
           it "allows #{code} because it routes to PayPal payouts" do
             post :set_country, params: params.merge(country: code), as: :json
