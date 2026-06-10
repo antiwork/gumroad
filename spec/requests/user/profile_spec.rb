@@ -335,6 +335,10 @@ describe "User profile page", type: :system, js: true do
           expect(page).to have_tab_button("New page", open: true)
           expect(page).to have_tab_button("Hi! I'm page!", open: false)
         end
+        within_profile_editor_preview do
+          expect(page).to have_tab_button("New page")
+          expect(page).to have_tab_button("Hi! I'm page!")
+        end
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
 
         add_section "Products"
@@ -374,11 +378,11 @@ describe "User profile page", type: :system, js: true do
         expect_sections_in_order("Section 2", "Section 1", "Section 3")
 
         add_section "Posts"
-        expect_sections_in_order("Section 2", "Section 1", "Section 3", "New section")
+        expect_sections_in_order("Section 2", "Section 1", "Section 3", "Posts")
 
         sections = profile_editor_sections
         drag_row(sections[3], to: sections[2])
-        expect_sections_in_order("Section 2", "Section 1", "New section", "Section 3")
+        expect_sections_in_order("Section 2", "Section 1", "Posts", "Section 3")
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
 
@@ -398,12 +402,12 @@ describe "User profile page", type: :system, js: true do
         expect(page).not_to have_selector("[aria-label='Filters']")
         [@product1, @product2, @product3, @product4].each { check _1.name }
         expect_profile_editor_product_cards_in_order([@product1, @product2, @product3, @product4])
-        within_section_form "New section" do
+        within_section_form "Products" do
           drag_product_row(@product1, to: @product2)
         end
         wait_for_ajax
         expect_profile_editor_product_cards_in_order([@product2, @product1, @product3,  @product4])
-        within_section_form "New section" do
+        within_section_form "Products" do
           drag_product_row(@product3, to: @product2)
         end
         wait_for_ajax
@@ -418,7 +422,7 @@ describe "User profile page", type: :system, js: true do
         section = seller.seller_profile_products_sections.reload.sole
         expect(section).to have_attributes(show_filters: false, add_new_products: true, default_product_sort: "price_asc", shown_products: [@product3.id, @product1.id, @product4.id])
 
-        within_section_form "New section" do
+        within_section_form "Products" do
           check "Show product filters"
           uncheck "Add new products by default"
         end
@@ -436,20 +440,24 @@ describe "User profile page", type: :system, js: true do
         visit settings_profile_path
 
         add_section "Posts"
+        within_section_form "Posts" do
+          fill_in "Section name", with: "My posts"
+          blur_field "Section name"
+        end
         save_changes
 
         within_profile_editor_preview do
-          within_section "New section", section_element: :section do
+          within_section "My posts", section_element: :section do
             expect(page).to have_link(count: 2)
             posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
           end
         end
 
-        expect(seller.seller_profile_posts_sections.reload.sole).to have_attributes(header: "New section", shown_posts: posts.pluck(:id))
+        expect(seller.seller_profile_posts_sections.reload.sole).to have_attributes(header: "My posts", shown_posts: posts.pluck(:id))
 
         refresh
         within_profile_editor_preview do
-          within_section "New section", section_element: :section do
+          within_section "My posts", section_element: :section do
             expect(page).to have_link(count: 2)
             posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
           end
@@ -462,7 +470,7 @@ describe "User profile page", type: :system, js: true do
         add_section "Rich text"
         save_changes
 
-        editor = within_section_form "New section" do
+        editor = within_section_form "Rich text" do
           find("[contenteditable=true]").tap(&:click)
         end
         editor.send_keys "Some rich text"
@@ -478,13 +486,15 @@ describe "User profile page", type: :system, js: true do
             { type: "paragraph", content: [{ type: "text", text: "Some rich text" }] }
           ]
         }.as_json
-        expect(section).to have_attributes(header: "New section", text: expected_rich_text)
+        expect(section).to have_attributes(header: "", text: expected_rich_text)
+
+        within_profile_editor_preview do
+          expect(page).to have_text("Some rich text")
+        end
 
         refresh
         within_profile_editor_preview do
-          within_section "New section", section_element: :section do
-            expect(page).to have_text("Some rich text")
-          end
+          expect(page).to have_text("Some rich text")
         end
       end
 
@@ -530,7 +540,7 @@ describe "User profile page", type: :system, js: true do
         expect(section).to be_a SellerProfileFeaturedProductSection
         expect(section.featured_product_id).to be_nil
 
-        within_section_form "New section" do
+        within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
           blur_field "Section name"
         end
@@ -570,7 +580,7 @@ describe "User profile page", type: :system, js: true do
         expect(section).to be_a SellerProfileFeaturedProductSection
         expect(section.featured_product_id).to be_nil
 
-        within_section_form "New section" do
+        within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
           blur_field "Section name"
         end
@@ -608,7 +618,7 @@ describe "User profile page", type: :system, js: true do
 
         wishlists.each { check _1.name }
         expect_profile_editor_product_cards_in_order(wishlists)
-        within_section_form "New section" do
+        within_section_form "Wishlists" do
           drag_product_row(wishlists.first, to: wishlists.second)
         end
         wait_for_ajax

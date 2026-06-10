@@ -4,7 +4,7 @@ import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import { unlinkTwitter } from "$app/data/profile_settings";
+import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
@@ -64,13 +64,10 @@ export default function SettingsPage() {
         : { ...prevProfile, ...updates },
     );
   }, []);
-  const previewTabs = React.useMemo(() => {
-    const tab = editableProfile.tabs[selectedProfilePageIndex] ?? editableProfile.tabs[0];
-    return tab ? [tab] : [];
-  }, [editableProfile.tabs, selectedProfilePageIndex]);
+  const previewTabIndex = Math.min(selectedProfilePageIndex, Math.max(editableProfile.tabs.length - 1, 0));
   const selectedPreviewSectionIds = React.useMemo(
-    () => new Set(previewTabs.flatMap((tab) => tab.sections)),
-    [previewTabs],
+    () => new Set(editableProfile.tabs[previewTabIndex]?.sections ?? []),
+    [editableProfile.tabs, previewTabIndex],
   );
   const previewSectionCount = editableProfile.sections.filter((section) =>
     selectedPreviewSectionIds.has(section.id),
@@ -86,7 +83,9 @@ export default function SettingsPage() {
 
   const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !form.processing;
 
+  const lastSavedSettings = React.useRef(profile_settings);
   const handleSave = () => {
+    const data = form.data;
     form.transform((data) => {
       const { profile_picture_blob_id, ...user } = data;
       return {
@@ -96,8 +95,32 @@ export default function SettingsPage() {
     });
     form.put(Routes.settings_profile_path(), {
       preserveScroll: true,
+      onSuccess: () => {
+        lastSavedSettings.current = data;
+      },
     });
   };
+
+  const saveIfChanged = async () => {
+    const data = form.data;
+    const lastSaved = lastSavedSettings.current;
+    if (isEqual(lastSaved, data)) return;
+    lastSavedSettings.current = data;
+    try {
+      await saveProfileSettings(data);
+      showAlert("Changes saved!", "success");
+    } catch (e) {
+      lastSavedSettings.current = lastSaved;
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  };
+  const avatarSaveQueued = React.useRef(false);
+  React.useEffect(() => {
+    if (!avatarSaveQueued.current) return;
+    avatarSaveQueued.current = false;
+    void saveIfChanged();
+  }, [form.data]);
 
   const profileColors = currentSeller
     ? {
@@ -144,6 +167,7 @@ export default function SettingsPage() {
                   updateCreatorProfile({ name: evt.target.value });
                   updateProfileSettings({ name: evt.target.value });
                 }}
+                onBlur={() => void saveIfChanged()}
               />
             </Fieldset>
             <Fieldset>
@@ -155,17 +179,17 @@ export default function SettingsPage() {
                 value={profileSettings.bio ?? ""}
                 disabled={!canUpdate}
                 onChange={(e) => updateProfileSettings({ bio: e.target.value })}
+                onBlur={() => void saveIfChanged()}
               />
             </Fieldset>
             <LogoInput
               logoUrl={creatorProfile.avatar_url}
               onChange={(blob) => {
-                if (blob) {
-                  updateCreatorProfile({
-                    avatar_url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-                  });
-                }
+                updateCreatorProfile({
+                  avatar_url: blob ? Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) : "",
+                });
                 updateProfileSettings({ profile_picture_blob_id: blob?.signedId ?? null });
+                avatarSaveQueued.current = true;
               }}
               disabled={!canUpdate}
             />
@@ -245,15 +269,17 @@ export default function SettingsPage() {
                 <link rel="stylesheet" href={fontUrl} />
               </>
             ) : null}
-            <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
-              <EditProfile
-                {...editableProfile}
-                tabs={previewTabs}
-                creator_profile={previewCreatorProfile}
-                bio={profileSettings.bio}
-                controls={false}
-              />
-            </ProfileLayout>
+            <div inert>
+              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+                <EditProfile
+                  {...editableProfile}
+                  creator_profile={previewCreatorProfile}
+                  bio={profileSettings.bio}
+                  controls={false}
+                  selectedTabIndex={previewTabIndex}
+                />
+              </ProfileLayout>
+            </div>
           </Preview>
         </PreviewSidebar>
       </WithPreviewSidebar>

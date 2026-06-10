@@ -63,7 +63,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 Impersonate
               </NavigationButton>
             ) : null}
-            <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" />
+            {creatorProfile.avatar_url ? <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" /> : null}
             <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
               {creatorProfile.name}
               {creatorProfile.is_verified ? (

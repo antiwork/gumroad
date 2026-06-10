@@ -1,6 +1,5 @@
 import {
   Bell,
-  Bold,
   Box,
   ChevronDown,
   ChevronUp,
@@ -9,18 +8,9 @@ import {
   File,
   FileDetail,
   Grid,
-  Italic,
-  Minus,
   Plus,
-  QuoteLeftAlt,
-  Redo,
-  Strikethrough,
   Trash,
-  Underline as UnderlineIcon,
-  Undo,
 } from "@boxicons/react";
-import type { Editor } from "@tiptap/core";
-import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
 import * as React from "react";
@@ -38,10 +28,9 @@ import { SORT_BY_LABELS } from "$app/components/Product/CardGrid";
 import { TabWithId, useTabs } from "$app/components/Profile";
 import type { ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { Section, useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
-import { ImageUploadSettingsContext, useRichTextEditor } from "$app/components/RichTextEditor";
+import { ImageUploadSettingsContext, RichTextEditorToolbar, useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
-import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -88,22 +77,7 @@ const SECTION_TYPES: Section["type"][] = [
   "SellerProfileWishlistsSection",
 ];
 
-const RICH_TEXT_FORMAT_OPTIONS = [
-  { id: "paragraph", label: "Text" },
-  { id: "heading-1", label: "Header" },
-  { id: "heading-2", label: "Title" },
-  { id: "heading-3", label: "Subtitle" },
-  { id: "bullet-list", label: "Bulleted list" },
-  { id: "ordered-list", label: "Numbered list" },
-  { id: "code-block", label: "Code block" },
-] as const;
-
-type RichTextFormat = (typeof RICH_TEXT_FORMAT_OPTIONS)[number]["id"];
-
 const tabsWithoutIds = (tabs: ReturnType<typeof useTabs>["tabs"]) => tabs.map(({ id: _id, ...tab }) => tab);
-
-const parseRichTextFormat = (value: string) =>
-  RICH_TEXT_FORMAT_OPTIONS.find((option) => option.id === value)?.id ?? null;
 
 const parseProfileSortKey = (value: string): ProfileSortKey | null =>
   PROFILE_SORT_KEYS.find((key) => key === value) ?? null;
@@ -157,9 +131,9 @@ const SortableWishlistRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HT
 ));
 SortableWishlistRows.displayName = "SortableWishlistRows";
 
-const DrawerToggle = ({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) => (
+const DrawerToggle = ({ isOpen, onToggle, label }: { isOpen: boolean; onToggle: () => void; label: string }) => (
   <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-    <Button size="icon" onClick={onToggle}>
+    <Button size="icon" onClick={onToggle} aria-label={`${isOpen ? "Collapse" : "Expand"} ${label}`}>
       {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
     </Button>
   </WithTooltip>
@@ -214,49 +188,45 @@ const useSaveSection = (initialSection: Section) => {
 
 const PageRow = ({
   tab,
+  shouldFocusName,
   updateName,
   commitName,
   onDelete,
 }: {
   tab: TabWithId;
+  shouldFocusName: boolean;
   updateName: (name: string) => void;
   commitName: (name: string) => void;
   onDelete: () => void;
 }) => {
-  const uid = React.useId();
-  const [isOpen, setIsOpen] = React.useState(true);
+  const nameInputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (!shouldFocusName) return;
+    const frame = requestAnimationFrame(() => nameInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [shouldFocusName]);
 
   return (
     <Row role="listitem">
-      <RowContent>
+      <RowContent className="grow">
         <ReorderingHandle />
-        <File className="size-5" />
-        <h3>{tab.name || "Untitled"}</h3>
+        <File className="size-5 shrink-0" />
+        <Input
+          ref={nameInputRef}
+          type="text"
+          aria-label="Page name"
+          value={tab.name}
+          onChange={(evt) => updateName(evt.target.value)}
+          onBlur={(evt) => commitName(evt.target.value)}
+        />
       </RowContent>
       <RowActions>
-        <DrawerToggle isOpen={isOpen} onToggle={() => setIsOpen((prevIsOpen) => !prevIsOpen)} />
         <WithTooltip tip="Remove">
           <Button size="icon" onClick={onDelete} aria-label="Remove page">
             <Trash className="size-5" />
           </Button>
         </WithTooltip>
       </RowActions>
-      {isOpen ? (
-        <RowDetails asChild>
-          <Drawer className="grid gap-6">
-            <Fieldset>
-              <Label htmlFor={`${uid}-name`}>Page name</Label>
-              <Input
-                id={`${uid}-name`}
-                type="text"
-                value={tab.name}
-                onChange={(evt) => updateName(evt.target.value)}
-                onBlur={(evt) => commitName(evt.target.value)}
-              />
-            </Fieldset>
-          </Drawer>
-        </RowDetails>
-      ) : null}
     </Row>
   );
 };
@@ -264,17 +234,25 @@ const PageRow = ({
 const SectionRow = ({
   section,
   state,
+  shouldFocusHeader,
   updateSection,
   onDelete,
 }: {
   section: Section;
   state: ProfileEditorProps;
+  shouldFocusHeader: boolean;
   updateSection: (section: Section) => void;
   onDelete: () => void;
 }) => {
   const saveSection = useSaveSection(section);
   const uid = React.useId();
   const [isOpen, setIsOpen] = React.useState(true);
+  const headerInputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (!shouldFocusHeader) return;
+    const frame = requestAnimationFrame(() => headerInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [shouldFocusHeader]);
   const sectionTitle = section.header || SECTION_TYPE_LABELS[section.type];
   const commit = (updated: Section) => {
     updateSection(updated);
@@ -305,7 +283,11 @@ const SectionRow = ({
             <Copy className="size-5" />
           </Button>
         </WithTooltip>
-        <DrawerToggle isOpen={isOpen} onToggle={() => setIsOpen((prevIsOpen) => !prevIsOpen)} />
+        <DrawerToggle
+          isOpen={isOpen}
+          onToggle={() => setIsOpen((prevIsOpen) => !prevIsOpen)}
+          label={`${sectionTitle} section`}
+        />
         <WithTooltip tip="Remove">
           <Button size="icon" onClick={onDelete} aria-label="Remove section">
             <Trash className="size-5" />
@@ -318,6 +300,7 @@ const SectionRow = ({
             <Fieldset>
               <Label htmlFor={`${uid}-header`}>Section name</Label>
               <Input
+                ref={headerInputRef}
                 id={`${uid}-header`}
                 type="text"
                 value={section.header}
@@ -510,157 +493,17 @@ const RichTextSectionFields = ({
     <Fieldset>
       <FieldsetTitle>Text</FieldsetTitle>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
-        {editor ? <RichTextControls editor={editor} imageUploadSettings={imageUploadSettings} /> : null}
-        <EditorContent editor={editor} className="rich-text rounded border border-border p-4" />
+        <div className="grid grid-rows-[max-content_1fr] rounded">
+          {editor ? (
+            <RichTextEditorToolbar
+              editor={editor}
+              className="rounded-t rounded-b-none border border-b-0 border-border"
+            />
+          ) : null}
+          <EditorContent editor={editor} className="rich-text rounded-b border border-border p-4" />
+        </div>
       </ImageUploadSettingsContext.Provider>
     </Fieldset>
-  );
-};
-
-const RichTextControls = ({
-  editor,
-  imageUploadSettings,
-}: {
-  editor: Editor;
-  imageUploadSettings: ReturnType<typeof useSectionImageUploadSettings>;
-}) => {
-  const [, rerender] = React.useReducer((count: number) => count + 1, 0);
-  const imageInputId = React.useId();
-
-  React.useEffect(() => {
-    const handleTransaction = () => rerender();
-    editor.on("transaction", handleTransaction);
-    return () => void editor.off("transaction", handleTransaction);
-  }, [editor]);
-
-  const activeFormat: RichTextFormat = editor.isActive("heading", { level: 1 })
-    ? "heading-1"
-    : editor.isActive("heading", { level: 2 })
-      ? "heading-2"
-      : editor.isActive("heading", { level: 3 })
-        ? "heading-3"
-        : editor.isActive("bulletList")
-          ? "bullet-list"
-          : editor.isActive("orderedList")
-            ? "ordered-list"
-            : editor.isActive("codeBlock")
-              ? "code-block"
-              : "paragraph";
-
-  const applyFormat = (format: RichTextFormat) => {
-    switch (format) {
-      case "paragraph":
-        editor.chain().focus().setParagraph().run();
-        break;
-      case "heading-1":
-        editor.chain().focus().toggleHeading({ level: 1 }).run();
-        break;
-      case "heading-2":
-        editor.chain().focus().toggleHeading({ level: 2 }).run();
-        break;
-      case "heading-3":
-        editor.chain().focus().toggleHeading({ level: 3 }).run();
-        break;
-      case "bullet-list":
-        editor.chain().focus().toggleBulletList().run();
-        break;
-      case "ordered-list":
-        editor.chain().focus().toggleOrderedList().run();
-        break;
-      case "code-block":
-        editor.chain().focus().toggleCodeBlock().run();
-        break;
-    }
-  };
-
-  const insertImages = (files: FileList | null) => {
-    const imageFiles = [...(files ?? [])].filter((file) => file.type.startsWith("image/"));
-    uploadImages({ view: editor.view, files: imageFiles, imageSettings: imageUploadSettings });
-  };
-
-  return (
-    <div className="grid gap-3 rounded border border-border bg-background p-3">
-      <Fieldset>
-        <Label htmlFor={`${imageInputId}-format`}>Text format</Label>
-        <Select
-          id={`${imageInputId}-format`}
-          value={activeFormat}
-          onChange={(evt) => {
-            const format = parseRichTextFormat(evt.target.value);
-            if (format) applyFormat(format);
-          }}
-        >
-          {RICH_TEXT_FORMAT_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Fieldset>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" outline={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
-          <Bold className="size-4" />
-          Bold
-        </Button>
-        <Button
-          size="sm"
-          outline={editor.isActive("italic")}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        >
-          <Italic className="size-4" />
-          Italic
-        </Button>
-        <Button
-          size="sm"
-          outline={editor.isActive("underline")}
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-        >
-          <UnderlineIcon className="size-4" />
-          Underline
-        </Button>
-        <Button
-          size="sm"
-          outline={editor.isActive("strike")}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <Strikethrough className="size-4" />
-          Strikethrough
-        </Button>
-        <Button
-          size="sm"
-          outline={editor.isActive("blockquote")}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          <QuoteLeftAlt className="size-4" />
-          Quote
-        </Button>
-        <Button size="sm" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-          <Minus className="size-4" />
-          Divider
-        </Button>
-        <Button size="sm" disabled={undoDepth(editor.state) === 0} onClick={() => editor.chain().focus().undo().run()}>
-          <Undo className="size-4" />
-          Undo
-        </Button>
-        <Button size="sm" disabled={redoDepth(editor.state) === 0} onClick={() => editor.chain().focus().redo().run()}>
-          <Redo className="size-4" />
-          Redo
-        </Button>
-      </div>
-      <Fieldset>
-        <Label htmlFor={imageInputId}>Images</Label>
-        <Input
-          id={imageInputId}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(evt) => {
-            insertImages(evt.target.files);
-            evt.currentTarget.value = "";
-          }}
-        />
-      </Fieldset>
-    </div>
   );
 };
 
@@ -772,6 +615,8 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
   const [deletionModalPageId, setDeletionModalPageId] = React.useState<string | null>(null);
   const [deletionModalSectionId, setDeletionModalSectionId] = React.useState<string | null>(null);
   const [addSectionMenuOpen, setAddSectionMenuOpen] = React.useState(false);
+  const [lastAddedPageId, setLastAddedPageId] = React.useState<string | null>(null);
+  const [lastAddedSectionId, setLastAddedSectionId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setSections((currentSections) => (isEqual(currentSections, props.sections) ? currentSections : props.sections));
@@ -825,6 +670,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
 
     const tab = { id: GuidGenerator.generate(), name: "New page", sections: [] };
     const nextTabs = [...tabs, tab];
+    setLastAddedPageId(tab.id);
     setSelectedTab(tab);
     await saveTabs(nextTabs);
   };
@@ -844,30 +690,13 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     const removedTab = tabs.find(({ id }) => id === tabId);
     if (!removedTab) return;
     const removedSectionIds = new Set(removedTab.sections);
-    try {
-      const nextTabs = tabs.filter(({ id }) => id !== tabId);
-      if (selectedTab?.id === tabId && nextTabs[0]) setSelectedTab(nextTabs[0]);
-      const tabsSaved = await saveTabs(nextTabs, { showSuccess: false });
-      if (!tabsSaved) return;
+    const nextTabs = tabs.filter(({ id }) => id !== tabId);
+    if (selectedTab?.id === tabId && nextTabs[0]) setSelectedTab(nextTabs[0]);
+    const tabsSaved = await saveTabs(nextTabs, { showSuccess: false });
+    if (!tabsSaved) return;
 
-      await Promise.all(
-        sections
-          .filter((section) => removedSectionIds.has(section.id))
-          .map(async (section) => {
-            const response = await request({
-              method: "DELETE",
-              url: Routes.profile_section_path(section.id),
-              accept: "json",
-            });
-            await assertResponseOk(response);
-          }),
-      );
-      setSections((currentSections) => currentSections.filter((section) => !removedSectionIds.has(section.id)));
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
+    setSections((currentSections) => currentSections.filter((section) => !removedSectionIds.has(section.id)));
+    showAlert("Changes saved!", "success");
   };
 
   const reorderPages = async (newOrder: string[]) => {
@@ -888,7 +717,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
   };
 
   const createSection = async (type: Section["type"]): Promise<Section> => {
-    const commonProps = { header: "New section", hide_header: false, product_id: props.product_id };
+    const commonProps = { header: "", hide_header: false, product_id: props.product_id };
 
     switch (type) {
       case "SellerProfileProductsSection": {
@@ -957,6 +786,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
         existing.id === tab.id ? { ...existing, sections: [...existing.sections, section.id] } : existing,
       );
       const nextSelectedTab = nextTabs.find((existing) => existing.id === tab.id);
+      setLastAddedSectionId(section.id);
       setSections((currentSections) => [...currentSections, section]);
       if (nextSelectedTab) setSelectedTab(nextSelectedTab);
       await saveTabs(nextTabs);
@@ -969,21 +799,14 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
   const removeSection = async (sectionId: string) => {
     if (disabled) return;
 
-    try {
-      const tabsSaved = await saveTabs(
-        tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })),
-        { showSuccess: false },
-      );
-      if (!tabsSaved) return;
+    const tabsSaved = await saveTabs(
+      tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })),
+      { showSuccess: false },
+    );
+    if (!tabsSaved) return;
 
-      const response = await request({ method: "DELETE", url: Routes.profile_section_path(sectionId), accept: "json" });
-      await assertResponseOk(response);
-      setSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
+    setSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
+    showAlert("Changes saved!", "success");
   };
 
   const reorderSections = async (newOrder: string[]) => {
@@ -1089,6 +912,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                   <PageRow
                     key={tab.id}
                     tab={tab}
+                    shouldFocusName={tab.id === lastAddedPageId}
                     updateName={(name) => updatePageName(tab.id, name)}
                     commitName={(name) => void commitPageName(tab.id, name)}
                     onDelete={() => setDeletionModalPageId(tab.id)}
@@ -1132,6 +956,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                       key={section.id}
                       section={section}
                       state={{ ...props, sections }}
+                      shouldFocusHeader={section.id === lastAddedSectionId}
                       updateSection={updateSection}
                       onDelete={() => setDeletionModalSectionId(section.id)}
                     />

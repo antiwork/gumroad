@@ -524,7 +524,7 @@ const RichTextSectionView = ({ section, controls = true }: { section: RichTextSe
     return () => window.removeEventListener("focusin", listener);
   }, []);
   const editor = useRichTextEditor({
-    initialValue,
+    initialValue: controls ? initialValue : section.text,
     placeholder: "Enter text here",
     editable: controls,
   });

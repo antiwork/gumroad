@@ -38,6 +38,7 @@ export type ProfileEditorProps = ProfileProps & SectionsProps;
 export type ProfileEditorState = Pick<ProfileEditorProps, "sections" | "tabs">;
 export type Props = ProfileEditorProps & {
   controls?: boolean;
+  selectedTabIndex?: number;
   onChange?: (state: ProfileEditorState) => void;
 };
 
@@ -112,9 +113,10 @@ TabList.displayName = "TabList";
 
 const tabsWithoutIds = (tabs: TabWithId[]) => tabs.map(({ id: _id, ...tab }) => tab);
 
-export const EditProfile = ({ controls = true, onChange, ...props }: Props) => {
+export const EditProfile = ({ controls = true, selectedTabIndex, onChange, ...props }: Props) => {
   const [sections, setSections] = React.useState(props.sections);
-  const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
+  const { tabs, setTabs, selectedTab: activeTab, setSelectedTab } = useTabs(props.tabs);
+  const selectedTab = selectedTabIndex != null ? (tabs[selectedTabIndex] ?? activeTab) : activeTab;
   const updateTab = (tab: TabWithId) => setTabs(tabs.map((existing) => (existing.id === tab.id ? tab : existing)));
   const [hasAddedTab, setHasAddedTab] = React.useState(false);
 
