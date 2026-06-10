@@ -1,7 +1,18 @@
 # frozen_string_literal: true
 
 class AudienceMember < ApplicationRecord
+  include AudienceMember::Searchable
+
   VALID_FILTER_TYPES = %w[customer follower affiliate].freeze
+  FILTER_PARAM_KEYS = %i[
+    type
+    bought_product_ids bought_variant_ids
+    not_bought_product_ids not_bought_variant_ids
+    paid_more_than_cents paid_less_than_cents
+    created_after created_before
+    bought_from
+    affiliate_product_ids
+  ].freeze
 
   belongs_to :seller, class_name: "User"
   after_initialize :assign_default_details_value
@@ -11,19 +22,18 @@ class AudienceMember < ApplicationRecord
   validate :details_json_has_valid_format
   before_save :assign_derived_columns
 
+  def self.normalize_filter_params(params)
+    params = params.slice(*FILTER_PARAM_KEYS).compact_blank
+    if params[:type] && !params[:type].in?(VALID_FILTER_TYPES)
+      raise ArgumentError, "Invalid type: #{params[:type]}. Must be one of: #{VALID_FILTER_TYPES.join(', ')}"
+    end
+    params
+  end
+
   def self.filter(seller_id:, params: {}, with_ids: false)
-    params = params.slice(
-      :type,
-      :bought_product_ids, :bought_variant_ids,
-      :not_bought_product_ids, :not_bought_variant_ids,
-      :paid_more_than_cents, :paid_less_than_cents,
-      :created_after, :created_before,
-      :bought_from,
-      :affiliate_product_ids
-    ).compact_blank
+    params = normalize_filter_params(params)
 
     if params[:type]
-      raise ArgumentError, "Invalid type: #{params[:type]}. Must be one of: #{VALID_FILTER_TYPES.join(', ')}" unless params[:type].in?(VALID_FILTER_TYPES)
       types_sql = where(:seller_id => seller_id, params[:type] => true).to_sql
     end
 
@@ -156,7 +166,10 @@ class AudienceMember < ApplicationRecord
       if params[:affiliate_product_ids]
         json_filter = json_filter.where("jt.affiliate_product_id IN (?)", params[:affiliate_product_ids])
       end
-      json_filter = json_filter.where("jt.purchase_country = ?", params[:bought_from]) if params[:bought_from]
+      # COLLATE makes this binary-exact like the JSON_CONTAINS country subquery above and the
+      # Elasticsearch term query in AudienceMember::Searchable; the connection's default
+      # case-insensitive collation would otherwise match country spellings the other two reject.
+      json_filter = json_filter.where("jt.purchase_country = ? COLLATE utf8mb4_bin", params[:bought_from]) if params[:bought_from]
       # Joining a JSON_TABLE yields a row for each matching element in the JSON array.
       # Our business logic says that if a user has multiple purchases or affiliates matching the filters,
       # we should only return the most recent one. This is why we use max() and group() below, when we need the ids.

@@ -72,7 +72,7 @@ class ElasticsearchSetup
     end
 
     # Ensure indices are ready: same settings, same mapping, zero documents
-    models = [Link, Balance, Purchase, Installment, ConfirmedFollowerEvent, ProductPageView]
+    models = [Link, Balance, Purchase, Installment, ConfirmedFollowerEvent, ProductPageView, AudienceMember]
     models.each do |model|
       model.index_name("#{model.name.parameterize}-test")
     end

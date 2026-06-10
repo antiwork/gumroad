@@ -850,7 +850,11 @@ class Installment < ApplicationRecord
   end
 
   def audience_members_count(limit = nil)
-    AudienceMember.filter(seller_id:, params: audience_members_filter_params).limit(limit).count
+    if Feature.active?(:audience_count_from_elasticsearch, seller)
+      AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
+    else
+      AudienceMember.filter(seller_id:, params: audience_members_filter_params).limit(limit).count
+    end
   end
 
   def self.receivable_by_customers_of_product(product:, variant_external_id:)

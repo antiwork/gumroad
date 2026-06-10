@@ -963,6 +963,23 @@ const b = 2;</code></pre>
       expect(@post.audience_members_count).to eq(2)
       expect(@post.audience_members_count(1)).to eq(1) # supports a limit, for extra performance
     end
+
+    context "when the audience_count_from_elasticsearch feature is active", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      before do
+        recreate_model_index(AudienceMember)
+        Feature.activate_user(:audience_count_from_elasticsearch, @post.seller)
+      end
+
+      it "counts audience members through Elasticsearch" do
+        expect(AudienceMember).to receive(:filter_count).exactly(3).times.and_call_original
+
+        expect(@post.audience_members_count).to eq(0)
+        create(:audience_member, seller: @post.seller, purchases: [{ "id" => 1 }])
+        create(:audience_member, seller: @post.seller, purchases: [{ "id" => 2 }])
+        expect(@post.audience_members_count).to eq(2)
+        expect(@post.audience_members_count(1)).to eq(1)
+      end
+    end
   end
 
   describe "#send_preview_email" do
