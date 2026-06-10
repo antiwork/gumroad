@@ -7,10 +7,12 @@ import typia from "typia";
 import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -44,6 +46,7 @@ export default function SettingsPage() {
     usePage().props,
   );
   const loggedInUser = useLoggedInUser();
+  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
@@ -95,6 +98,20 @@ export default function SettingsPage() {
       preserveScroll: true,
     });
   };
+
+  const profileColors = currentSeller
+    ? {
+        "--accent": hexToRgb(currentSeller.profileHighlightColor),
+        "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+      }
+    : {};
+
+  const fontUrl =
+    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
+      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
+      : null;
 
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
@@ -175,10 +192,7 @@ export default function SettingsPage() {
               </Fieldset>
             ) : null}
           </section>
-          <section className="grid gap-8 border-t border-border" aria-label="Profile section editor">
-            <header className="px-4 pt-4 md:px-8 md:pt-8">
-              <h2>Sections</h2>
-            </header>
+          <section aria-label="Profile section editor">
             <ProfileSectionsForm
               {...editableProfile}
               creator_profile={creatorProfile}
@@ -190,19 +204,47 @@ export default function SettingsPage() {
         </div>
         <PreviewSidebar
           previewLink={(props) => (
-            <Button asChild>
-              <a {...props} href={Routes.root_url({ host: creatorProfile.subdomain })} target="_blank" rel="noreferrer">
-                View profile
-              </a>
-            </Button>
+            <NavigationButton
+              {...props}
+              size="icon"
+              href={Routes.root_url({ host: creatorProfile.subdomain })}
+              target="_blank"
+              rel="noreferrer"
+            />
           )}
         >
           <Preview
-            scaleFactor={0.35}
+            scaleFactor={0.4}
             style={{
               border: "var(--border)",
+              borderRadius: "var(--border-radius-2)",
+              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+              ...profileColors,
+              "--primary": "var(--color)",
+              "--body-bg": "rgb(var(--filled))",
+              "--contrast-primary": "var(--filled)",
+              "--contrast-filled": "var(--color)",
+              "--color-body": "var(--body-bg)",
+              "--color-background": "rgb(var(--filled))",
+              "--color-foreground": "rgb(var(--color))",
+              "--color-border": "rgb(var(--color) / var(--border-alpha))",
+              "--color-accent": "rgb(var(--accent))",
+              "--color-accent-foreground": "rgb(var(--contrast-accent))",
+              "--color-primary": "rgb(var(--primary))",
+              "--color-primary-foreground": "rgb(var(--contrast-primary))",
+              "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+              "--color-muted": "rgb(var(--color) / var(--gray-3))",
+              backgroundColor: "rgb(var(--filled))",
+              color: "rgb(var(--color))",
             }}
           >
+            {fontUrl ? (
+              <>
+                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                <link rel="stylesheet" href={fontUrl} />
+              </>
+            ) : null}
             <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
               <EditProfile
                 {...editableProfile}

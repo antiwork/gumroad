@@ -1,8 +1,14 @@
 import {
-  ArrowDown,
-  ArrowUp,
+  Bell,
   Bold,
+  Box,
+  ChevronDown,
+  ChevronUp,
   Copy,
+  Envelope,
+  File,
+  FileDetail,
+  Grid,
   Italic,
   Minus,
   Plus,
@@ -26,19 +32,27 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { SORT_BY_LABELS } from "$app/components/Product/CardGrid";
-import { useTabs } from "$app/components/Profile";
+import { TabWithId, useTabs } from "$app/components/Profile";
 import type { ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { Section, useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
-import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { Placeholder } from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Select } from "$app/components/ui/Select";
+import { Switch } from "$app/components/ui/Switch";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 type ProfileSectionsFormState = ProfileEditorState & { selectedTabIndex: number };
 
@@ -56,13 +70,22 @@ const SECTION_TYPE_LABELS: Record<Section["type"], string> = {
   SellerProfileWishlistsSection: "Wishlists",
 };
 
-const SECTION_TYPE_OPTIONS: { id: Section["type"]; label: string }[] = [
-  { id: "SellerProfileProductsSection", label: SECTION_TYPE_LABELS.SellerProfileProductsSection },
-  { id: "SellerProfilePostsSection", label: SECTION_TYPE_LABELS.SellerProfilePostsSection },
-  { id: "SellerProfileFeaturedProductSection", label: SECTION_TYPE_LABELS.SellerProfileFeaturedProductSection },
-  { id: "SellerProfileRichTextSection", label: SECTION_TYPE_LABELS.SellerProfileRichTextSection },
-  { id: "SellerProfileSubscribeSection", label: SECTION_TYPE_LABELS.SellerProfileSubscribeSection },
-  { id: "SellerProfileWishlistsSection", label: SECTION_TYPE_LABELS.SellerProfileWishlistsSection },
+const SECTION_TYPE_ICONS: Record<Section["type"], React.ReactNode> = {
+  SellerProfileProductsSection: <Grid className="size-5" />,
+  SellerProfilePostsSection: <Envelope pack="filled" className="size-5" />,
+  SellerProfileFeaturedProductSection: <Box className="size-5" />,
+  SellerProfileRichTextSection: <FileDetail className="size-5" />,
+  SellerProfileSubscribeSection: <Bell pack="filled" className="size-5" />,
+  SellerProfileWishlistsSection: <FileDetail pack="filled" className="size-5" />,
+};
+
+const SECTION_TYPES: Section["type"][] = [
+  "SellerProfileProductsSection",
+  "SellerProfilePostsSection",
+  "SellerProfileFeaturedProductSection",
+  "SellerProfileRichTextSection",
+  "SellerProfileSubscribeSection",
+  "SellerProfileWishlistsSection",
 ];
 
 const RICH_TEXT_FORMAT_OPTIONS = [
@@ -82,19 +105,14 @@ const tabsWithoutIds = (tabs: ReturnType<typeof useTabs>["tabs"]) => tabs.map(({
 const parseRichTextFormat = (value: string) =>
   RICH_TEXT_FORMAT_OPTIONS.find((option) => option.id === value)?.id ?? null;
 
-const parseSectionType = (value: string) => SECTION_TYPE_OPTIONS.find((option) => option.id === value)?.id ?? null;
-
 const parseProfileSortKey = (value: string): ProfileSortKey | null =>
   PROFILE_SORT_KEYS.find((key) => key === value) ?? null;
 
-const moveItem = <T,>(items: T[], index: number, direction: -1 | 1) => {
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return items;
-  const updated = [...items];
-  const [item] = updated.splice(index, 1);
-  if (item) updated.splice(nextIndex, 0, item);
-  return updated;
-};
+const optionOrder = (ids: string[], shownIds: string[]) =>
+  sortBy(ids, (id) => {
+    const index = shownIds.indexOf(id);
+    return index < 0 ? Infinity : index;
+  });
 
 const responseErrorMessage = async (response: Response) => {
   try {
@@ -111,80 +129,65 @@ const assertResponseOk = async (response: Response) => {
   if (!response.ok) throw new ResponseError(await responseErrorMessage(response));
 };
 
-const SectionActions = ({
-  index,
-  count,
-  onMove,
-  onRemove,
-  onCopyLink,
-}: {
-  index: number;
-  count: number;
-  onMove: (direction: -1 | 1) => void;
-  onRemove: () => void;
-  onCopyLink: () => void;
-}) => (
-  <div className="flex flex-wrap gap-2">
-    <Button size="sm" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Move section up">
-      <ArrowUp className="size-4" />
-      Move up
+const SortablePageRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
+  <Rows ref={ref} role="list" aria-label="Pages">
+    {children}
+  </Rows>
+));
+SortablePageRows.displayName = "SortablePageRows";
+
+const SortableSectionRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
+  <Rows ref={ref} role="list" aria-label="Sections">
+    {children}
+  </Rows>
+));
+SortableSectionRows.displayName = "SortableSectionRows";
+
+const SortableProductRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
+  <Rows ref={ref} role="list" aria-label="Products">
+    {children}
+  </Rows>
+));
+SortableProductRows.displayName = "SortableProductRows";
+
+const SortableWishlistRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
+  <Rows ref={ref} role="list" aria-label="Wishlists">
+    {children}
+  </Rows>
+));
+SortableWishlistRows.displayName = "SortableWishlistRows";
+
+const DrawerToggle = ({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) => (
+  <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
+    <Button size="icon" onClick={onToggle}>
+      {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
     </Button>
-    <Button size="sm" onClick={() => onMove(1)} disabled={index === count - 1} aria-label="Move section down">
-      <ArrowDown className="size-4" />
-      Move down
-    </Button>
-    <Button size="sm" onClick={onCopyLink}>
-      <Copy className="size-4" />
-      Copy link
-    </Button>
-    <Button size="sm" color="danger" onClick={onRemove}>
-      <Trash className="size-4" />
-      Remove
-    </Button>
-  </div>
+  </WithTooltip>
 );
 
-const OptionCheckboxRow = ({
+const OptionRow = ({
   name,
   checked,
-  canMove,
-  isFirst,
-  isLast,
+  draggable = false,
   onToggle,
-  onMove,
 }: {
   name: string;
   checked: boolean;
-  canMove?: boolean;
-  isFirst?: boolean;
-  isLast?: boolean;
+  draggable?: boolean;
   onToggle: () => void;
-  onMove?: (direction: -1 | 1) => void;
-}) => {
-  const checkboxId = React.useId();
-  return (
-    <Row role="listitem">
-      <RowContent asChild>
-        <Label htmlFor={checkboxId}>
-          <Checkbox id={checkboxId} checked={checked} onChange={onToggle} />
-          <span className="truncate">{name}</span>
-        </Label>
+}) => (
+  <Row asChild>
+    <Label role="listitem">
+      <RowContent>
+        {draggable ? <ReorderingHandle /> : null}
+        <span className="truncate">{name}</span>
       </RowContent>
-      {canMove && checked && onMove ? (
-        <RowActions>
-          <Button size="sm" onClick={() => onMove(-1)} disabled={isFirst} aria-label={`Move ${name} up`}>
-            <ArrowUp className="size-4" />
-            Move up
-          </Button>
-          <Button size="sm" onClick={() => onMove(1)} disabled={isLast} aria-label={`Move ${name} down`}>
-            <ArrowDown className="size-4" />
-            Move down
-          </Button>
-        </RowActions>
-      ) : null}
-    </Row>
-  );
-};
+      <RowActions>
+        <Checkbox checked={checked} onChange={onToggle} />
+      </RowActions>
+    </Label>
+  </Row>
+);
 
 const useSaveSection = (initialSection: Section) => {
   const [savedSection, setSavedSection] = React.useState(initialSection);
@@ -209,25 +212,69 @@ const useSaveSection = (initialSection: Section) => {
   };
 };
 
-const SectionForm = ({
+const PageRow = ({
+  tab,
+  updateName,
+  commitName,
+  onDelete,
+}: {
+  tab: TabWithId;
+  updateName: (name: string) => void;
+  commitName: (name: string) => void;
+  onDelete: () => void;
+}) => {
+  const uid = React.useId();
+  const [isOpen, setIsOpen] = React.useState(true);
+
+  return (
+    <Row role="listitem">
+      <RowContent>
+        <ReorderingHandle />
+        <File className="size-5" />
+        <h3>{tab.name || "Untitled"}</h3>
+      </RowContent>
+      <RowActions>
+        <DrawerToggle isOpen={isOpen} onToggle={() => setIsOpen((prevIsOpen) => !prevIsOpen)} />
+        <WithTooltip tip="Remove">
+          <Button size="icon" onClick={onDelete} aria-label="Remove page">
+            <Trash className="size-5" />
+          </Button>
+        </WithTooltip>
+      </RowActions>
+      {isOpen ? (
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>Page name</Label>
+              <Input
+                id={`${uid}-name`}
+                type="text"
+                value={tab.name}
+                onChange={(evt) => updateName(evt.target.value)}
+                onBlur={(evt) => commitName(evt.target.value)}
+              />
+            </Fieldset>
+          </Drawer>
+        </RowDetails>
+      ) : null}
+    </Row>
+  );
+};
+
+const SectionRow = ({
   section,
-  index,
-  count,
   state,
   updateSection,
-  moveSection,
-  removeSection,
+  onDelete,
 }: {
   section: Section;
-  index: number;
-  count: number;
   state: ProfileEditorProps;
   updateSection: (section: Section) => void;
-  moveSection: (sectionId: string, direction: -1 | 1) => void;
-  removeSection: (sectionId: string) => void;
+  onDelete: () => void;
 }) => {
   const saveSection = useSaveSection(section);
   const uid = React.useId();
+  const [isOpen, setIsOpen] = React.useState(true);
   const sectionTitle = section.header || SECTION_TYPE_LABELS[section.type];
   const commit = (updated: Section) => {
     updateSection(updated);
@@ -246,55 +293,60 @@ const SectionForm = ({
   };
 
   return (
-    <section className="grid gap-6 border-t border-border py-6" aria-label={`${sectionTitle} section settings`}>
-      <header className="grid gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3>{sectionTitle}</h3>
-            <div className="text-muted">{SECTION_TYPE_LABELS[section.type]}</div>
-          </div>
-          <SectionActions
-            index={index}
-            count={count}
-            onMove={(direction) => moveSection(section.id, direction)}
-            onRemove={() => removeSection(section.id)}
-            onCopyLink={copyLink}
-          />
-        </div>
-        <Fieldset>
-          <FieldsetTitle>
-            <Label htmlFor={`${uid}-header`}>Section name</Label>
-          </FieldsetTitle>
-          <Input
-            id={`${uid}-header`}
-            value={section.header}
-            onChange={(evt) => update({ ...section, header: evt.target.value })}
-            onBlur={(evt) => commit({ ...section, header: evt.target.value })}
-          />
-        </Fieldset>
-        <Label className="inline-flex items-center gap-2">
-          <Checkbox
-            checked={!section.hide_header}
-            onChange={() => commit({ ...section, hide_header: !section.hide_header })}
-          />
-          Show section name
-        </Label>
-      </header>
-
-      {section.type === "SellerProfileProductsSection" ? (
-        <ProductsSectionFields section={section} state={state} commit={commit} />
-      ) : section.type === "SellerProfilePostsSection" ? (
-        <PostsSectionFields section={section} state={state} commit={commit} />
-      ) : section.type === "SellerProfileRichTextSection" ? (
-        <RichTextSectionFields section={section} commit={commit} />
-      ) : section.type === "SellerProfileSubscribeSection" ? (
-        <SubscribeSectionFields section={section} update={update} commit={commit} />
-      ) : section.type === "SellerProfileFeaturedProductSection" ? (
-        <FeaturedProductSectionFields section={section} state={state} commit={commit} />
-      ) : (
-        <WishlistsSectionFields section={section} state={state} commit={commit} />
-      )}
-    </section>
+    <Row role="listitem" aria-label={`${sectionTitle} section settings`}>
+      <RowContent>
+        <ReorderingHandle />
+        {SECTION_TYPE_ICONS[section.type]}
+        <h3>{sectionTitle}</h3>
+      </RowContent>
+      <RowActions>
+        <WithTooltip tip="Copy link">
+          <Button size="icon" onClick={copyLink} aria-label="Copy link">
+            <Copy className="size-5" />
+          </Button>
+        </WithTooltip>
+        <DrawerToggle isOpen={isOpen} onToggle={() => setIsOpen((prevIsOpen) => !prevIsOpen)} />
+        <WithTooltip tip="Remove">
+          <Button size="icon" onClick={onDelete} aria-label="Remove section">
+            <Trash className="size-5" />
+          </Button>
+        </WithTooltip>
+      </RowActions>
+      {isOpen ? (
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
+            <Fieldset>
+              <Label htmlFor={`${uid}-header`}>Section name</Label>
+              <Input
+                id={`${uid}-header`}
+                type="text"
+                value={section.header}
+                onChange={(evt) => update({ ...section, header: evt.target.value })}
+                onBlur={(evt) => commit({ ...section, header: evt.target.value })}
+              />
+            </Fieldset>
+            <Switch
+              checked={!section.hide_header}
+              onChange={() => commit({ ...section, hide_header: !section.hide_header })}
+              label="Show section name"
+            />
+            {section.type === "SellerProfileProductsSection" ? (
+              <ProductsSectionFields section={section} state={state} commit={commit} />
+            ) : section.type === "SellerProfilePostsSection" ? (
+              <PostsSectionFields section={section} state={state} commit={commit} />
+            ) : section.type === "SellerProfileRichTextSection" ? (
+              <RichTextSectionFields section={section} commit={commit} />
+            ) : section.type === "SellerProfileSubscribeSection" ? (
+              <SubscribeSectionFields section={section} update={update} commit={commit} />
+            ) : section.type === "SellerProfileFeaturedProductSection" ? (
+              <FeaturedProductSectionFields section={section} state={state} commit={commit} />
+            ) : (
+              <WishlistsSectionFields section={section} state={state} commit={commit} />
+            )}
+          </Drawer>
+        </RowDetails>
+      ) : null}
+    </Row>
   );
 };
 
@@ -307,31 +359,35 @@ const ProductsSectionFields = ({
   state: ProfileEditorProps;
   commit: (section: Section) => void;
 }) => {
-  const orderedProducts = sortBy(state.products, (product) => {
-    const index = section.shown_products.indexOf(product.id);
-    return index < 0 ? Infinity : index;
-  });
-  const selectedProducts = orderedProducts.filter((product) => section.shown_products.includes(product.id));
+  const uid = React.useId();
+  const [orderedProductIds, setOrderedProductIds] = React.useState(() =>
+    optionOrder(
+      state.products.map(({ id }) => id),
+      section.shown_products,
+    ),
+  );
+  const orderedProducts = orderedProductIds.flatMap((id) => state.products.find((product) => product.id === id) ?? []);
+  const canReorder = section.default_product_sort === "page_layout";
+
   const toggleProduct = (id: string) =>
     commit({
       ...section,
       shown_products: section.shown_products.includes(id)
         ? section.shown_products.filter((productId) => productId !== id)
-        : [...section.shown_products, id],
+        : orderedProductIds.filter((productId) => productId === id || section.shown_products.includes(productId)),
     });
-  const moveProduct = (id: string, direction: -1 | 1) => {
-    const index = section.shown_products.indexOf(id);
-    commit({ ...section, shown_products: moveItem(section.shown_products, index, direction) });
+
+  const reorderProducts = (newOrder: string[]) => {
+    setOrderedProductIds(newOrder);
+    commit({ ...section, shown_products: sortBy(section.shown_products, (id) => newOrder.indexOf(id)) });
   };
 
   return (
-    <div className="grid gap-4">
+    <>
       <Fieldset>
-        <FieldsetTitle>
-          <Label htmlFor={`${section.id}-default-sort`}>Default sort order</Label>
-        </FieldsetTitle>
+        <Label htmlFor={`${uid}-default-sort`}>Default sort order</Label>
         <Select
-          id={`${section.id}-default-sort`}
+          id={`${uid}-default-sort`}
           value={section.default_product_sort}
           onChange={(evt) => {
             const default_product_sort = parseProfileSortKey(evt.target.value);
@@ -345,45 +401,35 @@ const ProductsSectionFields = ({
           ))}
         </Select>
       </Fieldset>
-      <Label className="inline-flex items-center gap-2">
-        <Checkbox
-          checked={section.show_filters}
-          onChange={() => commit({ ...section, show_filters: !section.show_filters })}
-        />
-        Show product filters
-      </Label>
-      <Label className="inline-flex items-center gap-2">
-        <Checkbox
-          checked={section.add_new_products}
-          onChange={() => commit({ ...section, add_new_products: !section.add_new_products })}
-        />
-        Add new products by default
-      </Label>
+      <Switch
+        checked={section.show_filters}
+        onChange={() => commit({ ...section, show_filters: !section.show_filters })}
+        label="Show product filters"
+      />
+      <Switch
+        checked={section.add_new_products}
+        onChange={() => commit({ ...section, add_new_products: !section.add_new_products })}
+        label="Add new products by default"
+      />
       <Fieldset>
         <FieldsetTitle>Products</FieldsetTitle>
         {orderedProducts.length ? (
-          <Rows role="list" aria-label="Products">
-            {orderedProducts.map((product) => {
-              const selectedIndex = selectedProducts.findIndex((selected) => selected.id === product.id);
-              return (
-                <OptionCheckboxRow
-                  key={product.id}
-                  name={product.name}
-                  checked={section.shown_products.includes(product.id)}
-                  canMove={section.default_product_sort === "page_layout"}
-                  isFirst={selectedIndex === 0}
-                  isLast={selectedIndex === selectedProducts.length - 1}
-                  onToggle={() => toggleProduct(product.id)}
-                  onMove={(direction) => moveProduct(product.id, direction)}
-                />
-              );
-            })}
-          </Rows>
+          <SortableList currentOrder={orderedProductIds} onReorder={reorderProducts} tag={SortableProductRows}>
+            {orderedProducts.map((product) => (
+              <OptionRow
+                key={product.id}
+                name={product.name}
+                checked={section.shown_products.includes(product.id)}
+                draggable={canReorder}
+                onToggle={() => toggleProduct(product.id)}
+              />
+            ))}
+          </SortableList>
         ) : (
           <p>No products available.</p>
         )}
       </Fieldset>
-    </div>
+    </>
   );
 };
 
@@ -410,7 +456,7 @@ const PostsSectionFields = ({
       {state.posts.length ? (
         <Rows role="list" aria-label="Posts">
           {state.posts.map((post) => (
-            <OptionCheckboxRow
+            <OptionRow
               key={post.id}
               name={post.name}
               checked={section.shown_posts.includes(post.id)}
@@ -535,9 +581,7 @@ const RichTextControls = ({
   return (
     <div className="grid gap-3 rounded border border-border bg-background p-3">
       <Fieldset>
-        <FieldsetTitle>
-          <Label htmlFor={`${imageInputId}-format`}>Text format</Label>
-        </FieldsetTitle>
+        <Label htmlFor={`${imageInputId}-format`}>Text format</Label>
         <Select
           id={`${imageInputId}-format`}
           value={activeFormat}
@@ -604,9 +648,7 @@ const RichTextControls = ({
         </Button>
       </div>
       <Fieldset>
-        <FieldsetTitle>
-          <Label htmlFor={imageInputId}>Images</Label>
-        </FieldsetTitle>
+        <Label htmlFor={imageInputId}>Images</Label>
         <Input
           id={imageInputId}
           type="file"
@@ -632,11 +674,10 @@ const SubscribeSectionFields = ({
   commit: (section: Section) => void;
 }) => (
   <Fieldset>
-    <FieldsetTitle>
-      <Label htmlFor={`${section.id}-button-label`}>Button label</Label>
-    </FieldsetTitle>
+    <Label htmlFor={`${section.id}-button-label`}>Button label</Label>
     <Input
       id={`${section.id}-button-label`}
+      type="text"
       value={section.button_label}
       onChange={(evt) => update({ ...section, button_label: evt.target.value })}
       onBlur={(evt) => commit({ ...section, button_label: evt.target.value })}
@@ -654,9 +695,7 @@ const FeaturedProductSectionFields = ({
   commit: (section: Section) => void;
 }) => (
   <Fieldset>
-    <FieldsetTitle>
-      <Label htmlFor={`${section.id}-featured-product`}>Featured product</Label>
-    </FieldsetTitle>
+    <Label htmlFor={`${section.id}-featured-product`}>Featured product</Label>
     <Select
       id={`${section.id}-featured-product`}
       value={section.featured_product_id ?? ""}
@@ -681,44 +720,44 @@ const WishlistsSectionFields = ({
   state: ProfileEditorProps;
   commit: (section: Section) => void;
 }) => {
-  const orderedWishlists = sortBy(state.wishlist_options, (wishlist) => {
-    const index = section.shown_wishlists.indexOf(wishlist.id);
-    return index < 0 ? Infinity : index;
-  });
-  const selectedWishlists = orderedWishlists.filter((wishlist) => section.shown_wishlists.includes(wishlist.id));
+  const [orderedWishlistIds, setOrderedWishlistIds] = React.useState(() =>
+    optionOrder(
+      state.wishlist_options.map(({ id }) => id),
+      section.shown_wishlists,
+    ),
+  );
+  const orderedWishlists = orderedWishlistIds.flatMap(
+    (id) => state.wishlist_options.find((wishlist) => wishlist.id === id) ?? [],
+  );
+
   const toggleWishlist = (id: string) =>
     commit({
       ...section,
       shown_wishlists: section.shown_wishlists.includes(id)
         ? section.shown_wishlists.filter((wishlistId) => wishlistId !== id)
-        : [...section.shown_wishlists, id],
+        : orderedWishlistIds.filter((wishlistId) => wishlistId === id || section.shown_wishlists.includes(wishlistId)),
     });
-  const moveWishlist = (id: string, direction: -1 | 1) => {
-    const index = section.shown_wishlists.indexOf(id);
-    commit({ ...section, shown_wishlists: moveItem(section.shown_wishlists, index, direction) });
+
+  const reorderWishlists = (newOrder: string[]) => {
+    setOrderedWishlistIds(newOrder);
+    commit({ ...section, shown_wishlists: sortBy(section.shown_wishlists, (id) => newOrder.indexOf(id)) });
   };
 
   return (
     <Fieldset>
       <FieldsetTitle>Wishlists</FieldsetTitle>
       {orderedWishlists.length ? (
-        <Rows role="list" aria-label="Wishlists">
-          {orderedWishlists.map((wishlist) => {
-            const selectedIndex = selectedWishlists.findIndex((selected) => selected.id === wishlist.id);
-            return (
-              <OptionCheckboxRow
-                key={wishlist.id}
-                name={wishlist.name}
-                checked={section.shown_wishlists.includes(wishlist.id)}
-                canMove
-                isFirst={selectedIndex === 0}
-                isLast={selectedIndex === selectedWishlists.length - 1}
-                onToggle={() => toggleWishlist(wishlist.id)}
-                onMove={(direction) => moveWishlist(wishlist.id, direction)}
-              />
-            );
-          })}
-        </Rows>
+        <SortableList currentOrder={orderedWishlistIds} onReorder={reorderWishlists} tag={SortableWishlistRows}>
+          {orderedWishlists.map((wishlist) => (
+            <OptionRow
+              key={wishlist.id}
+              name={wishlist.name}
+              checked={section.shown_wishlists.includes(wishlist.id)}
+              draggable
+              onToggle={() => toggleWishlist(wishlist.id)}
+            />
+          ))}
+        </SortableList>
       ) : (
         <p>No wishlists available.</p>
       )}
@@ -729,8 +768,10 @@ const WishlistsSectionFields = ({
 export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: ProfileSectionsFormProps) => {
   const [sections, setSections] = React.useState(props.sections);
   const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
-  const [newSectionType, setNewSectionType] = React.useState<Section["type"]>("SellerProfileProductsSection");
   const savedTabs = React.useRef(tabs);
+  const [deletionModalPageId, setDeletionModalPageId] = React.useState<string | null>(null);
+  const [deletionModalSectionId, setDeletionModalSectionId] = React.useState<string | null>(null);
+  const [addSectionMenuOpen, setAddSectionMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
     setSections((currentSections) => (isEqual(currentSections, props.sections) ? currentSections : props.sections));
@@ -742,6 +783,12 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
   );
   const visibleSectionIds = selectedTab?.sections ?? [];
   const visibleSections = visibleSectionIds.flatMap((id) => sections.find((section) => section.id === id) ?? []);
+
+  const deletionModalPage = tabs.find(({ id }) => id === deletionModalPageId);
+  const deletionModalSection = sections.find(({ id }) => id === deletionModalSectionId);
+  const deletionModalSectionTitle = deletionModalSection
+    ? deletionModalSection.header || SECTION_TYPE_LABELS[deletionModalSection.type]
+    : "";
 
   React.useEffect(
     () => onChange?.({ sections, tabs: tabsWithoutIds(tabs), selectedTabIndex }),
@@ -782,22 +829,24 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     await saveTabs(nextTabs);
   };
 
-  const updatePageName = (name: string) => {
-    if (disabled || !selectedTab) return;
-    setTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, name } : tab)));
+  const updatePageName = (tabId: string, name: string) => {
+    if (disabled) return;
+    setTabs(tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)));
   };
 
-  const commitPageName = async (name: string) => {
-    if (disabled || !selectedTab) return;
-    await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, name } : tab)));
+  const commitPageName = async (tabId: string, name: string) => {
+    if (disabled) return;
+    await saveTabs(tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)));
   };
 
-  const removePage = async () => {
-    if (disabled || !selectedTab) return;
-    const removedSectionIds = new Set(selectedTab.sections);
+  const removePage = async (tabId: string) => {
+    if (disabled) return;
+    const removedTab = tabs.find(({ id }) => id === tabId);
+    if (!removedTab) return;
+    const removedSectionIds = new Set(removedTab.sections);
     try {
-      const nextTabs = tabs.filter((tab) => tab.id !== selectedTab.id);
-      if (nextTabs[0]) setSelectedTab(nextTabs[0]);
+      const nextTabs = tabs.filter(({ id }) => id !== tabId);
+      if (selectedTab?.id === tabId && nextTabs[0]) setSelectedTab(nextTabs[0]);
       const tabsSaved = await saveTabs(nextTabs, { showSuccess: false });
       if (!tabsSaved) return;
 
@@ -821,14 +870,9 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     }
   };
 
-  const movePage = async (direction: -1 | 1) => {
+  const reorderPages = async (newOrder: string[]) => {
     if (disabled) return;
-
-    const index = selectedTabIndex;
-    const nextTabs = moveItem(tabs, index, direction);
-    const nextSelectedTab = nextTabs[index + direction];
-    if (nextSelectedTab) setSelectedTab(nextSelectedTab);
-    await saveTabs(nextTabs);
+    await saveTabs(newOrder.flatMap((id) => tabs.find((tab) => tab.id === id) ?? []));
   };
 
   const createSectionRecord = async (section: Omit<Section, "id">) => {
@@ -902,13 +946,13 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     }
   };
 
-  const addSection = async () => {
+  const addSection = async (type: Section["type"]) => {
     if (disabled) return;
 
     try {
       const tab = selectedTab ?? { id: GuidGenerator.generate(), name: "New page", sections: [] };
       const baseTabs = selectedTab ? tabs : [tab];
-      const section = await createSection(newSectionType);
+      const section = await createSection(type);
       const nextTabs = baseTabs.map((existing) =>
         existing.id === tab.id ? { ...existing, sections: [...existing.sections, section.id] } : existing,
       );
@@ -942,121 +986,163 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     }
   };
 
-  const moveSection = async (sectionId: string, direction: -1 | 1) => {
+  const reorderSections = async (newOrder: string[]) => {
     if (disabled || !selectedTab) return;
-    const sectionIndex = selectedTab.sections.indexOf(sectionId);
-    const updatedTab = { ...selectedTab, sections: moveItem(selectedTab.sections, sectionIndex, direction) };
-    await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? updatedTab : tab)));
+    await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, sections: newOrder } : tab)));
   };
 
-  return (
-    <div className="grid gap-8 px-4 pb-8 md:px-8">
-      <Fieldset disabled={disabled}>
-        <FieldsetTitle>Pages</FieldsetTitle>
-        <div className="grid gap-4">
-          {tabs.length ? (
-            <>
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor="profile-page">Current page</Label>
-                </FieldsetTitle>
-                <Select
-                  id="profile-page"
-                  value={selectedTab?.id ?? ""}
-                  onChange={(evt) => {
-                    const tab = tabs.find(({ id }) => id === evt.target.value);
-                    if (tab) setSelectedTab(tab);
-                  }}
-                >
-                  {tabs.map((tab, index) => (
-                    <option key={tab.id} value={tab.id}>
-                      {tab.name || `Page ${index + 1}`}
-                    </option>
-                  ))}
-                </Select>
-              </Fieldset>
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor="profile-page-name">Page name</Label>
-                </FieldsetTitle>
-                <Input
-                  id="profile-page-name"
-                  value={selectedTab?.name ?? ""}
-                  onChange={(evt) => updatePageName(evt.target.value)}
-                  onBlur={(evt) => void commitPageName(evt.target.value)}
-                />
-              </Fieldset>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => void movePage(-1)} disabled={selectedTabIndex === 0}>
-                  <ArrowUp className="size-4" />
-                  Move page up
-                </Button>
-                <Button size="sm" onClick={() => void movePage(1)} disabled={selectedTabIndex === tabs.length - 1}>
-                  <ArrowDown className="size-4" />
-                  Move page down
-                </Button>
-                <Button size="sm" color="danger" onClick={() => void removePage()}>
-                  <Trash className="size-4" />
-                  Remove page
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p>No pages yet.</p>
-          )}
-          <Button onClick={() => void addPage()}>
-            <Plus className="size-5" />
-            Add page
-          </Button>
-        </div>
-      </Fieldset>
+  const addPageButton = (
+    <Button color="primary" onClick={() => void addPage()}>
+      <Plus className="size-5" />
+      Add page
+    </Button>
+  );
 
-      <Fieldset disabled={disabled}>
-        <FieldsetTitle>Sections</FieldsetTitle>
-        <div className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor="new-profile-section-type">Section type</Label>
-              </FieldsetTitle>
-              <Select
-                id="new-profile-section-type"
-                value={newSectionType}
-                onChange={(evt) => {
-                  const sectionType = parseSectionType(evt.target.value);
-                  if (sectionType) setNewSectionType(sectionType);
+  const addSectionButton = (
+    <Popover open={addSectionMenuOpen} onOpenChange={setAddSectionMenuOpen}>
+      <PopoverTrigger asChild>
+        <Button color="primary">
+          <Plus className="size-5" />
+          Add section
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="border-0 p-0 shadow-none">
+        <Menu onClick={() => setAddSectionMenuOpen(false)}>
+          {SECTION_TYPES.map((type) => (
+            <MenuItem key={type} onClick={() => void addSection(type)}>
+              {SECTION_TYPE_ICONS[type]}
+              {SECTION_TYPE_LABELS[type]}
+            </MenuItem>
+          ))}
+        </Menu>
+      </PopoverContent>
+    </Popover>
+  );
+
+  return (
+    <>
+      {deletionModalPage ? (
+        <Modal
+          open
+          onClose={() => setDeletionModalPageId(null)}
+          title={`Remove ${deletionModalPage.name || "Untitled"}?`}
+          footer={
+            <>
+              <Button onClick={() => setDeletionModalPageId(null)}>No, cancel</Button>
+              <Button
+                color="accent"
+                onClick={() => {
+                  setDeletionModalPageId(null);
+                  void removePage(deletionModalPage.id);
                 }}
               >
-                {SECTION_TYPE_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Fieldset>
-            <Button className="self-end" onClick={() => void addSection()}>
-              <Plus className="size-5" />
-              Add section
-            </Button>
-          </div>
-          {visibleSections.length ? (
-            visibleSections.map((section, index) => (
-              <SectionForm
-                key={section.id}
-                section={section}
-                index={index}
-                count={visibleSections.length}
-                state={{ ...props, sections }}
-                updateSection={updateSection}
-                moveSection={(sectionId, direction) => void moveSection(sectionId, direction)}
-                removeSection={(sectionId) => void removeSection(sectionId)}
-              />
-            ))
+                Yes, remove
+              </Button>
+            </>
+          }
+        >
+          If you remove this page, all of its sections will be deleted as well. This action cannot be undone.
+        </Modal>
+      ) : null}
+      {deletionModalSection ? (
+        <Modal
+          open
+          onClose={() => setDeletionModalSectionId(null)}
+          title={`Remove ${deletionModalSectionTitle}?`}
+          footer={
+            <>
+              <Button onClick={() => setDeletionModalSectionId(null)}>No, cancel</Button>
+              <Button
+                color="accent"
+                onClick={() => {
+                  setDeletionModalSectionId(null);
+                  void removeSection(deletionModalSection.id);
+                }}
+              >
+                Yes, remove
+              </Button>
+            </>
+          }
+        >
+          This will permanently delete the section and its settings. Your products, posts, and wishlists themselves
+          won't be affected.
+        </Modal>
+      ) : null}
+
+      <section className="grid gap-8 border-t border-border p-4! md:p-8!">
+        <h2>Pages</h2>
+        <Fieldset disabled={disabled}>
+          {tabs.length === 0 ? (
+            <Placeholder>
+              <h2>Build your profile</h2>
+              Add pages to organize your products, posts, and more.
+              {addPageButton}
+            </Placeholder>
           ) : (
-            <p>This page has no sections yet.</p>
+            <div className="grid gap-8">
+              <SortableList
+                currentOrder={tabs.map(({ id }) => id)}
+                onReorder={(newOrder) => void reorderPages(newOrder)}
+                tag={SortablePageRows}
+              >
+                {tabs.map((tab) => (
+                  <PageRow
+                    key={tab.id}
+                    tab={tab}
+                    updateName={(name) => updatePageName(tab.id, name)}
+                    commitName={(name) => void commitPageName(tab.id, name)}
+                    onDelete={() => setDeletionModalPageId(tab.id)}
+                  />
+                ))}
+              </SortableList>
+              {addPageButton}
+            </div>
           )}
-        </div>
-      </Fieldset>
-    </div>
+        </Fieldset>
+      </section>
+
+      <section className="grid gap-8 border-t border-border p-4! md:p-8!">
+        <h2>Sections</h2>
+        <Fieldset disabled={disabled}>
+          <div className="grid gap-8">
+            {tabs.length > 1 ? (
+              <Tabs aria-label="Pages">
+                {tabs.map((tab, index) => (
+                  <Tab key={tab.id} isSelected={tab.id === selectedTab?.id} onClick={() => setSelectedTab(tab)}>
+                    {tab.name || `Page ${index + 1}`}
+                  </Tab>
+                ))}
+              </Tabs>
+            ) : null}
+            {visibleSections.length === 0 ? (
+              <Placeholder>
+                <h2>Build your page</h2>
+                Add sections to showcase your products, posts, and more.
+                {addSectionButton}
+              </Placeholder>
+            ) : (
+              <>
+                <SortableList
+                  currentOrder={visibleSections.map(({ id }) => id)}
+                  onReorder={(newOrder) => void reorderSections(newOrder)}
+                  tag={SortableSectionRows}
+                >
+                  {visibleSections.map((section) => (
+                    <SectionRow
+                      key={section.id}
+                      section={section}
+                      state={{ ...props, sections }}
+                      updateSection={updateSection}
+                      onDelete={() => setDeletionModalSectionId(section.id)}
+                    />
+                  ))}
+                </SortableList>
+                {addSectionButton}
+              </>
+            )}
+          </div>
+        </Fieldset>
+      </section>
+    </>
   );
 };

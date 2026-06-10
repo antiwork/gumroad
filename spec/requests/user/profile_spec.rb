@@ -187,8 +187,8 @@ describe "User profile page", type: :system, js: true do
 
       def add_section(type)
         within_profile_section_editor do
-          select type, from: "Section type"
           click_on "Add section"
+          click_on type
         end
         wait_for_ajax
       end
@@ -199,7 +199,17 @@ describe "User profile page", type: :system, js: true do
       end
 
       def profile_editor_sections
-        within_profile_section_editor { all(:css, "section[aria-label$=' section settings']") }
+        within_profile_section_editor { all(:css, "[aria-label$=' section settings']") }
+      end
+
+      def profile_editor_pages
+        within_profile_section_editor { all(:css, "[role=list][aria-label='Pages'] > [role=listitem]") }
+      end
+
+      def drag_row(row, to:)
+        page.scroll_to row.first("[aria-grabbed]"), align: :center
+        row.first("[aria-grabbed]").drag_to to, delay: 0.1
+        wait_for_ajax
       end
 
       def within_profile_section_editor(&block)
@@ -208,7 +218,7 @@ describe "User profile page", type: :system, js: true do
 
       def within_section_form(name, match: :first, &block)
         within_profile_section_editor do
-          within(:css, "section[aria-label='#{name} section settings']", match:, &block)
+          within(:css, "[aria-label='#{name} section settings']", match:, &block)
         end
       end
 
@@ -267,7 +277,10 @@ describe "User profile page", type: :system, js: true do
         add_section "Products"
         expect(profile_editor_sections.count).to eq 2
         within_section_form "New name" do
-          click_on "Remove"
+          click_on "Remove section"
+        end
+        within_modal "Remove New name?" do
+          click_on "Yes, remove"
         end
         wait_for_ajax
         expect(profile_editor_sections.count).to eq 1
@@ -282,7 +295,7 @@ describe "User profile page", type: :system, js: true do
         visit "#{settings_profile_path}?section=#{section2.external_id}"
 
         within_profile_section_editor do
-          expect(page).to have_select("Current page", selected: "Tab 2")
+          expect(page).to have_tab_button("Tab 2", open: true)
           # This currently cannot be tested properly as `navigator.clipboard` is `undefined` in Selenium.
           # Attempting to use `Browser.grantPermissions` like in Flexile throws an error saying "Permissions can't be granted in current context."
           expect(page).to have_button "Copy link"
@@ -296,20 +309,31 @@ describe "User profile page", type: :system, js: true do
 
         visit settings_profile_path
         within_profile_section_editor do
-          expect(page).to have_text("No pages yet.")
+          expect(page).to have_text("Build your profile")
           click_on "Add page"
           wait_for_ajax
           fill_in "Page name", with: "Hi! I'm page!"
           blur_field "Page name"
           click_on "Add page"
           wait_for_ajax
-          click_on "Move page up"
-          wait_for_ajax
+        end
+        pages = profile_editor_pages
+        expect(pages.count).to eq 2
+        drag_row(pages[1], to: pages[0])
+        within_profile_section_editor do
           click_on "Add page"
           wait_for_ajax
+        end
+        within(profile_editor_pages[2]) do
           click_on "Remove page"
-          wait_for_ajax
-          expect(page).to have_select("Current page", options: ["New page", "Hi! I'm page!"], selected: "New page")
+        end
+        within_modal "Remove New page?" do
+          click_on "Yes, remove"
+        end
+        wait_for_ajax
+        within_profile_section_editor do
+          expect(page).to have_tab_button("New page", open: true)
+          expect(page).to have_tab_button("Hi! I'm page!", open: false)
         end
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
 
@@ -320,7 +344,7 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_link(published_audience_installment.name)
         expect(page).to_not have_link(unpublished_audience_installment.name)
         expect(page).to_not have_link(published_follower_installment.name)
-        within_profile_section_editor { select "Hi! I'm page!", from: "Current page" }
+        within_profile_section_editor { click_on "Hi! I'm page!" }
         add_section "Products"
 
         expect(seller.seller_profile_sections.count).to eq 3
@@ -345,19 +369,15 @@ describe "User profile page", type: :system, js: true do
 
         expect_sections_in_order("Section 1", "Section 2", "Section 3")
 
-        within_section_form "Section 1" do
-          expect(page).to have_button "Move section up", disabled: true
-          click_on "Move section down"
-        end
+        sections = profile_editor_sections
+        drag_row(sections[0], to: sections[1])
         expect_sections_in_order("Section 2", "Section 1", "Section 3")
 
         add_section "Posts"
         expect_sections_in_order("Section 2", "Section 1", "Section 3", "New section")
 
-        within_section_form "New section" do
-          expect(page).to have_button "Move section down", disabled: true
-          click_on "Move section up"
-        end
+        sections = profile_editor_sections
+        drag_row(sections[3], to: sections[2])
         expect_sections_in_order("Section 2", "Section 1", "New section", "Section 3")
         wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
@@ -378,9 +398,15 @@ describe "User profile page", type: :system, js: true do
         expect(page).not_to have_selector("[aria-label='Filters']")
         [@product1, @product2, @product3, @product4].each { check _1.name }
         expect_profile_editor_product_cards_in_order([@product1, @product2, @product3, @product4])
-        click_on "Move Product 1 down"
+        within_section_form "New section" do
+          drag_product_row(@product1, to: @product2)
+        end
+        wait_for_ajax
         expect_profile_editor_product_cards_in_order([@product2, @product1, @product3,  @product4])
-        click_on "Move Product 3 up"
+        within_section_form "New section" do
+          drag_product_row(@product3, to: @product2)
+        end
+        wait_for_ajax
         uncheck @product2.name
         expect_profile_editor_product_cards_in_order([@product3, @product1,  @product4])
 
@@ -582,7 +608,9 @@ describe "User profile page", type: :system, js: true do
 
         wishlists.each { check _1.name }
         expect_profile_editor_product_cards_in_order(wishlists)
-        click_on "Move First Wishlist down"
+        within_section_form "New section" do
+          drag_product_row(wishlists.first, to: wishlists.second)
+        end
         wait_for_ajax
         expect_profile_editor_product_cards_in_order(wishlists.reverse)
 

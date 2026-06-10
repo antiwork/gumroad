@@ -28,8 +28,14 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
   const isDesktop = useIsAboveBreakpoint("lg");
 
   const headerButtons =
-    creatorProfile.twitter_handle || cartItemsCount ? (
+    creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
       <div className="ml-auto flex items-center gap-3">
+        {creatorProfile.can_edit ? (
+          <NavigationButton color="filled" href={Routes.settings_profile_url({ host: appDomain })}>
+            <Pencil className="size-5" />
+            Edit profile
+          </NavigationButton>
+        ) : null}
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
             <TwitterX pack="brands" className="size-5" />
@@ -41,14 +47,6 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   return (
     <div className="flex min-h-screen flex-col">
-      {creatorProfile.can_edit ? (
-        <div className="mx-auto w-full max-w-6xl p-4 pb-0 lg:px-4">
-          <NavigationButton color="filled" href={Routes.settings_profile_url({ host: appDomain })}>
-            <Pencil className="size-5" />
-            Edit profile
-          </NavigationButton>
-        </div>
-      ) : null}
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex grow items-center gap-3 border-b border-border p-4 lg:flex-1 lg:border-0 lg:p-0">
