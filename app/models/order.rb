@@ -17,7 +17,7 @@ class Order < ApplicationRecord
             flag_query_mode: :bit_operator,
             check_for_column: false
 
-  delegate :card_type, :card_visual, :full_name, to: :purchase_with_payment_as_orderable
+  delegate :card_type, :card_visual, :full_name, to: :purchase_with_payment_as_orderable, allow_nil: true
 
   after_save :schedule_review_reminder!, if: :should_schedule_review_reminder?
 
@@ -38,15 +38,15 @@ class Order < ApplicationRecord
   end
 
   def email
-    purchase_as_orderable.email
+    purchase_as_orderable&.email
   end
 
   def locale
-    purchase_as_orderable.locale
+    purchase_as_orderable&.locale
   end
 
   def test?
-    purchase_as_orderable.is_test_purchase?
+    purchase_as_orderable&.is_test_purchase? || false
   end
 
   def send_charge_receipts
@@ -62,7 +62,7 @@ class Order < ApplicationRecord
   end
 
   def unsubscribe_buyer
-    purchase_as_orderable.unsubscribe_buyer
+    purchase_as_orderable&.unsubscribe_buyer
   end
 
   def schedule_review_reminder!
