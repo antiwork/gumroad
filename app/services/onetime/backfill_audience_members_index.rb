@@ -5,40 +5,54 @@ class Onetime::BackfillAudienceMembersIndex
   REDIS_CURSOR_KEY = "onetime_backfill_audience_members_index_last_id"
   REDIS_FAILED_IDS_KEY = "onetime_backfill_audience_members_index_failed_ids"
 
-  def self.process(batch_size: BATCH_SIZE)
-    new(batch_size:).process
+  def self.process(batch_size: BATCH_SIZE, seller_id: nil)
+    new(batch_size:, seller_id:).process
   end
 
-  def initialize(batch_size: BATCH_SIZE)
+  def initialize(batch_size: BATCH_SIZE, seller_id: nil)
     @batch_size = batch_size
+    @seller_id = seller_id
   end
 
   def process
-    AudienceMember.__elasticsearch__.create_index! unless AudienceMember.__elasticsearch__.index_exists?
+    # Creating the index here instead would race the CreateAudienceMembersIndex migration's
+    # versioned-index-plus-alias layout, and a bulk write to a missing index would auto-create
+    # it with a dynamic mapping instead of the strict one.
+    raise "The #{AudienceMember.index_name} index is missing; run the CreateAudienceMembersIndex migration first" unless AudienceMember.__elasticsearch__.index_exists?
     $redis.sadd(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices, AudienceMember.index_name)
 
     loop do
-      members = AudienceMember.where("id > ?", last_processed_id).order(:id).limit(batch_size).to_a
+      members = scope.where("id > ?", last_processed_id).order(:id).limit(batch_size).to_a
       break if members.empty?
 
       ReplicaLagWatcher.watch
       bulk_index(members)
-      $redis.set(REDIS_CURSOR_KEY, members.last.id)
+      $redis.set(cursor_key, members.last.id)
       puts "Indexed audience members up to id #{members.last.id}"
     end
 
     delete_stale_documents
-    $redis.srem(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices, AudienceMember.index_name)
+    # After a seller-scoped run the other sellers' rows are still unindexed, so their
+    # partial-update jobs must keep ignoring 404s until the full backfill removes this entry.
+    $redis.srem(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices, AudienceMember.index_name) if seller_id.nil?
 
     failed_count = $redis.scard(REDIS_FAILED_IDS_KEY)
     puts "Done. #{failed_count} members failed to index; ids are in the #{REDIS_FAILED_IDS_KEY} redis set." if failed_count > 0
   end
 
   private
-    attr_reader :batch_size
+    attr_reader :batch_size, :seller_id
+
+    def scope
+      seller_id ? AudienceMember.where(seller_id:) : AudienceMember.all
+    end
+
+    def cursor_key
+      seller_id ? "#{REDIS_CURSOR_KEY}_seller_#{seller_id}" : REDIS_CURSOR_KEY
+    end
 
     def last_processed_id
-      $redis.get(REDIS_CURSOR_KEY).to_i
+      $redis.get(cursor_key).to_i
     end
 
     def bulk_index(members)
@@ -65,7 +79,7 @@ class Onetime::BackfillAudienceMembersIndex
       response = EsClient.search(
         index: AudienceMember.index_name,
         scroll: "1m",
-        body: { query: { match_all: {} } },
+        body: { query: seller_id ? { term: { seller_id: } } : { match_all: {} } },
         size: batch_size,
         sort: ["_doc"],
         _source: false,
