@@ -390,7 +390,11 @@ describe CustomerLowPriorityMailer do
     context "when the subscription's credit card is missing" do
       let(:subscription) { create(:subscription, link: product, user: nil, credit_card: nil) }
 
-      it "does not raise an error and does not deliver the email" do
+      it "logs the skip and does not deliver the email" do
+        expect(Rails.logger).to receive(:warn).with(
+          "[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=subscription_giftee_added_card; subscription_id=#{subscription.id}"
+        )
+
         expect do
           CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_now
         end.not_to change(ActionMailer::Base.deliveries, :count)

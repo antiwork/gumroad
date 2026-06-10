@@ -405,7 +405,10 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   private
     def deliver_subscription_email
-      return if @subject.nil?
+      if @subject.nil?
+        Rails.logger.warn("[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=#{action_name}; subscription_id=#{@subscription&.id}")
+        return
+      end
 
       query_params = { token: @subscription.refresh_token }
       query_params[:declined] = true if @declined
