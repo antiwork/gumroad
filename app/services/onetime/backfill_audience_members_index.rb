@@ -32,8 +32,9 @@ class Onetime::BackfillAudienceMembersIndex
     end
 
     delete_stale_documents
-    # After a seller-scoped run the other sellers' rows are still unindexed, so their
-    # partial-update jobs must keep ignoring 404s until the full backfill removes this entry.
+    # Members updated between a seller's flag enablement and their backfill completing
+    # produce partial-update jobs for documents that don't exist yet, so the 404
+    # suppression must outlive seller-scoped runs; the full backfill removes it.
     $redis.srem(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices, AudienceMember.index_name) if seller_id.nil?
 
     failed_count = $redis.scard(REDIS_FAILED_IDS_KEY)

@@ -6,10 +6,23 @@ module AudienceMember::Searchable
   PURCHASE_DETAIL_KEYS = %w[id product_id variant_ids price_cents created_at country].freeze
   AFFILIATE_DETAIL_KEYS = %w[id product_id created_at].freeze
 
+  # Audience members churn on every purchase and follow across all sellers, but only
+  # flag-enabled sellers are served from this index, so sellers without the flag don't
+  # enqueue indexing jobs. Enabling a seller must therefore be followed by a
+  # seller-scoped backfill: their documents only start syncing at flag-flip time.
+  module GatedAsyncIndexing
+    private
+      def send_to_elasticsearch(action)
+        return unless Feature.active?(:audience_count_from_elasticsearch, seller)
+        super
+      end
+  end
+
   included do
     include Elasticsearch::Model
     include SearchIndexModelCommon
     include ElasticsearchModelAsyncCallbacks
+    prepend GatedAsyncIndexing
 
     index_name "audience_members"
 
