@@ -983,6 +983,23 @@ describe PurchasesController, :vcr do
         expect(response).to be_successful
       end
 
+      context "when the order has no successful purchases" do
+        let(:purchase) { create(:failed_purchase, email: "test@example.com") }
+
+        before do
+          order = create(:order, purchases: [purchase])
+          create(:charge, order:, purchases: [purchase], seller: purchase.seller)
+        end
+
+        it "404s instead of enqueueing a receipt job" do
+          expect do
+            post :resend_receipt, params: { id: purchase.external_id }
+          end.to raise_error(ActionController::RoutingError)
+
+          expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+        end
+      end
+
       describe "gift purchase" do
         before do
           @product = create(:product_with_pdf_file)
