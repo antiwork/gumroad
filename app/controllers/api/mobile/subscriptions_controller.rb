@@ -6,4 +6,15 @@ class Api::Mobile::SubscriptionsController < Api::Mobile::BaseController
   def subscription_attributes
     render json: { success: true, subscription: @subscription.subscription_mobile_json_data }
   end
+
+  def cancel
+    doorkeeper_authorize! :mobile_api
+    subscription = Subscription.find_by_external_id(params[:id])
+    if subscription.nil? || subscription.seller_id != current_resource_owner.id
+      return fetch_error("Could not find subscription")
+    end
+
+    subscription.cancel!(by_seller: true)
+    render json: { success: true }
+  end
 end
