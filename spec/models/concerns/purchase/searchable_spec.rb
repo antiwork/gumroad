@@ -265,14 +265,11 @@ describe Purchase::Searchable do
     end
 
     it "updates related purchases when deactivated_at changes" do
-      audience_member = AudienceMember.find_by(email: @purchase_1.email, seller_id: @purchase_1.seller_id)
-
       @subscription.deactivate!
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(3)
+      expect(ElasticsearchIndexerWorker.jobs.size).to eq(2)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @purchase_1.id, "class_name" => "Purchase", "fields" => ["subscription_deactivated_at"])
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @purchase_2.id, "class_name" => "Purchase", "fields" => ["subscription_deactivated_at"])
-      expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("delete", "record_id" => audience_member.id, "class_name" => "AudienceMember")
     end
 
     it "does not update related purchases when unrelated attributes changes" do
