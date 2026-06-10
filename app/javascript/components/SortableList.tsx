@@ -29,6 +29,7 @@ export const SortableList = ({ currentOrder, onReorder, children, group, tag = "
         handle="[aria-grabbed]"
         tag={tag}
         scrollSensitivity={150}
+        swapThreshold={0.8}
         setData={(dataTransfer: DataTransfer, draggedElement: HTMLElement) => {
           const drawers = draggedElement.querySelectorAll<HTMLElement>(".drawer");
           for (const drawer of drawers) drawer.classList.add("hidden");
