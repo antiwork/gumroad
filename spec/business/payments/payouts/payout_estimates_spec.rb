@@ -59,12 +59,56 @@ describe PayoutEstimates do
     let(:seller) { create(:user_with_compliance_info) }
     let(:seller_ma) { create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-    it "sums unpaid Gumroad-held balances up to the date, excluding Stripe-held, future, and paid balances" do
+    before do
+      create(:ach_account, user: seller, stripe_bank_account_id: "ba_seller")
       create(:balance, user: seller, date: date - 2, amount_cents: 100_00, merchant_account: gumroad_ma)
       create(:balance, user: seller, date:,          amount_cents:  50_00, merchant_account: gumroad_ma)
+    end
+
+    it "sums unpaid Gumroad-held balances up to the date, excluding Stripe-held, future, and paid balances" do
       create(:balance, user: seller, date: date + 1, amount_cents: 999_00, merchant_account: gumroad_ma)
       create(:balance, user: seller, date: date - 1, amount_cents: 777_00, merchant_account: seller_ma)
       create(:balance, user: seller, date: date - 3, amount_cents: 333_00, merchant_account: gumroad_ma, state: "paid")
+
+      expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
+    end
+
+    it "excludes balances of users who are not compliant" do
+      flagged_seller = create(:user_with_compliance_info, user_risk_state: "flagged_for_tos_violation")
+      create(:ach_account, user: flagged_seller, stripe_bank_account_id: "ba_flagged")
+      create(:balance, user: flagged_seller, date: date - 1, amount_cents: 500_00, merchant_account: gumroad_ma)
+
+      expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
+    end
+
+    it "excludes balances of users whose payouts are paused" do
+      paused_internally = create(:user_with_compliance_info, payouts_paused_internally: true)
+      create(:ach_account, user: paused_internally, stripe_bank_account_id: "ba_paused_int")
+      create(:balance, user: paused_internally, date: date - 1, amount_cents: 500_00, merchant_account: gumroad_ma)
+
+      paused_by_user = create(:user_with_compliance_info, payouts_paused_by_user: true)
+      create(:ach_account, user: paused_by_user, stripe_bank_account_id: "ba_paused_user")
+      create(:balance, user: paused_by_user, date: date - 1, amount_cents: 600_00, merchant_account: gumroad_ma)
+
+      expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
+    end
+
+    it "excludes balances of users without an alive bank account, who are not paid out from the Stripe balance" do
+      paypal_seller = create(:user_with_compliance_info)
+      create(:ach_account, user: paypal_seller, stripe_bank_account_id: "ba_deleted", deleted_at: Time.current)
+      create(:balance, user: paypal_seller, date: date - 1, amount_cents: 500_00, merchant_account: gumroad_ma)
+
+      expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
+    end
+
+    it "excludes users whose summed balance is below the minimum payout amount" do
+      small_seller = create(:user_with_compliance_info)
+      create(:ach_account, user: small_seller, stripe_bank_account_id: "ba_small")
+      create(:balance, user: small_seller, date: date - 1, amount_cents: Payouts::MIN_AMOUNT_CENTS - 1, merchant_account: gumroad_ma)
+
+      negative_seller = create(:user_with_compliance_info)
+      create(:ach_account, user: negative_seller, stripe_bank_account_id: "ba_negative")
+      create(:balance, user: negative_seller, date: date - 1, amount_cents: -500_00, merchant_account: gumroad_ma)
 
       expect(described_class.estimate_gumroad_held_stripe_cents(date)).to eq(150_00)
     end
