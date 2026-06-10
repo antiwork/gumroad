@@ -13,7 +13,6 @@ class SendStripeBalanceCheckNotificationJob
     $redis.set(RedisKey.stripe_balance_topup_needed, balance_check.topup_needed?)
 
     return unless balance_check.topup_needed?
-    return unless Feature.active?(:stripe_balance_check_notification)
 
     notification_msg = "Stripe balance needs to be #{formatted_dollar_amount(balance_check.required_balance_cents)} " \
                        "(#{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} for upcoming payouts + " \

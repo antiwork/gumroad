@@ -15,34 +15,15 @@ describe SendStripeBalanceCheckNotificationJob do
         allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 300_000_00 })
       end
 
-      context "when the stripe_balance_check_notification feature is active" do
-        before do
-          Feature.activate(:stripe_balance_check_notification)
-        end
+      it "sends a notification with the required top-up and sets the redis key to true" do
+        notification_msg = "Stripe balance needs to be $400,000 ($300,000 for upcoming payouts + $100,000 Stripe minimum balance) to pay out all creators.\n"\
+                           "Current Stripe balance is $300,000.\n"\
+                           "A top-up of $100,000 is needed."
 
-        it "sends a notification with the required top-up and sets the redis key to true" do
-          notification_msg = "Stripe balance needs to be $400,000 ($300,000 for upcoming payouts + $100,000 Stripe minimum balance) to pay out all creators.\n"\
-                             "Current Stripe balance is $300,000.\n"\
-                             "A top-up of $100,000 is needed."
+        described_class.new.perform
 
-          described_class.new.perform
-
-          expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", notification_msg, "red")
-          expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
-        end
-      end
-
-      context "when the stripe_balance_check_notification feature is inactive" do
-        before do
-          Feature.deactivate(:stripe_balance_check_notification)
-        end
-
-        it "does not notify but still sets the redis key to true" do
-          described_class.new.perform
-
-          expect(InternalNotificationWorker.jobs.size).to eq(0)
-          expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
-        end
+        expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", notification_msg, "red")
+        expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
       end
     end
 
