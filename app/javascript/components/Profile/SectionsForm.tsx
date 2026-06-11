@@ -16,7 +16,6 @@ import { debounce, isEqual, sortBy } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import { updateProfileSettings } from "$app/data/profile_settings";
 import { PROFILE_SORT_KEYS, type ProfileSortKey } from "$app/parsers/product";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -88,21 +87,6 @@ const optionOrder = (ids: string[], shownIds: string[]) =>
     return index < 0 ? Infinity : index;
   });
 
-const responseErrorMessage = async (response: Response) => {
-  try {
-    const json: unknown = await response.json();
-    if (json && typeof json === "object" && "error" in json && typeof json.error === "string") return json.error;
-  } catch {
-    // Fall back to the generic response error below.
-  }
-
-  return undefined;
-};
-
-const assertResponseOk = async (response: Response) => {
-  if (!response.ok) throw new ResponseError(await responseErrorMessage(response));
-};
-
 const SortablePageRows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
   <Rows ref={ref} role="list" aria-label="Pages">
     {children}
@@ -163,40 +147,15 @@ const OptionRow = ({
   </Row>
 );
 
-const useSaveSection = (initialSection: Section) => {
-  const [savedSection, setSavedSection] = React.useState(initialSection);
-  React.useEffect(() => setSavedSection(initialSection), [initialSection.id]);
-
-  return async (section: Section) => {
-    if (isEqual(savedSection, section)) return;
-    try {
-      const response = await request({
-        method: "PATCH",
-        url: Routes.profile_section_path(section.id),
-        data: section,
-        accept: "json",
-      });
-      await assertResponseOk(response);
-      showAlert("Changes saved!", "success");
-      setSavedSection(section);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  };
-};
-
 const PageRow = ({
   tab,
   shouldFocusName,
   updateName,
-  commitName,
   onDelete,
 }: {
   tab: TabWithId;
   shouldFocusName: boolean;
   updateName: (name: string) => void;
-  commitName: (name: string) => void;
   onDelete: () => void;
 }) => {
   const nameInputRef = React.useRef<HTMLInputElement>(null);
@@ -217,7 +176,6 @@ const PageRow = ({
           aria-label="Page name"
           value={tab.name}
           onChange={(evt) => updateName(evt.target.value)}
-          onBlur={(evt) => commitName(evt.target.value)}
         />
       </RowContent>
       <RowActions>
@@ -244,7 +202,6 @@ const SectionRow = ({
   updateSection: (section: Section) => void;
   onDelete: () => void;
 }) => {
-  const saveSection = useSaveSection(section);
   const uid = React.useId();
   const [isOpen, setIsOpen] = React.useState(true);
   const headerInputRef = React.useRef<HTMLInputElement>(null);
@@ -254,10 +211,6 @@ const SectionRow = ({
     return () => cancelAnimationFrame(frame);
   }, [shouldFocusHeader]);
   const sectionTitle = section.header || SECTION_TYPE_LABELS[section.type];
-  const commit = (updated: Section) => {
-    updateSection(updated);
-    void saveSection(updated);
-  };
   const update = (updated: Section) => updateSection(updated);
   const copyLink = () => {
     try {
@@ -305,26 +258,25 @@ const SectionRow = ({
                 type="text"
                 value={section.header}
                 onChange={(evt) => update({ ...section, header: evt.target.value })}
-                onBlur={(evt) => commit({ ...section, header: evt.target.value })}
               />
             </Fieldset>
             <Switch
               checked={!section.hide_header}
-              onChange={() => commit({ ...section, hide_header: !section.hide_header })}
+              onChange={() => update({ ...section, hide_header: !section.hide_header })}
               label="Show section name"
             />
             {section.type === "SellerProfileProductsSection" ? (
-              <ProductsSectionFields section={section} state={state} commit={commit} />
+              <ProductsSectionFields section={section} state={state} update={update} />
             ) : section.type === "SellerProfilePostsSection" ? (
-              <PostsSectionFields section={section} state={state} commit={commit} />
+              <PostsSectionFields section={section} state={state} update={update} />
             ) : section.type === "SellerProfileRichTextSection" ? (
-              <RichTextSectionFields section={section} commit={commit} />
+              <RichTextSectionFields section={section} update={update} />
             ) : section.type === "SellerProfileSubscribeSection" ? (
-              <SubscribeSectionFields section={section} update={update} commit={commit} />
+              <SubscribeSectionFields section={section} update={update} />
             ) : section.type === "SellerProfileFeaturedProductSection" ? (
-              <FeaturedProductSectionFields section={section} state={state} commit={commit} />
+              <FeaturedProductSectionFields section={section} state={state} update={update} />
             ) : (
-              <WishlistsSectionFields section={section} state={state} commit={commit} />
+              <WishlistsSectionFields section={section} state={state} update={update} />
             )}
           </Drawer>
         </RowDetails>
@@ -336,11 +288,11 @@ const SectionRow = ({
 const ProductsSectionFields = ({
   section,
   state,
-  commit,
+  update,
 }: {
   section: Extract<Section, { type: "SellerProfileProductsSection" }>;
   state: ProfileEditorProps;
-  commit: (section: Section) => void;
+  update: (section: Section) => void;
 }) => {
   const uid = React.useId();
   const [orderedProductIds, setOrderedProductIds] = React.useState(() =>
@@ -353,7 +305,7 @@ const ProductsSectionFields = ({
   const canReorder = section.default_product_sort === "page_layout";
 
   const toggleProduct = (id: string) =>
-    commit({
+    update({
       ...section,
       shown_products: section.shown_products.includes(id)
         ? section.shown_products.filter((productId) => productId !== id)
@@ -362,7 +314,7 @@ const ProductsSectionFields = ({
 
   const reorderProducts = (newOrder: string[]) => {
     setOrderedProductIds(newOrder);
-    commit({ ...section, shown_products: sortBy(section.shown_products, (id) => newOrder.indexOf(id)) });
+    update({ ...section, shown_products: sortBy(section.shown_products, (id) => newOrder.indexOf(id)) });
   };
 
   return (
@@ -374,7 +326,7 @@ const ProductsSectionFields = ({
           value={section.default_product_sort}
           onChange={(evt) => {
             const default_product_sort = parseProfileSortKey(evt.target.value);
-            if (default_product_sort) commit({ ...section, default_product_sort });
+            if (default_product_sort) update({ ...section, default_product_sort });
           }}
         >
           {PROFILE_SORT_KEYS.map((key) => (
@@ -386,12 +338,12 @@ const ProductsSectionFields = ({
       </Fieldset>
       <Switch
         checked={section.show_filters}
-        onChange={() => commit({ ...section, show_filters: !section.show_filters })}
+        onChange={() => update({ ...section, show_filters: !section.show_filters })}
         label="Show product filters"
       />
       <Switch
         checked={section.add_new_products}
-        onChange={() => commit({ ...section, add_new_products: !section.add_new_products })}
+        onChange={() => update({ ...section, add_new_products: !section.add_new_products })}
         label="Add new products by default"
       />
       <Fieldset>
@@ -419,14 +371,14 @@ const ProductsSectionFields = ({
 const PostsSectionFields = ({
   section,
   state,
-  commit,
+  update,
 }: {
   section: Extract<Section, { type: "SellerProfilePostsSection" }>;
   state: ProfileEditorProps;
-  commit: (section: Section) => void;
+  update: (section: Section) => void;
 }) => {
   const togglePost = (id: string) =>
-    commit({
+    update({
       ...section,
       shown_posts: section.shown_posts.includes(id)
         ? section.shown_posts.filter((postId) => postId !== id)
@@ -456,10 +408,10 @@ const PostsSectionFields = ({
 
 const RichTextSectionFields = ({
   section,
-  commit,
+  update,
 }: {
   section: Extract<Section, { type: "SellerProfileRichTextSection" }>;
-  commit: (section: Section) => void;
+  update: (section: Section) => void;
 }) => {
   const [initialValue] = React.useState(section.text);
   const editor = useRichTextEditor({ initialValue, placeholder: "Enter text here", editable: true });
@@ -475,17 +427,16 @@ const RichTextSectionFields = ({
 
   React.useEffect(() => {
     if (!editor) return;
-    const save = () => {
+    const syncText = () => {
       if (isUploadingRef.current) return;
-      const updated = { ...sectionRef.current, text: editor.getJSON() };
-      commit(updated);
+      update({ ...sectionRef.current, text: editor.getJSON() });
     };
-    const debouncedSave = debounce(save, 2000);
-    editor.on("blur", save);
-    editor.on("update", debouncedSave);
+    const debouncedSyncText = debounce(syncText, 2000);
+    editor.on("blur", syncText);
+    editor.on("update", debouncedSyncText);
     return () => {
-      editor.off("blur", save);
-      editor.off("update", debouncedSave);
+      editor.off("blur", syncText);
+      editor.off("update", debouncedSyncText);
     };
   }, [editor]);
 
@@ -510,11 +461,9 @@ const RichTextSectionFields = ({
 const SubscribeSectionFields = ({
   section,
   update,
-  commit,
 }: {
   section: Extract<Section, { type: "SellerProfileSubscribeSection" }>;
   update: (section: Section) => void;
-  commit: (section: Section) => void;
 }) => (
   <Fieldset>
     <Label htmlFor={`${section.id}-button-label`}>Button label</Label>
@@ -523,7 +472,6 @@ const SubscribeSectionFields = ({
       type="text"
       value={section.button_label}
       onChange={(evt) => update({ ...section, button_label: evt.target.value })}
-      onBlur={(evt) => commit({ ...section, button_label: evt.target.value })}
     />
   </Fieldset>
 );
@@ -531,18 +479,18 @@ const SubscribeSectionFields = ({
 const FeaturedProductSectionFields = ({
   section,
   state,
-  commit,
+  update,
 }: {
   section: Extract<Section, { type: "SellerProfileFeaturedProductSection" }>;
   state: ProfileEditorProps;
-  commit: (section: Section) => void;
+  update: (section: Section) => void;
 }) => (
   <Fieldset>
     <Label htmlFor={`${section.id}-featured-product`}>Featured product</Label>
     <Select
       id={`${section.id}-featured-product`}
       value={section.featured_product_id ?? ""}
-      onChange={(evt) => commit({ ...section, featured_product_id: evt.target.value || undefined })}
+      onChange={(evt) => update({ ...section, featured_product_id: evt.target.value || undefined })}
     >
       <option value="">Choose a product</option>
       {state.products.map((product) => (
@@ -557,11 +505,11 @@ const FeaturedProductSectionFields = ({
 const WishlistsSectionFields = ({
   section,
   state,
-  commit,
+  update,
 }: {
   section: Extract<Section, { type: "SellerProfileWishlistsSection" }>;
   state: ProfileEditorProps;
-  commit: (section: Section) => void;
+  update: (section: Section) => void;
 }) => {
   const [orderedWishlistIds, setOrderedWishlistIds] = React.useState(() =>
     optionOrder(
@@ -574,7 +522,7 @@ const WishlistsSectionFields = ({
   );
 
   const toggleWishlist = (id: string) =>
-    commit({
+    update({
       ...section,
       shown_wishlists: section.shown_wishlists.includes(id)
         ? section.shown_wishlists.filter((wishlistId) => wishlistId !== id)
@@ -583,7 +531,7 @@ const WishlistsSectionFields = ({
 
   const reorderWishlists = (newOrder: string[]) => {
     setOrderedWishlistIds(newOrder);
-    commit({ ...section, shown_wishlists: sortBy(section.shown_wishlists, (id) => newOrder.indexOf(id)) });
+    update({ ...section, shown_wishlists: sortBy(section.shown_wishlists, (id) => newOrder.indexOf(id)) });
   };
 
   return (
@@ -611,7 +559,6 @@ const WishlistsSectionFields = ({
 export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: ProfileSectionsFormProps) => {
   const [sections, setSections] = React.useState(props.sections);
   const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
-  const savedTabs = React.useRef(tabs);
   const [deletionModalPageId, setDeletionModalPageId] = React.useState<string | null>(null);
   const [deletionModalSectionId, setDeletionModalSectionId] = React.useState<string | null>(null);
   const [addSectionMenuOpen, setAddSectionMenuOpen] = React.useState(false);
@@ -640,39 +587,17 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     [onChange, sections, selectedTabIndex, tabs],
   );
 
-  const saveTabs = async (nextTabs = tabs, options: { showSuccess?: boolean } = {}) => {
-    if (disabled) return false;
-
-    setTabs(nextTabs);
-    if (isEqual(tabsWithoutIds(nextTabs), tabsWithoutIds(savedTabs.current))) return true;
-    try {
-      await updateProfileSettings({ tabs: tabsWithoutIds(nextTabs) });
-      if (options.showSuccess ?? true) showAlert("Changes saved!", "success");
-      savedTabs.current = nextTabs;
-      return true;
-    } catch (e) {
-      assertResponseError(e);
-      const rollbackTabs = savedTabs.current;
-      setTabs(rollbackTabs);
-      const rollbackSelectedTab = rollbackTabs.find((tab) => tab.id === selectedTab?.id) ?? rollbackTabs[0];
-      if (rollbackSelectedTab) setSelectedTab(rollbackSelectedTab);
-      showAlert(e.message, "error");
-      return false;
-    }
-  };
-
   const updateSection = (updated: Section) => {
     setSections((currentSections) => currentSections.map((section) => (section.id === updated.id ? updated : section)));
   };
 
-  const addPage = async () => {
+  const addPage = () => {
     if (disabled) return;
 
     const tab = { id: GuidGenerator.generate(), name: "New page", sections: [] };
-    const nextTabs = [...tabs, tab];
     setLastAddedPageId(tab.id);
     setSelectedTab(tab);
-    await saveTabs(nextTabs);
+    setTabs([...tabs, tab]);
   };
 
   const updatePageName = (tabId: string, name: string) => {
@@ -680,28 +605,20 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     setTabs(tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)));
   };
 
-  const commitPageName = async (tabId: string, name: string) => {
-    if (disabled) return;
-    await saveTabs(tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)));
-  };
-
-  const removePage = async (tabId: string) => {
+  const removePage = (tabId: string) => {
     if (disabled) return;
     const removedTab = tabs.find(({ id }) => id === tabId);
     if (!removedTab) return;
     const removedSectionIds = new Set(removedTab.sections);
     const nextTabs = tabs.filter(({ id }) => id !== tabId);
     if (selectedTab?.id === tabId && nextTabs[0]) setSelectedTab(nextTabs[0]);
-    const tabsSaved = await saveTabs(nextTabs, { showSuccess: false });
-    if (!tabsSaved) return;
-
+    setTabs(nextTabs);
     setSections((currentSections) => currentSections.filter((section) => !removedSectionIds.has(section.id)));
-    showAlert("Changes saved!", "success");
   };
 
-  const reorderPages = async (newOrder: string[]) => {
+  const reorderPages = (newOrder: string[]) => {
     if (disabled) return;
-    await saveTabs(newOrder.flatMap((id) => tabs.find((tab) => tab.id === id) ?? []));
+    setTabs(newOrder.flatMap((id) => tabs.find((tab) => tab.id === id) ?? []));
   };
 
   const createSectionRecord = async (section: Omit<Section, "id">) => {
@@ -789,33 +706,27 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
       setLastAddedSectionId(section.id);
       setSections((currentSections) => [...currentSections, section]);
       if (nextSelectedTab) setSelectedTab(nextSelectedTab);
-      await saveTabs(nextTabs);
+      setTabs(nextTabs);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
     }
   };
 
-  const removeSection = async (sectionId: string) => {
+  const removeSection = (sectionId: string) => {
     if (disabled) return;
 
-    const tabsSaved = await saveTabs(
-      tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })),
-      { showSuccess: false },
-    );
-    if (!tabsSaved) return;
-
+    setTabs(tabs.map((tab) => ({ ...tab, sections: tab.sections.filter((id) => id !== sectionId) })));
     setSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
-    showAlert("Changes saved!", "success");
   };
 
-  const reorderSections = async (newOrder: string[]) => {
+  const reorderSections = (newOrder: string[]) => {
     if (disabled || !selectedTab) return;
-    await saveTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, sections: newOrder } : tab)));
+    setTabs(tabs.map((tab) => (tab.id === selectedTab.id ? { ...tab, sections: newOrder } : tab)));
   };
 
   const addPageButton = (
-    <Button color="primary" onClick={() => void addPage()}>
+    <Button color="primary" onClick={addPage}>
       <Plus className="size-5" />
       Add page
     </Button>
@@ -856,7 +767,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                 color="accent"
                 onClick={() => {
                   setDeletionModalPageId(null);
-                  void removePage(deletionModalPage.id);
+                  removePage(deletionModalPage.id);
                 }}
               >
                 Yes, remove
@@ -879,7 +790,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                 color="accent"
                 onClick={() => {
                   setDeletionModalSectionId(null);
-                  void removeSection(deletionModalSection.id);
+                  removeSection(deletionModalSection.id);
                 }}
               >
                 Yes, remove
@@ -903,18 +814,13 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
             </Placeholder>
           ) : (
             <div className="grid gap-8">
-              <SortableList
-                currentOrder={tabs.map(({ id }) => id)}
-                onReorder={(newOrder) => void reorderPages(newOrder)}
-                tag={SortablePageRows}
-              >
+              <SortableList currentOrder={tabs.map(({ id }) => id)} onReorder={reorderPages} tag={SortablePageRows}>
                 {tabs.map((tab) => (
                   <PageRow
                     key={tab.id}
                     tab={tab}
                     shouldFocusName={tab.id === lastAddedPageId}
                     updateName={(name) => updatePageName(tab.id, name)}
-                    commitName={(name) => void commitPageName(tab.id, name)}
                     onDelete={() => setDeletionModalPageId(tab.id)}
                   />
                 ))}
@@ -948,7 +854,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
               <>
                 <SortableList
                   currentOrder={visibleSections.map(({ id }) => id)}
-                  onReorder={(newOrder) => void reorderSections(newOrder)}
+                  onReorder={reorderSections}
                   tag={SortableSectionRows}
                 >
                   {visibleSections.map((section) => (

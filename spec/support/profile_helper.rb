@@ -11,6 +11,7 @@ module FillInUserProfileHelpers
     visit settings_profile_path
     fill_in("Name", with: "Edgar Gumstein")
     click_on("Update settings")
+    expect(page).to have_alert(text: "Changes saved!")
   end
 
   def submit_follow_form(with: nil)

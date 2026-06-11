@@ -83,6 +83,7 @@ describe "User profile settings page", type: :system, js: true do
         end
         click_on "Update settings"
         expect(page).to have_alert(text: "Changes saved!")
+        wait_for_ajax
         expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
 
         within_fieldset "Avatar" do
@@ -91,7 +92,7 @@ describe "User profile settings page", type: :system, js: true do
         end
         click_on "Update settings"
         expect(page).to have_alert(text: "Changes saved!")
-        sleep 0.5 # Since the previous Alerts takes time to disappear, checking avatar_url returns early before the api call is complete
+        wait_for_ajax
         expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         refresh
         expect(page).to have_selector("img[alt='Current avatar'][src*='gumroad-default-avatar-5']")
@@ -138,6 +139,7 @@ describe "User profile settings page", type: :system, js: true do
         env["omniauth.params"] = { "state" => "link_twitter_account" }
       end
       click_on "Connect to X"
+      expect(page).to have_button("Disconnect squidarth from X")
       expect(@user.reload.twitter_handle).not_to be_nil
       click_on "Disconnect #{@user.twitter_handle} from X"
       wait_for_ajax

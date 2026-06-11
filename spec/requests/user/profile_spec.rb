@@ -194,7 +194,8 @@ describe "User profile page", type: :system, js: true do
       end
 
       def save_changes
-        page.find("body").click
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
         wait_for_ajax
       end
 
@@ -222,11 +223,6 @@ describe "User profile page", type: :system, js: true do
         end
       end
 
-      def blur_field(label)
-        find_field(label, match: :first).send_keys(:tab)
-        wait_for_ajax
-      end
-
       def within_profile_editor_preview(&block)
         within_section "Preview", section_element: :aside, &block
       end
@@ -243,8 +239,8 @@ describe "User profile page", type: :system, js: true do
 
         add_section "Products"
         expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
-        wait_for_ajax
         expect(seller.seller_profile_sections.count).to eq 1
+        save_changes
 
         seller.update!(bio: "Hello!")
         visit settings_profile_path
@@ -258,12 +254,14 @@ describe "User profile page", type: :system, js: true do
         within_section_form "Section 1" do
           fill_in "Section name", with: "New name", fill_options: { clear: :backspace }
           uncheck "Show section name"
-          blur_field "Section name"
         end
         within_profile_editor_preview do
           expect(page).to_not have_section "Section 1"
           expect(page).to_not have_section "New name"
         end
+        expect(section.reload.header).to eq "Section 1"
+        expect(section.hide_header?).to eq false
+        save_changes
         expect(section.reload.header).to eq "New name"
         expect(section.hide_header?).to eq true
 
@@ -271,7 +269,7 @@ describe "User profile page", type: :system, js: true do
           check "Show section name"
         end
         within_profile_editor_preview { expect(page).to have_section "New name" }
-        wait_for_ajax
+        save_changes
         expect(section.reload.hide_header?).to eq false
 
         add_section "Products"
@@ -282,9 +280,9 @@ describe "User profile page", type: :system, js: true do
         within_modal "Remove New name?" do
           click_on "Yes, remove"
         end
-        wait_for_ajax
         expect(profile_editor_sections.count).to eq 1
         expect(page).to_not have_section "New name"
+        save_changes
         expect(seller.seller_profile_sections.reload.sole).to_not eq section
       end
 
@@ -311,18 +309,14 @@ describe "User profile page", type: :system, js: true do
         within_profile_section_editor do
           expect(page).to have_text("Build your profile")
           click_on "Add page"
-          wait_for_ajax
           fill_in "Page name", with: "Hi! I'm page!"
-          blur_field "Page name"
           click_on "Add page"
-          wait_for_ajax
         end
         pages = profile_editor_pages
         expect(pages.count).to eq 2
         drag_row(pages[1], to: pages[0])
         within_profile_section_editor do
           click_on "Add page"
-          wait_for_ajax
         end
         within(profile_editor_pages[2]) do
           click_on "Remove page"
@@ -330,7 +324,6 @@ describe "User profile page", type: :system, js: true do
         within_modal "Remove New page?" do
           click_on "Yes, remove"
         end
-        wait_for_ajax
         within_profile_section_editor do
           expect(page).to have_tab_button("New page", open: true)
           expect(page).to have_tab_button("Hi! I'm page!", open: false)
@@ -339,17 +332,18 @@ describe "User profile page", type: :system, js: true do
           expect(page).to have_tab_button("New page")
           expect(page).to have_tab_button("Hi! I'm page!")
         end
+        expect(seller.reload.seller_profile&.json_data&.dig("tabs")).to be_blank
+        save_changes
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq([{ name: "New page", sections: [] }, { name: "Hi! I'm page!", sections: [] }].as_json)
 
         add_section "Products"
         add_section "Posts"
-        wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
         expect(page).to have_link(published_audience_installment.name)
         expect(page).to_not have_link(unpublished_audience_installment.name)
         expect(page).to_not have_link(published_follower_installment.name)
         within_profile_section_editor { click_on "Hi! I'm page!" }
         add_section "Products"
+        save_changes
 
         expect(seller.seller_profile_sections.count).to eq 3
         expect(seller.seller_profile.reload.json_data["tabs"]).to eq([
@@ -383,8 +377,10 @@ describe "User profile page", type: :system, js: true do
         sections = profile_editor_sections
         drag_row(sections[3], to: sections[2])
         expect_sections_in_order("Section 2", "Section 1", "Posts", "Section 3")
-        wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.seller_profile.reload.json_data["tabs"]).to eq([
+          { name: "", sections: [section1, section2, section3].pluck(:id) },
+        ].as_json)
+        save_changes
 
         expect(seller.seller_profile_sections.count).to eq 4
         expect(seller.seller_profile.reload.json_data["tabs"]).to eq([
@@ -400,7 +396,10 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_checked_field "Add new products by default"
         expect(page).to have_unchecked_field "Show product filters"
         expect(page).not_to have_selector("[aria-label='Filters']")
-        [@product1, @product2, @product3, @product4].each { check _1.name }
+        [@product1, @product2, @product3, @product4].each do |product|
+          check product.name
+          wait_for_ajax
+        end
         expect_profile_editor_product_cards_in_order([@product1, @product2, @product3, @product4])
         within_section_form "Products" do
           drag_product_row(@product1, to: @product2)
@@ -412,6 +411,7 @@ describe "User profile page", type: :system, js: true do
         end
         wait_for_ajax
         uncheck @product2.name
+        wait_for_ajax
         expect_profile_editor_product_cards_in_order([@product3, @product1,  @product4])
 
         expect(page).to have_select("Default sort order", options: ["Custom", "Newest", "Highest rated", "Most reviewed", "Price (Low to High)", "Price (High to Low)"], selected: "Custom")
@@ -442,7 +442,6 @@ describe "User profile page", type: :system, js: true do
         add_section "Posts"
         within_section_form "Posts" do
           fill_in "Section name", with: "My posts"
-          blur_field "Section name"
         end
         save_changes
 
@@ -474,11 +473,8 @@ describe "User profile page", type: :system, js: true do
           find("[contenteditable=true]").tap(&:click)
         end
         editor.send_keys "Some rich text"
-        wait_for_ajax
+        expect(seller.seller_profile_rich_text_sections.sole.text).to eq({})
         save_changes
-        wait_for_ajax
-        expect(page).to have_alert(text: "Changes saved!")
-        expect(page).to_not have_alert
         section = seller.seller_profile_rich_text_sections.sole
         expected_rich_text = {
           type: "doc",
@@ -516,9 +512,7 @@ describe "User profile page", type: :system, js: true do
 
         within_section_form "Subscribe to receive email updates from Gumbot." do
           fill_in "Section name", with: "Subscribe now or else"
-          blur_field "Section name"
           fill_in "Button label", with: "Follow"
-          blur_field "Button label"
         end
 
         within_profile_editor_preview do
@@ -528,13 +522,14 @@ describe "User profile page", type: :system, js: true do
           end
         end
 
+        expect(new_section.reload).to have_attributes(header: "Subscribe to receive email updates from Gumbot.", button_label: "Subscribe")
+        save_changes
         expect(new_section.reload).to have_attributes(header: "Subscribe now or else", button_label: "Follow")
       end
 
       it "allows creating featured product sections" do
         visit settings_profile_path
         add_section "Featured product"
-        expect(page).to have_alert(text: "Changes saved!")
 
         section = seller.seller_profile_sections.sole
         expect(section).to be_a SellerProfileFeaturedProductSection
@@ -542,30 +537,31 @@ describe "User profile page", type: :system, js: true do
 
         within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
-          blur_field "Section name"
         end
+        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
 
         within_section_form "My featured product" do
           select "Product 2", from: "Featured product"
         end
-        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to have_section "Product 2", section_element: :article
           end
         end
+        expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
+        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product2.id)
 
         within_section_form "My featured product" do
           select "Product 3", from: "Featured product"
         end
-        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to have_section "Product 3", section_element: :article
           end
         end
+        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: @product3.id)
       end
 
@@ -574,7 +570,6 @@ describe "User profile page", type: :system, js: true do
 
         visit settings_profile_path
         add_section "Featured product"
-        expect(page).to have_alert(text: "Changes saved!")
 
         section = seller.seller_profile_sections.sole
         expect(section).to be_a SellerProfileFeaturedProductSection
@@ -582,14 +577,13 @@ describe "User profile page", type: :system, js: true do
 
         within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
-          blur_field "Section name"
         end
+        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
 
         within_section_form "My featured product" do
           select "Buy me a coffee", from: "Featured product"
         end
-        wait_for_ajax
         within_profile_editor_preview do
           within_section "My featured product", section_element: :section do
             expect(page).to_not have_section "Buy me a coffee", section_element: :article
@@ -598,6 +592,7 @@ describe "User profile page", type: :system, js: true do
             expect(page).to have_selector("h3", text: "I need caffeine!")
           end
         end
+        save_changes
         expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: coffee_product.id)
       end
 
@@ -616,14 +611,18 @@ describe "User profile page", type: :system, js: true do
         expect(section).to be_a SellerProfileWishlistsSection
         expect(section.shown_wishlists).to eq([])
 
-        wishlists.each { check _1.name }
+        wishlists.each do |wishlist|
+          check wishlist.name
+          wait_for_ajax
+        end
         expect_profile_editor_product_cards_in_order(wishlists)
         within_section_form "Wishlists" do
           drag_product_row(wishlists.first, to: wishlists.second)
         end
-        wait_for_ajax
         expect_profile_editor_product_cards_in_order(wishlists.reverse)
 
+        expect(section.reload.shown_wishlists).to eq([])
+        save_changes
         expect(section.reload.shown_wishlists).to eq(wishlists.reverse.map(&:id))
 
         refresh

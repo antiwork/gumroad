@@ -1,5 +1,5 @@
 import { TwitterX } from "@boxicons/react";
-import { router, useForm, usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
@@ -9,7 +9,7 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -41,6 +41,27 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
 } & ProfileProps;
 
+const sectionErrorMessage = async (response: Response) => {
+  try {
+    const json: unknown = await response.json();
+    if (json && typeof json === "object" && "error" in json && typeof json.error === "string") return json.error;
+  } catch {
+    // Fall back to the generic response error below.
+  }
+
+  return undefined;
+};
+
+const saveProfileSection = async (section: ProfileEditorState["sections"][number]) => {
+  const response = await request({
+    method: "PATCH",
+    url: Routes.profile_section_path(section.id),
+    data: section,
+    accept: "json",
+  });
+  if (!response.ok) throw new ResponseError(await sectionErrorMessage(response));
+};
+
 export default function SettingsPage() {
   const { creator_profile, profile_settings, settings_pages, editable_profile } = typia.assert<ProfilePageProps>(
     usePage().props,
@@ -54,8 +75,20 @@ export default function SettingsPage() {
   const previewCreatorProfile = React.useMemo(() => ({ ...creatorProfile, can_edit: false }), [creatorProfile]);
 
   const [editableProfile, setEditableProfile] = React.useState(editable_profile);
+  const lastSavedProfile = React.useRef<ProfileEditorState>({
+    sections: editable_profile.sections,
+    tabs: editable_profile.tabs,
+  });
   const [selectedProfilePageIndex, setSelectedProfilePageIndex] = React.useState(0);
-  React.useEffect(() => setEditableProfile(editable_profile), [editable_profile]);
+  React.useEffect(() => {
+    const previousBaseline = lastSavedProfile.current;
+    lastSavedProfile.current = { sections: editable_profile.sections, tabs: editable_profile.tabs };
+    setEditableProfile((prevProfile) =>
+      isEqual(prevProfile.sections, previousBaseline.sections) && isEqual(prevProfile.tabs, previousBaseline.tabs)
+        ? editable_profile
+        : prevProfile,
+    );
+  }, [editable_profile]);
   const handleProfileEditorChange = React.useCallback((updates: ProfileEditorState & { selectedTabIndex: number }) => {
     setSelectedProfilePageIndex(updates.selectedTabIndex);
     setEditableProfile((prevProfile) =>
@@ -73,54 +106,73 @@ export default function SettingsPage() {
     selectedPreviewSectionIds.has(section.id),
   ).length;
 
-  const form = useForm(profile_settings);
-
-  const profileSettings = form.data;
+  const [profileSettings, setProfileSettings] = React.useState(profile_settings);
+  const lastSavedSettings = React.useRef(profile_settings);
+  React.useEffect(() => {
+    const previousBaseline = lastSavedSettings.current;
+    lastSavedSettings.current = profile_settings;
+    setProfileSettings((prevSettings) => (isEqual(prevSettings, previousBaseline) ? profile_settings : prevSettings));
+  }, [profile_settings]);
   const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
-    form.setData({ ...form.data, ...newSettings });
+    setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
 
   const uid = React.useId();
 
-  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !form.processing;
+  const [isSaving, setIsSaving] = React.useState(false);
+  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
+  const isDirty =
+    !isEqual(profileSettings, lastSavedSettings.current) ||
+    !isEqual(editableProfile.sections, lastSavedProfile.current.sections) ||
+    !isEqual(editableProfile.tabs, lastSavedProfile.current.tabs);
+  const canSave = canUpdate && isDirty;
 
-  const lastSavedSettings = React.useRef(profile_settings);
-  const handleSave = () => {
-    const data = form.data;
-    form.transform((data) => {
-      const { profile_picture_blob_id, ...user } = data;
-      return {
-        profile_picture_blob_id,
-        user,
-      };
+  const isDirtyRef = React.useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  React.useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    const removeInertiaListener = router.on("before", (event) => {
+      if (!isDirtyRef.current || event.detail.visit.method !== "get") return;
+      // eslint-disable-next-line no-alert
+      if (!window.confirm("You have unsaved changes that will be lost if you leave this page. Leave anyway?"))
+        event.preventDefault();
     });
-    form.put(Routes.settings_profile_path(), {
-      preserveScroll: true,
-      onSuccess: () => {
-        lastSavedSettings.current = data;
-      },
-    });
-  };
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      removeInertiaListener();
+    };
+  }, []);
 
-  const saveIfChanged = async () => {
-    const data = form.data;
-    const lastSaved = lastSavedSettings.current;
-    if (isEqual(lastSaved, data)) return;
-    lastSavedSettings.current = data;
+  const handleSave = asyncVoid(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    const settings = profileSettings;
+    const { sections, tabs } = editableProfile;
     try {
-      await saveProfileSettings(data);
+      const savedSections = lastSavedProfile.current.sections;
+      const dirtySections = sections.filter(
+        (section) =>
+          !isEqual(
+            savedSections.find(({ id }) => id === section.id),
+            section,
+          ),
+      );
+      await Promise.all(dirtySections.map(saveProfileSection));
+      await saveProfileSettings({ ...settings, tabs });
+      lastSavedSettings.current = settings;
+      lastSavedProfile.current = { sections, tabs };
+      isDirtyRef.current = false;
       showAlert("Changes saved!", "success");
+      await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
     } catch (e) {
-      lastSavedSettings.current = lastSaved;
       assertResponseError(e);
       showAlert(e.message, "error");
+    } finally {
+      setIsSaving(false);
     }
-  };
-  const avatarSaveQueued = React.useRef(false);
-  React.useEffect(() => {
-    if (!avatarSaveQueued.current) return;
-    avatarSaveQueued.current = false;
-    void saveIfChanged();
-  }, [form.data]);
+  });
 
   const profileColors = currentSeller
     ? {
@@ -147,7 +199,7 @@ export default function SettingsPage() {
   });
 
   return (
-    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>
+    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canSave}>
       <WithPreviewSidebar>
         <div>
           <section className="grid gap-8 p-4! md:p-8!">
@@ -167,7 +219,6 @@ export default function SettingsPage() {
                   updateCreatorProfile({ name: evt.target.value });
                   updateProfileSettings({ name: evt.target.value });
                 }}
-                onBlur={() => void saveIfChanged()}
               />
             </Fieldset>
             <Fieldset>
@@ -179,7 +230,6 @@ export default function SettingsPage() {
                 value={profileSettings.bio ?? ""}
                 disabled={!canUpdate}
                 onChange={(e) => updateProfileSettings({ bio: e.target.value })}
-                onBlur={() => void saveIfChanged()}
               />
             </Fieldset>
             <LogoInput
@@ -189,7 +239,6 @@ export default function SettingsPage() {
                   avatar_url: blob ? Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) : "",
                 });
                 updateProfileSettings({ profile_picture_blob_id: blob?.signedId ?? null });
-                avatarSaveQueued.current = true;
               }}
               disabled={!canUpdate}
             />
