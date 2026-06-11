@@ -35,11 +35,14 @@ describe OmanBankAccount do
   end
 
   describe "#validate_account_number" do
-    it "allows records that are valid Omani IBANs" do
+    it "rejects valid Omani IBANs with a message explaining what to enter instead" do
       allow(Rails.env).to receive(:production?).and_return(true)
 
-      expect(build(:oman_bank_account, account_number: "OM030001234567890123456")).to be_valid
-      expect(build(:oman_bank_account, account_number: "OM810180000001299123456")).to be_valid
+      ["OM030001234567890123456", "OM810180000001299123456"].each do |iban|
+        om_bank_account = build(:oman_bank_account, account_number: iban)
+        expect(om_bank_account).not_to be_valid
+        expect(om_bank_account.errors.full_messages.to_sentence).to eq("Please enter your bank account number, not your IBAN.")
+      end
     end
 
     it "allows records that match the required account number regex" do
