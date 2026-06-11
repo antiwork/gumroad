@@ -6,6 +6,11 @@ class ElasticsearchIndexerWorker
 
   UPDATE_BY_QUERY_SCROLL_SIZE = 100
 
+  # Models whose rows are hard-deleted, so their index/update jobs can race the
+  # destroy and find the row legitimately missing. Every other indexed model is
+  # soft-deleted and a missing row there always indicates replica lag or a bug.
+  HARD_DELETED_CLASSES = %w[AudienceMember].freeze
+
   # Usage examples:
   # .perform("index", { "class_name" => "Link", "record_id" => 1 } )
   # .perform("delete", { "class_name" => "Link", "record_id" => 1 } )
@@ -52,6 +57,18 @@ class ElasticsearchIndexerWorker
       client_params[:ignore] << 404
       EsClient.delete(client_params)
     end
+  rescue ActiveRecord::RecordNotFound
+    # For hard-deleted models a row already gone when its index/update job runs
+    # is normal: the destroy's own after_commit enqueued the delete that removes
+    # the document, so retrying would never succeed. Everything else — including
+    # a freshly written row not yet visible on a lagging replica — keeps the
+    # retries that exist to ride the lag out, and the primary re-check stops lag
+    # from masquerading as a deletion.
+    raise unless params["class_name"].in?(HARD_DELETED_CLASSES)
+
+    ActiveRecord::Base.connection.stick_to_primary!
+    searched_id = params["record_id"]
+    raise if searched_id.nil? || params.fetch("class_name").constantize.exists?(searched_id)
   end
 
   def self.columns_to_fields(columns, mapping:)
