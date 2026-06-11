@@ -9,7 +9,7 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -40,27 +40,6 @@ type ProfilePageProps = {
   settings_pages: SettingPage[];
   editable_profile: ProfileEditorProps;
 } & ProfileProps;
-
-const sectionErrorMessage = async (response: Response) => {
-  try {
-    const json: unknown = await response.json();
-    if (json && typeof json === "object" && "error" in json && typeof json.error === "string") return json.error;
-  } catch {
-    // Fall back to the generic response error below.
-  }
-
-  return undefined;
-};
-
-const saveProfileSection = async (section: ProfileEditorState["sections"][number]) => {
-  const response = await request({
-    method: "PATCH",
-    url: Routes.profile_section_path(section.id),
-    data: section,
-    accept: "json",
-  });
-  if (!response.ok) throw new ResponseError(await sectionErrorMessage(response));
-};
 
 export default function SettingsPage() {
   const { creator_profile, profile_settings, settings_pages, editable_profile } = typia.assert<ProfilePageProps>(
@@ -151,21 +130,12 @@ export default function SettingsPage() {
     const settings = profileSettings;
     const { sections, tabs } = editableProfile;
     try {
-      const savedSections = lastSavedProfile.current.sections;
-      const dirtySections = sections.filter(
-        (section) =>
-          !isEqual(
-            savedSections.find(({ id }) => id === section.id),
-            section,
-          ),
-      );
-      await Promise.all(dirtySections.map(saveProfileSection));
-      await saveProfileSettings({ ...settings, tabs });
+      await saveProfileSettings({ ...settings, tabs, sections });
       lastSavedSettings.current = settings;
       lastSavedProfile.current = { sections, tabs };
       isDirtyRef.current = false;
-      showAlert("Changes saved!", "success");
       await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
+      showAlert("Changes saved!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");

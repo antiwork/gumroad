@@ -28,11 +28,18 @@ class Settings::ProfileController < Settings::BaseController
     begin
       ActiveRecord::Base.transaction do
         seller_profile = current_seller.seller_profile
-        sections = current_seller.seller_profile_sections.on_profile
+        section_ids_by_param_id = {}
+        if permitted_params[:sections]
+          save_service = SellerProfileSections::SaveService.new(seller: current_seller)
+          permitted_params[:sections].each do |section_attributes|
+            section = save_service.upsert!(section_attributes)
+            section_ids_by_param_id[section_attributes[:id]] = section.id
+          end
+        end
         if permitted_params[:tabs]
           tabs = permitted_params[:tabs].as_json
-          tabs.each { |tab| (tab["sections"] ||= []).map! { ObfuscateIds.decrypt(_1) } }
-          sections.each do |section|
+          tabs.each { |tab| (tab["sections"] ||= []).map! { section_ids_by_param_id[_1] || ObfuscateIds.decrypt(_1) } }
+          current_seller.seller_profile_sections.on_profile.each do |section|
             section.destroy! if tabs.none? { _1["sections"]&.include?(section.id) }
           end
           seller_profile.json_data["tabs"] = tabs
@@ -45,6 +52,8 @@ class Settings::ProfileController < Settings::BaseController
       respond_success
     rescue ActiveRecord::RecordInvalid => e
       respond_error(e.record.errors.full_messages.to_sentence)
+    rescue ActiveRecord::SubclassNotFound
+      respond_error("Invalid section type")
     end
   end
 

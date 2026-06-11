@@ -111,6 +111,121 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.avatar.attached?).to be(true) # Ensure the avatar remains attached
     end
 
+    describe "batch-saving sections" do
+      let(:temp_id) { "0b8f3782-3a85-4f93-8e3c-2b1f5d3e8a90" }
+
+      it "creates sections carrying temporary ids and maps tab references to the new records" do
+        expect do
+          put :update, params: {
+            sections: [{ id: temp_id, type: "SellerProfileSubscribeSection", header: "Subscribe", hide_header: false, button_label: "Follow" }],
+            tabs: [{ name: "Tab 1", sections: [temp_id] }],
+          }, as: :json
+        end.to change { seller.seller_profile_sections.count }.from(0).to(1)
+
+        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
+        section = seller.seller_profile_subscribe_sections.sole
+        expect(section).to have_attributes(header: "Subscribe", hide_header: false, button_label: "Follow")
+        expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [section.id] }].as_json
+      end
+
+      it "updates existing sections and creates new ones in the same save" do
+        products = create_list(:product, 2, user: seller)
+        existing = create(:seller_profile_products_section, seller:, header: "Old")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [existing.id] }] })
+
+        put :update, params: {
+          sections: [
+            { id: existing.external_id, header: "Updated", hide_header: true, shown_products: products.map(&:external_id) },
+            { id: temp_id, type: "SellerProfileProductsSection", header: "New", shown_products: [], default_product_sort: "page_layout", show_filters: false, add_new_products: true },
+          ],
+          tabs: [{ name: "Tab 1", sections: [existing.external_id, temp_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(seller.seller_profile_sections.count).to eq 2
+        expect(existing.reload).to have_attributes(header: "Updated", hide_header: true, shown_products: products.map(&:id))
+        new_section = seller.seller_profile_sections.where.not(id: existing.id).sole
+        expect(new_section.header).to eq("New")
+        expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [existing.id, new_section.id] }].as_json
+      end
+
+      it "destroys sections that no tab references anymore" do
+        removed = create(:seller_profile_products_section, seller:)
+        kept = create(:seller_profile_products_section, seller:, header: "Old")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [removed.id, kept.id] }] })
+
+        put :update, params: {
+          sections: [{ id: kept.external_id, header: "Kept" }],
+          tabs: [{ name: "Tab 1", sections: [kept.external_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(seller.seller_profile_sections.sole).to eq kept
+        expect(kept.reload.header).to eq("Kept")
+        expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [kept.id] }].as_json
+      end
+
+      it "does not keep a row for a new section that no tab references" do
+        put :update, params: {
+          sections: [{ id: temp_id, type: "SellerProfileSubscribeSection", button_label: "Subscribe" }],
+          tabs: [{ name: "Tab 1", sections: [] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(seller.seller_profile_sections.count).to eq 0
+      end
+
+      it "processes rich text upsell content for sections created in the batch save" do
+        product = create(:product, user: seller)
+        text = {
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ text: "hi", type: "text" }] },
+            { type: "upsellCard", attrs: { discount: nil, productId: product.external_id } },
+          ],
+        }
+
+        put :update, params: {
+          sections: [{ id: temp_id, type: "SellerProfileRichTextSection", text: }],
+          tabs: [{ name: "Tab 1", sections: [temp_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        upsell = Upsell.last
+        expect(upsell).to be_alive
+        expect(upsell.product_id).to eq(product.id)
+        section = seller.seller_profile_rich_text_sections.sole
+        expect(section.text["content"][1]["attrs"]["id"]).to eq(upsell.external_id)
+      end
+
+      it "rolls back the whole save when a section is invalid" do
+        put :update, params: {
+          user: { name: "Updated name" },
+          sections: [{ id: temp_id, type: "SellerProfileProductsSection", show_filters: "i hack u :)" }],
+          tabs: [{ name: "Tab 1", sections: [temp_id] }],
+        }, as: :json
+
+        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to include("show_filters")
+        expect(seller.reload.name).to_not eq("Updated name")
+        expect(seller.seller_profile_sections.count).to eq 0
+      end
+
+      it "returns an error for an invalid section type" do
+        put :update, params: {
+          sections: [{ id: temp_id, type: "SellerProfileFakeSection" }],
+        }, as: :json
+
+        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Invalid section type")
+        expect(seller.seller_profile_sections.count).to eq 0
+      end
+    end
+
     it "returns an error if the corresponding blob for the provided 'profile_picture_blob_id' is already removed" do
       seller.avatar.attach(file_fixture("test.png"))
       signed_id = seller.avatar.signed_id

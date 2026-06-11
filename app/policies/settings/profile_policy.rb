@@ -27,7 +27,8 @@ class Settings::ProfilePolicy < ApplicationPolicy
       :profile_picture_blob_id,
       {
         user: user_attributes,
-        tabs: [:name, { sections: [] }]
+        tabs: [:name, { sections: [] }],
+        sections: [:id, *ProfileSectionPolicy::CREATE_ATTRIBUTES]
       }
     ]
   end

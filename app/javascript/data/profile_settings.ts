@@ -46,8 +46,18 @@ export type WishlistsSection = Section & {
   shown_wishlists: string[];
 };
 
-export const updateProfileSettings = async (profileSettings: Partial<ProfileSettings> & { tabs?: Tab[] }) => {
-  const { profile_picture_blob_id, tabs, ...user } = profileSettings;
+export type ProfileSection =
+  | ProductsSection
+  | PostsSection
+  | RichTextSection
+  | SubscribeSection
+  | FeaturedProductSection
+  | WishlistsSection;
+
+export const updateProfileSettings = async (
+  profileSettings: Partial<ProfileSettings> & { tabs?: Tab[]; sections?: ProfileSection[] },
+) => {
+  const { profile_picture_blob_id, tabs, sections, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
     url: Routes.settings_profile_path(),
@@ -56,6 +66,7 @@ export const updateProfileSettings = async (profileSettings: Partial<ProfileSett
       user,
       profile_picture_blob_id,
       tabs,
+      sections,
     },
   });
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());

@@ -14,11 +14,9 @@ import {
 import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import { PROFILE_SORT_KEYS, type ProfileSortKey } from "$app/parsers/product";
 import GuidGenerator from "$app/utils/guid_generator";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -621,24 +619,12 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     setTabs(newOrder.flatMap((id) => tabs.find((tab) => tab.id === id) ?? []));
   };
 
-  const createSectionRecord = async (section: Omit<Section, "id">) => {
-    const response = await request({
-      method: "POST",
-      url: Routes.profile_sections_path(),
-      data: section,
-      accept: "json",
-    });
-    const json: unknown = await response.json();
-    if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
-    return typia.assert<{ id: string }>(json).id;
-  };
-
-  const createSection = async (type: Section["type"]): Promise<Section> => {
-    const commonProps = { header: "", hide_header: false, product_id: props.product_id };
+  const createSection = (type: Section["type"]): Section => {
+    const commonProps = { id: GuidGenerator.generate(), header: "", hide_header: false, product_id: props.product_id };
 
     switch (type) {
-      case "SellerProfileProductsSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfileProductsSection" }>, "id"> = {
+      case "SellerProfileProductsSection":
+        return {
           ...commonProps,
           type,
           shown_products: [],
@@ -647,70 +633,53 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
           add_new_products: true,
           search_results: { products: [], total: 0, filetypes_data: [], tags_data: [] },
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
-      case "SellerProfilePostsSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfilePostsSection" }>, "id"> = {
+      case "SellerProfilePostsSection":
+        return {
           ...commonProps,
           type,
           shown_posts: props.posts.map((post) => post.id),
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
-      case "SellerProfileRichTextSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfileRichTextSection" }>, "id"> = {
+      case "SellerProfileRichTextSection":
+        return {
           ...commonProps,
           type,
           text: {},
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
-      case "SellerProfileSubscribeSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfileSubscribeSection" }>, "id"> = {
+      case "SellerProfileSubscribeSection":
+        return {
           ...commonProps,
           type,
           header: `Subscribe to receive email updates from ${props.creator_profile.name}.`,
           button_label: "Subscribe",
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
-      case "SellerProfileFeaturedProductSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfileFeaturedProductSection" }>, "id"> = {
+      case "SellerProfileFeaturedProductSection":
+        return {
           ...commonProps,
           type,
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
-      case "SellerProfileWishlistsSection": {
-        const section: Omit<Extract<Section, { type: "SellerProfileWishlistsSection" }>, "id"> = {
+      case "SellerProfileWishlistsSection":
+        return {
           ...commonProps,
           type,
           shown_wishlists: [],
         };
-        return { ...section, id: await createSectionRecord(section) };
-      }
     }
   };
 
-  const addSection = async (type: Section["type"]) => {
+  const addSection = (type: Section["type"]) => {
     if (disabled) return;
 
-    try {
-      const tab = selectedTab ?? { id: GuidGenerator.generate(), name: "New page", sections: [] };
-      const baseTabs = selectedTab ? tabs : [tab];
-      const section = await createSection(type);
-      const nextTabs = baseTabs.map((existing) =>
-        existing.id === tab.id ? { ...existing, sections: [...existing.sections, section.id] } : existing,
-      );
-      const nextSelectedTab = nextTabs.find((existing) => existing.id === tab.id);
-      setLastAddedSectionId(section.id);
-      setSections((currentSections) => [...currentSections, section]);
-      if (nextSelectedTab) setSelectedTab(nextSelectedTab);
-      setTabs(nextTabs);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
+    const tab = selectedTab ?? { id: GuidGenerator.generate(), name: "New page", sections: [] };
+    const baseTabs = selectedTab ? tabs : [tab];
+    const section = createSection(type);
+    const nextTabs = baseTabs.map((existing) =>
+      existing.id === tab.id ? { ...existing, sections: [...existing.sections, section.id] } : existing,
+    );
+    const nextSelectedTab = nextTabs.find((existing) => existing.id === tab.id);
+    setLastAddedSectionId(section.id);
+    setSections((currentSections) => [...currentSections, section]);
+    if (nextSelectedTab) setSelectedTab(nextSelectedTab);
+    setTabs(nextTabs);
   };
 
   const removeSection = (sectionId: string) => {
@@ -743,7 +712,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
       <PopoverContent className="border-0 p-0 shadow-none">
         <Menu onClick={() => setAddSectionMenuOpen(false)}>
           {SECTION_TYPES.map((type) => (
-            <MenuItem key={type} onClick={() => void addSection(type)}>
+            <MenuItem key={type} onClick={() => addSection(type)}>
               {SECTION_TYPE_ICONS[type]}
               {SECTION_TYPE_LABELS[type]}
             </MenuItem>

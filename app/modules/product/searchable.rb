@@ -342,7 +342,7 @@ module Product::Searchable
           end
 
           # In the event of a tie, sort by newest. Don't sort purchases, since they're already sorted.
-          by :created_at, order: "desc" unless params[:section] && params[:sort] == ProductSortKey::PAGE_LAYOUT
+          by :created_at, order: "desc" unless (params[:section] || params[:ids].present?) && params[:sort] == ProductSortKey::PAGE_LAYOUT
         end
 
         aggregation "tags.keyword" do

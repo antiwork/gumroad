@@ -239,8 +239,9 @@ describe "User profile page", type: :system, js: true do
 
         add_section "Products"
         expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
-        expect(seller.seller_profile_sections.count).to eq 1
+        expect(seller.seller_profile_sections.count).to eq 0
         save_changes
+        expect(seller.seller_profile_sections.count).to eq 1
 
         seller.update!(bio: "Hello!")
         visit settings_profile_path
@@ -505,10 +506,8 @@ describe "User profile page", type: :system, js: true do
             expect(page).to have_button("Subscribe")
           end
         end
-        wait_for_ajax
 
-        new_section = seller.seller_profile_sections.sole
-        expect(new_section).to have_attributes(header: "Subscribe to receive email updates from Gumbot.", button_label: "Subscribe")
+        expect(seller.seller_profile_sections.count).to eq 0
 
         within_section_form "Subscribe to receive email updates from Gumbot." do
           fill_in "Section name", with: "Subscribe now or else"
@@ -522,24 +521,24 @@ describe "User profile page", type: :system, js: true do
           end
         end
 
-        expect(new_section.reload).to have_attributes(header: "Subscribe to receive email updates from Gumbot.", button_label: "Subscribe")
+        expect(seller.seller_profile_sections.count).to eq 0
         save_changes
-        expect(new_section.reload).to have_attributes(header: "Subscribe now or else", button_label: "Follow")
+        expect(seller.seller_profile_sections.sole).to have_attributes(header: "Subscribe now or else", button_label: "Follow")
       end
 
       it "allows creating featured product sections" do
         visit settings_profile_path
         add_section "Featured product"
 
-        section = seller.seller_profile_sections.sole
-        expect(section).to be_a SellerProfileFeaturedProductSection
-        expect(section.featured_product_id).to be_nil
+        expect(seller.seller_profile_sections.count).to eq 0
 
         within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
         end
         save_changes
-        expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
+        section = seller.seller_profile_sections.sole
+        expect(section).to be_a SellerProfileFeaturedProductSection
+        expect(section).to have_attributes(header: "My featured product", featured_product_id: nil)
 
         within_section_form "My featured product" do
           select "Product 2", from: "Featured product"
@@ -571,15 +570,15 @@ describe "User profile page", type: :system, js: true do
         visit settings_profile_path
         add_section "Featured product"
 
-        section = seller.seller_profile_sections.sole
-        expect(section).to be_a SellerProfileFeaturedProductSection
-        expect(section.featured_product_id).to be_nil
+        expect(seller.seller_profile_sections.count).to eq 0
 
         within_section_form "Featured product" do
           fill_in "Section name", with: "My featured product"
         end
         save_changes
-        expect(section.reload).to have_attributes(header: "My featured product", featured_product_id: nil)
+        section = seller.seller_profile_sections.sole
+        expect(section).to be_a SellerProfileFeaturedProductSection
+        expect(section).to have_attributes(header: "My featured product", featured_product_id: nil)
 
         within_section_form "My featured product" do
           select "Buy me a coffee", from: "Featured product"
