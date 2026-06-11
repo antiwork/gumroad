@@ -125,6 +125,65 @@ describe Onetime::BackfillAudienceMembersIndex do
     end
   end
 
+  describe ".spread" do
+    after do
+      $redis.srem(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices, AudienceMember.index_name)
+    end
+
+    it "enqueues paced range jobs covering all members and advances the cursor" do
+      members = create_list(:audience_member, 5)
+
+      described_class.spread(duration: 30.minutes, rows_per_job: 2, batch_size: 100)
+
+      jobs = BackfillAudienceMembersIndexJob.jobs
+      expect(jobs.size).to eq(3)
+      expect(jobs.map { _1["args"] }).to eq([
+                                              [members[0].id, members[1].id, nil, 100],
+                                              [members[2].id, members[3].id, nil, 100],
+                                              [members[4].id, members[4].id, nil, 100],
+                                            ])
+      expect(jobs.first["at"]).to be_nil
+      expect(jobs.second["at"]).to be_within(2).of(10.minutes.from_now.to_f)
+      expect(jobs.third["at"]).to be_within(2).of(20.minutes.from_now.to_f)
+      expect($redis.get(described_class::REDIS_CURSOR_KEY).to_i).to eq(members.last.id)
+      expect($redis.smembers(RedisKey.elasticsearch_indexer_worker_ignore_404_errors_on_indices)).to include(AudienceMember.index_name)
+    end
+
+    it "scopes ranges to the seller and uses the per-seller cursor" do
+      seller = create(:user)
+      member = create(:audience_member, seller:)
+      create(:audience_member)
+
+      described_class.spread(seller_id: seller.id)
+
+      jobs = BackfillAudienceMembersIndexJob.jobs
+      expect(jobs.size).to eq(1)
+      expect(jobs.first["args"]).to eq([member.id, member.id, seller.id, described_class::BATCH_SIZE])
+      expect($redis.get("#{described_class::REDIS_CURSOR_KEY}_seller_#{seller.id}").to_i).to eq(member.id)
+      expect($redis.get(described_class::REDIS_CURSOR_KEY)).to be_nil
+    end
+
+    it "starts ranges after the stored cursor" do
+      members = create_list(:audience_member, 3)
+      $redis.set(described_class::REDIS_CURSOR_KEY, members.second.id)
+
+      described_class.spread
+
+      expect(BackfillAudienceMembersIndexJob.jobs.map { _1["args"] }).to eq(
+        [[members.third.id, members.third.id, nil, described_class::BATCH_SIZE]]
+      )
+    end
+
+    it "raises when the index does not exist" do
+      AudienceMember.__elasticsearch__.delete_index!
+
+      expect do
+        described_class.spread
+      end.to raise_error(/index is missing/)
+      expect(BackfillAudienceMembersIndexJob.jobs).to be_empty
+    end
+  end
+
   it "suppresses indexer 404s only while the backfill is running" do
     create(:audience_member)
     ignore_set_during_run = nil
