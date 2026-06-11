@@ -20,6 +20,18 @@ describe BackfillAudienceMembersIndexJob do
     expect(document).to eq(members.first.as_indexed_json)
   end
 
+  it "skips the range when the pause flag is active" do
+    member = create(:audience_member)
+    Feature.activate(:pause_audience_members_index_backfill)
+
+    described_class.new.perform(member.id, member.id)
+    AudienceMember.__elasticsearch__.refresh_index!
+
+    expect(EsClient.exists?(index: AudienceMember.index_name, id: member.id)).to eq(false)
+  ensure
+    Feature.deactivate(:pause_audience_members_index_backfill)
+  end
+
   it "scopes the range to the seller when seller_id is given" do
     seller = create(:user)
     member = create(:audience_member, seller:)
