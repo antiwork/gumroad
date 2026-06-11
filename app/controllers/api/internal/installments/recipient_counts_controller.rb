@@ -24,7 +24,7 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
     installment.seller = current_seller
 
     render json: {
-      audience_count: current_seller.audience_members.count,
+      audience_count: AudienceMember.count_for_seller(current_seller),
       recipient_count: installment.audience_members_count
     }
   end

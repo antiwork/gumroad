@@ -100,6 +100,32 @@ describe AudienceMember::Searchable, :freeze_time do
     end
   end
 
+  describe ".count_for_seller" do
+    let(:seller) { create(:user) }
+
+    it "counts from MySQL when the seller's flag is off" do
+      create_list(:audience_member, 2, seller:)
+
+      expect(AudienceMember).not_to receive(:filter_count)
+      expect(AudienceMember.count_for_seller(seller)).to eq(2)
+    end
+
+    context "when the seller's flag is on", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      before do
+        recreate_model_index(AudienceMember)
+        Feature.activate_user(:audience_count_from_elasticsearch, seller)
+      end
+
+      it "counts from Elasticsearch" do
+        create_list(:audience_member, 2, seller:)
+        create(:audience_member)
+
+        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
+        expect(AudienceMember.count_for_seller(seller)).to eq(2)
+      end
+    end
+  end
+
   describe ".filter_count", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     let(:seller) { create(:user) }
     let(:seller_id) { seller.id }

@@ -106,6 +106,17 @@ module AudienceMember::Searchable
       EsClient.count(options)["count"]
     end
 
+    # Total audience size from the same engine that serves the seller's filtered
+    # counts: numbers displayed side by side must come from one snapshot, or the
+    # engines' different sync latencies can show a filtered count above the total.
+    def count_for_seller(seller)
+      if Feature.active?(:audience_count_from_elasticsearch, seller)
+        filter_count(seller_id: seller.id)
+      else
+        seller.audience_members.count
+      end
+    end
+
     # Builds an Elasticsearch query equivalent to the SQL built by AudienceMember.filter,
     # so that counts computed here always match the recipients selected by the blast jobs.
     def filter_query(seller_id:, params: {})
