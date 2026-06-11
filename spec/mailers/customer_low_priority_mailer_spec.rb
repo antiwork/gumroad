@@ -386,6 +386,20 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.sanitized).to include "First payment #{subscription.formatted_end_time_of_subscription}"
       expect(mail.body.sanitized).to include "Payment method VISA *4242"
     end
+
+    context "when the subscription's credit card is missing" do
+      let(:subscription) { create(:subscription, link: product, user: nil, credit_card: nil) }
+
+      it "logs the skip and does not deliver the email" do
+        expect(Rails.logger).to receive(:warn).with(
+          "[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=subscription_giftee_added_card; subscription_id=#{subscription.id}"
+        )
+
+        expect do
+          CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_now
+        end.not_to change(ActionMailer::Base.deliveries, :count)
+      end
+    end
   end
 
   describe "order_shipped" do
