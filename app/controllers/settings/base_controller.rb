@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 class Settings::BaseController < Sellers::BaseController
+  include MobileAppWebView
+
   layout "inertia"
+
+  prepend_before_action :authenticate_mobile_app_web_view!
 
   inertia_share do
     {
