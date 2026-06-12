@@ -10,6 +10,8 @@ class Api::V2::SalesController < Api::V2::BaseController
 
   RESULTS_PER_PAGE = 10
   SALES_API_PRELOADS = [
+    :preorder,
+    :subscription,
     :tip,
     :utm_link,
     { order: { cart: { sent_abandoned_cart_emails: :installment } } },
