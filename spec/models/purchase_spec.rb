@@ -839,6 +839,16 @@ describe Purchase, :vcr do
       )
     end
 
+    it "includes the giftee review for gift sender purchases in v2 web CSV parity fields" do
+      product = create(:product)
+      gift_sender_purchase = create(:purchase, :gift_sender, link: product)
+      giftee_purchase = create(:purchase, :gift_receiver, link: product)
+      create(:gift, link: product, gifter_purchase: gift_sender_purchase, giftee_purchase:)
+      create(:product_review, purchase: giftee_purchase, rating: 5, message: "The giftee loved it")
+
+      expect(gift_sender_purchase.reload.as_json(version: 2)).to include(review: "The giftee loved it")
+    end
+
     it "exposes processor fields for PayPal marketplace sales" do
       @purchase.update!(
         paypal_order_id: "paypal_order_123",
