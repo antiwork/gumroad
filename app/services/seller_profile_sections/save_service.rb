@@ -19,7 +19,7 @@ class SellerProfileSections::SaveService
   end
 
   def update!(section, attributes)
-    attributes = decrypt_ids(attributes.except(:id, :type, :product_id, :shown_posts))
+    attributes = decrypt_ids(attributes.except(:id, :type, :product_id))
     if attributes[:text].present? && section.is_a?(SellerProfileRichTextSection)
       attributes[:text][:content] = process_text(attributes[:text][:content], section.json_data["text"]["content"] || [])
     end

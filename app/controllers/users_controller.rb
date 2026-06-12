@@ -34,7 +34,10 @@ class UsersController < ApplicationController
   end
 
   def edit
-    e404 unless @user == current_seller
+    if @user != current_seller
+      skip_authorization
+      e404
+    end
 
     authorize [:settings, :profile], :show?
 
