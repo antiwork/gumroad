@@ -845,7 +845,8 @@ class Purchase < ApplicationRecord
       can_update: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).update? : nil,
       invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
-      paypal_refund_expired: paypal_refund_expired?
+      paypal_refund_expired: paypal_refund_expired?,
+      **(version == 2 ? web_csv_parity_fields : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
@@ -925,6 +926,18 @@ class Purchase < ApplicationRecord
     json[:quantity] = quantity
     json[:message] = messages.unread.last if options[:unread_message]
     json
+  end
+
+  def tax_included_in_price
+    return unless was_purchase_taxable?
+
+    !was_tax_excluded_from_price
+  end
+
+  def sent_abandoned_cart_email?
+    return false if order&.cart.blank?
+
+    order.cart.sent_abandoned_cart_emails.any? { _1.installment.seller_id == link.user_id }
   end
 
   def receipt_url
@@ -2995,6 +3008,42 @@ class Purchase < ApplicationRecord
   end
 
   private
+    def web_csv_parity_fields
+      {
+        utm_source: utm_link&.utm_source,
+        utm_medium: utm_link&.utm_medium,
+        utm_campaign: utm_link&.utm_campaign,
+        utm_term: utm_link&.utm_term,
+        utm_content: utm_link&.utm_content,
+        tip_cents: tip&.value_usd_cents,
+        tax_cents: web_csv_tax_cents,
+        shipping_cents:,
+        tax_label: (tax_label(include_tax_rate: false) if has_tax_label?),
+        tax_included_in_price:,
+        payment_processor: web_csv_payment_processor,
+        processor_transaction_id: (stripe_transaction_id if web_csv_payment_processor.present?),
+        processor_fee_cents: (processor_fee_cents if web_csv_payment_processor.present?),
+        processor_fee_currency: (processor_fee_cents_currency if web_csv_payment_processor.present?),
+        access_revoked: is_access_revoked,
+        preorder_authorization_time: (preorder.created_at if is_preorder_charge?),
+        variants_price_cents: variant_extra_cost,
+        review: original_product_review&.message,
+        cancellation_date: subscription&.user_requested_cancellation_at,
+        subscription_end_date: subscription&.termination_date,
+        sent_abandoned_cart_email: sent_abandoned_cart_email?
+      }
+    end
+
+    def web_csv_tax_cents
+      gumroad_responsible_for_tax? ? gumroad_tax_cents : tax_cents
+    end
+
+    def web_csv_payment_processor
+      return "paypal" if paypal_order_id?
+
+      "stripe_connect" if charged_using_stripe_connect_account?
+    end
+
     def resolved_offer_code_discount_for_buyer
       if offer_code.existing_customers_only? || offer_code.tiered?
         evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer, product: link)

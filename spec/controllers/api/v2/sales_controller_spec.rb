@@ -5,6 +5,14 @@ require "shared_examples/authorized_oauth_v1_api_method"
 
 describe Api::V2::SalesController do
   before do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id) ||
+      create(:merchant_account_paypal, user: nil, charge_processor_merchant_id: "paypal_#{SecureRandom.hex(8)}")
+    MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
+
     @seller = create(:user)
     @purchaser = create(:user)
     @app = create(:oauth_application, owner: create(:user))
@@ -45,6 +53,35 @@ describe Api::V2::SalesController do
           expect(response.parsed_body["success"]).to eq true
           expect(response.parsed_body["sales"]).to match_array sales_json
         end
+      end
+
+      it "includes web CSV parity fields in the response" do
+        add_web_csv_api_fields(@purchase)
+
+        get :index, params: @params
+
+        sale_json = response.parsed_body["sales"].find { _1["id"] == @purchase.external_id }
+        expect(sale_json).to include(
+          "utm_source" => "newsletter",
+          "utm_medium" => "email",
+          "utm_campaign" => "launch",
+          "utm_term" => "founders",
+          "utm_content" => "hero",
+          "tip_cents" => 350,
+          "tax_cents" => 123,
+          "shipping_cents" => 456,
+          "tax_label" => "Sales tax",
+          "tax_included_in_price" => true,
+          "payment_processor" => "stripe_connect",
+          "processor_transaction_id" => "ch_123",
+          "processor_fee_cents" => 78,
+          "processor_fee_currency" => "usd",
+          "access_revoked" => true,
+          "variants_price_cents" => 250,
+          "review" => "Worth it",
+          "sent_abandoned_cart_email" => true
+        )
+        expect(sale_json.keys).to include("preorder_authorization_time", "cancellation_date", "subscription_end_date")
       end
 
       it "returns a link to the next page if there are more than 10 sales" do
@@ -308,6 +345,21 @@ describe Api::V2::SalesController do
             email: @purchase.email,
             host: UrlService.domain_with_protocol
           )
+        )
+      end
+
+      it "includes web CSV parity fields in the response" do
+        add_web_csv_api_fields(@purchase)
+
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]).to include(
+          "utm_source" => "newsletter",
+          "tip_cents" => 350,
+          "tax_cents" => 123,
+          "payment_processor" => "stripe_connect",
+          "processor_transaction_id" => "ch_123",
+          "sent_abandoned_cart_email" => true
         )
       end
 
@@ -1024,5 +1076,37 @@ describe Api::V2::SalesController do
         expect(response.code).to eq "403"
       end
     end
+  end
+
+  def add_web_csv_api_fields(purchase)
+    utm_link = create(:utm_link, seller: purchase.seller, utm_source: "newsletter", utm_medium: "email", utm_campaign: "launch", utm_term: "founders", utm_content: "hero")
+    create(:utm_link_driven_sale, utm_link:, purchase:)
+    create(:tip, purchase:, value_usd_cents: 350)
+    category = create(:variant_category, link: purchase.link, title: "Format")
+    variant = create(:variant, variant_category: category, name: "Premium", price_difference_cents: 250)
+    purchase.variant_attributes << variant
+    create(:product_review, purchase:, rating: 5, message: "Worth it")
+    subscription = create(:subscription, user: purchase.seller, link: purchase.link)
+    subscription.update!(user_requested_cancellation_at: Time.zone.parse("2026-01-02 03:04:05"), cancelled_at: Date.new(2026, 1, 10))
+    preorder = create(:preorder, seller: purchase.seller, preorder_link: create(:preorder_link, link: purchase.link), created_at: Time.zone.parse("2025-12-01 08:00:00"))
+    cart = create(:cart, order: create(:order, purchases: [purchase]))
+    workflow = create(:abandoned_cart_workflow, seller: purchase.seller)
+    create(:sent_abandoned_cart_email, cart:, installment: workflow.installments.sole)
+
+    purchase.update!(
+      was_purchase_taxable: true,
+      was_tax_excluded_from_price: false,
+      tax_cents: 123,
+      shipping_cents: 456,
+      is_access_revoked: true,
+      subscription:,
+      preorder:,
+      is_original_subscription_purchase: true,
+      is_preorder_authorization: false,
+      merchant_account: create(:merchant_account_stripe_connect, user: purchase.seller),
+      processor_fee_cents: 78,
+      processor_fee_cents_currency: "usd",
+      stripe_transaction_id: "ch_123"
+    )
   end
 end
