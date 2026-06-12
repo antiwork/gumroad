@@ -54,7 +54,8 @@ describe WebauthnCredential do
       credential = build(:webauthn_credential, user:)
 
       expect(credential).not_to be_valid
-      expect(credential.errors[:base]).to include("You can add up to #{described_class::MAX_PER_USER} passkeys.")
+      expect(credential.errors[:base]).to include(described_class::MAX_PER_USER_ERROR_MESSAGE)
+      expect(credential.errors.details[:base]).to include(error: described_class::MAX_PER_USER_ERROR)
     end
 
     it "allows existing passkeys to be renamed when the user is at the maximum" do

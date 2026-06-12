@@ -55,7 +55,7 @@ describe Settings::PasskeysController, type: :controller do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to eq(
         "success" => false,
-        "error_message" => "You can add up to #{WebauthnCredential::MAX_PER_USER} passkeys."
+        "error_message" => WebauthnCredential::MAX_PER_USER_ERROR_MESSAGE
       )
     end
 
@@ -104,6 +104,23 @@ describe Settings::PasskeysController, type: :controller do
       expect(credential.public_key).to be_present
       expect(credential.sign_count).to eq(0)
       expect(session[Settings::PasskeysController::REGISTRATION_CHALLENGE_SESSION_KEY]).to be_nil
+    end
+
+    it "ignores unexpected credential payload fields before verification" do
+      post :registration_options, as: :json
+      credential_params = valid_credential_params.merge("unexpected" => "ignored")
+      credential_params["response"] = credential_params["response"].merge("unexpected" => "ignored")
+
+      allow(WebAuthn::Credential).to receive(:from_create).and_wrap_original do |method, credential|
+        expect(credential).not_to have_key("unexpected")
+        expect(credential["response"]).not_to have_key("unexpected")
+
+        method.call(credential)
+      end
+
+      post :create, params: { credential: credential_params }, as: :json
+
+      expect(response).to have_http_status(:created)
     end
 
     it "uses a default nickname when none is provided" do
@@ -181,6 +198,86 @@ describe Settings::PasskeysController, type: :controller do
       )
       expect(user.reload.webauthn_credentials).to be_empty
       expect(session[Settings::PasskeysController::REGISTRATION_CHALLENGE_SESSION_KEY]).to be_nil
+    end
+
+    it "returns a generic error for scalar credential payloads" do
+      post :registration_options, as: :json
+
+      post :create, params: { credential: "not-a-credential" }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "error_message" => Settings::PasskeysController::REGISTRATION_ERROR_MESSAGE
+      )
+      expect(user.reload.webauthn_credentials).to be_empty
+    end
+
+    it "returns a generic error for invalid base64url credential strings" do
+      post :registration_options, as: :json
+
+      post :create, params: {
+        credential: {
+          type: "public-key",
+          id: "***",
+          rawId: "***",
+          response: {
+            attestationObject: "***",
+            clientDataJSON: "***"
+          }
+        }
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "error_message" => Settings::PasskeysController::REGISTRATION_ERROR_MESSAGE
+      )
+      expect(user.reload.webauthn_credentials).to be_empty
+    end
+
+    it "returns a generic error for structurally invalid attestation objects" do
+      post :registration_options, as: :json
+      encoded_client_data = Base64.urlsafe_encode64({
+        type: "webauthn.create",
+        challenge: response.parsed_body.dig("options", "challenge"),
+        origin:
+      }.to_json, padding: false)
+
+      post :create, params: {
+        credential: {
+          type: "public-key",
+          id: "AA",
+          rawId: "AA",
+          response: {
+            attestationObject: "AA",
+            clientDataJSON: encoded_client_data
+          }
+        }
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "error_message" => Settings::PasskeysController::REGISTRATION_ERROR_MESSAGE
+      )
+      expect(user.reload.webauthn_credentials).to be_empty
+    end
+
+    it "returns the max-passkeys error when the limit is reached after options were issued" do
+      create_list(:webauthn_credential, WebauthnCredential::MAX_PER_USER - 1, user:)
+      post :registration_options, as: :json
+      credential_params = valid_credential_params
+      create(:webauthn_credential, user:)
+
+      post :create, params: { credential: credential_params }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "error_message" => WebauthnCredential::MAX_PER_USER_ERROR_MESSAGE
+      )
+      expect(user.reload.webauthn_credentials.count).to eq(WebauthnCredential::MAX_PER_USER)
     end
   end
 

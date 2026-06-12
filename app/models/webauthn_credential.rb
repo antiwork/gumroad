@@ -6,6 +6,8 @@ class WebauthnCredential < ApplicationRecord
   include ExternalId
 
   MAX_PER_USER = 10
+  MAX_PER_USER_ERROR = :too_many_passkeys
+  MAX_PER_USER_ERROR_MESSAGE = "You can add up to #{MAX_PER_USER} passkeys."
   MAX_NICKNAME_LENGTH = 100
   MAX_WEBAUTHN_ID_LENGTH = 1_364
 
@@ -54,6 +56,6 @@ class WebauthnCredential < ApplicationRecord
       return if user.blank?
       return if user.webauthn_credentials.count < MAX_PER_USER
 
-      errors.add(:base, "You can add up to #{MAX_PER_USER} passkeys.")
+      errors.add(:base, MAX_PER_USER_ERROR, message: MAX_PER_USER_ERROR_MESSAGE)
     end
 end
