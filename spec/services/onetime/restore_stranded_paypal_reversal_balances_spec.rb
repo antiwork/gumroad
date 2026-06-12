@@ -61,14 +61,14 @@ describe Onetime::RestoreStrandedPaypalReversalBalances do
     end
 
     it "leaves balances held by a completed payout untouched" do
-      balance = build_balance(state: "paid")
+      balance = build_balance
       build_payment(:payment_reversed, balances: [balance])
       build_payment(:payment_completed, balances: [balance])
 
       result = described_class.process(dry_run: false)
 
-      expect(balance.reload.state).to eq("paid")
-      expect(result[:payments_with_stuck_balances]).to eq(0)
+      expect(balance.reload.state).to eq("processing")
+      expect(result[:balances_skipped_still_held]).to eq(1)
       expect(result[:balances_restored]).to eq(0)
     end
 

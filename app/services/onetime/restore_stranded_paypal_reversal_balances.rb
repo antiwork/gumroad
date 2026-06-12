@@ -21,11 +21,10 @@ module Onetime
   class RestoreStrandedPaypalReversalBalances
     BATCH_SIZE = 100
 
-    # A balance still owed to a live payout must not be reverted. These are the
-    # payment states in which a balance is rightfully held in `processing`.
-    HOLDING_PAYMENT_STATES = [
-      Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED
-    ].freeze
+    # A balance still owed to a live payout must not be reverted. A balance is
+    # rightfully held in `processing` while any of its payments is still in a
+    # non-terminal state, so delegate to the model's own constant to stay in sync.
+    HOLDING_PAYMENT_STATES = Payment::NON_TERMINAL_STATES
 
     def self.process(dry_run: true, payment_ids: nil)
       new.process(dry_run:, payment_ids:)
@@ -34,31 +33,34 @@ module Onetime
     def process(dry_run: true, payment_ids: nil)
       stats = Hash.new(0)
 
-      candidate_payments(payment_ids).find_each(batch_size: BATCH_SIZE) do |payment|
+      candidate_payments(payment_ids).find_in_batches(batch_size: BATCH_SIZE) do |batch|
         ReplicaLagWatcher.watch
-        stats[:payments_scanned] += 1
 
-        stuck_balances = payment.balances.processing.to_a
-        next if stuck_balances.empty?
+        batch.each do |payment|
+          stats[:payments_scanned] += 1
 
-        stats[:payments_with_stuck_balances] += 1
+          stuck_balances = payment.balances.processing.to_a
+          next if stuck_balances.empty?
 
-        stuck_balances.each do |balance|
-          unless restorable?(balance)
-            stats[:balances_skipped_still_held] += 1
-            puts "skip balance #{balance.id} (payment #{payment.id}): still held by an active payout"
-            next
+          stats[:payments_with_stuck_balances] += 1
+
+          stuck_balances.each do |balance|
+            unless restorable?(balance)
+              stats[:balances_skipped_still_held] += 1
+              puts "skip balance #{balance.id} (payment #{payment.id}): still held by an active payout"
+              next
+            end
+
+            if dry_run
+              stats[:balances_would_restore] += 1
+              puts "DRY-RUN restore balance #{balance.id} (#{balance.amount_cents}c) payment #{payment.id} user #{payment.user_id}"
+              next
+            end
+
+            balance.mark_unpaid!
+            stats[:balances_restored] += 1
+            puts "restored balance #{balance.id} (#{balance.amount_cents}c) payment #{payment.id} user #{payment.user_id}"
           end
-
-          if dry_run
-            stats[:balances_would_restore] += 1
-            puts "DRY-RUN restore balance #{balance.id} (#{balance.amount_cents}c) payment #{payment.id} user #{payment.user_id}"
-            next
-          end
-
-          balance.mark_unpaid!
-          stats[:balances_restored] += 1
-          puts "restored balance #{balance.id} (#{balance.amount_cents}c) payment #{payment.id} user #{payment.user_id}"
         end
       end
 
