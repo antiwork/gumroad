@@ -88,17 +88,18 @@ describe SellerProfileSections::SaveService do
       expect(section.reload).to have_attributes(header: "B!", shown_products: products.map(&:id), hide_header: true)
     end
 
-    it "ignores type and product_id" do
-      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [])
-      service.update!(posts_section, section_params(type: "SellerProfileRichTextSection", product_id: create(:product, user: seller).external_id, header: "B!"))
-
-      expect(posts_section.reload).to have_attributes(type: "SellerProfilePostsSection", product_id: nil, header: "B!")
-    end
-
-    it "updates shown_posts and decrypts obfuscated ids" do
+    it "ignores type, product_id, and shown_posts by default" do
       post = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
       posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [])
-      service.update!(posts_section, section_params(shown_posts: [post.external_id], header: "B!"))
+      service.update!(posts_section, section_params(type: "SellerProfileRichTextSection", product_id: create(:product, user: seller).external_id, shown_posts: [post.external_id], header: "B!"))
+
+      expect(posts_section.reload).to have_attributes(type: "SellerProfilePostsSection", product_id: nil, shown_posts: [], header: "B!")
+    end
+
+    it "updates shown_posts and decrypts obfuscated ids when allow_shown_posts is true" do
+      post = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [])
+      service.update!(posts_section, section_params(shown_posts: [post.external_id], header: "B!"), allow_shown_posts: true)
 
       expect(posts_section.reload).to have_attributes(shown_posts: [post.id], header: "B!")
     end

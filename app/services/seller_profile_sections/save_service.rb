@@ -7,7 +7,7 @@ class SellerProfileSections::SaveService
 
   def upsert!(attributes)
     section = attributes[:id].present? ? seller.seller_profile_sections.find_by_external_id(attributes[:id]) : nil
-    section ? update!(section, attributes) : create!(attributes)
+    section ? update!(section, attributes, allow_shown_posts: true) : create!(attributes)
   end
 
   def create!(attributes)
@@ -18,8 +18,13 @@ class SellerProfileSections::SaveService
     seller.seller_profile_sections.create!(attributes)
   end
 
-  def update!(section, attributes)
-    attributes = decrypt_ids(attributes.except(:id, :type, :product_id))
+  # The legacy per-section endpoint (ProfileSectionsController) intentionally does not allow
+  # mutating shown_posts on update, while the new batched profile editor does. Callers opt in
+  # via allow_shown_posts so both share this persistence path.
+  def update!(section, attributes, allow_shown_posts: false)
+    excepted = [:id, :type, :product_id]
+    excepted << :shown_posts unless allow_shown_posts
+    attributes = decrypt_ids(attributes.except(*excepted))
     if attributes[:text].present? && section.is_a?(SellerProfileRichTextSection)
       attributes[:text][:content] = process_text(attributes[:text][:content], section.json_data["text"]["content"] || [])
     end

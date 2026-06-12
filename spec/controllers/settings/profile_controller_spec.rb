@@ -151,6 +151,21 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [existing.id, new_section.id] }].as_json
       end
 
+      it "updates shown_posts on an existing posts section" do
+        post1 = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+        post2 = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+        existing = create(:seller_profile_posts_section, seller:, header: "Old", shown_posts: [post1.id])
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [existing.id] }] })
+
+        put :update, params: {
+          sections: [{ id: existing.external_id, header: "Updated", shown_posts: [post1.external_id, post2.external_id] }],
+          tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(existing.reload).to have_attributes(header: "Updated", shown_posts: [post1.id, post2.id])
+      end
+
       it "destroys sections that no tab references anymore" do
         removed = create(:seller_profile_products_section, seller:)
         kept = create(:seller_profile_products_section, seller:, header: "Old")
