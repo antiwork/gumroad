@@ -583,6 +583,11 @@ Rails.application.routes.draw do
         post :confirm
         post :regenerate_recovery_codes
       end
+      resources :passkeys, only: %i[create update destroy], controller: "passkeys" do
+        collection do
+          post :registration_options
+        end
+      end
       resource :profile, only: %i[show update], controller: "profile"
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"

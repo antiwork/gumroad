@@ -266,6 +266,16 @@ class Rack::Attack
                      period: 60.seconds,
                      throttle_params: Proc.new { |req| req.env["warden"]&.user&.id }
 
+  # Initial: 10rpm, Max: 60 requests/3 days (per user)
+  throttle_with_exponential_backoff(name: "/params:/settings/passkeys/registration_options:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
+    req.env["warden"]&.user&.id if req.path.match?(%r{\A/settings/passkeys/registration_options(?:\.[^/]+)?\z}) && req.post?
+  end
+
+  # Initial: 10rpm, Max: 60 requests/3 days (per user)
+  throttle_with_exponential_backoff(name: "/params:/settings/passkeys:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
+    req.env["warden"]&.user&.id if req.path.match?(%r{\A/settings/passkeys(?:\.[^/]+)?\z}) && req.post?
+  end
+
   # Initial: 4rpm, Max: 24 requests/9 hours
   throttle_by_params path: "/forgot_password.json",
                      method: :post,
