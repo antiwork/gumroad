@@ -682,6 +682,11 @@ export const OFFER_CODE_FIELDS: FieldDefinition[] = [
     condition: "present for percentage offer codes",
   },
   { name: "max_purchase_count", type: "number | null", description: "Maximum number of times this code can be used" },
+  {
+    name: "minimum_amount_cents",
+    type: "number | null",
+    description: "Minimum order total in cents required for the offer code to apply. null when there is no minimum.",
+  },
   { name: "universal", type: "boolean", description: "Whether this code applies to all products" },
   { name: "times_used", type: "number", description: "Number of times this code has been redeemed" },
 ];

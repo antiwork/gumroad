@@ -273,6 +273,13 @@ describe Api::V2::OfferCodesController do
         expect(@product.offer_codes.alive.first.max_purchase_count).to eq(@new_offer_code_params[:max_purchase_count])
       end
 
+      it "updates offer code minimum_amount_cents" do
+        put @action, params: @params.merge(minimum_amount_cents: 5000)
+
+        expect(@product.reload.offer_codes.alive.count).to eq(1)
+        expect(@product.offer_codes.alive.first.minimum_amount_cents).to eq(5000)
+      end
+
       it "returns the right response" do
         put @action, params: @params
 

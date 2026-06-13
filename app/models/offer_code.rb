@@ -125,10 +125,10 @@ class OfferCode < ApplicationRecord
         id: external_id,
         code:,
         max_purchase_count:,
+        minimum_amount_cents:,
         universal: universal?,
         times_used:
       }
-      json[:minimum_amount_cents] = minimum_amount_cents if minimum_amount_cents.present?
 
       if is_percent?
         json[:percent_off] = amount_percentage
@@ -146,10 +146,10 @@ class OfferCode < ApplicationRecord
       # The `code` is returned as `name` for backwards compatibility of the API
       name: code,
       max_purchase_count:,
+      minimum_amount_cents:,
       universal: universal?,
       times_used:
     }
-    json[:minimum_amount_cents] = minimum_amount_cents if minimum_amount_cents.present?
 
     if is_percent?
       json[:percent_off] = amount_percentage
