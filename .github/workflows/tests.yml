@@ -39,6 +39,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint-fast
+      - run: npm test
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
 
   lint_ruby:
     name: Lint Ruby
