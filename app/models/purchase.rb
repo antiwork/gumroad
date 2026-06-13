@@ -2938,29 +2938,41 @@ class Purchase < ApplicationRecord
   end
 
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
-    total_issued_amount_cents = combined_flow_of_funds.issued_amount.cents
-    purchase_portion = total_transaction_cents * 1.0 / charge.amount_cents
-    purchase_gumroad_amount_portion = if charge.gumroad_amount_cents == 0
+    charge_purchases = charge.purchases.to_a.sort_by(&:id)
+    purchase_index = charge_purchases.index { |purchase| purchase.id == id }
+    raise ArgumentError, "Purchase #{id} is not part of charge #{charge&.id}" if purchase_index.nil?
+
+    # The "portion" ratios use total_transaction_cents (whole charge), the
+    # gumroad amount, and the seller (complement) amount respectively. Each
+    # amount is split across all purchases in the charge with the
+    # largest-remainder method so the per-purchase shares always reconcile to
+    # the combined charge amount; this purchase takes its own share by index.
+    transaction_weights = charge_purchases.map(&:total_transaction_cents)
+    gumroad_weights = charge_purchases.map(&:total_transaction_amount_for_gumroad_cents)
+    seller_weights = charge_purchases.map { |purchase| purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents }
+
+    share = lambda do |total_cents, weights, weight_total|
+      Charge.allocate_by_largest_remainder(total_cents, weights, weight_total)[purchase_index]
+    end
+
+    issued_amount_cents = share.call(combined_flow_of_funds.issued_amount.cents, transaction_weights, charge.amount_cents)
+    settled_amount_cents = share.call(combined_flow_of_funds.settled_amount.cents, transaction_weights, charge.amount_cents)
+    gumroad_amount_cents = if charge.gumroad_amount_cents == 0
       0
     else
-      total_transaction_amount_for_gumroad_cents * 1.0 / charge.gumroad_amount_cents
+      share.call(combined_flow_of_funds.gumroad_amount.cents, gumroad_weights, charge.gumroad_amount_cents)
     end
-    purchase_seller_portion = (total_transaction_cents - total_transaction_amount_for_gumroad_cents) * 1.0 /
-        (charge.amount_cents - charge.gumroad_amount_cents)
-
-    issued_amount_cents = (total_issued_amount_cents * purchase_portion).floor
-    settled_amount_cents = (combined_flow_of_funds.settled_amount.cents * purchase_portion).floor
-    gumroad_amount_cents = (combined_flow_of_funds.gumroad_amount.cents * purchase_gumroad_amount_portion).floor
 
     issued_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.issued_amount.currency, cents: issued_amount_cents)
     settled_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.settled_amount.currency, cents: settled_amount_cents)
     gumroad_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.gumroad_amount.currency, cents: gumroad_amount_cents)
 
     if combined_flow_of_funds.merchant_account_gross_amount.present?
-      merchant_account_gross_amount_cents = (combined_flow_of_funds.merchant_account_gross_amount.cents * purchase_seller_portion).floor
+      seller_weight_total = charge.amount_cents - charge.gumroad_amount_cents
+      merchant_account_gross_amount_cents = share.call(combined_flow_of_funds.merchant_account_gross_amount.cents, seller_weights, seller_weight_total)
       merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.merchant_account_gross_amount.currency,
                                                               cents: merchant_account_gross_amount_cents)
-      merchant_account_net_amount_cents = (combined_flow_of_funds.merchant_account_net_amount.cents * purchase_seller_portion).floor
+      merchant_account_net_amount_cents = share.call(combined_flow_of_funds.merchant_account_net_amount.cents, seller_weights, seller_weight_total)
       merchant_account_net_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.merchant_account_net_amount.currency,
                                                             cents: merchant_account_net_amount_cents)
     end
