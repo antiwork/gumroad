@@ -128,6 +128,7 @@ class OfferCode < ApplicationRecord
         universal: universal?,
         times_used:
       }
+      json[:minimum_amount_cents] = minimum_amount_cents if minimum_amount_cents.present?
 
       if is_percent?
         json[:percent_off] = amount_percentage
@@ -148,6 +149,7 @@ class OfferCode < ApplicationRecord
       universal: universal?,
       times_used:
     }
+    json[:minimum_amount_cents] = minimum_amount_cents if minimum_amount_cents.present?
 
     if is_percent?
       json[:percent_off] = amount_percentage
