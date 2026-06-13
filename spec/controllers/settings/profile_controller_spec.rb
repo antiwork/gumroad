@@ -137,7 +137,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
         put :update, params: {
           sections: [
-            { id: existing.external_id, header: "Updated", hide_header: true, shown_products: products.map(&:external_id) },
+            { id: existing.external_id, header: "Updated", shown_products: products.map(&:external_id) },
             { id: temp_id, type: "SellerProfileProductsSection", header: "New", shown_products: [], default_product_sort: "page_layout", show_filters: false, add_new_products: true },
           ],
           tabs: [{ name: "Tab 1", sections: [existing.external_id, temp_id] }],
@@ -145,7 +145,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
         expect(response).to have_http_status :see_other
         expect(seller.seller_profile_sections.count).to eq 2
-        expect(existing.reload).to have_attributes(header: "Updated", hide_header: true, shown_products: products.map(&:id))
+        expect(existing.reload).to have_attributes(header: "Updated", hide_header: false, shown_products: products.map(&:id))
         new_section = seller.seller_profile_sections.where.not(id: existing.id).sole
         expect(new_section.header).to eq("New")
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [existing.id, new_section.id] }].as_json

@@ -285,7 +285,7 @@ export const SectionLayout = ({
 
   return (
     <>
-      {section.header && !section.hide_header ? <h2>{section.header}</h2> : null}
+      {section.header ? <h2>{section.header}</h2> : null}
       {controls ? (
         <SectionToolbar>
           <EditorMenu label="Edit section" onClose={onClose}>
@@ -295,13 +295,9 @@ export const SectionLayout = ({
                   aria-label="Name"
                   value={section.header}
                   onChange={(e) => updateSection({ header: e.target.value })}
+                  placeholder="Leave blank to hide"
                 />
               </Fieldset>
-              <Switch
-                checked={!section.hide_header}
-                onChange={() => updateSection({ hide_header: !section.hide_header })}
-                label="Display above section"
-              />
             </EditorSubmenu>
             {menuItems}
             <CardContent asChild>

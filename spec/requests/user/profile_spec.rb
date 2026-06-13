@@ -253,25 +253,25 @@ describe "User profile page", type: :system, js: true do
         visit settings_profile_path
 
         within_section_form "Section 1" do
-          fill_in "Section name", with: "New name", fill_options: { clear: :backspace }
-          uncheck "Show section name"
+          fill_in "Section name", with: "", fill_options: { clear: :backspace }
         end
         within_profile_editor_preview do
           expect(page).to_not have_section "Section 1"
-          expect(page).to_not have_section "New name"
         end
         expect(section.reload.header).to eq "Section 1"
         expect(section.hide_header?).to eq false
         save_changes
-        expect(section.reload.header).to eq "New name"
+        expect(section.reload.header).to eq ""
         expect(section.hide_header?).to eq true
 
-        within_section_form "New name" do
-          check "Show section name"
+        # With a blank header the form falls back to the section type label ("Products")
+        within_section_form "Products" do
+          fill_in "Section name", with: "New name", fill_options: { clear: :backspace }
         end
         within_profile_editor_preview { expect(page).to have_section "New name" }
         save_changes
-        expect(section.reload.hide_header?).to eq false
+        expect(section.reload.header).to eq "New name"
+        expect(section.hide_header?).to eq false
 
         add_section "Products"
         expect(profile_editor_sections.count).to eq 2

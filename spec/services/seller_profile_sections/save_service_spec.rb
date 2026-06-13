@@ -16,7 +16,6 @@ describe SellerProfileSections::SaveService do
       section = service.create!(section_params(
                                   type: "SellerProfileProductsSection",
                                   header: "Products",
-                                  hide_header: true,
                                   shown_products: products.map(&:external_id),
                                   default_product_sort: "page_layout",
                                   show_filters: true,
@@ -27,12 +26,20 @@ describe SellerProfileSections::SaveService do
       expect(section).to have_attributes(
         type: "SellerProfileProductsSection",
         header: "Products",
-        hide_header: true,
+        hide_header: false,
         shown_products: products.map(&:id),
         default_product_sort: "page_layout",
         show_filters: true,
         add_new_products: false,
       )
+    end
+
+    it "derives hide_header from the header: a blank header hides the name" do
+      with_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "Subscribe", button_label: "Follow"))
+      without_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "", button_label: "Follow"))
+
+      expect(with_name.hide_header?).to eq(false)
+      expect(without_name.hide_header?).to eq(true)
     end
 
     it "decrypts the featured product id" do
@@ -85,7 +92,21 @@ describe SellerProfileSections::SaveService do
       products = create_list(:product, 2, user: seller)
       service.update!(section, section_params(header: "B!", shown_products: products.map(&:external_id)))
 
-      expect(section.reload).to have_attributes(header: "B!", shown_products: products.map(&:id), hide_header: true)
+      expect(section.reload).to have_attributes(header: "B!", shown_products: products.map(&:id), hide_header: false)
+    end
+
+    it "derives hide_header from the header on update" do
+      service.update!(section, section_params(header: ""))
+      expect(section.reload.hide_header?).to eq(true)
+
+      service.update!(section, section_params(header: "Now visible"))
+      expect(section.reload.hide_header?).to eq(false)
+    end
+
+    it "leaves hide_header untouched when the header is not part of the update" do
+      section.update!(header: "Kept", hide_header: false)
+      service.update!(section, section_params(shown_products: []))
+      expect(section.reload).to have_attributes(header: "Kept", hide_header: false)
     end
 
     it "ignores type, product_id, and shown_posts by default" do

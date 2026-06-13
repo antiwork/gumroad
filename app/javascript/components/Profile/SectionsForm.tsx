@@ -257,12 +257,8 @@ const SectionRow = ({
                 value={section.header}
                 onChange={(evt) => update({ ...section, header: evt.target.value })}
               />
+              <small>Leave blank to hide the section name.</small>
             </Fieldset>
-            <Switch
-              checked={!section.hide_header}
-              onChange={() => update({ ...section, hide_header: !section.hide_header })}
-              label="Show section name"
-            />
             {section.type === "SellerProfileProductsSection" ? (
               <ProductsSectionFields section={section} state={state} update={update} />
             ) : section.type === "SellerProfilePostsSection" ? (

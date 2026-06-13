@@ -12,6 +12,7 @@ class SellerProfileSections::SaveService
 
   def create!(attributes)
     attributes = decrypt_ids(attributes.except(:id))
+    attributes = derive_hide_header(attributes)
     if attributes[:text].present? && attributes[:type] == "SellerProfileRichTextSection"
       attributes[:text][:content] = process_text(attributes[:text][:content])
     end
@@ -25,6 +26,7 @@ class SellerProfileSections::SaveService
     excepted = [:id, :type, :product_id]
     excepted << :shown_posts unless allow_shown_posts
     attributes = decrypt_ids(attributes.except(*excepted))
+    attributes = derive_hide_header(attributes)
     if attributes[:text].present? && section.is_a?(SellerProfileRichTextSection)
       attributes[:text][:content] = process_text(attributes[:text][:content], section.json_data["text"]["content"] || [])
     end
@@ -34,6 +36,15 @@ class SellerProfileSections::SaveService
 
   private
     attr_reader :seller
+
+    # The section header is the single source of truth for whether the name shows:
+    # a blank header hides it, a present header shows it. Keep the persisted hide_header
+    # flag derived from the header so the public renderer and API stay consistent even
+    # though the editor no longer exposes a separate toggle.
+    def derive_hide_header(attributes)
+      return attributes unless attributes.key?(:header)
+      attributes.merge(hide_header: attributes[:header].blank?)
+    end
 
     def decrypt_ids(attributes)
       attributes[:shown_products]&.map! { ObfuscateIds.decrypt(_1) }
