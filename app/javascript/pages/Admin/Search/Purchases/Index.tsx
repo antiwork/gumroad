@@ -113,9 +113,9 @@ export default function Purchases() {
                       <ArrowUpRightSquare className="size-5" />
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
-                    {((purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal") ||
-                      purchase.early_fraud_warning ||
-                      purchase.disputes.length > 0) && (
+                    {(purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal") ||
+                    purchase.early_fraud_warning ||
+                    purchase.disputes.length > 0 ? (
                       <span className="inline-flex flex-wrap gap-1">
                         {purchase.stripe_risk_level && purchase.stripe_risk_level !== "normal" ? (
                           <Pill size="small" color={purchase.stripe_risk_level === "highest" ? "danger" : "warning"}>
@@ -140,7 +140,7 @@ export default function Purchases() {
                           </Pill>
                         ))}
                       </span>
-                    )}
+                    ) : null}
                     <div className="text-sm">
                       <InlineList>
                         {purchase.refund_policy ? (

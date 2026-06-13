@@ -2389,7 +2389,7 @@ class Purchase < ApplicationRecord
       existing_redirects = UrlRedirect.where(purchase_id: purchase_ids, installment_id: installment_ids)
                                       .order(:id)
                                       .reverse_each
-                                      .each_with_object({}) { |ur, h| h[[ur.purchase_id, ur.installment_id]] = ur }
+                                      .index_by { |ur| [ur.purchase_id, ur.installment_id] }
 
       # Key email_infos on original_purchase.id to match action_at_for_purchase's
       # behavior — otherwise renewal purchases get post.published_at instead of the
@@ -2398,7 +2398,7 @@ class Purchase < ApplicationRecord
       email_infos = CreatorContactingCustomersEmailInfo
                       .where(installment_id: installment_ids, purchase_id: original_purchase_ids)
                       .order(:id)
-                      .each_with_object({}) { |ei, h| h[[ei.installment_id, ei.purchase_id]] = ei }
+                      .index_by { |ei| [ei.installment_id, ei.purchase_id] }
     else
       existing_redirects = {}
       email_infos = {}

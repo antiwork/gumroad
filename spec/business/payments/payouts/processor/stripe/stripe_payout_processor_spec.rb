@@ -293,8 +293,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_096_45, currency: "eur" }],
-                                          pending: [{ amount: 0, currency: "eur" }])
+                                         available: [{ amount: 1_096_45, currency: "eur" }],
+                                         pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -321,8 +321,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_096_45, currency: "eur" }],
-                                          pending: [{ amount: 26_000, currency: "eur" }])
+                                         available: [{ amount: 1_096_45, currency: "eur" }],
+                                         pending: [{ amount: 26_000, currency: "eur" }])
         )
       end
 
@@ -338,8 +338,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_500_00, currency: "eur" }],
-                                          pending: [{ amount: -50_000, currency: "eur" }])
+                                         available: [{ amount: 1_500_00, currency: "eur" }],
+                                         pending: [{ amount: -50_000, currency: "eur" }])
         )
       end
 
@@ -355,8 +355,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_400_00, currency: "eur" }],
-                                          pending: [{ amount: 0, currency: "eur" }])
+                                         available: [{ amount: 1_400_00, currency: "eur" }],
+                                         pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -373,8 +373,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_400_00, currency: "usd" }],
-                                          pending: [{ amount: 50_000, currency: "usd" }])
+                                         available: [{ amount: 1_400_00, currency: "usd" }],
+                                         pending: [{ amount: 50_000, currency: "usd" }])
         )
       end
 

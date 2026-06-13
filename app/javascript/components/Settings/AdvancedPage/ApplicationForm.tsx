@@ -1,7 +1,6 @@
 import { Trash } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
-import placeholderAppIcon from "$assets/images/gumroad_app.png";
 import * as React from "react";
 import typia from "typia";
 
@@ -16,6 +15,8 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
+
+import placeholderAppIcon from "$assets/images/gumroad_app.png";
 
 export type Application = {
   id: string;
@@ -239,9 +240,9 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
                       method: "POST",
                       accept: "json",
                     });
-                    const responseData = typia.assert<{ success: true; token: string } | { success: false; message: string }>(
-                      await response.json(),
-                    );
+                    const responseData = typia.assert<
+                      { success: true; token: string } | { success: false; message: string }
+                    >(await response.json());
                     if (!responseData.success) throw new ResponseError(responseData.message);
                     setToken(responseData.token);
                   } catch (e) {

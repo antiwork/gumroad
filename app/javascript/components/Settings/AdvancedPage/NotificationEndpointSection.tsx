@@ -68,12 +68,7 @@ const NotificationEndpointSection = ({
           <Label htmlFor={uid}>Ping endpoint</Label>
         </FieldsetTitle>
         <InputGroup>
-          <Input
-            type="url"
-            id={uid}
-            value={pingEndpoint}
-            onChange={(e) => setPingEndpoint(e.target.value)}
-          />
+          <Input type="url" id={uid} value={pingEndpoint} onChange={(e) => setPingEndpoint(e.target.value)} />
           <WithTooltip tip={isSendingPing ? null : "Send your most recent sale's JSON, with 'test' set to 'true'"}>
             <Pill asChild>
               <Button className="rounded-full! px-3! py-2!" onClick={sendTestPing} disabled={isSendingPing}>

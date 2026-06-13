@@ -91,7 +91,6 @@ describe User::Risk do
         end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
       end
     end
-
   end
 
   describe "#unblock_seller_ip!" do
@@ -112,6 +111,5 @@ describe User::Risk do
       expect(ip_block.reload.blocked_at).to be_nil
       expect(email_block.reload.blocked_at).to be_present
     end
-
   end
 end

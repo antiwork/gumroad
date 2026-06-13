@@ -53,7 +53,6 @@ class Bundles::ProductController < Bundles::BaseController
   rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
     error_message = @bundle.errors.full_messages.first || e.message
     redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
-
   end
 
   private

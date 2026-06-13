@@ -15,12 +15,7 @@ export const CustomSummaryInput = ({
   return (
     <Fieldset>
       <Label htmlFor={uid}>Summary</Label>
-      <Input
-        id={uid}
-        type="text"
-        value={value ?? ""}
-        onChange={(evt) => onChange(evt.target.value)}
-      />
+      <Input id={uid} type="text" value={value ?? ""} onChange={(evt) => onChange(evt.target.value)} />
     </Fieldset>
   );
 };

@@ -1,5 +1,4 @@
 import { Link } from "@boxicons/react";
-import hands from "$assets/images/illustrations/hands.png";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -19,6 +18,8 @@ import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
+
+import hands from "$assets/images/illustrations/hands.png";
 
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();

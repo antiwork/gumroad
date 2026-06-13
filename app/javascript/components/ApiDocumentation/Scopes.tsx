@@ -13,8 +13,7 @@ const SCOPES = [
   },
   {
     name: "edit_products",
-    description:
-      "read/write access to the user's products and their variants, offer codes, custom fields, and files.",
+    description: "read/write access to the user's products and their variants, offer codes, custom fields, and files.",
   },
   {
     name: "view_sales",

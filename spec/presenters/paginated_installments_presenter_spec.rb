@@ -194,7 +194,7 @@ describe PaginatedInstallmentsPresenter do
         per_row_patterns.each do |pattern, label, max|
           hits = queries.grep(pattern)
           expect(hits.size).to be <= max,
-            "Expected at most #{max} per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
+                               "Expected at most #{max} per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
     end

@@ -96,8 +96,8 @@ function assignLayout(page) {
   return page;
 }
 
-const pages = import.meta.glob('../pages/**/*.tsx');
-const jsxPages = import.meta.glob('../pages/**/*.jsx');
+const pages = import.meta.glob("../pages/**/*.tsx");
+const jsxPages = import.meta.glob("../pages/**/*.jsx");
 
 async function resolvePageComponent(name) {
   const tsxPath = `../pages/${name}.tsx`;

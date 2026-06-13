@@ -13,10 +13,10 @@ import { Button, buttonVariants } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
-import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 
 export const LinkDialog = ({
   editor,

@@ -36,7 +36,9 @@ export const joinServer = async (
     accept: "json",
   });
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(await response.json());
+    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(
+      await response.json(),
+    );
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }
@@ -52,7 +54,9 @@ export const leaveServer = async (purchaseId: string): Promise<{ ok: true; serve
     accept: "json",
   });
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(await response.json());
+    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(
+      await response.json(),
+    );
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }

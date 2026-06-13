@@ -499,10 +499,10 @@ describe "PurchaseInstallments", :vcr do
     end
 
     context "Purchase.preload_product_updates_data!" do
-      def capture_queries
+      def capture_queries(&block)
         queries = []
         callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].present? && !payload[:sql].start_with?("EXPLAIN", "SAVEPOINT", "RELEASE", "ROLLBACK", "BEGIN", "COMMIT") }
-        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
         queries
       end
 

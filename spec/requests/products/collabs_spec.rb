@@ -79,13 +79,11 @@ describe "Collabs", type: :system, js: true do
       end
 
       [Purchase, Link, Balance].each do |model|
-        begin
-          index_model_records(model)
-        rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
-          raise unless e.message.include?("resource_already_exists_exception")
-          sleep 0.5
-          index_model_records(model)
-        end
+        index_model_records(model)
+      rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
+        raise unless e.message.include?("resource_already_exists_exception")
+        sleep 0.5
+        index_model_records(model)
       end
     end
 

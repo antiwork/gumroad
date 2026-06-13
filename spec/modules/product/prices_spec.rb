@@ -257,7 +257,7 @@ describe Product::Prices do
 
           per_row_alive_variants = queries.grep(/FROM `base_variants`.*`variant_category_id` = \d+/)
           expect(per_row_alive_variants).to be_empty,
-            "Expected no per-row alive_variants queries when associations are not preloaded, got:\n#{per_row_alive_variants.join("\n")}"
+                                            "Expected no per-row alive_variants queries when associations are not preloaded, got:\n#{per_row_alive_variants.join("\n")}"
         end
       end
     end

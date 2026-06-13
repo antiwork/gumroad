@@ -65,9 +65,9 @@ class License < ApplicationRecord
       return if purchase_id.blank? || fields.blank?
 
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
-        "record_id" => purchase_id,
-        "class_name" => "Purchase",
-        "fields" => fields
-      })
+                                              "record_id" => purchase_id,
+                                              "class_name" => "Purchase",
+                                              "fields" => fields
+                                            })
     end
 end

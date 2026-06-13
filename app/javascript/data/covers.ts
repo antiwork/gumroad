@@ -17,9 +17,9 @@ export const createCover = async (permalink: string, coverPayload: CoverPayload)
   });
 
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; asset_previews: AssetPreview[] } | { success: false; error: string }>(
-      await response.json(),
-    );
+    const responseData = typia.assert<
+      { success: true; asset_previews: AssetPreview[] } | { success: false; error: string }
+    >(await response.json());
     if (responseData.success) return responseData.asset_previews;
     throw new ResponseError(responseData.error);
   }

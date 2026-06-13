@@ -130,12 +130,12 @@ const SuspendUsers = () => {
         </Select>
 
         <Label htmlFor="additionalNotes">Notes</Label>
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className="mb-2 flex flex-wrap gap-1">
           {NOTES_SUGGESTIONS.map((suggestion) => (
             <button
               key={suggestion}
               type="button"
-              className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-black hover:text-white transition-colors"
+              className="rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-black hover:text-white"
               onClick={() => {
                 const current = form.data.suspend_users.additional_notes;
                 const sep = current && !current.endsWith("\n") ? "\n" : "";

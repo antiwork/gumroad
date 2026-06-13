@@ -21,7 +21,9 @@ type Props = {
 };
 
 function SubscriptionsMagicLink() {
-  const { product_name, subscription_id, is_installment_plan, user_emails, email_sent } = typia.assert<Props>(usePage().props);
+  const { product_name, subscription_id, is_installment_plan, user_emails, email_sent } = typia.assert<Props>(
+    usePage().props,
+  );
 
   const hasSentEmail = email_sent !== null;
   const defaultEmailSource = email_sent ?? user_emails[0].source;

@@ -29,7 +29,9 @@ export async function cancelDropboxFileUpload(id: string) {
     url: Routes.cancel_dropbox_file_upload_path(id),
   });
   if (!response.ok) throw new ResponseError();
-  const json = typia.assert<{ success: false } | { dropbox_file: ResponseDropboxFile; success: true }>(await response.json());
+  const json = typia.assert<{ success: false } | { dropbox_file: ResponseDropboxFile; success: true }>(
+    await response.json(),
+  );
   if (!json.success) throw new ResponseError();
   return json.dropbox_file;
 }

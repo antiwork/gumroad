@@ -1,6 +1,5 @@
 import { ChevronDown, Sparkle } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
-import hands from "$assets/images/illustrations/hands.png";
 import * as React from "react";
 import { useState } from "react";
 import typia from "typia";
@@ -33,11 +32,13 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-const rawIcons = import.meta.glob("$assets/images/native_types/*", {
+import hands from "$assets/images/illustrations/hands.png";
+
+const rawIcons = import.meta.glob<string>("$assets/images/native_types/*", {
   eager: true,
   query: "?url",
   import: "default",
-}) as Record<string, string>;
+});
 const nativeTypeIcons = Object.fromEntries(
   Object.entries(rawIcons).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
 );
@@ -433,8 +434,7 @@ const NewProductPage = () => {
                       const firstDotIndex = newValue.indexOf(".");
                       if (firstDotIndex !== -1) {
                         newValue =
-                          newValue.slice(0, firstDotIndex + 1) +
-                          newValue.slice(firstDotIndex + 1).replace(/\./gu, "");
+                          newValue.slice(0, firstDotIndex + 1) + newValue.slice(firstDotIndex + 1).replace(/\./gu, "");
                       }
                       form.setData("link.price_range", newValue);
                       form.clearErrors("link.price_range");

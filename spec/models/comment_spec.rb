@@ -49,7 +49,6 @@ describe Comment do
             expect(comment).to be_valid
           end
         end
-
       end
 
       context "when content does not contain adult keywords" do

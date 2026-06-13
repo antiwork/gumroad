@@ -567,7 +567,7 @@ export default function PayoutsIndex() {
                 )
               ) : (
                 <>
-                  Your balance is on hold. Please <a href={"mailto:support@gumroad.com"}>contact support</a> for details.
+                  Your balance is on hold. Please <a href="mailto:support@gumroad.com">contact support</a> for details.
                 </>
               )}
             </p>
@@ -602,7 +602,7 @@ export default function PayoutsIndex() {
                 {instant_payout.payable_balances.some(
                   (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
                 ) ? (
-                  <a href={"mailto:support@gumroad.com"}>Contact us for an instant payout</a>
+                  <a href="mailto:support@gumroad.com">Contact us for an instant payout</a>
                 ) : (
                   <Button
                     size="sm"

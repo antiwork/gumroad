@@ -172,9 +172,8 @@ type IncomingCollaboratorsPageProps = {
 const IncomingCollaboratorsPage = () => {
   const loggedInUser = useLoggedInUser();
 
-  const { collaborators: incomingCollaborators, collaborators_disabled_reason } = typia.assert<IncomingCollaboratorsPageProps>(
-    usePage().props,
-  );
+  const { collaborators: incomingCollaborators, collaborators_disabled_reason } =
+    typia.assert<IncomingCollaboratorsPageProps>(usePage().props);
 
   const [selected, setSelected] = React.useState<IncomingCollaborator | null>(null);
 
