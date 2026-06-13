@@ -90,6 +90,7 @@ Also lint before committing:
 ```bash
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
+npm run typecheck                   # TS type check
 ```
 
 Do not push code with failing tests. CI is not a substitute for local verification. Fix any issues before committing.
