@@ -11,7 +11,7 @@ class FlowOfFunds
 
     def to_h
       {
-        currenty: currency,
+        currency:,
         cents:
       }
     end

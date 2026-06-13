@@ -19,7 +19,8 @@ class GenerateFeesByCreatorLocationReportJob
         .where.not(stripe_transaction_id: nil)
         .where("purchases.created_at BETWEEN ? AND ?",
                Date.new(year, month).beginning_of_month.beginning_of_day,
-               Date.new(year, month).end_of_month.end_of_day).find_each do |purchase|
+               Date.new(year, month).end_of_month.end_of_day)
+        .includes(:seller).find_each do |purchase|
         GC.start if purchase.id % 10000 == 0
 
         next if purchase.chargedback_not_reversed_or_refunded?
@@ -67,7 +68,7 @@ class GenerateFeesByCreatorLocationReportJob
   end
 
   def determine_country_name_and_state_name(purchase)
-    user_compliance_info = purchase.seller.user_compliance_infos.where("created_at < ?", purchase.created_at).where.not("country IS NULL AND business_country IS NULL").last rescue nil
+    user_compliance_info = compliance_info_for(purchase)
     country_name = user_compliance_info&.legal_entity_country.presence
     state_code = user_compliance_info&.legal_entity_state.presence
 
@@ -77,8 +78,9 @@ class GenerateFeesByCreatorLocationReportJob
     end
 
     unless country_name.present?
-      country_name = GeoIp.lookup(purchase.seller&.account_created_ip)&.country_name
-      state_code = GeoIp.lookup(purchase.seller&.account_created_ip)&.region_name
+      geo_ip_location = GeoIp.lookup(purchase.seller&.account_created_ip)
+      country_name = geo_ip_location&.country_name
+      state_code = geo_ip_location&.region_name
     end
 
     country_name = Compliance::Countries.find_by_name(country_name)&.common_name || "Uncategorized"
@@ -86,4 +88,21 @@ class GenerateFeesByCreatorLocationReportJob
 
     [country_name, state_name]
   end
+
+  private
+    # Memoizes each seller's compliance-info rows once, then selects the
+    # applicable one per purchase in Ruby. This keeps the exact
+    # `created_at < purchase.created_at` semantics of the original per-purchase
+    # query (so intraday compliance changes are still honored) while issuing
+    # only one query per seller instead of one per purchase.
+    def compliance_info_for(purchase)
+      @compliance_infos_by_seller ||= {}
+      infos = (@compliance_infos_by_seller[purchase.seller_id] ||= purchase.seller
+        .user_compliance_infos
+        .where.not("country IS NULL AND business_country IS NULL")
+        .order(:created_at)
+        .to_a)
+
+      infos.select { |info| info.created_at < purchase.created_at }.last
+    end
 end

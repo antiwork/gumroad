@@ -169,4 +169,49 @@ describe GenerateFeesByCreatorLocationReportJob do
                                    ])
     end
   end
+
+  describe "#determine_country_name_and_state_name" do
+    let(:job) { described_class.new }
+
+    it "queries a seller's compliance info only once across purchases on the same date" do
+      seller = travel_to(1.year.ago) do
+        create(:user).tap do |creator|
+          creator.fetch_or_build_user_compliance_info.dup_and_save! do |info|
+            info.state = "CA"
+            info.country = "United States"
+          end
+        end
+      end
+      product = create(:product, user: seller, price_cents: 0)
+      created_at = Time.current.change(usec: 0)
+      create_list(:purchase, 3, seller:, link: product, price_cents: 0, created_at:)
+      # Reload from the DB so each purchase.seller is an independent record with
+      # no pre-loaded association, mirroring the job's find_each iteration.
+      purchases = Purchase.where(seller_id: seller.id).to_a
+
+      compliance_query_count = 0
+      counter = ->(_name, _start, _finish, _id, payload) do
+        compliance_query_count += 1 if payload[:sql]&.include?("user_compliance_info") && payload[:name] != "CACHE"
+      end
+
+      results = []
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        results = purchases.map { |purchase| job.determine_country_name_and_state_name(purchase) }
+      end
+
+      expect(results).to all(eq(["United States", "California"]))
+      expect(compliance_query_count).to eq(1)
+    end
+
+    it "looks up GeoIp once when falling back to it" do
+      seller = create(:user, country: nil, state: nil)
+      product = create(:product, user: seller, price_cents: 0)
+      purchase = create(:purchase, seller:, link: product, price_cents: 0)
+      location = double(country_name: "United States", region_name: "CA")
+
+      expect(GeoIp).to receive(:lookup).once.and_return(location)
+
+      job.determine_country_name_and_state_name(purchase)
+    end
+  end
 end

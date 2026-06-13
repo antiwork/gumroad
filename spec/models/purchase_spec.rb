@@ -5807,7 +5807,10 @@ describe Purchase, :vcr do
       expect(flow_of_funds.settled_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.gumroad_amount.cents).to eq(-3_00)
       expect(flow_of_funds.gumroad_amount.currency).to eq(Currency::USD)
-      expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(-52_74)
+      # p2's gross share is -52_73 (not -52_74): with the largest-remainder
+      # split, the three purchases' gross shares now sum to exactly -125_00
+      # (was -125_01 before the fix). p1 -23_44 + p2 -52_73 + p3 -48_83 = -125_00.
+      expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(-52_73)
       expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.merchant_account_net_amount.cents).to eq(-33_75)
       expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::CAD)
@@ -5824,6 +5827,37 @@ describe Purchase, :vcr do
       expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.merchant_account_net_amount.cents).to eq(-31_25)
       expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::CAD)
+    end
+
+    it "splits each amount so the per-purchase shares sum exactly to the combined charge amounts" do
+      charge = create(:charge, amount_cents: 100_01, gumroad_amount_cents: 10_01)
+
+      purchase1 = create(:purchase, total_transaction_cents: 33_34)
+      purchase1.update!(fee_cents: 3_34)
+      purchase2 = create(:purchase, total_transaction_cents: 33_34)
+      purchase2.update!(fee_cents: 3_34)
+      purchase3 = create(:purchase, total_transaction_cents: 33_33)
+      purchase3.update!(fee_cents: 3_33)
+
+      charge.purchases << purchase1
+      charge.purchases << purchase2
+      charge.purchases << purchase3
+
+      combined_flow_of_funds = FlowOfFunds.new(
+        issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_01),
+        settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_01),
+        gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 10_01),
+        merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_01),
+        merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 112_51)
+      )
+
+      flows = [purchase1, purchase2, purchase3].map { |purchase| purchase.build_flow_of_funds_from_combined_charge(combined_flow_of_funds) }
+
+      expect(flows.sum { |flow| flow.issued_amount.cents }).to eq(100_01)
+      expect(flows.sum { |flow| flow.settled_amount.cents }).to eq(125_01)
+      expect(flows.sum { |flow| flow.gumroad_amount.cents }).to eq(10_01)
+      expect(flows.sum { |flow| flow.merchant_account_gross_amount.cents }).to eq(125_01)
+      expect(flows.sum { |flow| flow.merchant_account_net_amount.cents }).to eq(112_51)
     end
   end
 
