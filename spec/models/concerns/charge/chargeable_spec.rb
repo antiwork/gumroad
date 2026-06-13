@@ -253,6 +253,22 @@ describe Charge::Chargeable do
         expect(purchase2.reload.processor_fee_cents).to eq 3_00
         expect(purchase3.reload.processor_fee_cents).to eq 5_00
       end
+
+      it "allocates a non-divisible fee so the per-purchase fees sum exactly to the charge fee" do
+        charge = create(:charge, amount_cents: 100_00)
+        purchase1 = create(:purchase, total_transaction_cents: 33_33)
+        purchase2 = create(:purchase, total_transaction_cents: 33_33)
+        purchase3 = create(:purchase, total_transaction_cents: 33_34)
+        charge.purchases << purchase1
+        charge.purchases << purchase2
+        charge.purchases << purchase3
+
+        charge.update_processor_fee_cents!(processor_fee_cents: 1_00)
+
+        expect(charge.reload.processor_fee_cents).to eq 1_00
+        per_purchase_fees = [purchase1, purchase2, purchase3].map { |purchase| purchase.reload.processor_fee_cents }
+        expect(per_purchase_fees.sum).to eq 1_00
+      end
     end
   end
 
