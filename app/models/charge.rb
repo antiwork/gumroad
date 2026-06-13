@@ -44,11 +44,45 @@ class Charge < ApplicationRecord
     transaction do
       update!(processor_fee_cents:)
 
-      charged_purchases.each do |purchase|
-        purchase_processor_fee_cents = (processor_fee_cents * (purchase.total_transaction_cents.to_f / amount_cents)).round
-        purchase.update!(processor_fee_cents: purchase_processor_fee_cents)
+      purchases = charged_purchases.to_a
+      allocated_fees = self.class.allocate_by_largest_remainder(
+        processor_fee_cents,
+        purchases.map(&:total_transaction_cents),
+        amount_cents,
+      )
+
+      purchases.each_with_index do |purchase, index|
+        purchase.update!(processor_fee_cents: allocated_fees[index])
       end
     end
+  end
+
+  # Splits +total_cents+ into one integer-cent share per weight so that the
+  # shares always sum exactly to +total_cents+ (largest-remainder method).
+  # Each share is floor(total_cents * weight / weight_total); the leftover
+  # cents are handed out one at a time to the shares with the largest
+  # fractional remainders, tie-broken by position so the result is
+  # deterministic. Returns an array aligned with +weights+.
+  def self.allocate_by_largest_remainder(total_cents, weights, weight_total)
+    return weights.map { 0 } if weight_total.to_i == 0
+
+    exact_shares = weights.map { |weight| total_cents * weight.to_f / weight_total }
+    floors = exact_shares.map(&:floor)
+    residual = total_cents - floors.sum
+
+    if residual != 0
+      step = residual.positive? ? 1 : -1
+      ranked = (0...weights.size).sort_by do |index|
+        remainder = exact_shares[index] - floors[index]
+        # Largest remainder first when distributing positive cents; smallest
+        # (to reclaim) first when distributing negative cents. Tie-break by
+        # index for determinism.
+        [residual.positive? ? -remainder : remainder, index]
+      end
+      ranked.first(residual.abs).each { |index| floors[index] += step }
+    end
+
+    floors
   end
 
   def upload_invoice_pdf(pdf)
