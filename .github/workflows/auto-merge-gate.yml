@@ -63,16 +63,30 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          signers=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" \
-            --jq '[.[] | select(.commit.verification.verified == true) | "gumclaw"] | join(",")' \
-            2>/dev/null || echo "")
-          # If ANY commit is unverified, surface a sentinel so the gate blocks.
-          total=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --jq 'length')
-          verified=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" \
-            --jq '[.[] | select(.commit.verification.verified == true)] | length')
-          if [ "$total" != "$verified" ] || [ "$total" = "0" ]; then
+          set -euo pipefail
+          # --paginate walks ALL commit pages (finding: signer check ignored
+          # pages past the first 30). We collect every commit into one JSON array.
+          commits=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[]' | jq -s '.')
+
+          total=$(echo "$commits" | jq 'length')
+
+          # Extract the ACTUAL verified signer identity per commit, not a literal
+          # constant (finding: verified commits were all misattributed to the bot).
+          # A commit counts as bot-signed ONLY if BOTH:
+          #   * cryptographic signature verified by GitHub, AND
+          #   * GitHub-resolved author login == the bot account.
+          # `.author.login` is GitHub's resolved identity for the signing key, so
+          # a different collaborator's verified commit yields THEIR login, not the
+          # bot's, and the Ruby gate then blocks it.
+          signers=$(echo "$commits" | jq -r \
+            '[.[] | if (.commit.verification.verified == true) and (.author.login != null)
+                    then .author.login else "unverified" end] | join(",")')
+
+          if [ "$total" = "0" ] || [ -z "$signers" ]; then
             signers="unverified"
           fi
+
           label=$(gh api "repos/$REPO/pulls/$PR_NUMBER" \
             --jq '[.labels[].name] | index("support-fix") != null')
           echo "signers=$signers" >> "$GITHUB_OUTPUT"

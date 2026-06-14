@@ -43,6 +43,10 @@ require "open3"
 MAX_LINES_CHANGED = 40
 MAX_FILES_CHANGED = 5
 SHA_RE = /\A[0-9a-f]{7,40}\z/.freeze
+# The bot account whose VERIFIED signature authorizes the safe lane. Compared
+# against each commit's GitHub-resolved signer login (.author.login on a
+# verified commit), supplied by the trusted caller — never the PR author field.
+BOT_IDENTITY = "gumclaw"
 
 # ALLOWLIST (default-deny): a PR is eligible ONLY if EVERY changed path matches
 # one of these safe prefixes. Anything outside the allowlist => block. This is
@@ -90,7 +94,7 @@ block!("missing/invalid --head-sha") unless head =~ SHA_RE
 # mutable PR author field. Every commit must be bot-signed.
 signers = options[:signers].to_s.split(",").map(&:strip)
 block!("no verified commit signers provided") if signers.empty?
-unless signers.all? { |s| s == "gumclaw" }
+unless signers.all? { |s| s == BOT_IDENTITY }
   block!("not all commits verified-signed by bot (signers=#{signers.uniq.join(',')})")
 end
 # Label is a SECONDARY scoping signal, verified by the trusted caller via API.
