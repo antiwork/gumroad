@@ -42,7 +42,7 @@ require "open3"
 # ---- Tunables (start conservative; loosen only with evidence) ----
 MAX_LINES_CHANGED = 40
 MAX_FILES_CHANGED = 5
-SHA_RE = /\A[0-9a-f]{7,40}\z/.freeze
+SHA_RE = /\A[0-9a-f]{7,40}\z/
 # The bot account whose VERIFIED signature authorizes the safe lane. Compared
 # against each commit's GitHub-resolved signer login (.author.login on a
 # verified commit), supplied by the trusted caller — never the PR author field.
@@ -86,8 +86,8 @@ end.parse!
 
 base = options[:base].to_s
 head = options[:head].to_s
-block!("missing/invalid --base-sha") unless base =~ SHA_RE
-block!("missing/invalid --head-sha") unless head =~ SHA_RE
+block!("missing/invalid --base-sha") unless SHA_RE.match?(base)
+block!("missing/invalid --head-sha") unless SHA_RE.match?(head)
 
 # (4) Authorization comes from VERIFIED commit signatures supplied by the trusted
 # caller (from the GitHub API `verification.verified` + signer), not from the
