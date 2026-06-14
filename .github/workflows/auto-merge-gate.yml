@@ -79,9 +79,16 @@ jobs:
           # `.author.login` is GitHub's resolved identity for the signing key, so
           # a different collaborator's verified commit yields THEIR login, not the
           # bot's, and the Ruby gate then blocks it.
+          #
+          # SECURITY: authenticate the COMMITTER, not the author. GitHub binds the
+          # verifying key to the committer email, so `.committer.login` is the
+          # identity cryptographically tied to the signature. `.author.login` is
+          # spoofable — an attacker can set author email to the bot's noreply
+          # address (resolving .author.login -> bot) while signing with their own
+          # key (verification.verified == true). Reading the committer closes that.
           signers=$(echo "$commits" | jq -r \
-            '[.[] | if (.commit.verification.verified == true) and (.author.login != null)
-                    then .author.login else "unverified" end] | join(",")')
+            '[.[] | if (.commit.verification.verified == true) and (.committer.login != null)
+                    then .committer.login else "unverified" end] | join(",")')
 
           if [ "$total" = "0" ] || [ -z "$signers" ]; then
             signers="unverified"
