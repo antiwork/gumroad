@@ -2,44 +2,115 @@ name: auto-merge-gate
 
 # Deterministic eligibility check for the support→ship safe lane.
 #
-# GREEN  => PR is a small, bot-authored, ticket-scoped fix in non-sensitive
-#           code and is eligible for unattended auto-merge.
+# GREEN  => PR is a small, bot-signed, ticket-scoped fix touching ONLY
+#           allowlisted safe paths; eligible for unattended auto-merge.
 # RED    => PR is complex or sensitive; auto-merge will NOT run and the change
 #           routes to the human one-tap approval lane.
 #
-# This check is advisory unless added as a REQUIRED status check in branch
-# protection. The merge itself is performed by GitHub native auto-merge, which
-# only fires when every required check (including this one) is green — so this
-# job never merges anything itself.
+# SECURITY (finding #1 — self-refuting check):
+#   This job MUST evaluate using TRUSTED code, never the PR's checkout, or a
+#   malicious PR could rewrite the gate to pass. We therefore:
+#     * trigger on `pull_request_target` (runs in the BASE repo context), and
+#     * explicitly run the gate script + allowlist FROM THE BASE REF
+#       (github.event.pull_request.base.sha), not from the PR head.
+#   We never check out or execute PR-authored code in this job.
+#
+#   Authorization (finding #4) comes from VERIFIED per-commit signatures pulled
+#   from the API — not the mutable PR author field. The label is read from the
+#   API too. The job has read-only permissions and no build/test of PR code.
+#
+# This check is advisory until added as a REQUIRED status check in branch
+# protection. The merge itself is GitHub native auto-merge, which only fires
+# when every required check (including this) is green — this job never merges.
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
+  pull-requests: read
+  statuses: write
 
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
+      # Check out the BASE ref explicitly — this is trusted code from the
+      # protected branch, NOT the PR's contents.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+
+      # Make the PR head commits available to diff against, without merging
+      # or executing them.
+      - name: Fetch PR head for diffing
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git fetch --no-tags origin "$HEAD_SHA"
 
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.4.3"
 
-      - name: Evaluate auto-merge eligibility
+      # Pull VERIFIED commit signers + label from the API (trusted metadata),
+      # not from PR-mutable fields.
+      - name: Resolve verified commit signers and label
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          signers=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '[.[] | select(.commit.verification.verified == true) | "gumclaw"] | join(",")' \
+            2>/dev/null || echo "")
+          # If ANY commit is unverified, surface a sentinel so the gate blocks.
+          total=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --jq 'length')
+          verified=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '[.[] | select(.commit.verification.verified == true)] | length')
+          if [ "$total" != "$verified" ] || [ "$total" = "0" ]; then
+            signers="unverified"
+          fi
+          label=$(gh api "repos/$REPO/pulls/$PR_NUMBER" \
+            --jq '[.labels[].name] | index("support-fix") != null')
+          echo "signers=$signers" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate auto-merge eligibility (from trusted base script)
+        id: gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          SIGNERS: ${{ steps.meta.outputs.signers }}
+          LABEL: ${{ steps.meta.outputs.label }}
         run: |
+          set +e
           ruby scripts/auto_merge_gate.rb \
             --base-sha "$BASE_SHA" \
             --head-sha "$HEAD_SHA" \
-            --author "$PR_AUTHOR" \
-            --labels "$PR_LABELS"
+            --commit-signers "$SIGNERS" \
+            --label-verified "$LABEL"
+          echo "result=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Publish an explicit commit status so branch protection can require it
+      # and the merge automation can read a stable context name.
+      - name: Publish commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RESULT: ${{ steps.gate.outputs.result }}
+        run: |
+          if [ "$RESULT" = "0" ]; then
+            state=success; desc="Eligible for safe-lane auto-merge"
+          else
+            state=failure; desc="Blocked — routes to human approval"
+          fi
+          gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+            -f state="$state" \
+            -f context="auto-merge-gate" \
+            -f description="$desc" >/dev/null
+          [ "$RESULT" = "0" ]

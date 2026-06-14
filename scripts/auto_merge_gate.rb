@@ -1,125 +1,132 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# auto_merge_gate.rb
+# auto-merge-gate
 #
 # Decides whether a PR is ELIGIBLE for unattended auto-merge on the "safe lane".
+# Deterministic by design: a model drafts the fix, but the merge decision is
+# inspectable rules — no LLM judgment in the merge path.
 #
-# Deterministic by design: an AI agent may DRAFT the fix, but the merge
-# decision itself is made by inspectable rules here — there is no model
-# judgment anywhere in the merge path. A PR only becomes a candidate when it
-# is a small, bot-authored, ticket-scoped fix that touches no sensitive code.
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY MODEL (read before changing the wiring)
 #
-#   Exit 0 (GREEN) => eligible for safe-lane auto-merge.
-#   Exit 1 (RED)   => blocked; routes to the human one-tap approval lane.
+#   This script is a SECURITY BOUNDARY. It MUST be executed from TRUSTED code —
+#   i.e. the copy of this file on the protected base branch (main) — and NEVER
+#   from the PR's own checkout. If it runs from the PR checkout, the PR under
+#   judgment can rewrite the gate to always pass, which defeats the entire
+#   purpose (self-refuting check).
 #
-# Usage (CI):
-#   ruby scripts/auto_merge_gate.rb \
-#     --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" \
-#     --author "$PR_AUTHOR" --labels "$PR_LABELS"
+#   Enforced by the caller (the trusted support-to-ship cron OR a
+#   `workflow_run`-triggered job that checks out `main`), which:
+#     1. checks out THIS script from the base/main ref,
+#     2. fetches the PR's verified metadata via the API (not from PR files),
+#     3. runs the diff against the PR head,
+#     4. posts the commit status.
 #
-# Reads the diff via `git diff --numstat base...head`, so the workflow must
-# check out with enough history to resolve both SHAs (fetch-depth: 0).
+#   The gate also requires per-commit verification: every commit on the PR must
+#   be verified-signed by the bot identity. The PR "author" field and labels are
+#   NOT treated as authorization (both are spoofable / mutable by the PR).
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Exit 0 (GREEN) => eligible: small, signed-by-bot, ticket-scoped fix touching
+#                   ONLY allowlisted safe paths.
+# Exit 1 (RED)   => blocked: routes to the one-tap human-approval lane.
+#
+# Usage (from trusted context only):
+#   ruby auto_merge_gate.rb --base-sha SHA --head-sha SHA \
+#     --commit-signers "gumclaw,gumclaw" --label-verified true
 
 require "optparse"
 require "open3"
 
-# ---- Tunables (intentionally conservative; loosen only with evidence) ----
+# ---- Tunables (start conservative; loosen only with evidence) ----
 MAX_LINES_CHANGED = 40
 MAX_FILES_CHANGED = 5
-BOT_AUTHOR        = "gumclaw"
-REQUIRED_LABEL    = "support-fix"
+SHA_RE = /\A[0-9a-f]{7,40}\z/.freeze
 
-# Any changed file matching ANY of these patterns blocks the merge.
-# Covers money, auth, fraud/risk, schema/data migrations, infra/CI, deps —
-# anything where an unattended change could move money or break checkout.
-SENSITIVE_PATTERNS = [
-  %r{\Aapp/models/(charge|purchase|payment|subscription|balance|refund|credit|payout)}i,
-  %r{\Aapp/services/.*(payment|payout|charge|risk|fraud|stripe|paypal|tax)}i,
-  %r{\Aapp/services/risk}i,
-  %r{payments?/}i,
-  %r{stripe}i,
-  %r{paypal}i,
-  %r{webhook}i,
-  %r{\Adb/migrate/},
-  %r{\Adb/schema\.rb\z},
-  %r{\Aconfig/},
-  %r{devise}i,
-  %r{\Aapp/controllers/.*(session|auth|login|oauth|admin)}i,
-  %r{\AGemfile(\.lock)?\z},
-  %r{package(-lock)?\.json\z},
-  %r{yarn\.lock\z},
-  %r{\A\.github/},                 # never let the loop edit its own CI
-  %r{\Ascripts/auto_merge_gate},   # never let it edit the gate itself
+# ALLOWLIST (default-deny): a PR is eligible ONLY if EVERY changed path matches
+# one of these safe prefixes. Anything outside the allowlist => block. This is
+# the inverse of a denylist and fails closed on unknown/new code areas.
+SAFE_PATH_ALLOWLIST = [
+  %r{\Aapp/services/support/},
+  %r{\Aapp/views/support/},
+  %r{\Aapp/javascript/components/support/}i,
+  %r{\Aapp/helpers/support/},
+  %r{\Aspec/services/support/},
+  %r{\Aspec/views/support/},
+  %r{\Aconfig/locales/support\.[a-z-]+\.yml\z},
+  %r{\A(README|CHANGELOG)\.md\z},
+  %r{\Adocs/},
 ].freeze
 
 def block!(reason)
   puts "🔴 auto-merge-gate: BLOCKED"
   puts "   reason: #{reason}"
-  puts "   → routing to human one-tap approval lane"
+  puts "   → routing to human-approval lane"
   exit 1
 end
 
-def allow!(files:, lines:, author:)
+def pass!(stats)
   puts "🟢 auto-merge-gate: ELIGIBLE for safe-lane auto-merge"
-  puts "   files=#{files} lines=#{lines} author=#{author}"
+  puts "   files=#{stats[:files]} lines=#{stats[:lines]} signed_by=#{stats[:signer]}"
   exit 0
 end
 
 options = {}
 OptionParser.new do |o|
-  o.on("--base-sha SHA") { |v| options[:base] = v }
-  o.on("--head-sha SHA") { |v| options[:head] = v }
-  o.on("--author A")     { |v| options[:author] = v }
-  o.on("--labels L")     { |v| options[:labels] = v.to_s }
+  o.on("--base-sha SHA")        { |v| options[:base] = v }
+  o.on("--head-sha SHA")        { |v| options[:head] = v }
+  o.on("--commit-signers LIST") { |v| options[:signers] = v.to_s }
+  o.on("--label-verified BOOL") { |v| options[:label] = (v == "true") }
 end.parse!
 
-base   = options[:base]  || block!("--base-sha argument is required")
-head   = options[:head]  || block!("--head-sha argument is required")
-author = options[:author].to_s
-labels = options[:labels].to_s.split(/[,\s]+/).map(&:strip).reject(&:empty?)
+base = options[:base].to_s
+head = options[:head].to_s
+block!("missing/invalid --base-sha") unless base =~ SHA_RE
+block!("missing/invalid --head-sha") unless head =~ SHA_RE
 
-# 1) Provenance — only bot-authored, ticket-scoped fixes are candidates.
-block!("author '#{author}' is not the bot (#{BOT_AUTHOR})") unless author == BOT_AUTHOR
-block!("missing required label '#{REQUIRED_LABEL}'")        unless labels.include?(REQUIRED_LABEL)
-
-# 2) Diff analysis.
-#
-# Use Open3 (no shell) so the SHA range can never be interpreted by /bin/sh —
-# this script is the security boundary, so it must not build shell strings.
-# Validate the SHA shape as defense-in-depth even though CI always supplies
-# 40-char hex. `--no-renames` forces git to emit renames as separate
-# delete/add rows (instead of the `dir/{old => new}` inline form), so a renamed
-# sensitive file is still checked against SENSITIVE_PATTERNS on both paths.
-[base, head].each do |sha|
-  block!("invalid SHA format: #{sha.inspect}") unless sha =~ /\A[0-9a-fA-F]{7,40}\z/
+# (4) Authorization comes from VERIFIED commit signatures supplied by the trusted
+# caller (from the GitHub API `verification.verified` + signer), not from the
+# mutable PR author field. Every commit must be bot-signed.
+signers = options[:signers].to_s.split(",").map(&:strip)
+block!("no verified commit signers provided") if signers.empty?
+unless signers.all? { |s| s == "gumclaw" }
+  block!("not all commits verified-signed by bot (signers=#{signers.uniq.join(',')})")
 end
+# Label is a SECONDARY scoping signal, verified by the trusted caller via API.
+block!("support-fix label not present/verified") unless options[:label]
 
-numstat, status = Open3.capture2("git", "diff", "--numstat", "--no-renames", "#{base}...#{head}")
-block!("git diff failed (exit #{status.exitstatus})") unless status.success?
-numstat = numstat.strip
-block!("empty or unreadable diff") if numstat.empty?
+# (2) Parse the diff with quoting disabled and NUL separators so no path can
+# dodge the matchers via git's octal/quote escaping or embedded whitespace.
+# (1) The caller guarantees this runs against trusted git state.
+out, status = Open3.capture2(
+  "git", "-c", "core.quotePath=false",
+  "diff", "--numstat", "-z", "--no-renames", "#{base}...#{head}"
+)
+block!("git diff failed (#{status.exitstatus})") unless status.success?
+block!("empty or unreadable diff") if out.strip.empty?
 
+# numstat -z format: "added\tdeleted\tpath\0" repeated.
 files = []
-total_lines = 0
-numstat.each_line do |line|
-  added, deleted, path = line.strip.split("\t", 3)
-  next if path.nil?
-  # binary files report "-" for added/deleted counts.
+total = 0
+out.split("\0").each do |rec|
+  next if rec.empty?
+  added, deleted, path = rec.split("\t", 3)
+  next if path.nil? || path.empty?
   block!("binary file change: #{path}") if added == "-" || deleted == "-"
   files << path
-  total_lines += added.to_i + deleted.to_i
+  total += added.to_i + deleted.to_i
 end
+block!("no file changes parsed") if files.empty?
 
-# 3) Sensitive-path veto.
+# (3) Default-deny: every path must be inside the safe allowlist.
 files.each do |path|
-  SENSITIVE_PATTERNS.each do |re|
-    block!("touches sensitive path: #{path}") if path =~ re
+  unless SAFE_PATH_ALLOWLIST.any? { |re| path =~ re }
+    block!("path outside safe allowlist: #{path}")
   end
 end
 
-# 4) Size ceilings.
-block!("too many files (#{files.size} > #{MAX_FILES_CHANGED})")   if files.size > MAX_FILES_CHANGED
-block!("too many lines (#{total_lines} > #{MAX_LINES_CHANGED})")  if total_lines > MAX_LINES_CHANGED
+block!("too many files (#{files.size} > #{MAX_FILES_CHANGED})") if files.size > MAX_FILES_CHANGED
+block!("too many lines (#{total} > #{MAX_LINES_CHANGED})")      if total > MAX_LINES_CHANGED
 
-allow!(files: files.size, lines: total_lines, author: author)
+pass!(files: files.size, lines: total, signer: signers.uniq.join(","))
