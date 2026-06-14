@@ -1,0 +1,45 @@
+name: auto-merge-gate
+
+# Deterministic eligibility check for the support→ship safe lane.
+#
+# GREEN  => PR is a small, bot-authored, ticket-scoped fix in non-sensitive
+#           code and is eligible for unattended auto-merge.
+# RED    => PR is complex or sensitive; auto-merge will NOT run and the change
+#           routes to the human one-tap approval lane.
+#
+# This check is advisory unless added as a REQUIRED status check in branch
+# protection. The merge itself is performed by GitHub native auto-merge, which
+# only fires when every required check (including this one) is green — so this
+# job never merges anything itself.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.3"
+
+      - name: Evaluate auto-merge eligibility
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          ruby scripts/auto_merge_gate.rb \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --author "$PR_AUTHOR" \
+            --labels "$PR_LABELS"
