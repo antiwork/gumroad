@@ -22,6 +22,7 @@
 # check out with enough history to resolve both SHAs (fetch-depth: 0).
 
 require "optparse"
+require "open3"
 
 # ---- Tunables (intentionally conservative; loosen only with evidence) ----
 MAX_LINES_CHANGED = 40
@@ -73,8 +74,8 @@ OptionParser.new do |o|
   o.on("--labels L")     { |v| options[:labels] = v.to_s }
 end.parse!
 
-base   = options[:base]  || abort("--base-sha required")
-head   = options[:head]  || abort("--head-sha required")
+base   = options[:base]  || block!("--base-sha argument is required")
+head   = options[:head]  || block!("--head-sha argument is required")
 author = options[:author].to_s
 labels = options[:labels].to_s.split(/[,\s]+/).map(&:strip).reject(&:empty?)
 
@@ -83,7 +84,20 @@ block!("author '#{author}' is not the bot (#{BOT_AUTHOR})") unless author == BOT
 block!("missing required label '#{REQUIRED_LABEL}'")        unless labels.include?(REQUIRED_LABEL)
 
 # 2) Diff analysis.
-numstat = `git diff --numstat #{base}...#{head}`.strip
+#
+# Use Open3 (no shell) so the SHA range can never be interpreted by /bin/sh —
+# this script is the security boundary, so it must not build shell strings.
+# Validate the SHA shape as defense-in-depth even though CI always supplies
+# 40-char hex. `--no-renames` forces git to emit renames as separate
+# delete/add rows (instead of the `dir/{old => new}` inline form), so a renamed
+# sensitive file is still checked against SENSITIVE_PATTERNS on both paths.
+[base, head].each do |sha|
+  block!("invalid SHA format: #{sha.inspect}") unless sha =~ /\A[0-9a-fA-F]{7,40}\z/
+end
+
+numstat, status = Open3.capture2("git", "diff", "--numstat", "--no-renames", "#{base}...#{head}")
+block!("git diff failed (exit #{status.exitstatus})") unless status.success?
+numstat = numstat.strip
 block!("empty or unreadable diff") if numstat.empty?
 
 files = []
