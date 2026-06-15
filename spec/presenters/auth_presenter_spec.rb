@@ -20,6 +20,7 @@ describe AuthPresenter do
             email: nil,
             application_name: nil,
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
+            show_passkey_login: false,
           }
         )
       end
@@ -34,8 +35,17 @@ describe AuthPresenter do
             email: nil,
             application_name: "Test App",
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
+            show_passkey_login: false,
           }
         )
+      end
+    end
+
+    context "when the passkeys feature is active" do
+      before { Feature.activate(:passkeys) }
+
+      it "enables passkey login" do
+        expect(presenter.login_props[:show_passkey_login]).to be(true)
       end
     end
   end
@@ -58,6 +68,7 @@ describe AuthPresenter do
               total_made: 0,
             },
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
+            show_passkey_login: false,
           }
         )
       end
@@ -67,6 +78,7 @@ describe AuthPresenter do
       before do
         allow(Feature).to receive(:active?).with(:disable_login_recaptcha).and_return(false)
         allow(Feature).to receive(:active?).with(:disable_signup_recaptcha).and_return(true)
+        allow(Feature).to receive(:active?).with(:passkeys).and_return(false)
         $redis.del(RedisKey.total_made)
         $redis.del(RedisKey.number_of_creators)
       end
@@ -102,6 +114,7 @@ describe AuthPresenter do
               total_made: 923_456_789,
             },
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
+            show_passkey_login: false,
           }
         )
       end

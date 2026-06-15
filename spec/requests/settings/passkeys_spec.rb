@@ -19,6 +19,21 @@ describe("Passkeys Settings Scenario", type: :system, js: true) do
     end
   end
 
+  it "adds a passkey with the browser authenticator" do
+    use_webauthn_driver
+    visit settings_password_path
+    register_virtual_authenticator!
+    visit settings_password_path
+
+    click_on "Add a passkey"
+
+    expect(page).to have_alert(text: "Passkey added.")
+    within_section("Passkeys", section_element: :section) do
+      expect(page).to have_button("Remove")
+    end
+    expect(seller.webauthn_credentials.count).to eq(1)
+  end
+
   it "lists the seller's passkeys" do
     create(:webauthn_credential, user: seller, nickname: "MacBook Pro")
     create(:webauthn_credential, user: seller, nickname: "iPhone 15")

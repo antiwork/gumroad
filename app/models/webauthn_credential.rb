@@ -30,6 +30,10 @@ class WebauthnCredential < ApplicationRecord
     AAGUID_PROVIDER_NAMES[aaguid]
   end
 
+  def self.find_by_webauthn_id(webauthn_id)
+    find_by(webauthn_id_sha256: Digest::SHA256.hexdigest(webauthn_id))
+  end
+
   before_validation :set_webauthn_id_sha256
   before_validation :normalize_nickname
   before_validation :set_default_nickname, on: :create

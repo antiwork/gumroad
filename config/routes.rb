@@ -486,6 +486,8 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
+      post "login/passkey/options", to: "logins/passkeys#options", as: :login_passkey_options
+      post "login/passkey", to: "logins/passkeys#create", as: :login_passkey
       # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
       get "logout", to: "logins#destroy"
       delete "logout", to: "logins#destroy"

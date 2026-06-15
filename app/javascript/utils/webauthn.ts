@@ -23,6 +23,23 @@ export type PasskeyRegistrationCredential = {
   clientExtensionResults: AuthenticationExtensionsClientOutputs;
 };
 
+export type PasskeyAuthenticationOptions = {
+  challenge: string;
+  timeout?: number;
+  rpId?: string;
+  allowCredentials?: { type: "public-key"; id: string; transports?: string[] }[];
+  userVerification?: UserVerificationRequirement;
+};
+
+export type PasskeyAuthenticationCredential = {
+  id: string;
+  rawId: string;
+  type: string;
+  authenticatorAttachment: string | null;
+  response: { authenticatorData: string; clientDataJSON: string; signature: string; userHandle: string | null };
+  clientExtensionResults: AuthenticationExtensionsClientOutputs;
+};
+
 export const isPasskeySupported = () => typeof window !== "undefined" && "PublicKeyCredential" in window;
 
 const base64UrlToBytes = (value: string): Uint8Array => {
@@ -77,6 +94,42 @@ export const createPasskey = async (options: PasskeyRegistrationOptions): Promis
       attestationObject: bytesToBase64Url(response.attestationObject),
       clientDataJSON: bytesToBase64Url(response.clientDataJSON),
       transports: response.getTransports(),
+    },
+    clientExtensionResults: credential.getClientExtensionResults(),
+  };
+};
+
+export const getPasskey = async (options: PasskeyAuthenticationOptions): Promise<PasskeyAuthenticationCredential> => {
+  const publicKey: PublicKeyCredentialRequestOptions = {
+    challenge: base64UrlToBytes(options.challenge),
+    ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+    ...(options.rpId ? { rpId: options.rpId } : {}),
+    ...(options.allowCredentials
+      ? {
+          allowCredentials: options.allowCredentials.map((credential) => ({
+            type: credential.type,
+            id: base64UrlToBytes(credential.id),
+          })),
+        }
+      : {}),
+    ...(options.userVerification ? { userVerification: options.userVerification } : {}),
+  };
+
+  const credential = await navigator.credentials.get({ publicKey });
+  if (!(credential instanceof PublicKeyCredential)) throw new Error("Could not authenticate with a passkey.");
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- get() always yields an assertion response
+  const response = credential.response as AuthenticatorAssertionResponse;
+  return {
+    id: credential.id,
+    rawId: bytesToBase64Url(credential.rawId),
+    type: credential.type,
+    authenticatorAttachment: credential.authenticatorAttachment,
+    response: {
+      authenticatorData: bytesToBase64Url(response.authenticatorData),
+      clientDataJSON: bytesToBase64Url(response.clientDataJSON),
+      signature: bytesToBase64Url(response.signature),
+      userHandle: response.userHandle ? bytesToBase64Url(response.userHandle) : null,
     },
     clientExtensionResults: credential.getClientExtensionResults(),
   };
