@@ -277,12 +277,12 @@ class Rack::Attack
   end
 
   # Passkey login is unauthenticated, so throttle by IP. Initial: 10rpm, Max: 60 requests/3 days (per IP)
-  throttle_with_exponential_backoff(name: "/params:/login/passkey/options:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
+  throttle_with_exponential_backoff(name: "/ip:/login/passkey/options:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
     req.remote_ip if req.path.match?(%r{\A/login/passkey/options(?:\.[^/]+)?\z}) && req.post?
   end
 
   # Initial: 10rpm, Max: 60 requests/3 days (per IP)
-  throttle_with_exponential_backoff(name: "/params:/login/passkey:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
+  throttle_with_exponential_backoff(name: "/ip:/login/passkey:POST", requests: 10, period: 60.seconds, max_level: 6) do |req|
     req.remote_ip if req.path.match?(%r{\A/login/passkey(?:\.[^/]+)?\z}) && req.post?
   end
 
