@@ -52,13 +52,7 @@ BOT_IDENTITY = "gumclaw"
 # one of these safe prefixes. Anything outside the allowlist => block. This is
 # the inverse of a denylist and fails closed on unknown/new code areas.
 SAFE_PATH_ALLOWLIST = [
-  %r{\Aapp/services/support/},
-  %r{\Aapp/views/support/},
-  %r{\Aapp/javascript/components/support/}i,
-  %r{\Aapp/helpers/support/},
-  %r{\Aspec/services/support/},
-  %r{\Aspec/views/support/},
-  %r{\Aconfig/locales/support\.[a-z-]+\.yml\z},
+  %r{\Aapp/views/help_center/articles/contents/},
   %r{\A(README|CHANGELOG)\.md\z},
   %r{\Adocs/},
 ].freeze
