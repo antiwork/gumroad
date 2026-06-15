@@ -182,11 +182,27 @@ class SettingsPresenter
   end
 
   def password_props
+    passkeys_enabled = Feature.active?(:passkeys, seller)
+    passkeys = if passkeys_enabled
+      seller.webauthn_credentials.order(:created_at).map do |credential|
+        {
+          id: credential.external_id,
+          nickname: credential.nickname,
+          created_at: credential.created_at.iso8601,
+          last_used_at: credential.last_used_at&.iso8601,
+        }
+      end
+    else
+      []
+    end
+
     {
       require_old_password: seller.provider.blank?,
       settings_pages: pages,
       show_authenticator_app_settings: Feature.active?(:authenticator_2fa, seller),
       authenticator_app_enabled: seller.totp_enabled?,
+      show_passkeys_settings: passkeys_enabled,
+      passkeys:,
     }
   end
 

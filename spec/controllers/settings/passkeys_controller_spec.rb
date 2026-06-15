@@ -132,6 +132,17 @@ describe Settings::PasskeysController, type: :controller do
       expect(user.reload.webauthn_credentials.sole.nickname).to eq("Passkey 1")
     end
 
+    it "names the passkey after the detected provider when no nickname is provided" do
+      expect(WebauthnCredential).to receive(:provider_name_for_aaguid).with(a_string_matching(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)).and_return("1Password")
+
+      post :registration_options, as: :json
+
+      post :create, params: { credential: valid_credential_params }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(user.reload.webauthn_credentials.sole.nickname).to eq("1Password")
+    end
+
     it "rejects a stale challenge" do
       post :registration_options, as: :json
       credential_params = fake_client.create(

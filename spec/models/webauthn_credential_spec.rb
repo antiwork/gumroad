@@ -82,4 +82,16 @@ describe WebauthnCredential do
       expect(credential.nickname).to eq("MacBook Pro")
     end
   end
+
+  describe ".provider_name_for_aaguid" do
+    it "maps a known AAGUID to its provider name" do
+      expect(described_class.provider_name_for_aaguid("bada5566-a7aa-401f-bd96-45619a55120d")).to eq("1Password")
+      expect(described_class.provider_name_for_aaguid("fbfc3007-154e-4ecc-8c0b-6e020557d7bd")).to eq("iCloud Keychain")
+    end
+
+    it "returns nil for an unknown or missing AAGUID" do
+      expect(described_class.provider_name_for_aaguid("00000000-0000-0000-0000-000000000000")).to be_nil
+      expect(described_class.provider_name_for_aaguid(nil)).to be_nil
+    end
+  end
 end

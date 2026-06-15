@@ -11,6 +11,7 @@ import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { AuthenticatorSetup } from "$app/components/Settings/PasswordPage/AuthenticatorSetup";
+import { PasskeysSection, type Passkey } from "$app/components/Settings/PasswordPage/PasskeysSection";
 import { RecoveryCodes } from "$app/components/Settings/PasswordPage/RecoveryCodes";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -25,6 +26,8 @@ type PasswordPageProps = {
   require_old_password: boolean;
   show_authenticator_app_settings: boolean;
   authenticator_app_enabled: boolean;
+  show_passkeys_settings: boolean;
+  passkeys: Passkey[];
 };
 
 export default function PasswordPage() {
@@ -195,6 +198,11 @@ export default function PasswordPage() {
           {props.authenticator_app_enabled && regeneratedCodes ? (
             <RecoveryCodes codes={regeneratedCodes} onDone={() => setRegeneratedCodes(null)} />
           ) : null}
+        </FormSection>
+      ) : null}
+      {props.show_passkeys_settings ? (
+        <FormSection header={<h2>Passkeys</h2>}>
+          <PasskeysSection passkeys={props.passkeys} />
         </FormSection>
       ) : null}
     </SettingsLayout>

@@ -334,13 +334,31 @@ describe SettingsPresenter do
       end
 
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
+        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
       end
     end
 
     context "when seller is registered using email" do
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
+        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
+      end
+    end
+
+    context "when the passkeys feature is active" do
+      before { Feature.activate_user(:passkeys, seller) }
+
+      it "enables the passkeys settings" do
+        expect(presenter.password_props).to include(show_passkeys_settings: true, passkeys: [])
+      end
+
+      it "returns the seller's passkeys ordered by creation date" do
+        older = create(:webauthn_credential, user: seller, nickname: "Laptop", created_at: 2.days.ago, last_used_at: 1.hour.ago)
+        newer = create(:webauthn_credential, user: seller, nickname: "Phone", created_at: 1.day.ago, last_used_at: nil)
+
+        expect(presenter.password_props[:passkeys]).to eq([
+                                                            { id: older.external_id, nickname: "Laptop", created_at: older.created_at.iso8601, last_used_at: older.last_used_at.iso8601 },
+                                                            { id: newer.external_id, nickname: "Phone", created_at: newer.created_at.iso8601, last_used_at: nil },
+                                                          ])
       end
     end
   end

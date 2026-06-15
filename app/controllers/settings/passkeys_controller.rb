@@ -58,7 +58,7 @@ class Settings::PasskeysController < Settings::BaseController
         webauthn_id: webauthn_credential.id,
         public_key: webauthn_credential.public_key,
         sign_count: webauthn_credential.sign_count,
-        nickname: params[:nickname]
+        nickname: params[:nickname].presence || detected_provider_name(webauthn_credential)
       )
     end
 
@@ -140,6 +140,10 @@ class Settings::PasskeysController < Settings::BaseController
       raise unless ["invalid type", "invalid id"].include?(e.message)
 
       raise RegistrationVerificationError, e.class.name
+    end
+
+    def detected_provider_name(webauthn_credential)
+      WebauthnCredential.provider_name_for_aaguid(webauthn_credential.response&.authenticator_data&.aaguid)
     end
 
     def passkey_props(credential)
