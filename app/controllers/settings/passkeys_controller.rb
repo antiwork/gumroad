@@ -1,16 +1,7 @@
 # frozen_string_literal: true
 
-require "base64"
-
 class Settings::PasskeysController < Settings::BaseController
-  class RegistrationVerificationError < StandardError
-    attr_reader :reason
-
-    def initialize(reason)
-      @reason = reason
-      super(reason)
-    end
-  end
+  include WebauthnCeremonyVerification
 
   REGISTRATION_CHALLENGE_SESSION_KEY = :webauthn_registration_challenge
   REGISTRATION_ERROR_MESSAGE = "Could not add this passkey. Please try again."
@@ -65,7 +56,7 @@ class Settings::PasskeysController < Settings::BaseController
     Rails.logger.info("passkey.registration.succeeded user_id=#{@user.id} webauthn_credential_id=#{credential.id}")
 
     render json: { success: true, passkey: passkey_props(credential) }, status: :created
-  rescue RegistrationVerificationError => e
+  rescue VerificationError => e
     log_registration_failure(e.reason)
     render json: { success: false, error_message: REGISTRATION_ERROR_MESSAGE }, status: :unprocessable_entity
   rescue ActiveRecord::RecordInvalid => e
@@ -109,37 +100,21 @@ class Settings::PasskeysController < Settings::BaseController
     end
 
     def credential_params
-      credential = params.require(:credential)
-      raise RegistrationVerificationError, "malformed_credential" unless credential.respond_to?(:permit)
-
-      permitted_params = credential.permit(
-        :id,
-        :rawId,
-        :type,
-        :authenticatorAttachment,
+      permitted_params = permitted_credential_params(
         response: [:attestationObject, :clientDataJSON, { transports: [] }],
         clientExtensionResults: {}
-      ).to_h
-
-      unless valid_credential_params?(permitted_params)
-        raise RegistrationVerificationError, "malformed_credential"
-      end
+      )
+      raise VerificationError, "malformed_credential" unless valid_credential_params?(permitted_params)
 
       permitted_params
     end
 
     def verified_webauthn_credential(challenge)
-      WebAuthn::Credential.from_create(credential_params).tap do |credential|
-        credential.verify(challenge, user_verification: true)
+      map_webauthn_verification_errors do
+        WebAuthn::Credential.from_create(credential_params).tap do |credential|
+          credential.verify(challenge, user_verification: true)
+        end
       end
-    rescue RegistrationVerificationError
-      raise
-    rescue ActionController::ParameterMissing, WebAuthn::Error, JSON::ParserError, CBOR::MalformedFormatError, CBOR::UnpackError, ArgumentError => e
-      raise RegistrationVerificationError, e.class.name
-    rescue RuntimeError => e
-      raise unless ["invalid type", "invalid id"].include?(e.message)
-
-      raise RegistrationVerificationError, e.class.name
     end
 
     def detected_provider_name(webauthn_credential)
@@ -166,24 +141,9 @@ class Settings::PasskeysController < Settings::BaseController
     def valid_credential_params?(permitted_params)
       response = permitted_params["response"]
 
-      permitted_params["type"] == "public-key" &&
-        base64url_encoded?(permitted_params["id"]) &&
-        base64url_encoded?(permitted_params["rawId"]) &&
-        response.is_a?(Hash) &&
+      valid_credential_base?(permitted_params) &&
         valid_attestation_object?(response["attestationObject"]) &&
         valid_client_data_json?(response["clientDataJSON"])
-    end
-
-    def base64url_encoded?(value)
-      !base64url_decoded(value).nil?
-    end
-
-    def base64url_decoded(value)
-      return unless value.is_a?(String) && value.match?(/\A[A-Za-z0-9_-]+={0,2}\z/)
-
-      Base64.urlsafe_decode64(value)
-    rescue ArgumentError
-      nil
     end
 
     def valid_attestation_object?(encoded_attestation_object)
@@ -209,6 +169,6 @@ class Settings::PasskeysController < Settings::BaseController
     end
 
     def log_registration_failure(reason)
-      Rails.logger.warn("passkey.registration.failed user_id=#{@user.id} reason=#{reason}")
+      log_ceremony_failure("registration", reason, user_id: @user.id)
     end
 end
