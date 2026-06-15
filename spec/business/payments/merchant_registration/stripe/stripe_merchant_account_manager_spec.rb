@@ -128,6 +128,17 @@ describe StripeMerchantAccountManager, :vcr do
         end.to raise_error(Stripe::InvalidRequestError)
       end
 
+      it "cleans up the merchant account when onboarding is interrupted by a non-Stripe error" do
+        allow(Stripe::Account).to receive(:create).and_raise(Timeout::Error.new("execution expired"))
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Timeout::Error)
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account).to be_present
+        expect(merchant_account.alive?).to be(false)
+      end
+
       context "when user compliance info contains whitespaces" do
         let(:user_compliance_info) do
           create(:user_compliance_info,

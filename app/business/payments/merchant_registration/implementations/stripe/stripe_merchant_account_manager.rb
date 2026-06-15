@@ -115,9 +115,11 @@ module StripeMerchantAccountManager
     end
 
     merchant_account
-  rescue Stripe::StripeError => e
-    cleanup_failed_merchant_account(merchant_account) if merchant_account.present?
-    ErrorNotifier.notify(e)
+  rescue => e
+    if merchant_account.present?
+      cleanup_failed_merchant_account(merchant_account)
+      ErrorNotifier.notify(e)
+    end
     raise
   end
 
