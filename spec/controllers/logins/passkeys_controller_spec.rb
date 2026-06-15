@@ -51,6 +51,17 @@ describe Logins::PasskeysController, type: :controller do
       expect(session[Logins::PasskeysController::AUTHENTICATION_CHALLENGE_SESSION_KEY]).to eq(json["options"]["challenge"])
     end
 
+    it "issues options even when a lingering signed-in session was invalidated elsewhere" do
+      sign_in user
+      user.update!(last_active_sessions_invalidated_at: 1.day.from_now)
+
+      post :options, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be true
+      expect(response.parsed_body["options"]["challenge"]).to be_present
+    end
+
     context "when the feature flag is inactive" do
       before { Feature.deactivate(:passkeys) }
 

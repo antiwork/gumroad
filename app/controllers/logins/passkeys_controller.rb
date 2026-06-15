@@ -14,6 +14,7 @@ class Logins::PasskeysController < ApplicationController
   AUTHENTICATION_ERROR_MESSAGE = "We couldn't sign you in with that passkey. Please try again or use your password."
 
   skip_before_action :check_suspended
+  skip_before_action :invalidate_session_if_necessary
   before_action :ensure_passkeys_feature_enabled
 
   def options
