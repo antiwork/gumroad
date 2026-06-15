@@ -160,7 +160,7 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        handleRename(passkey);
+                        if (editingNickname.trim()) handleRename(passkey);
                       } else if (e.key === "Escape") {
                         setEditingId(null);
                       }
@@ -172,7 +172,11 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
                   />
                 </RowContent>
                 <RowActions>
-                  <Button color="accent" onClick={() => handleRename(passkey)} disabled={savingRename}>
+                  <Button
+                    color="accent"
+                    onClick={() => handleRename(passkey)}
+                    disabled={savingRename || !editingNickname.trim()}
+                  >
                     {savingRename ? "Saving..." : "Save"}
                   </Button>
                   <Button onClick={() => setEditingId(null)} disabled={savingRename}>
