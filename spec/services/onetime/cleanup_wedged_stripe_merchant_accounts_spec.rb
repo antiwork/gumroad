@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe Onetime::CleanupWedgedStripeMerchantAccounts do
+  before { allow(Stripe::Account).to receive(:delete) }
+
   def wedged_account(user:, created_at: 8.days.ago)
     create(:merchant_account, user:, charge_processor_alive_at: nil, created_at:)
   end
@@ -18,6 +20,15 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
       expect(result[:cleaned]).to eq(1)
     end
 
+    it "deletes the orphaned half-provisioned Stripe account" do
+      user = create(:user)
+      merchant_account = wedged_account(user:)
+
+      described_class.process(dry_run: false)
+
+      expect(Stripe::Account).to have_received(:delete).with(merchant_account.charge_processor_merchant_id)
+    end
+
     it "does not modify anything on a dry run" do
       user = create(:user)
       merchant_account = wedged_account(user:)
@@ -27,6 +38,7 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
       expect(merchant_account.reload.alive?).to be(true)
       expect(result[:would_clean]).to eq(1)
       expect(result[:cleaned]).to eq(0)
+      expect(Stripe::Account).not_to have_received(:delete)
     end
 
     it "leaves users who have a working Stripe account untouched" do

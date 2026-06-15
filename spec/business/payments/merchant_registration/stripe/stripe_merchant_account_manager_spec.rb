@@ -502,6 +502,19 @@ describe StripeMerchantAccountManager, :vcr do
         expect(merchant_account.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
         expect(merchant_account.charge_processor_merchant_id).to be_present
       end
+
+      it "deletes the half-provisioned Stripe account when interrupted after it is created" do
+        allow(Stripe::Account).to receive(:create_person).and_raise(StandardError.new("interrupted"))
+        expect(Stripe::Account).to receive(:delete).with(/\Aacct_/).and_call_original
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(StandardError, "interrupted")
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+        expect(merchant_account.alive?).to be(false)
+      end
     end
 
     describe "US business with a foreign-resident representative (person_hash)" do

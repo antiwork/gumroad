@@ -14,9 +14,11 @@
 # correctly set up".
 #
 # The forward fix broadens that rescue so new failures clean up after themselves.
-# This task remediates the rows stranded before that shipped: it soft-deletes each
-# wedged row whose owner has no other alive Stripe account, so the seller can
-# onboard again from scratch via the normal flow.
+# This task remediates the rows stranded before that shipped: for each wedged row
+# whose owner has no other alive Stripe account it runs the same cleanup the
+# forward fix uses — StripeMerchantAccountManager.cleanup_failed_merchant_account —
+# which deletes the orphaned half-provisioned Stripe account and soft-deletes the
+# row, so the seller can onboard again from scratch via the normal flow.
 #
 # It does NOT re-provision accounts or move money. Owners with a stranded balance
 # are logged so support can prompt them to re-enter their payout details.
@@ -65,7 +67,7 @@ module Onetime
             next
           end
 
-          merchant_account.mark_deleted!
+          StripeMerchantAccountManager.cleanup_failed_merchant_account(merchant_account)
           stats[:cleaned] += 1
           puts "cleaned merchant_account #{merchant_account.id} user #{user.id}"
         end
