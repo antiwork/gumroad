@@ -39,6 +39,16 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
       expect(wedged.reload.alive?).to be(true)
     end
 
+    it "still cleans a wedged row when the only alive-flagged account is soft-deleted" do
+      user = create(:user)
+      create(:merchant_account, user:).mark_deleted!
+      wedged = wedged_account(user:)
+
+      described_class.process(dry_run: false)
+
+      expect(wedged.reload.alive?).to be(false)
+    end
+
     it "ignores rows recent enough to be a live onboarding" do
       user = create(:user)
       recent = wedged_account(user:, created_at: 1.day.ago)

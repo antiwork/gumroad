@@ -139,6 +139,18 @@ describe StripeMerchantAccountManager, :vcr do
         expect(merchant_account.alive?).to be(false)
       end
 
+      it "keeps an already-alive account when a later step fails" do
+        allow(described_class).to receive(:save_stripe_bank_account_info).and_raise(StandardError.new("bank sync failed"))
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(StandardError, "bank sync failed")
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account.charge_processor_alive_at).to be_present
+        expect(merchant_account.alive?).to be(true)
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+      end
+
       context "when user compliance info contains whitespaces" do
         let(:user_compliance_info) do
           create(:user_compliance_info,

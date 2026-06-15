@@ -116,7 +116,7 @@ module StripeMerchantAccountManager
 
     merchant_account
   rescue => e
-    if merchant_account.present?
+    if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
       ErrorNotifier.notify(e)
     end

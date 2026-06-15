@@ -49,7 +49,7 @@ module Onetime
 
           # Re-validate on the primary at write time: a user with a working Stripe
           # account is not wedged, and the stranded row is harmless for them.
-          if user.merchant_accounts.stripe.charge_processor_alive.exists?
+          if user.merchant_accounts.alive.stripe.charge_processor_alive.exists?
             stats[:skipped_has_alive_account] += 1
             next
           end
