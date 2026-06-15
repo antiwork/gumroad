@@ -8,6 +8,8 @@ webauthn_webdriver_client = Selenium::WebDriver::Remote::Http::Default.new(open_
 # app over HTTP on a custom host, so we mark that origin as secure to expose the WebAuthn API,
 # and register a virtual authenticator to drive the ceremonies without real hardware. Use these
 # drivers via `use_webauthn_driver` in specs that exercise passkey registration or sign-in.
+# Chrome only honors --unsafely-treat-insecure-origin-as-secure under the new headless mode, so
+# the docker driver swaps the legacy --headless flag for --headless=new.
 Capybara.register_driver :webauthn_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
   options.add_emulation(device_metrics: { width: 1440, height: 900, touch: false })
@@ -20,7 +22,12 @@ end
 Capybara.register_driver :webauthn_docker_headless_chrome do |app|
   Capybara::Selenium::Driver.load_selenium
   options = Selenium::WebDriver::Chrome::Options.new.tap do |opts|
-    docker_browser_args.each { |arg| opts.args << arg }
+    docker_browser_args.each do |arg|
+      next if arg.start_with?("--user-data-dir=")
+
+      opts.args << (arg == "--headless" ? "--headless=new" : arg)
+    end
+    opts.args << "--user-data-dir=#{Dir.mktmpdir}"
     opts.args << "--window-size=1440,900"
     opts.args << "--unsafely-treat-insecure-origin-as-secure=#{Capybara.app_host}"
   end
