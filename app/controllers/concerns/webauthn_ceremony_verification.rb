@@ -3,6 +3,8 @@
 require "base64"
 
 module WebauthnCeremonyVerification
+  extend ActiveSupport::Concern
+
   class VerificationError < StandardError
     attr_reader :reason
 
