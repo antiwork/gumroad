@@ -36,6 +36,7 @@ module Onetime
 
     def process(dry_run: true, merchant_account_ids: nil)
       stats = Hash.new(0)
+      ActiveRecord::Base.connection.stick_to_primary! unless dry_run
 
       candidates(merchant_account_ids).find_in_batches(batch_size: BATCH_SIZE) do |batch|
         ReplicaLagWatcher.watch
@@ -49,8 +50,6 @@ module Onetime
             next
           end
 
-          # Re-validate on the primary at write time: a user with a working Stripe
-          # account is not wedged, and the stranded row is harmless for them.
           if user.merchant_accounts.alive.stripe.charge_processor_alive.exists?
             stats[:skipped_has_alive_account] += 1
             next
@@ -64,6 +63,12 @@ module Onetime
           if dry_run
             stats[:would_clean] += 1
             puts "DRY-RUN clean merchant_account #{merchant_account.id} user #{user.id}"
+            next
+          end
+
+          merchant_account.reload
+          unless merchant_account.alive? && merchant_account.charge_processor_alive_at.nil?
+            stats[:skipped_no_longer_wedged] += 1
             next
           end
 

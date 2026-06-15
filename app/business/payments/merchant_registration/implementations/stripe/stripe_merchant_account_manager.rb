@@ -374,7 +374,6 @@ module StripeMerchantAccountManager
     end
   end
 
-  private_class_method
   def self.cleanup_failed_merchant_account(merchant_account)
     if merchant_account.charge_processor_merchant_id.present?
       begin

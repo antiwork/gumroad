@@ -61,6 +61,23 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
       expect(wedged.reload.alive?).to be(false)
     end
 
+    it "skips a candidate that is no longer wedged when re-checked on the primary" do
+      user = create(:user)
+      merchant_account = wedged_account(user:)
+      allow_any_instance_of(MerchantAccount).to receive(:reload).and_wrap_original do |original|
+        record = original.call
+        record.charge_processor_alive_at = Time.current
+        record
+      end
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:skipped_no_longer_wedged]).to eq(1)
+      expect(result[:cleaned]).to eq(0)
+      expect(Stripe::Account).not_to have_received(:delete)
+      expect(MerchantAccount.find(merchant_account.id).alive?).to be(true)
+    end
+
     it "ignores rows recent enough to be a live onboarding" do
       user = create(:user)
       recent = wedged_account(user:, created_at: 1.day.ago)
