@@ -146,6 +146,20 @@ describe Logins::PasskeysController, type: :controller do
       expect(controller.user_signed_in?).to be(false)
     end
 
+    it "ignores an unrequested appid extension instead of returning a server error" do
+      store_credential(fake_register)
+
+      post :options, as: :json
+      assertion = fake_client.get(challenge: response.parsed_body.dig("options", "challenge"), rp_id:, user_verified: true)
+      assertion["clientExtensionResults"] = { "appid" => true }
+
+      post :create, params: { credential: assertion }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to include("success" => true)
+      expect(controller.user_signed_in?).to be(true)
+    end
+
     context "when the feature flag is inactive" do
       before { Feature.deactivate(:passkeys) }
 

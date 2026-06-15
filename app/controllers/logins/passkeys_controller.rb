@@ -86,8 +86,7 @@ class Logins::PasskeysController < ApplicationController
         :rawId,
         :type,
         :authenticatorAttachment,
-        response: [:authenticatorData, :clientDataJSON, :signature, :userHandle],
-        clientExtensionResults: {}
+        response: [:authenticatorData, :clientDataJSON, :signature, :userHandle]
       ).to_h
 
       raise AuthenticationVerificationError, "malformed_credential" unless valid_assertion_params?(permitted_params)
