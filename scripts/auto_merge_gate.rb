@@ -57,6 +57,46 @@ SAFE_PATH_ALLOWLIST = [
   %r{\Adocs/},
 ].freeze
 
+# DENYLIST (hard block): critical paths with real production blast radius —
+# money movement, auth, data shape, config, secrets, dependencies, CI, and the
+# gate itself. Evaluated BEFORE the allowlist so a deny ALWAYS wins. Today this
+# is redundant with the default-deny allowlist, but it is a durable tripwire: if
+# the allowlist is ever broadened, none of these can reach unattended merge.
+SENSITIVE_PATH_DENYLIST = [
+  # Payments core: charging, payouts, transfers, refunds, disputes, merchant
+  # registration, sales tax, raw card data.
+  %r{\Aapp/business/payments/},
+  %r{\Aapp/business/sales_tax/},
+  %r{\Aapp/business/card_data_handling/},
+  # Money/auth models (charge, refund, dispute, payout, balance, payment,
+  # purchase, credit, subscription, bank account, merchant, fraud, tax).
+  %r{\Aapp/models/concerns/(balance|charge|payment)/},
+  %r{\Aapp/models/.*(charge|refund|dispute|chargeback|payout|balance|payment|purchase|credit|subscription|bank|merchant|fraud|recurring_service|tax)},
+  # Payment/fraud/subscription services and money exports.
+  %r{\Aapp/services/(charge|dispute_evidence|early_fraud_warning|subscription)/},
+  %r{\Aapp/services/exports/(payouts|tax_summary)/},
+  # Legacy payment/subscription modules.
+  %r{\Aapp/modules/(payment|subscription)/},
+  # Money/auth/admin/webhook controllers.
+  %r{\Aapp/controllers/(admin|oauth|payouts|subscriptions|stripe|settings)/},
+  %r{\Aapp/controllers/api/internal/admin/},
+  %r{\Aapp/controllers/.*(webhook|paypal|stripe|ipn|events_controller|sessions_controller|users_controller|application_controller)},
+  # Authorization policies for money/admin/settings.
+  %r{\Aapp/policies/(admin|settings)/},
+  # Admin & payment frontend (server enforces logic, but block the surface too).
+  %r{\Aapp/javascript/(components|pages)/Admin/},
+  %r{\Aapp/javascript/(components|pages)/(Settings/Payments|Payout|Subscriptions)},
+  # Database schema, migrations, seeds.
+  %r{\Adb/},
+  # Application config, secrets, certs, routes, initializers, credentials.
+  %r{\Aconfig/},
+  # Dependency manifests / lockfiles.
+  %r{\A(Gemfile(\.lock)?|package(-lock)?\.json|yarn\.lock)\z},
+  # CI / automation / the gate itself — no self-widening of authority.
+  %r{\A\.github/},
+  %r{\Ascripts/auto_merge_gate},
+].freeze
+
 def block!(reason)
   puts "🔴 auto-merge-gate: BLOCKED"
   puts "   reason: #{reason}"
@@ -117,8 +157,13 @@ out.split("\0").each do |rec|
 end
 block!("no file changes parsed") if files.empty?
 
-# (3) Default-deny: every path must be inside the safe allowlist.
+# (3) Deny wins over allow: any critical path hard-blocks the PR, even if a
+# future allowlist change would match it. Then default-deny: every remaining
+# path must be inside the safe allowlist.
 files.each do |path|
+  if SENSITIVE_PATH_DENYLIST.any? { |re| path =~ re }
+    block!("critical path blocked by denylist: #{path}")
+  end
   unless SAFE_PATH_ALLOWLIST.any? { |re| path =~ re }
     block!("path outside safe allowlist: #{path}")
   end
