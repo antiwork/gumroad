@@ -1027,7 +1027,7 @@ class Installment < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :post)
       return if result.passed
 
-      errors.add(:base, "This post can’t be published right now because it appears to conflict with our content guidelines. If you think this is a mistake, contact support@gumroad.com and we’ll take another look.")
+      errors.add(:base, "This post can’t be published because it looks like it contains #{ContentModeration::ModerateRecordService.humanize_reasons(result.reasons)}. Please edit it to follow our content guidelines and publish again.")
     end
 
     def normalize_tag(raw)
