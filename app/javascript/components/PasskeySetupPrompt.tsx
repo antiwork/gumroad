@@ -15,7 +15,7 @@ const SNOOZE_MS = 90 * 24 * 60 * 60 * 1000;
 const SETUP_ERROR = "Could not set up a passkey. Please try again.";
 
 export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; accountId: number }) => {
-  const { authenticity_token } = usePage<{ authenticity_token: string }>().props;
+  const { authenticity_token, passkeys } = usePage<{ authenticity_token: string; passkeys?: unknown }>().props;
   const snoozeKey = `${SNOOZE_KEY_PREFIX}:${accountId}`;
   const [supported, setSupported] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(false);
@@ -23,7 +23,17 @@ export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; account
 
   React.useEffect(() => setSupported(isPasskeySupported()), []);
 
-  if (!show || !supported || dismissed || Number(localStorage.getItem(snoozeKey)) > Date.now()) return null;
+  const onPasskeyManagementPage = passkeys !== undefined;
+
+  if (
+    !show ||
+    !supported ||
+    onPasskeyManagementPage ||
+    dismissed ||
+    Number(localStorage.getItem(snoozeKey)) > Date.now()
+  ) {
+    return null;
+  }
 
   const snooze = () => localStorage.setItem(snoozeKey, String(Date.now() + SNOOZE_MS));
 
