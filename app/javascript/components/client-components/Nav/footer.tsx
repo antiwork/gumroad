@@ -1,4 +1,4 @@
-import { ArrowOutRightSquareHalf, Book, Cog, Group, Store } from "@boxicons/react";
+import { ArrowOutRightSquareHalf, Book, Cog, Store } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -30,6 +30,12 @@ function NavbarFooter() {
         icon={<Book pack="filled" className="size-5" />}
         href={Routes.help_center_root_url(routeParams)}
       />
+      <NavLink
+        text="Settings"
+        icon={<Cog pack="filled" className="size-5" />}
+        href={Routes.settings_main_url(routeParams)}
+        component={Link}
+      />
       <DashboardNavProfilePopover user={currentSeller}>
         <Menu className="flex flex-col border-0! shadow-none! dark:border!">
           {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -45,20 +51,6 @@ function NavbarFooter() {
             icon={<Store pack="filled" className="mx-1 size-5" />}
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
-          <NavLinkDropdownItem
-            text="Settings"
-            icon={<Cog pack="filled" className="mx-1 size-5" />}
-            href={Routes.settings_main_url(routeParams)}
-            component={Link}
-          />
-          {teamMemberships != null && teamMemberships.length > 0 ? (
-            <NavLinkDropdownItem
-              text="Teams"
-              icon={<Group pack="filled" className="mx-1 size-5" />}
-              href={Routes.settings_team_url(routeParams)}
-              component={Link}
-            />
-          ) : null}
           <MenuItem asChild>
             <Link href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
               <ArrowOutRightSquareHalf pack="filled" className="mx-1 size-5" />
