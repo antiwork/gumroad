@@ -19,8 +19,8 @@ class ContentModeration::Strategies::ClassifierStrategy
     "self-harm/instructions" => 0.8,
     "sexual" => 0.8,
     "sexual/minors" => 0.3,
-    "violence" => 0.8,
-    "violence/graphic" => 0.8,
+    "violence" => 0.9,
+    "violence/graphic" => 0.9,
   }.freeze
 
   def initialize(text:, image_urls: [])
