@@ -22,16 +22,16 @@ class ContentModeration::ModerateRecordService
     "violence/graphic" => "graphic violence",
   }.freeze
 
-  # Turn raw moderation reasons (e.g. "violence (score: 0.86, threshold: 0.9)")
-  # into a friendly, de-duplicated phrase the seller can act on — without
-  # leaking scores, thresholds, or the provider. Generic fallback for
-  # blocklist/prompt reasons that aren't a known category.
+  # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
+  # (score: 0.86, threshold: 0.9)") into a friendly, de-duplicated phrase the
+  # seller can act on — without leaking scores, thresholds, or the provider.
+  # Generic fallback for blocklist/prompt reasons that aren't a known category.
   def self.humanize_reasons(reasons)
     labels = Array(reasons).map do |r|
       key = r.to_s.split(" (").first.to_s.split(": ").last.to_s.strip.downcase
       CATEGORY_LABELS[key]
     end.compact.uniq
-    labels.empty? ? "content that may violate our content guidelines" : labels.to_sentence
+    labels.empty? ? "something that may violate our content guidelines" : labels.to_sentence
   end
 
   def self.seller_message(reasons, noun)
