@@ -97,4 +97,18 @@ describe MerchantRegistrationMailer do
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end
+
+  describe "stripe_payouts_under_review" do
+    it "notifies the user that their payouts are paused while under review, with no action needed" do
+      user = create(:user)
+      mail = described_class.stripe_payouts_under_review(user.id)
+
+      expect(mail.subject).to eq("Your payouts are temporarily paused")
+      expect(mail.to).to include(user.email)
+      expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.body.encoded).to include("temporarily paused payouts on your account while it completes a review")
+      expect(mail.body.encoded).to include("There's nothing you need to do right now.")
+      expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
+    end
+  end
 end

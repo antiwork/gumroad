@@ -15,6 +15,16 @@ module StripeMerchantAccountManager
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
 
+  STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
+  private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
+
+  def self.stripe_payouts_pause_email_type(disabled_reason, fields_needed_present)
+    return nil if disabled_reason.to_s.start_with?("rejected.") || disabled_reason == "platform_paused"
+    return :action_required if fields_needed_present
+    :under_review
+  end
+  private_class_method :stripe_payouts_pause_email_type
+
   def self.account_holder_name_synced_to_stripe?(user)
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
     ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code)
@@ -867,10 +877,26 @@ module StripeMerchantAccountManager
 
     if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
       user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+      user.comments.create!(
+        author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+        content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
+      )
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
-      if stripe_fields_needed.present? && requirements["disabled_reason"].in?(%w(action_required.requested_capabilities requirements.past_due))
+      user.comments.create!(
+        author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+        content: merchant_account.stripe_payouts_paused_comment
+      )
+      action_required_fields_present = [requirements["currently_due"], requirements["past_due"],
+                                        future_requirements["currently_due"], future_requirements["past_due"],
+                                        alternative_fields_due].compact.flatten.any?
+      case stripe_payouts_pause_email_type(requirements["disabled_reason"], action_required_fields_present)
+      when :action_required
         MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
+      when :under_review
+        MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
       end
     end
 

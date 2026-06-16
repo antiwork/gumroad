@@ -10279,7 +10279,7 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "pauses payouts on the account and notifies the creator by email if payouts are disabled due to info requirement" do
+            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement" do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
 
@@ -10288,6 +10288,10 @@ describe StripeMerchantAccountManager, :vcr do
               end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
 
               expect(user.reload.payouts_paused_internally?).to be true
+              comment = user.comments.with_type_payouts_paused.last
+              expect(comment).to be_present
+              expect(comment.content).to include("requirements.past_due")
+              expect(user.payouts_paused_for_reason).to eq(comment.content)
             end
 
             it "does not overwrite the payout pause source if payouts are already paused internally" do
@@ -10316,19 +10320,67 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.reload.payouts_paused_internally?).to be true
             end
 
-            it "does not email the creator if payouts are disabled due to a reason other than info requirement" do
+            it "sends the action-required email for any disabled reason that still has outstanding requirements" do
               expect(user.reload.payouts_paused_internally?).to be false
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "listed"
+
               expect do
                 described_class.handle_stripe_event(stripe_event)
-              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
-              expect(user.reload.payouts_paused_internally?).to be true
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
 
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("listed")
+            end
+
+            it "does not email the creator when the platform paused payouts" do
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "platform_paused"
 
-              expect do
-                described_class.handle_stripe_event(stripe_event)
-              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_under_review)
+
+              described_class.handle_stripe_event(stripe_event)
+
               expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("platform_paused")
+            end
+
+            it "does not email the creator when Stripe rejected the account" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_under_review)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("rejected.listed")
+            end
+
+            context "when Stripe is not requesting any fields" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+              end
+
+              it "sends the under-review email for a non-rejected reason with no outstanding requirements" do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+
+                expect(user.reload.payouts_paused_internally?).to be true
+              end
+
+              it "sends the under-review email when only eventually-due (not yet required) fields exist" do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+                stripe_event["data"]["object"]["requirements"]["eventually_due"] = ["individual.id_number"]
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+
+                expect(user.reload.payouts_paused_internally?).to be true
+              end
             end
           end
 
@@ -10413,12 +10465,14 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "resumes payouts on the account if payouts are paused internally by stripe" do
+            it "resumes payouts on the account and records a resume comment if payouts are paused internally by stripe" do
               user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
               expect(user.reload.payouts_paused_internally?).to be true
               expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
 
-              described_class.handle_stripe_event(stripe_event)
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.comments.with_type_payouts_resumed.count }.by(1)
 
               expect(user.reload.payouts_paused_internally?).to be false
               expect(user.payouts_paused_by).to be nil

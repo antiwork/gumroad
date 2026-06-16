@@ -3361,19 +3361,50 @@ describe User, :vcr do
       expect(seller.payouts_paused_for_reason).to eq("Chargeback rate too high.")
     end
 
-    it "returns nil if payouts are not paused by admin" do
+    it "returns the content of the last payouts_paused comment when payouts are paused by stripe" do
       seller.comments.create!(
-        author_id: User.last.id,
-        content: "Chargeback rate too high.",
+        author_name: "Stripe payouts sync",
+        content: "Payouts automatically paused by Stripe (disabled reason: requirements.past_due).",
         comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
       )
 
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
       expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
-      expect(seller.payouts_paused_for_reason).to be nil
+      expect(seller.payouts_paused_for_reason).to eq("Payouts automatically paused by Stripe (disabled reason: requirements.past_due).")
+    end
+
+    it "returns nil for system pauses that only write an on_probation comment" do
+      seller.comments.create!(
+        author_name: "pause_payouts_for_seller_based_on_chargeback_rate",
+        content: "Payouts automatically paused due to chargeback rate.",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION
+      )
 
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns nil when the current pause is by the system even if a stale Stripe pause comment remains" do
+      seller.comments.create!(
+        author_name: "Stripe payouts sync",
+        content: "Payouts automatically paused by Stripe (disabled reason: listed).",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns nil once payouts are no longer paused even if a stale pause comment remains" do
+      seller.comments.create!(
+        author_name: "Stripe payouts sync",
+        content: "Payouts automatically paused by Stripe (disabled reason: requirements.past_due).",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+
+      expect(seller.payouts_paused?).to be false
       expect(seller.payouts_paused_for_reason).to be nil
     end
   end
