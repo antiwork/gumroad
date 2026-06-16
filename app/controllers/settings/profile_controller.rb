@@ -40,9 +40,20 @@ class Settings::ProfileController < Settings::BaseController
           tabs = permitted_params[:tabs].as_json
           # Resolve each tab's section references to real db ids, dropping any that no longer
           # resolve (client GUIDs decrypt to nil) so stale references can't be persisted.
-          tabs.each { |tab| tab["sections"] = Array(tab["sections"]).filter_map { section_ids_by_param_id[_1] || ObfuscateIds.decrypt(_1) } }
-          current_seller.seller_profile_sections.on_profile.each do |section|
-            section.destroy! if tabs.none? { _1["sections"].include?(section.id) }
+          all_references_resolved = true
+          tabs.each do |tab|
+            tab["sections"] = Array(tab["sections"]).filter_map do |param_id|
+              resolved_id = section_ids_by_param_id[param_id] || ObfuscateIds.decrypt(param_id)
+              all_references_resolved = false if resolved_id.nil?
+              resolved_id
+            end
+          end
+          # Only prune sections when every reference resolved. Otherwise an unresolvable
+          # reference would make a still-referenced section look orphaned and destroy it.
+          if all_references_resolved
+            current_seller.seller_profile_sections.on_profile.each do |section|
+              section.destroy! if tabs.none? { _1["sections"].include?(section.id) }
+            end
           end
           seller_profile.json_data["tabs"] = tabs
         end

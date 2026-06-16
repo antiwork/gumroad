@@ -194,6 +194,19 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [kept.id] }].as_json
       end
 
+      it "does not prune sections when a tab reference can't be resolved" do
+        kept = create(:seller_profile_products_section, seller:)
+        also_present = create(:seller_profile_products_section, seller:)
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [kept.id, also_present.id] }] })
+
+        put :update, params: {
+          tabs: [{ name: "Tab 1", sections: [kept.external_id, temp_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(seller.seller_profile_sections.pluck(:id)).to match_array([kept.id, also_present.id])
+      end
+
       it "does not keep a row for a new section that no tab references" do
         put :update, params: {
           sections: [{ id: temp_id, type: "SellerProfileSubscribeSection", button_label: "Subscribe" }],
