@@ -1243,6 +1243,7 @@ describe StripePayoutProcessor, :vcr do
         errors = described_class.perform_payment(payment)
         expect(errors).to be_present
         expect(errors.first).to match(/You have insufficient funds in your Stripe account for this transfer/)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
       end
     end
   end
@@ -1669,6 +1670,7 @@ describe StripePayoutProcessor, :vcr do
         errors = described_class.perform_payment(payment)
         expect(errors).to be_present
         expect(errors.first).to match(/You have insufficient funds in your Stripe account for this transfer/)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
       end
     end
   end

@@ -383,12 +383,14 @@ class StripePayoutProcessor
   end
 
   def self.stripe_invalid_request_error_failure_reason(error)
+    return Payment::FailureReason::INSUFFICIENT_FUNDS if error.code.to_s == "balance_insufficient"
+
     case error.message.to_s
     when /Cannot create live transfers/, /Cannot create payouts/
       Payment::FailureReason::CANNOT_PAY
     when /Debit card transfers are only supported for amounts less/
       Payment::FailureReason::DEBIT_CARD_LIMIT
-    when /Insufficient funds in Stripe account/
+    when /insufficient funds in (your )?Stripe account/i
       Payment::FailureReason::INSUFFICIENT_FUNDS
     when /has been deleted and can no longer be used/
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
