@@ -1482,6 +1482,6 @@ class Link < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :product)
       return if result.passed
 
-      errors.add(:base, "This product can’t be published because it looks like it contains #{ContentModeration::ModerateRecordService.humanize_reasons(result.reasons)}. Please edit it to follow our content guidelines and publish again.")
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "product"))
     end
 end

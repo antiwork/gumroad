@@ -29,8 +29,26 @@ class ContentModeration::ModerateRecordService
   # leaking scores, thresholds, or the provider. Generic fallback for
   # blocklist/prompt reasons that aren't a known category.
   def self.humanize_reasons(reasons)
-    labels = Array(reasons).map { |r| CATEGORY_LABELS[r.to_s.split(" (").first.to_s.strip.downcase] }.compact.uniq
+    labels = Array(reasons).map do |r|
+      # Reasons look like "OpenAI moderation flagged: violence (score: .., threshold: ..)";
+      # strip the provider prefix and the score/threshold tail to get the category key.
+      key = r.to_s.split(" (").first.to_s.split(": ").last.to_s.strip.downcase
+      CATEGORY_LABELS[key]
+    end.compact.uniq
     labels.empty? ? "content that may violate our content guidelines" : labels.to_sentence
+  end
+
+  # Seller-facing validation message. Distinguishes a transient moderation
+  # outage (retry) from a real content flag, names the category(ies), and leaks
+  # no scores/thresholds/provider. `noun` is "product" or "post".
+  def self.seller_message(reasons, noun)
+    rs = Array(reasons)
+    transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
+    if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
+      "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    else
+      "This #{noun} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."
+    end
   end
 
   def self.check(record, entity_type)
