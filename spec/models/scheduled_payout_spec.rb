@@ -268,12 +268,15 @@ describe ScheduledPayout do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago) }
 
       it "defers the bank payout instead of processing it immediately" do
+        scheduled_payout.update!(processor: PayoutProcessorType::STRIPE)
         payment = instance_double(Payment, id: 9876, blank?: false)
         allow(Payouts).to receive(:create_payment)
-          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
           .and_return([payment, nil])
         allow(StripePayoutProcessor).to receive(:cross_border_payout?).with(payment).and_return(true)
-        expect(StripePayoutProcessor).not_to receive(:process_payments)
+        processor = class_double(StripePayoutProcessor)
+        allow(PayoutProcessorType).to receive(:get).and_return(processor)
+        expect(processor).not_to receive(:process_payments)
         expect(ProcessPaymentWorker).to receive(:perform_in).with(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, 9876)
 
         scheduled_payout.execute!
