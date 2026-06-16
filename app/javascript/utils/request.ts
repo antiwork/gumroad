@@ -2,6 +2,7 @@ export type RequestSettings = {
   accept: "json" | "html" | "csv";
   url: string;
   abortSignal?: AbortSignal | undefined;
+  headers?: Record<string, string> | undefined;
 } & ({ method: "GET" } | { method: "POST" | "PUT" | "PATCH" | "DELETE"; data?: Record<string, unknown> | FormData });
 
 export class AbortError extends Error {
@@ -52,6 +53,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
   const headers = new Headers(defaults.headers);
   headers.set("Accept", acceptType);
   if (data && !(data instanceof FormData)) headers.set("Content-Type", "application/json");
+  for (const [name, value] of Object.entries(settings.headers ?? {})) headers.set(name, value);
   try {
     const response = await fetch(settings.url, {
       ...defaults,

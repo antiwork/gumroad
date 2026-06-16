@@ -1412,7 +1412,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_content("Payouts will be made in EUR.")
 
         click_on("Update settings")
-        expect(page).to have_content("The postal code you entered is not valid for Germany.")
+        expect(page).to have_content("We couldn't verify the postal code you entered for Germany. If you're sure it's correct, such as a newly built address, contact support and we'll look into it.")
 
         fill_in("Postal code", with: "01067")
         click_on("Update settings")

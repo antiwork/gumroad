@@ -128,6 +128,29 @@ describe StripeMerchantAccountManager, :vcr do
         end.to raise_error(Stripe::InvalidRequestError)
       end
 
+      it "cleans up the merchant account when onboarding is interrupted by a non-Stripe error" do
+        allow(Stripe::Account).to receive(:create).and_raise(Timeout::Error.new("execution expired"))
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Timeout::Error)
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account).to be_present
+        expect(merchant_account.alive?).to be(false)
+      end
+
+      it "keeps an already-alive account when a later step fails" do
+        allow(described_class).to receive(:save_stripe_bank_account_info).and_raise(StandardError.new("bank sync failed"))
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(StandardError, "bank sync failed")
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account.charge_processor_alive_at).to be_present
+        expect(merchant_account.alive?).to be(true)
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+      end
+
       context "when user compliance info contains whitespaces" do
         let(:user_compliance_info) do
           create(:user_compliance_info,
@@ -478,6 +501,19 @@ describe StripeMerchantAccountManager, :vcr do
         merchant_account = subject.create_account(user, passphrase: "1234")
         expect(merchant_account.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
         expect(merchant_account.charge_processor_merchant_id).to be_present
+      end
+
+      it "deletes the half-provisioned Stripe account when interrupted after it is created" do
+        allow(Stripe::Account).to receive(:create_person).and_raise(StandardError.new("interrupted"))
+        expect(Stripe::Account).to receive(:delete).with(/\Aacct_/).and_call_original
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(StandardError, "interrupted")
+
+        merchant_account = user.merchant_accounts.stripe.last
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+        expect(merchant_account.alive?).to be(false)
       end
     end
 

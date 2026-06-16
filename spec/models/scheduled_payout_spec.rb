@@ -180,6 +180,10 @@ describe ScheduledPayout do
     context "when action is payout" do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago) }
 
+      before do
+        allow(StripePayoutProcessor).to receive(:cross_border_payout?).and_return(false)
+      end
+
       it "creates a payment via Payouts.create_payment and marks as executed" do
         payment = instance_double(Payment, failed?: false, reload: nil)
         allow(payment).to receive(:reload).and_return(payment)
@@ -257,6 +261,28 @@ describe ScheduledPayout do
 
         expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe account not connected/)
         expect(scheduled_payout.reload.status).to eq("pending")
+      end
+    end
+
+    context "when action is payout to a cross-border account" do
+      let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago) }
+
+      it "defers the bank payout instead of processing it immediately" do
+        scheduled_payout.update!(processor: PayoutProcessorType::STRIPE)
+        payment = instance_double(Payment, id: 9876, blank?: false)
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
+          .and_return([payment, nil])
+        allow(StripePayoutProcessor).to receive(:cross_border_payout?).with(payment).and_return(true)
+        processor = class_double(StripePayoutProcessor)
+        allow(PayoutProcessorType).to receive(:get).and_return(processor)
+        expect(processor).not_to receive(:process_payments)
+        expect(ProcessPaymentWorker).to receive(:perform_in).with(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, 9876)
+
+        scheduled_payout.execute!
+
+        expect(scheduled_payout.reload.status).to eq("executed")
+        expect(scheduled_payout.executed_at).to be_present
       end
     end
 
