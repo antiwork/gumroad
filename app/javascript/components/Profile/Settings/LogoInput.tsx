@@ -53,6 +53,7 @@ export const LogoInput = ({
         }
         imageAlt="Current avatar"
         disabled={disabled}
+        circular
       />
     </Fieldset>
   );
