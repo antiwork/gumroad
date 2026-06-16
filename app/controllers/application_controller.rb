@@ -199,6 +199,7 @@ class ApplicationController < ActionController::Base
     def show_passkey_setup_prompt?
       logged_in_user.present? &&
         !impersonating? &&
+        cookies[:is_gumroad_mobile_app].blank? &&
         session[PROMPT_PASSKEY_SETUP_SESSION_KEY] == logged_in_user.id &&
         logged_in_user.role_owner_for?(current_seller) &&
         logged_in_user.passkeys_setup_pending?

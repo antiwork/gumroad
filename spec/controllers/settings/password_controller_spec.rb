@@ -57,6 +57,16 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
 
       expect(inertia.props[:prompt_passkey_setup]).to be(false)
     end
+
+    it "does not show the prompt inside the mobile app webview" do
+      Feature.activate(:passkeys)
+      session[:prompt_passkey_setup] = user.id
+      cookies[:is_gumroad_mobile_app] = "true"
+
+      get :show
+
+      expect(inertia.props[:prompt_passkey_setup]).to be(false)
+    end
   end
 
   describe "PUT update" do
