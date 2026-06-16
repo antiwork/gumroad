@@ -84,7 +84,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       </header>
       <main className="flex flex-1 flex-col">
         {children}
-        <PoweredByFooter className="mx-auto w-full max-w-6xl lg:py-6 lg:text-left" />
+        <PoweredByFooter className="mx-auto w-full max-w-6xl" />
       </main>
     </div>
   );
