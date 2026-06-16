@@ -5,10 +5,10 @@ class EmailRouterFallbackService
 
   class << self
     def email_provider_for_two_factor(user:)
-      return nil unless Feature.active?(:resend_fallback_for_auth_emails)
-      return nil unless $redis.exists?(RedisKey.email_router_fallback(user.id))
-
-      MailerInfo::EMAIL_PROVIDER_RESEND
+      # #506: all 2FA emails go through SendGrid (speed + deliverability).
+      # The Resend fallback for auth emails is retired — always use the
+      # default provider (SendGrid) by returning nil here.
+      nil
     end
 
     def record_email_sent(user:)
