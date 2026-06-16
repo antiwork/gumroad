@@ -109,14 +109,22 @@ describe "Two-Factor Authentication", js: true, type: :system do
   end
 
   describe "Resend authentication token" do
-    it "resends the authentication token" do
+    it "disables the resend button during the cooldown after login" do
+      login_to_app
+      expect(page).to have_content "Two-Factor Authentication"
+
+      expect(page).to have_button("Resend Authentication Token", disabled: true)
+    end
+
+    it "resends the authentication token once the cooldown allows it" do
+      stub_const("TwoFactorAuthenticationValidator::RESEND_AUTHENTICATION_TOKEN_COOLDOWN", 0.seconds)
+
       expect do
         login_to_app
         expect(page).to have_content "Two-Factor Authentication"
 
         click_on "Resend Authentication Token"
 
-        # Wait for the success message to appear (flash notice from the redirect)
         expect(page).to have_content "Resent the authentication token"
       end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).twice.with(user.id, email_provider: nil)
     end
@@ -151,7 +159,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
         expect(page).to have_content "Authentication token sent to #{user.email}."
         expect(page).to have_content "Authentication Token"
-        expect(page).to have_button "Resend Authentication Token"
+        expect(page).to have_button("Resend Authentication Token", disabled: true)
         expect(page).not_to have_button "Use email instead"
       end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id, email_provider: nil)
 

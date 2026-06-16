@@ -17,10 +17,20 @@ type PageProps = {
   token: string | null;
   authenticity_token: string;
   two_factor_method: TwoFactorMethod;
+  token_sent_at: number | null;
+  resend_cooldown_seconds: number;
 };
 
 function TwoFactorAuthentication() {
-  const { user_id, email, token: initialToken, authenticity_token, two_factor_method } = usePage<PageProps>().props;
+  const {
+    user_id,
+    email,
+    token: initialToken,
+    authenticity_token,
+    two_factor_method,
+    token_sent_at,
+    resend_cooldown_seconds,
+  } = usePage<PageProps>().props;
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
 
@@ -30,6 +40,22 @@ function TwoFactorAuthentication() {
 
   const [token, setToken] = React.useState(initialToken ?? "");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [resendCooldown, setResendCooldown] = React.useState(resend_cooldown_seconds);
+
+  React.useEffect(() => {
+    setResendCooldown(resend_cooldown_seconds);
+  }, [token_sent_at, resend_cooldown_seconds]);
+
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const resendToken = () => {
+    if (switchForm.processing || resendCooldown > 0) return;
+    switchForm.post(Routes.resend_authentication_token_path({ user_id }));
+  };
 
   const submitCode = (token: string) => {
     if (isSubmitting) return;
@@ -102,11 +128,10 @@ function TwoFactorAuthentication() {
             switch (two_factor_method) {
               case "email":
                 return (
-                  <Button
-                    disabled={switchForm.processing}
-                    onClick={() => switchForm.post(Routes.resend_authentication_token_path({ user_id }))}
-                  >
-                    Resend Authentication Token
+                  <Button disabled={switchForm.processing || resendCooldown > 0} onClick={resendToken}>
+                    {resendCooldown > 0
+                      ? `Resend Authentication Token in ${resendCooldown}s`
+                      : "Resend Authentication Token"}
                   </Button>
                 );
               case "totp":
