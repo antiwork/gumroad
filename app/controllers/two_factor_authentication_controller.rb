@@ -114,5 +114,6 @@ class TwoFactorAuthenticationController < ApplicationController
       remember_two_factor_auth
       reset_two_factor_auth_login_session
       merge_guest_cart_with_user_cart
+      refresh_passkey_setup_prompt(user)
     end
 end

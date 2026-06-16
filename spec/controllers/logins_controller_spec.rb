@@ -110,6 +110,49 @@ describe LoginsController, type: :controller, inertia: true do
       @user = create(:user, password: "password")
     end
 
+    describe "passkey setup prompt" do
+      before { Feature.activate(:passkeys) }
+
+      it "flags the prompt after an eligible login" do
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be(true)
+      end
+
+      it "does not flag the prompt when the user already has a passkey" do
+        create(:webauthn_credential, user: @user)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "clears a stale prompt flag when the logging-in user is no longer eligible" do
+        create(:webauthn_credential, user: @user)
+        session[:prompt_passkey_setup] = true
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "does not flag the prompt when the passkeys feature is inactive" do
+        Feature.deactivate(:passkeys)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "does not flag the prompt inside the mobile app webview" do
+        cookies[:is_gumroad_mobile_app] = "true"
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+    end
+
     it "logs in if user already exists" do
       post "create", params: { user: { login_identifier: @user.email, password: "password" } }
       expect(response).to redirect_to(dashboard_path)

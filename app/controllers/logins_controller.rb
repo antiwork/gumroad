@@ -48,6 +48,7 @@ class LoginsController < Devise::SessionsController
     @user.remember_me = true # Always "remember" user sessions
 
     sign_in_or_prepare_for_two_factor_auth(@user)
+    refresh_passkey_setup_prompt(@user) if user_signed_in?
 
     if @user.respond_to?(:pwned?) && @user.pwned?
       flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."

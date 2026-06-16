@@ -6,12 +6,14 @@ import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
 import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
+import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
 import { useFlashMessage } from "$app/components/useFlashMessage";
 
 type PageProps = {
   _inertia_meta?: MetaTag[];
   flash?: AlertPayload | null;
+  prompt_passkey_setup?: boolean;
   logged_in_user: LoggedInUser | null;
   current_seller: {
     id: number;
@@ -29,7 +31,7 @@ type PageProps = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const { flash, logged_in_user, current_seller, prompt_passkey_setup } = usePage<PageProps>().props;
   useFlashMessage(flash);
 
   return (
@@ -40,6 +42,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
+            {logged_in_user ? <PasskeySetupPrompt show={!!prompt_passkey_setup} /> : null}
             {children}
           </main>
         </div>

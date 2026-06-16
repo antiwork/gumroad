@@ -169,6 +169,24 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
         expect(response).to redirect_to(two_factor_authentication_path)
       end
     end
+
+    context "passkey setup prompt" do
+      before { Feature.activate(:passkeys) }
+
+      it "flags the prompt after completing two-factor authentication" do
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:prompt_passkey_setup]).to be(true)
+      end
+
+      it "does not flag the prompt when the user already has a passkey" do
+        create(:webauthn_credential, user: @user)
+
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+    end
   end
 
   # Request from "Login" link in authentication token email

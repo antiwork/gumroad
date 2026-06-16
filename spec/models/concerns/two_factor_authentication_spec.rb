@@ -203,6 +203,35 @@ describe TwoFactorAuthentication do
     end
   end
 
+  describe "#passkeys_setup_pending?" do
+    context "when the passkeys feature is inactive" do
+      before { Feature.deactivate_user(:passkeys, @user) }
+
+      it "returns false" do
+        expect(@user.passkeys_setup_pending?).to be false
+      end
+    end
+
+    context "when the passkeys feature is active and the user has no passkeys" do
+      before { Feature.activate_user(:passkeys, @user) }
+
+      it "returns true" do
+        expect(@user.passkeys_setup_pending?).to be true
+      end
+    end
+
+    context "when the passkeys feature is active and the user has a passkey" do
+      before do
+        create(:webauthn_credential, user: @user)
+        Feature.activate_user(:passkeys, @user)
+      end
+
+      it "returns false" do
+        expect(@user.passkeys_setup_pending?).to be false
+      end
+    end
+  end
+
   describe "#two_factor_auth_redis_namespace" do
     it "returns the redis namespace for two factor authentication" do
       redis_namespace = @user.two_factor_auth_redis_namespace

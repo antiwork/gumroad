@@ -31,6 +31,21 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
       actual_props = inertia.props.slice(*expected_props.keys)
       expect(actual_props).to eq(expected_props)
     end
+
+    it "exposes the passkey setup prompt flag and keeps it set until the user acts" do
+      session[:prompt_passkey_setup] = true
+
+      get :show
+
+      expect(inertia.props[:prompt_passkey_setup]).to be(true)
+      expect(session[:prompt_passkey_setup]).to be(true)
+    end
+
+    it "does not flag the passkey setup prompt when the session flag is absent" do
+      get :show
+
+      expect(inertia.props[:prompt_passkey_setup]).to be(false)
+    end
   end
 
   describe "PUT update" do
