@@ -200,7 +200,8 @@ class ApplicationController < ActionController::Base
       logged_in_user.present? &&
         !impersonating? &&
         session[PROMPT_PASSKEY_SETUP_SESSION_KEY] == logged_in_user.id &&
-        logged_in_user.role_owner_for?(current_seller)
+        logged_in_user.role_owner_for?(current_seller) &&
+        logged_in_user.passkeys_setup_pending?
     end
 
     def sign_in_or_prepare_for_two_factor_auth(user)

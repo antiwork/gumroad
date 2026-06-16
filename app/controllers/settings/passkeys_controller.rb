@@ -55,7 +55,7 @@ class Settings::PasskeysController < Settings::BaseController
 
     Rails.logger.info("passkey.registration.succeeded user_id=#{@user.id} webauthn_credential_id=#{credential.id}")
 
-    refresh_passkey_setup_prompt(@user)
+    refresh_passkey_setup_prompt(logged_in_user)
 
     render json: { success: true, passkey: passkey_props(credential) }, status: :created
   rescue VerificationError => e

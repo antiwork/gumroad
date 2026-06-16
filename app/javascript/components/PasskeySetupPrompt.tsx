@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { registerPasskey } from "$app/utils/passkeyRegistration";
+import { PASSKEY_ADD_ERROR, registerPasskey } from "$app/utils/passkeyRegistration";
 import { asyncVoid } from "$app/utils/promise";
 import { ResponseError } from "$app/utils/request";
 import { isPasskeySupported } from "$app/utils/webauthn";
@@ -12,7 +12,6 @@ import { Alert } from "$app/components/ui/Alert";
 
 const SNOOZE_KEY_PREFIX = "passkeySetupPromptSnoozedUntil";
 const SNOOZE_MS = 90 * 24 * 60 * 60 * 1000;
-const SETUP_ERROR = "Could not set up a passkey. Please try again.";
 
 export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; accountId: number }) => {
   const { authenticity_token, passkeys } = usePage<{ authenticity_token: string; passkeys?: unknown }>().props;
@@ -46,12 +45,11 @@ export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; account
     setAdding(true);
     try {
       await registerPasskey(authenticity_token);
-      snooze();
       setDismissed(true);
       showAlert("You're set — next time, sign in with your passkey.", "success");
     } catch (e) {
       if (e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
-      showAlert(e instanceof ResponseError ? e.message : SETUP_ERROR, "error");
+      showAlert(e instanceof ResponseError ? e.message : PASSKEY_ADD_ERROR, "error");
     } finally {
       setAdding(false);
     }
