@@ -788,7 +788,7 @@ const b = 2;</code></pre>
 
         expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
         expect(@installment.reload.published_at).to be(nil)
-        expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+        expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "skips the content moderation check for VIP creators" do
@@ -844,7 +844,7 @@ const b = 2;</code></pre>
 
           @installment.name = "New bad name"
           expect(@installment.save).to eq(false)
-          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+          expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
         end
 
         it "re-checks moderation when the message changes" do
@@ -854,7 +854,7 @@ const b = 2;</code></pre>
 
           @installment.message = "<p>New bad body</p>"
           expect(@installment.save).to eq(false)
-          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in message")
+          expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
         end
 
         it "does not re-check moderation when unrelated attributes change" do

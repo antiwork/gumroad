@@ -116,6 +116,17 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(inertia.props[:token]).to eq(User::DEFAULT_AUTH_TOKEN)
     end
 
+    it "exposes the resend cooldown derived from when the token was sent" do
+      freeze_time do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        get :show
+
+        expect(inertia.props[:token_sent_at]).to eq(Time.current.to_i)
+        expect(inertia.props[:resend_cooldown_seconds]).to eq(60)
+      end
+    end
+
     it "sets the page title" do
       get :show
 
@@ -152,6 +163,12 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
         expect(flash[:notice]).to eq "Successfully logged in!"
         expect(response).to redirect_to(controller.send(:login_path_for, @user))
+      end
+
+      it "clears the token-sent time from the session" do
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to be_nil
       end
 
       it_behaves_like "merge guest cart with user cart" do
@@ -246,6 +263,14 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(flash[:notice]).to eq "Resent the authentication token, please check your inbox."
     end
 
+    it "records the token-sent time so the cooldown restarts" do
+      freeze_time do
+        post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to eq(Time.current.to_i)
+      end
+    end
+
     context "when user has TOTP enabled" do
       before do
         Feature.activate_user(:authenticator_2fa, @user)
@@ -301,6 +326,14 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(controller.send(:two_factor_auth_method)).to eq("email")
       expect(response).to redirect_to(two_factor_authentication_path)
       expect(flash[:notice]).to eq "Authentication token sent to #{@user.email}."
+    end
+
+    it "records the token-sent time so the cooldown starts" do
+      freeze_time do
+        post :switch_to_email, params: { user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to eq(Time.current.to_i)
+      end
     end
   end
 

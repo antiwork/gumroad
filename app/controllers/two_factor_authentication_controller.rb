@@ -16,7 +16,9 @@ class TwoFactorAuthenticationController < ApplicationController
       user_id: @user.encrypted_external_id,
       email: @user.email,
       token: (User::DEFAULT_AUTH_TOKEN unless Rails.env.production?),
-      two_factor_method: two_factor_auth_method
+      two_factor_method: two_factor_auth_method,
+      token_sent_at: authentication_token_sent_at,
+      resend_cooldown_seconds: resend_authentication_token_cooldown_seconds
     }
   end
 
@@ -35,6 +37,7 @@ class TwoFactorAuthenticationController < ApplicationController
     end
 
     @user.send_authentication_token!
+    mark_authentication_token_sent
 
     redirect_to two_factor_authentication_path, notice: "Resent the authentication token, please check your inbox.", status: :see_other
   end
@@ -42,6 +45,7 @@ class TwoFactorAuthenticationController < ApplicationController
   def switch_to_email
     self.two_factor_auth_method = "email"
     @user.send_authentication_token!
+    mark_authentication_token_sent
 
     redirect_to two_factor_authentication_path, notice: "Authentication token sent to #{@user.email}.", status: :see_other
   end

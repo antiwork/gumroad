@@ -179,7 +179,7 @@ describe SaveInstallmentService do
           service.process
         end.to_not change { Installment.count }
 
-        expect(service.error).to eq("Content moderation failed: adult content; spam promoting escort services")
+        expect(service.error).to include("looks like it contains something that may violate our content guidelines")
         expect(SendPostBlastEmailsJob.jobs).to be_empty
       end
     end
