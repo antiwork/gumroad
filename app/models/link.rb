@@ -1482,6 +1482,6 @@ class Link < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :product)
       return if result.passed
 
-      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "product"))
     end
 end

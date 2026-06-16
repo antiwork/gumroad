@@ -420,7 +420,7 @@ describe Link, :vcr do
 
         expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
         expect(product.reload.purchase_disabled_at).not_to be(nil)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "skips the content moderation check for VIP creators" do
@@ -480,7 +480,7 @@ describe Link, :vcr do
 
         product.name = "New bad name"
         expect(product.save).to eq(false)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "re-checks moderation when the description changes" do
@@ -490,7 +490,7 @@ describe Link, :vcr do
 
         product.description = "<p>New bad body</p>"
         expect(product.save).to eq(false)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in description")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "does not re-check moderation when unrelated attributes change" do
