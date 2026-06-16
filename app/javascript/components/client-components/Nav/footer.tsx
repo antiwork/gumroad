@@ -51,12 +51,14 @@ function NavbarFooter() {
             href={Routes.settings_main_url(routeParams)}
             component={Link}
           />
-          <NavLinkDropdownItem
-            text="Teams"
-            icon={<Group pack="filled" className="mx-1 size-5" />}
-            href={Routes.settings_team_url(routeParams)}
-            component={Link}
-          />
+          {teamMemberships != null && teamMemberships.length > 0 ? (
+            <NavLinkDropdownItem
+              text="Teams"
+              icon={<Group pack="filled" className="mx-1 size-5" />}
+              href={Routes.settings_team_url(routeParams)}
+              component={Link}
+            />
+          ) : null}
           <MenuItem asChild>
             <Link href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
               <ArrowOutRightSquareHalf pack="filled" className="mx-1 size-5" />
