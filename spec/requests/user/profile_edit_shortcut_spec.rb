@@ -22,4 +22,10 @@ describe "Profile edit shortcut", type: :request do
 
     expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
   end
+
+  it "returns 404 for an unknown username rather than an authorization error" do
+    get "/nonexistent-username/edit", headers: { "HOST" => URI.parse(UrlService.domain_with_protocol).host }
+
+    expect(response).to have_http_status(:not_found)
+  end
 end
