@@ -15,6 +15,13 @@ class StripePayoutProcessor
   # the floor stay `unpaid` and roll forward to the next cycle.
   GUMROAD_HELD_USD_MIN_TRANSFER_CENTS = 1_00
 
+  # Money transferred into a cross-border-payouts Stripe Connect account becomes payable ~24h later
+  # (the funds land in the destination's `pending` balance and settle on the account's schedule).
+  # Attempting the bank payout before then fails with `balance_insufficient` and reverses the
+  # transfer, losing the FX spread. So those payouts are scheduled this far out instead of run
+  # immediately.
+  CROSS_BORDER_PAYOUT_DELAY = 25.hours
+
   # Public: Determines if it's possible for this processor to payout
   # the user by checking that the user has provided us with the
   # information we need to be able to payout with this processor.
@@ -306,6 +313,22 @@ class StripePayoutProcessor
     payments.each do |payment|
       perform_payment(payment)
     end
+  end
+
+  # Public: A payout to a Gumroad-managed Stripe account in a country that only supports cross-border
+  # payouts. For these, funds transferred into the connected account settle ~24h later, so the bank
+  # payout must be deferred (see CROSS_BORDER_PAYOUT_DELAY) rather than run in the same job as the
+  # transfer. Used to route both automated payouts and admin-scheduled payouts the same way.
+  def self.cross_border_payout?(payment)
+    return false unless payment.processor == PayoutProcessorType::STRIPE
+
+    merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
+    return false if merchant_account&.is_a_stripe_connect_account?
+
+    compliance_info = payment.user.alive_user_compliance_info
+    return false if compliance_info.blank?
+
+    Country.new(compliance_info.legal_entity_country_code).supports_stripe_cross_border_payouts?
   end
 
   # Public: Actually sends the money.

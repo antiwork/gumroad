@@ -83,11 +83,17 @@ class ScheduledPayout < ApplicationRecord
           raise "Payout failed: #{error_detail}"
         end
 
-        payout_processor = PayoutProcessorType.get(payout_processor_type)
-        payout_processor.process_payments([payment])
+        if StripePayoutProcessor.cross_border_payout?(payment)
+          # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
+          # payout (matching the automated payout path) instead of running it now — otherwise it
+          # fails with balance_insufficient and reverses the transfer, losing the FX spread.
+          ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
+        else
+          PayoutProcessorType.get(payout_processor_type).process_payments([payment])
 
-        if payment.reload.failed?
-          raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+          if payment.reload.failed?
+            raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+          end
         end
       rescue => e
         update!(status: "pending", executed_at: nil)
