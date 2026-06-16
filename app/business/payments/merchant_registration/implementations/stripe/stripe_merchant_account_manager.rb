@@ -876,19 +876,23 @@ module StripeMerchantAccountManager
     end
 
     if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-      user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
-      user.comments.create!(
-        author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
-        comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
-        content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
-      )
+      ActiveRecord::Base.transaction do
+        user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+        user.comments.create!(
+          author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+          content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
+        )
+      end
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
-      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
-      user.comments.create!(
-        author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
-        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-        content: merchant_account.stripe_payouts_paused_comment
-      )
+      ActiveRecord::Base.transaction do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        user.comments.create!(
+          author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+          content: merchant_account.stripe_payouts_paused_comment
+        )
+      end
       action_required_fields_present = [requirements["currently_due"], requirements["past_due"],
                                         future_requirements["currently_due"], future_requirements["past_due"],
                                         alternative_fields_due].compact.flatten.any?

@@ -10294,6 +10294,17 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.payouts_paused_for_reason).to eq(comment.content)
             end
 
+            it "rolls back the pause when the reason comment cannot be written, so a retry can recover" do
+              allow_any_instance_of(MerchantAccount).to receive(:stripe_payouts_paused_comment).and_return("")
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to raise_error(ActiveRecord::RecordInvalid)
+
+              expect(user.reload.payouts_paused_internally?).to be false
+              expect(user.comments.with_type_payouts_paused).to be_empty
+            end
+
             it "does not overwrite the payout pause source if payouts are already paused internally" do
               user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
               expect(user.reload.payouts_paused_internally?).to be true
