@@ -7,6 +7,7 @@ class SendStripeBalanceCheckNotificationJob
 
   def perform
     return unless Rails.env.production?
+    return if Feature.active?(:disable_stripe_balance_check_notification)
 
     balance_check = StripeBalanceCheckService.new
 
