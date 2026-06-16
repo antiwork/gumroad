@@ -22,7 +22,7 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { SORT_BY_LABELS } from "$app/components/Product/CardGrid";
-import { TabWithId, useTabs } from "$app/components/Profile";
+import { TabWithId, tabsWithoutIds, useTabs } from "$app/components/Profile";
 import type { ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { Section, useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, RichTextEditorToolbar, useRichTextEditor } from "$app/components/RichTextEditor";
@@ -73,8 +73,6 @@ const SECTION_TYPES: Section["type"][] = [
   "SellerProfileSubscribeSection",
   "SellerProfileWishlistsSection",
 ];
-
-const tabsWithoutIds = (tabs: ReturnType<typeof useTabs>["tabs"]) => tabs.map(({ id: _id, ...tab }) => tab);
 
 const parseProfileSortKey = (value: string): ProfileSortKey | null =>
   PROFILE_SORT_KEYS.find((key) => key === value) ?? null;

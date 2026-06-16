@@ -12,7 +12,7 @@ import { assertResponseError } from "$app/utils/request";
 import AutoLink from "$app/components/AutoLink";
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
-import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
+import { ProfileProps, TabWithId, tabsWithoutIds, useTabs } from "$app/components/Profile";
 import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -110,8 +110,6 @@ const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>
   </Rows>
 ));
 TabList.displayName = "TabList";
-
-const tabsWithoutIds = (tabs: TabWithId[]) => tabs.map(({ id: _id, ...tab }) => tab);
 
 export const EditProfile = ({ controls = true, selectedTabIndex, onChange, ...props }: Props) => {
   const [sections, setSections] = React.useState(props.sections);

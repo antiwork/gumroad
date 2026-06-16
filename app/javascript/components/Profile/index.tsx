@@ -23,6 +23,8 @@ export type TabWithId = Tab & { id: string };
 
 const tabWithoutId = ({ id: _id, ...tab }: TabWithId): Tab => tab;
 
+export const tabsWithoutIds = (tabs: TabWithId[]): Tab[] => tabs.map(tabWithoutId);
+
 const sharedSectionCount = (tab: Tab, currentTab: TabWithId) => {
   const currentSectionIds = new Set(currentTab.sections);
   return tab.sections.filter((sectionId) => currentSectionIds.has(sectionId)).length;
