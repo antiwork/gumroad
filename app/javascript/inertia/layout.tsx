@@ -42,7 +42,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
-            {logged_in_user ? <PasskeySetupPrompt show={!!prompt_passkey_setup} /> : null}
+            {logged_in_user ? <PasskeySetupPrompt show={!!prompt_passkey_setup} accountId={current_seller.id} /> : null}
             {children}
           </main>
         </div>

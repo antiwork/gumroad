@@ -116,7 +116,7 @@ describe LoginsController, type: :controller, inertia: true do
       it "flags the prompt after an eligible login" do
         post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
-        expect(session[:prompt_passkey_setup]).to be(true)
+        expect(session[:prompt_passkey_setup]).to eq(@user.id)
       end
 
       it "does not flag the prompt when the user already has a passkey" do

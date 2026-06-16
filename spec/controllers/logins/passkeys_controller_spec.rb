@@ -97,6 +97,16 @@ describe Logins::PasskeysController, type: :controller do
       expect(credential.reload.sign_count).to be > 0
     end
 
+    it "clears a stale passkey setup prompt flag on sign-in" do
+      store_credential(fake_register)
+      session[:prompt_passkey_setup] = true
+
+      sign_in_with_passkey
+
+      expect(response).to be_successful
+      expect(session[:prompt_passkey_setup]).to be_nil
+    end
+
     it "merges the guest cart with the user's cart" do
       store_credential(fake_register)
 

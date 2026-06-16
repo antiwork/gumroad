@@ -33,12 +33,12 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
     end
 
     it "exposes the passkey setup prompt flag and keeps it set until the user acts" do
-      session[:prompt_passkey_setup] = true
+      session[:prompt_passkey_setup] = user.id
 
       get :show
 
       expect(inertia.props[:prompt_passkey_setup]).to be(true)
-      expect(session[:prompt_passkey_setup]).to be(true)
+      expect(session[:prompt_passkey_setup]).to eq(user.id)
     end
 
     it "does not flag the passkey setup prompt when the session flag is absent" do

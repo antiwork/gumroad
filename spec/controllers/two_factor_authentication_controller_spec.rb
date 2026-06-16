@@ -176,7 +176,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       it "flags the prompt after completing two-factor authentication" do
         post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
 
-        expect(session[:prompt_passkey_setup]).to be(true)
+        expect(session[:prompt_passkey_setup]).to eq(@user.id)
       end
 
       it "does not flag the prompt when the user already has a passkey" do

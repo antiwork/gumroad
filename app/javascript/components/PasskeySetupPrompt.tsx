@@ -10,27 +10,26 @@ import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
-const SNOOZE_KEY = "passkeySetupPromptSnoozedUntil";
+const SNOOZE_KEY_PREFIX = "passkeySetupPromptSnoozedUntil";
 const SNOOZE_MS = 90 * 24 * 60 * 60 * 1000;
 const SETUP_ERROR = "Could not set up a passkey. Please try again.";
 
-const snoozed = () => Number(localStorage.getItem(SNOOZE_KEY)) > Date.now();
-const snooze = () => localStorage.setItem(SNOOZE_KEY, String(Date.now() + SNOOZE_MS));
-
-export const PasskeySetupPrompt = ({ show }: { show: boolean }) => {
+export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; accountId: number }) => {
   const { authenticity_token } = usePage<{ authenticity_token: string }>().props;
-  const [visible, setVisible] = React.useState(false);
+  const snoozeKey = `${SNOOZE_KEY_PREFIX}:${accountId}`;
+  const [supported, setSupported] = React.useState(false);
+  const [dismissed, setDismissed] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
 
-  React.useEffect(() => {
-    if (show && isPasskeySupported() && !snoozed()) setVisible(true);
-  }, [show]);
+  React.useEffect(() => setSupported(isPasskeySupported()), []);
 
-  if (!visible) return null;
+  if (!show || !supported || dismissed || Number(localStorage.getItem(snoozeKey)) > Date.now()) return null;
+
+  const snooze = () => localStorage.setItem(snoozeKey, String(Date.now() + SNOOZE_MS));
 
   const dismiss = () => {
     snooze();
-    setVisible(false);
+    setDismissed(true);
   };
 
   const handleSetup = asyncVoid(async () => {
@@ -38,7 +37,7 @@ export const PasskeySetupPrompt = ({ show }: { show: boolean }) => {
     try {
       await registerPasskey(authenticity_token);
       snooze();
-      setVisible(false);
+      setDismissed(true);
       showAlert("You're set — next time, sign in with your passkey.", "success");
     } catch (e) {
       if (e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
