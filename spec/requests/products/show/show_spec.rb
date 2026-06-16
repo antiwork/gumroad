@@ -274,6 +274,32 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(find(:radio_button, @variant.name)[:innerHTML]).to include("Description<br>with<br>newlines")
   end
 
+  describe "CTA button text for a returning buyer" do
+    let(:buyer) { create(:user) }
+
+    before { login_as buyer }
+
+    it "shows 'Purchase again' when the buyer previously paid for the product" do
+      product = create(:product, user: create(:named_user), price_cents: 500)
+      create(:purchase, link: product, purchaser: buyer, email: buyer.email, price_cents: 500)
+
+      visit short_link_path(product)
+
+      expect(page).to have_link("Purchase again")
+      expect(page).to_not have_link("I want this!")
+    end
+
+    it "shows the default CTA when the buyer previously acquired the product for free" do
+      product = create(:product, user: create(:named_user), price_range: "0+", price_cents: 0)
+      create(:free_purchase, link: product, purchaser: buyer, email: buyer.email)
+
+      visit short_link_path(product)
+
+      expect(page).to have_link("I want this!")
+      expect(page).to_not have_link("Purchase again")
+    end
+  end
+
   describe "Twitter meta tags" do
     before do
       @product = create(:product_with_pdf_file, preview_url: "https://staging-public-files.gumroad.com/happy_face.jpeg")

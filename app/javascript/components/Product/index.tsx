@@ -170,6 +170,7 @@ export type Purchase = {
   id: string;
   email_digest: string;
   created_at: string;
+  is_free: boolean;
   review: FormReview | null;
   should_show_receipt: boolean;
   is_gift_receiver_purchase: boolean;

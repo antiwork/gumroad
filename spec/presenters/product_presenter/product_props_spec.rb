@@ -156,6 +156,7 @@ describe ProductPresenter::ProductProps do
               created_at: purchase.created_at,
               id: purchase.external_id,
               email_digest: purchase.email_digest,
+              is_free: true,
               membership: {
                 manage_url: manage_subscription_url(purchase.subscription.external_id, host: DOMAIN),
                 tier_name: "hello",
@@ -386,6 +387,7 @@ describe ProductPresenter::ProductProps do
               id: purchase.external_id,
               email_digest: purchase.email_digest,
               created_at: purchase.created_at,
+              is_free: false,
               membership: nil,
               review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
               should_show_receipt: true,

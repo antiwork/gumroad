@@ -1141,6 +1141,7 @@ class Purchase < ApplicationRecord
   def self.purchase_info(url_redirect, link, purchase = nil)
     json = {
       created_at: purchase.created_at,
+      is_free: purchase.free_purchase?,
       should_show_receipt: !purchase.is_test_purchase? && purchase.successful_and_not_reversed?(include_gift: true),
       show_view_content_button_on_product_page: purchase.show_view_content_button_on_product_page?,
       is_recurring_billing: link.is_recurring_billing,

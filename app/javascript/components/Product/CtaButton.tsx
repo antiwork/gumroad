@@ -155,7 +155,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           {...buttonCommonProps}
         >
           {label ??
-            (purchase
+            (purchase && !purchase.is_free
               ? "Purchase again"
               : product.recurrences
                 ? "Subscribe"

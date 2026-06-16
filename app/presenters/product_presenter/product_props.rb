@@ -106,6 +106,7 @@ class ProductPresenter::ProductProps
         id: purchase_info[:id],
         email_digest: purchase_info[:email_digest],
         created_at: purchase_info[:created_at],
+        is_free: purchase_info[:is_free],
         review: purchase_info[:review],
         should_show_receipt: purchase_info[:should_show_receipt],
         is_gift_receiver_purchase: purchase_info[:is_gift_receiver_purchase],

@@ -2761,7 +2761,8 @@ describe Purchase, :vcr do
       url += "Signature=NVzpNIuQlqCyGrx%2BiySqSXBhis4%3D&response-content-disposition=attachment"
       allow(url_redirect).to receive(:redirect_or_s3_location).and_return(url)
 
-      expect(Purchase.purchase_info(url_redirect, link, purchase)).to eq(should_show_receipt: true,
+      expect(Purchase.purchase_info(url_redirect, link, purchase)).to eq(is_free: false,
+                                                                         should_show_receipt: true,
                                                                          show_view_content_button_on_product_page: true,
                                                                          is_recurring_billing: false,
                                                                          is_physical: false,
@@ -2823,6 +2824,16 @@ describe Purchase, :vcr do
     it "shows test purchase notice if purchase is a test" do
       allow(purchase).to receive(:is_test_purchase?).and_return(true)
       expect(Purchase.purchase_info(url_redirect, link, purchase)[:test_purchase_notice]).to eq("This was a test purchase — you have not been charged (you are seeing this message because you are logged in as the creator).")
+    end
+
+    it "marks is_free as false when the buyer paid for the product" do
+      expect(Purchase.purchase_info(url_redirect, link, purchase)[:is_free]).to eq(false)
+    end
+
+    it "marks is_free as true when the buyer acquired the product for free" do
+      free_product = create(:product, price_range: "0+")
+      free_purchase = create(:free_purchase, link: free_product)
+      expect(Purchase.purchase_info(url_redirect, free_product, free_purchase)[:is_free]).to eq(true)
     end
 
     it "returns sales tax amount and indicates it has sales tax to show if exclusive and present" do
