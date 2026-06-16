@@ -36,6 +36,12 @@ class Payment < ApplicationRecord
   attr_json_data_accessor :payout_type
   attr_json_data_accessor :gumroad_fee_cents
   attr_json_data_accessor :error_message
+  attr_json_data_accessor :payout_settlement_retry_count
+
+  def increment_payout_settlement_retry_count!
+    self.payout_settlement_retry_count = payout_settlement_retry_count.to_i + 1
+    save!
+  end
 
   # Payment state transitions:
   #

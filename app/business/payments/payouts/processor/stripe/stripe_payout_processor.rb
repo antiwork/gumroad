@@ -15,6 +15,17 @@ class StripePayoutProcessor
   # the floor stay `unpaid` and roll forward to the next cycle.
   GUMROAD_HELD_USD_MIN_TRANSFER_CENTS = 1_00
 
+  # When funds held by Gumroad are paid out, they are first transferred (USD) into the creator's
+  # Connect account and then paid to the bank. On accounts with a settlement delay (e.g. cross-border
+  # accounts with `delay_days > 0`), that internal transfer lands in the destination's `pending`
+  # balance and only becomes `available` a day or more later. Creating the bank payout in the same run
+  # fails with `balance_insufficient`, and the failure path reverses the transfer — losing the FX
+  # spread each cycle and never settling. Instead we defer the bank payout until the transferred funds
+  # are `available`, reusing the same Payment (no re-transfer). Capped so total deferral stays well
+  # under SyncStuckPayoutsJob's 3-day `processing` cutoff.
+  MAX_PAYOUT_SETTLEMENT_RETRIES = 2
+  SETTLEMENT_RETRY_BUFFER = 1.hour
+
   # Public: Determines if it's possible for this processor to payout
   # the user by checking that the user has provided us with the
   # information we need to be able to payout with this processor.
@@ -323,6 +334,21 @@ class StripePayoutProcessor
       return
     end
 
+    # Guard against re-paying a payment that already has a bank payout (e.g. a settlement retry that
+    # races a prior success).
+    return if payment.stripe_transfer_id.present?
+
+    # If the internal transfer that funded this payout is still settling, the destination's `available`
+    # balance can't cover the payout yet. Defer to a later run rather than attempting (and reversing)
+    # the payout now. `perform_payment` never re-transfers, so retrying the same Payment is safe.
+    if (settlement_time = pending_internal_transfer_settlement_time(payment)) &&
+       payment.payout_settlement_retry_count.to_i < MAX_PAYOUT_SETTLEMENT_RETRIES
+      payment.increment_payout_settlement_retry_count!
+      RetryStripePayoutForSettlingTransferJob.perform_at(settlement_time + SETTLEMENT_RETRY_BUFFER, payment.id)
+      Rails.logger.info("Payouts: deferring payout for payment #{payment.id} until internal transfer settles at #{settlement_time}")
+      return []
+    end
+
     amount_cents = if payment.currency == Currency::KRW
       # Our currencies.yml assumes KRW to have 100 subunits, and that's how we store them in the database.
       # However, Stripe treats KRW as a single-unit currency. So we convert the value here.
@@ -553,6 +579,32 @@ class StripePayoutProcessor
       payment.send_payout_failure_email
     end
   end
+
+  # Returns the Time at which the internal transfer's funds become `available` on the destination
+  # account, but only while they are still `pending` (i.e. not yet spendable). Returns nil when there
+  # is no internal transfer, the funds have already settled, or the state can't be determined — in all
+  # of which cases the caller should proceed with the payout as normal.
+  def self.pending_internal_transfer_settlement_time(payment)
+    return nil if payment.stripe_internal_transfer_id.blank?
+
+    internal_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
+    return nil if internal_transfer.destination_payment.blank?
+
+    destination_payment = Stripe::Charge.retrieve(
+      { id: internal_transfer.destination_payment, expand: %w[balance_transaction] },
+      { stripe_account: internal_transfer.destination }
+    )
+    balance_transaction = destination_payment.balance_transaction
+    return nil if balance_transaction.blank?
+    return nil if balance_transaction.status != "pending"
+
+    available_on = Time.zone.at(balance_transaction.available_on)
+    available_on > Time.current ? available_on : nil
+  rescue Stripe::StripeError => e
+    Rails.logger.error("Payouts: could not determine internal transfer settlement time for payment #{payment.id}: #{e.message}")
+    nil
+  end
+  private_class_method :pending_internal_transfer_settlement_time
 
   def self.reverse_internal_transfer!(payment)
     return if payment.stripe_internal_transfer_id.nil?

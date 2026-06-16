@@ -4176,4 +4176,47 @@ describe StripePayoutProcessor, :vcr do
       end
     end
   end
+
+  describe "perform_payment when the internal transfer is still settling" do
+    let(:user) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_test_settling") }
+    let(:bank_account) { create(:ach_account, user:) }
+    let(:balances) { [create(:balance, user:, merchant_account:, amount_cents: 100_00, state: "processing")] }
+    let(:payment) do
+      create(:payment, user:, processor: PayoutProcessorType::STRIPE, state: "processing",
+                       bank_account:, balances:, amount_cents: 100_00, correlation_id: nil,
+                       stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+                       stripe_internal_transfer_id: "tr_test")
+    end
+    let(:settlement_time) { 1.day.from_now.change(usec: 0) }
+
+    before do
+      allow(StripePayoutProcessor).to receive(:pending_internal_transfer_settlement_time).and_return(settlement_time)
+    end
+
+    it "defers the payout and schedules a retry instead of attempting or reversing it" do
+      expect(Stripe::Payout).not_to receive(:create)
+      expect(StripePayoutProcessor).not_to receive(:reverse_internal_transfer!)
+
+      StripePayoutProcessor.perform_payment(payment)
+
+      expect(RetryStripePayoutForSettlingTransferJob.jobs.size).to eq(1)
+      expect(RetryStripePayoutForSettlingTransferJob.jobs.first["args"]).to eq([payment.id])
+      expect(payment.reload.payout_settlement_retry_count.to_i).to eq(1)
+      expect(payment.reload.state).to eq("processing")
+      expect(payment.stripe_transfer_id).to be_nil
+    end
+
+    it "stops deferring and attempts the payout once the retry limit is reached" do
+      payment.payout_settlement_retry_count = StripePayoutProcessor::MAX_PAYOUT_SETTLEMENT_RETRIES
+      payment.save!
+      stripe_payout = double(id: "po_test", arrival_date: nil, application_fee_amount: nil)
+      expect(Stripe::Payout).to receive(:create).and_return(stripe_payout)
+
+      StripePayoutProcessor.perform_payment(payment)
+
+      expect(RetryStripePayoutForSettlingTransferJob.jobs.size).to eq(0)
+      expect(payment.reload.stripe_transfer_id).to eq("po_test")
+    end
+  end
 end
