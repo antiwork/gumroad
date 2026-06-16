@@ -12,7 +12,7 @@ import {
   Trash,
 } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
-import { debounce, isEqual, sortBy } from "lodash-es";
+import { isEqual, sortBy } from "lodash-es";
 import * as React from "react";
 
 import { PROFILE_SORT_KEYS, type ProfileSortKey } from "$app/parsers/product";
@@ -425,12 +425,13 @@ const RichTextSectionFields = ({
       if (isUploadingRef.current) return;
       update({ ...sectionRef.current, text: editor.getJSON() });
     };
-    const debouncedSyncText = debounce(syncText, 2000);
+    // Sync on every change (not debounced) so an explicit save right after typing always
+    // serializes the current text and the preview stays live, matching the other fields.
     editor.on("blur", syncText);
-    editor.on("update", debouncedSyncText);
+    editor.on("update", syncText);
     return () => {
       editor.off("blur", syncText);
-      editor.off("update", debouncedSyncText);
+      editor.off("update", syncText);
     };
   }, [editor]);
 

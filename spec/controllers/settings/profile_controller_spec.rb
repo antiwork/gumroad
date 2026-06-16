@@ -182,6 +182,18 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [kept.id] }].as_json
       end
 
+      it "drops tab section references that no longer resolve to a saved section" do
+        kept = create(:seller_profile_products_section, seller:)
+
+        put :update, params: {
+          sections: [{ id: kept.external_id, header: "Kept" }],
+          tabs: [{ name: "Tab 1", sections: [kept.external_id, temp_id] }],
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [kept.id] }].as_json
+      end
+
       it "does not keep a row for a new section that no tab references" do
         put :update, params: {
           sections: [{ id: temp_id, type: "SellerProfileSubscribeSection", button_label: "Subscribe" }],

@@ -38,9 +38,11 @@ class Settings::ProfileController < Settings::BaseController
         end
         if permitted_params[:tabs]
           tabs = permitted_params[:tabs].as_json
-          tabs.each { |tab| (tab["sections"] ||= []).map! { section_ids_by_param_id[_1] || ObfuscateIds.decrypt(_1) } }
+          # Resolve each tab's section references to real db ids, dropping any that no longer
+          # resolve (client GUIDs decrypt to nil) so stale references can't be persisted.
+          tabs.each { |tab| tab["sections"] = Array(tab["sections"]).filter_map { section_ids_by_param_id[_1] || ObfuscateIds.decrypt(_1) } }
           current_seller.seller_profile_sections.on_profile.each do |section|
-            section.destroy! if tabs.none? { _1["sections"]&.include?(section.id) }
+            section.destroy! if tabs.none? { _1["sections"].include?(section.id) }
           end
           seller_profile.json_data["tabs"] = tabs
         end
