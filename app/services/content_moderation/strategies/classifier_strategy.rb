@@ -19,8 +19,13 @@ class ContentModeration::Strategies::ClassifierStrategy
     "self-harm/instructions" => 0.8,
     "sexual" => 0.8,
     "sexual/minors" => 0.3,
-    "violence" => 0.8,
-    "violence/graphic" => 0.8,
+    # Raised from 0.8 -> 0.9: the omni-moderation model over-flags fitness /
+    # sports / combat-training copy as "violence" (e.g. a fitness product
+    # scored 0.855). 0.9 keeps genuine violence flagged while cutting that
+    # false-positive class. `illicit/violent` stays at 0.8 to still catch
+    # instructions to commit violence. (#489)
+    "violence" => 0.9,
+    "violence/graphic" => 0.9,
   }.freeze
 
   def initialize(text:, image_urls: [])

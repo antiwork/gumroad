@@ -1482,6 +1482,6 @@ class Link < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :product)
       return if result.passed
 
-      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
+      errors.add(:base, "This product can’t be published right now because it appears to conflict with our content guidelines. If you think this is a mistake, contact support@gumroad.com and we’ll take another look.")
     end
 end
