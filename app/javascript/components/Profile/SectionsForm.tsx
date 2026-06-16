@@ -423,12 +423,12 @@ const RichTextSectionFields = ({
       if (isUploadingRef.current) return;
       update({ ...sectionRef.current, text: editor.getJSON() });
     };
-    // Sync on every change (not debounced) so an explicit save right after typing always
-    // serializes the current text and the preview stays live, matching the other fields.
-    editor.on("blur", syncText);
+    // Sync on content changes only (not on focus/blur), so the preview stays live and an
+    // explicit save right after typing serializes the current text — while merely focusing
+    // and blurring an untouched empty section makes no change and so can't write the
+    // editor's canonical empty doc over the stored value and spuriously mark the form dirty.
     editor.on("update", syncText);
     return () => {
-      editor.off("blur", syncText);
       editor.off("update", syncText);
     };
   }, [editor]);

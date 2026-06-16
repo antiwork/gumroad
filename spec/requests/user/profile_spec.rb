@@ -511,6 +511,41 @@ describe "User profile page", type: :system, js: true do
         end
       end
 
+      it "loads an empty rich text section without flagging the form as changed" do
+        section = SellerProfileRichTextSection.create!(seller:, json_data: { "text" => {} })
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+
+        visit settings_profile_path
+
+        expect(page).to have_css("[contenteditable=true]")
+        expect(page).to have_button("Update settings", disabled: true)
+      end
+
+      it "clears the unsaved-changes state after saving a rich text section" do
+        visit settings_profile_path
+
+        add_section "Rich text"
+        editor = within_section_form "Rich text" do
+          find("[contenteditable=true]").tap(&:click)
+        end
+        editor.send_keys "Hello world"
+        save_changes
+
+        expect(page).to have_button("Update settings", disabled: true)
+      end
+
+      it "does not flag the form changed when an empty rich text section is only focused and blurred" do
+        section = SellerProfileRichTextSection.create!(seller:, json_data: { "text" => {} })
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+
+        visit settings_profile_path
+
+        find("[contenteditable=true]").click
+        find_field("Name").click
+
+        expect(page).to have_button("Update settings", disabled: true)
+      end
+
       it "allows creating subscribe sections" do
         visit settings_profile_path
 
