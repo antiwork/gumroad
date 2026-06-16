@@ -495,6 +495,22 @@ describe "User profile page", type: :system, js: true do
         end
       end
 
+      it "reflects unsaved rich text edits in the live preview" do
+        visit settings_profile_path
+
+        add_section "Rich text"
+        save_changes
+
+        editor = within_section_form "Rich text" do
+          find("[contenteditable=true]").tap(&:click)
+        end
+        editor.send_keys "Live preview text"
+
+        within_profile_editor_preview do
+          expect(page).to have_text("Live preview text")
+        end
+      end
+
       it "allows creating subscribe sections" do
         visit settings_profile_path
 
