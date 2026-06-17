@@ -9,6 +9,14 @@ describe Onetime::BackfillAudienceMembersIndex do
     $redis.del(described_class::REDIS_FAILED_IDS_KEY)
   end
 
+  # Some examples delete the index to exercise the missing-index path. Without
+  # this, whichever index-deleting example runs last (order is randomized)
+  # leaves audiencemember-test deleted, breaking unrelated specs that share the
+  # Knapsack worker and assume the index exists (e.g. DevTools.reindex_all_for_user).
+  after do
+    recreate_model_index(AudienceMember)
+  end
+
   it "raises when the index does not exist" do
     AudienceMember.__elasticsearch__.delete_index!
 
