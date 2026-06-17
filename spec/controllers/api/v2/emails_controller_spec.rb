@@ -227,6 +227,17 @@ describe Api::V2::EmailsController do
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
+      it "publishes when draft is false" do
+        allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+
+        expect do
+          post @action, params: @params.merge(draft: "false")
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(@user.installments.alive.sole.published?).to be(true)
+        expect(response.parsed_body["email"]["state"]).to eq("published")
+      end
+
       it "does not publish from a blank draft parameter" do
         allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
 

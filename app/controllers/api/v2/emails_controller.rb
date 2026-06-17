@@ -226,7 +226,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
     end
 
     def publish_requested?
-      boolean_param(:publish)
+      boolean_param(:publish) || boolean_param(:draft) == false
     end
 
     def boolean_param(key)

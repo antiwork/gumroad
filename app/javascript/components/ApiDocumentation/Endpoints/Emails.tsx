@@ -153,7 +153,7 @@ export const CreateEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails"
-    description="Create a draft audience email, or send it immediately by passing publish=true. Scheduled emails can only be created in the Emails web editor."
+    description="Create a draft audience email, or send it immediately by passing publish=true (or draft=false). Scheduled emails can only be created in the Emails web editor."
   >
     <ApiParameters>
       <ApiParameter name="subject" description="Email subject line" />
@@ -162,6 +162,7 @@ export const CreateEmail = () => (
       <ApiParameter name="product_id" description="Required when audience is product" />
       <ApiParameter name="link_id" description="Product permalink accepted when audience is product" />
       <ApiParameter name="publish" description="(optional, true to send immediately)" />
+      <ApiParameter name="draft" description="(optional, false to send immediately)" />
     </ApiParameters>
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
