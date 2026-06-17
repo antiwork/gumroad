@@ -3,7 +3,6 @@
 class Logins::PasskeysController < ApplicationController
   include WebauthnCeremonyVerification
 
-  AUTHENTICATION_CHALLENGE_SESSION_KEY = :webauthn_authentication_challenge
   AUTHENTICATION_ERROR_MESSAGE = "We couldn't sign you in with that passkey. Please try again or use your password."
 
   skip_before_action :check_suspended
@@ -11,11 +10,7 @@ class Logins::PasskeysController < ApplicationController
   before_action :ensure_passkeys_feature_enabled
 
   def options
-    webauthn_options = WebAuthn::Credential.options_for_get(user_verification: "required")
-
-    session[AUTHENTICATION_CHALLENGE_SESSION_KEY] = webauthn_options.challenge
-
-    render json: { success: true, options: webauthn_options.as_json.merge("rpId" => WebAuthn.configuration.rp_id) }
+    render json: { success: true, options: build_webauthn_authentication_options }
   end
 
   def create

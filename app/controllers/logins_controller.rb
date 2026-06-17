@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class LoginsController < Devise::SessionsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect
+  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect, WebauthnCeremonyVerification
 
   include PageMeta::Base
 
@@ -22,7 +22,10 @@ class LoginsController < Devise::SessionsController
 
     set_meta_tag(title: "Log In")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Logins/New", props: auth_presenter.login_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
+    render inertia: "Logins/New", props: auth_presenter.login_props.merge(
+      is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?,
+      passkey_login_options: Feature.active?(:passkeys) ? build_webauthn_authentication_options : nil,
+    )
   end
 
   def create

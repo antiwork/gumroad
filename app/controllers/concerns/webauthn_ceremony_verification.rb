@@ -15,8 +15,15 @@ module WebauthnCeremonyVerification
   end
 
   MALFORMED_CREDENTIAL_RUNTIME_MESSAGES = ["invalid type", "invalid id"].freeze
+  AUTHENTICATION_CHALLENGE_SESSION_KEY = :webauthn_authentication_challenge
 
   private
+    def build_webauthn_authentication_options
+      webauthn_options = WebAuthn::Credential.options_for_get(user_verification: "required")
+      session[AUTHENTICATION_CHALLENGE_SESSION_KEY] = webauthn_options.challenge
+      webauthn_options.as_json.merge("rpId" => WebAuthn.configuration.rp_id)
+    end
+
     def permitted_credential_params(**nested_filters)
       credential = params.require(:credential)
       raise VerificationError, "malformed_credential" unless credential.respond_to?(:permit)

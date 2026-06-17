@@ -23,8 +23,10 @@ describe("Passkey Login Scenario", type: :system, js: true) do
 
     logout(:user)
     visit login_path
-    click_on "Log in with a passkey"
 
+    # Conditional UI arms a discoverable passkey request on load; the virtual
+    # authenticator auto-consents, signing the user in and bypassing 2FA without
+    # the fallback "Log in with a passkey" button.
     expect(page).to have_current_path(dashboard_path, wait: 15)
     expect(user.webauthn_credentials.sole.last_used_at).to be_present
   end

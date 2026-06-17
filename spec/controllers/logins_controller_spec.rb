@@ -35,6 +35,31 @@ describe LoginsController, type: :controller, inertia: true do
       end
     end
 
+    context "when the passkeys feature is active" do
+      before { Feature.activate(:passkeys) }
+      after { Feature.deactivate(:passkeys) }
+
+      it "embeds passkey login options and stores the challenge in the session" do
+        get :new
+
+        expect(inertia.props[:show_passkey_login]).to be(true)
+        options = inertia.props[:passkey_login_options].with_indifferent_access
+        expect(options[:challenge]).to be_present
+        expect(options[:rpId]).to eq(WebAuthn.configuration.rp_id)
+        expect(session[:webauthn_authentication_challenge]).to eq(options[:challenge])
+      end
+    end
+
+    context "when the passkeys feature is inactive" do
+      it "does not embed passkey login options or store a challenge" do
+        get :new
+
+        expect(inertia.props[:show_passkey_login]).to be(false)
+        expect(inertia.props[:passkey_login_options]).to be_nil
+        expect(session[:webauthn_authentication_challenge]).to be_nil
+      end
+    end
+
     context "with an email in the query parameters" do
       it "renders successfully" do
         get :new, params: { email: "test@example.com" }

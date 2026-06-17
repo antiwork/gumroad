@@ -42,6 +42,15 @@ export type PasskeyAuthenticationCredential = {
 
 export const isPasskeySupported = () => typeof window !== "undefined" && "PublicKeyCredential" in window;
 
+export const isConditionalMediationSupported = async (): Promise<boolean> => {
+  if (!isPasskeySupported() || typeof PublicKeyCredential.isConditionalMediationAvailable !== "function") return false;
+  try {
+    return await PublicKeyCredential.isConditionalMediationAvailable();
+  } catch {
+    return false;
+  }
+};
+
 const base64UrlToBytes = (value: string): Uint8Array => {
   const base64 = value.replace(/-/gu, "+").replace(/_/gu, "/");
   const binary = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="));
@@ -99,7 +108,10 @@ export const createPasskey = async (options: PasskeyRegistrationOptions): Promis
   };
 };
 
-export const getPasskey = async (options: PasskeyAuthenticationOptions): Promise<PasskeyAuthenticationCredential> => {
+export const getPasskey = async (
+  options: PasskeyAuthenticationOptions,
+  { mediation, signal }: { mediation?: CredentialMediationRequirement; signal?: AbortSignal } = {},
+): Promise<PasskeyAuthenticationCredential> => {
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge: base64UrlToBytes(options.challenge),
     ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
@@ -115,7 +127,11 @@ export const getPasskey = async (options: PasskeyAuthenticationOptions): Promise
     ...(options.userVerification ? { userVerification: options.userVerification } : {}),
   };
 
-  const credential = await navigator.credentials.get({ publicKey });
+  const credential = await navigator.credentials.get({
+    publicKey,
+    ...(mediation ? { mediation } : {}),
+    ...(signal ? { signal } : {}),
+  });
   if (!(credential instanceof PublicKeyCredential)) throw new Error("Could not authenticate with a passkey.");
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- get() always yields an assertion response

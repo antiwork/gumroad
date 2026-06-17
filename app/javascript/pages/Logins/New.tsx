@@ -3,8 +3,13 @@ import * as React from "react";
 import typia from "typia";
 
 import { asyncVoid } from "$app/utils/promise";
-import { request, ResponseError } from "$app/utils/request";
-import { getPasskey, isPasskeySupported, type PasskeyAuthenticationOptions } from "$app/utils/webauthn";
+import { AbortError, request, ResponseError } from "$app/utils/request";
+import {
+  getPasskey,
+  isConditionalMediationSupported,
+  isPasskeySupported,
+  type PasskeyAuthenticationOptions,
+} from "$app/utils/webauthn";
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
@@ -27,6 +32,7 @@ type PageProps = {
   recaptcha_site_key: string | null;
   authenticity_token: string;
   show_passkey_login: boolean;
+  passkey_login_options: PasskeyAuthenticationOptions | null;
   is_gumroad_mobile_app: boolean;
 };
 
@@ -47,6 +53,7 @@ function LoginPage() {
     recaptcha_site_key,
     authenticity_token,
     show_passkey_login,
+    passkey_login_options,
     is_gumroad_mobile_app,
   } = usePage<PageProps>().props;
 
@@ -59,7 +66,8 @@ function LoginPage() {
   const [passkeyError, setPasskeyError] = React.useState<string | null>(null);
   const [passkeySupported, setPasskeySupported] = React.useState(false);
   React.useEffect(() => setPasskeySupported(isPasskeySupported()), []);
-  const showPasskeyButton = show_passkey_login && !is_gumroad_mobile_app && passkeySupported;
+  const passkeyLoginEnabled = show_passkey_login && !is_gumroad_mobile_app && passkeySupported;
+  const conditionalRequest = React.useRef<AbortController | null>(null);
 
   const form = useForm<FormData>({
     user: {
@@ -86,50 +94,92 @@ function LoginPage() {
     }
   };
 
+  const runPasskeyLogin = React.useCallback(
+    async ({
+      embeddedOptions,
+      mediation,
+      signal,
+      surfaceErrors,
+    }: {
+      embeddedOptions?: PasskeyAuthenticationOptions;
+      mediation?: CredentialMediationRequirement;
+      signal?: AbortSignal;
+      surfaceErrors: boolean;
+    }) => {
+      const csrfHeaders = { "X-CSRF-Token": authenticity_token };
+      try {
+        let options = embeddedOptions;
+        if (!options) {
+          const optionsResponse = await request({
+            url: Routes.login_passkey_options_path(),
+            method: "POST",
+            accept: "json",
+            headers: csrfHeaders,
+            abortSignal: signal,
+          });
+          const optionsResult = typia.assert<{
+            success: boolean;
+            options?: PasskeyAuthenticationOptions;
+            error_message?: string;
+          }>(await optionsResponse.json());
+          if (!optionsResponse.ok || !optionsResult.success || !optionsResult.options) {
+            throw new ResponseError(optionsResult.error_message ?? PASSKEY_ERROR);
+          }
+          options = optionsResult.options;
+        }
+
+        const credential = await getPasskey(options, { mediation, signal });
+
+        setPasskeyLoading(true);
+
+        const loginResponse = await request({
+          url: Routes.login_passkey_path(),
+          method: "POST",
+          accept: "json",
+          data: { credential, next },
+          headers: csrfHeaders,
+          abortSignal: signal,
+        });
+        const loginResult = typia.assert<{ success: boolean; redirect_location?: string; error_message?: string }>(
+          await loginResponse.json(),
+        );
+        if (!loginResponse.ok || !loginResult.success || !loginResult.redirect_location) {
+          throw new ResponseError(loginResult.error_message ?? PASSKEY_ERROR);
+        }
+
+        window.location.href = loginResult.redirect_location;
+      } catch (e) {
+        if (!signal?.aborted) setPasskeyLoading(false);
+        if (e instanceof AbortError) return;
+        if (e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
+        if (surfaceErrors) setPasskeyError(e instanceof ResponseError ? e.message : PASSKEY_ERROR);
+      }
+    },
+    [authenticity_token, next],
+  );
+
   const handlePasskeyLogin = asyncVoid(async () => {
+    conditionalRequest.current?.abort();
     setPasskeyError(null);
     setPasskeyLoading(true);
-    const csrfHeaders = { "X-CSRF-Token": authenticity_token };
-    try {
-      const optionsResponse = await request({
-        url: Routes.login_passkey_options_path(),
-        method: "POST",
-        accept: "json",
-        headers: csrfHeaders,
-      });
-      const optionsResult = typia.assert<{
-        success: boolean;
-        options?: PasskeyAuthenticationOptions;
-        error_message?: string;
-      }>(await optionsResponse.json());
-      if (!optionsResponse.ok || !optionsResult.success || !optionsResult.options) {
-        throw new ResponseError(optionsResult.error_message ?? PASSKEY_ERROR);
-      }
-
-      const credential = await getPasskey(optionsResult.options);
-
-      const loginResponse = await request({
-        url: Routes.login_passkey_path(),
-        method: "POST",
-        accept: "json",
-        data: { credential, next },
-        headers: csrfHeaders,
-      });
-      const loginResult = typia.assert<{ success: boolean; redirect_location?: string; error_message?: string }>(
-        await loginResponse.json(),
-      );
-      if (!loginResponse.ok || !loginResult.success || !loginResult.redirect_location) {
-        throw new ResponseError(loginResult.error_message ?? PASSKEY_ERROR);
-      }
-
-      window.location.href = loginResult.redirect_location;
-    } catch (e) {
-      if (e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
-      setPasskeyError(e instanceof ResponseError ? e.message : PASSKEY_ERROR);
-    } finally {
-      setPasskeyLoading(false);
-    }
+    await runPasskeyLogin({ surfaceErrors: true });
   });
+
+  React.useEffect(() => {
+    if (!passkeyLoginEnabled || !passkey_login_options) return;
+    const controller = new AbortController();
+    conditionalRequest.current = controller;
+    asyncVoid(async () => {
+      if (!(await isConditionalMediationSupported()) || controller.signal.aborted) return;
+      await runPasskeyLogin({
+        embeddedOptions: passkey_login_options,
+        mediation: "conditional",
+        signal: controller.signal,
+        surfaceErrors: false,
+      });
+    })();
+    return () => controller.abort();
+  }, [passkeyLoginEnabled, passkey_login_options, runPasskeyLogin]);
 
   return (
     <Layout
@@ -154,7 +204,7 @@ function LoginPage() {
               onChange={(e) => form.setData("user.login_identifier", e.target.value)}
               required
               tabIndex={1}
-              autoComplete="email"
+              autoComplete={passkeyLoginEnabled ? "email webauthn" : "email"}
             />
           </Fieldset>
           <Fieldset>
@@ -177,7 +227,7 @@ function LoginPage() {
             <Button color="primary" type="submit" disabled={form.processing}>
               {form.processing ? "Logging in..." : "Login"}
             </Button>
-            {showPasskeyButton ? (
+            {passkeyLoginEnabled ? (
               <>
                 {passkeyError ? <Alert variant="danger">{passkeyError}</Alert> : null}
                 <Button type="button" onClick={handlePasskeyLogin} disabled={passkeyLoading}>
