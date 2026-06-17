@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::EmailsController < Api::V2::BaseController
-  before_action(only: [:index, :show]) do
-    doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public]))
-  end
-  before_action(only: [:create, :preview, :send_email, :destroy]) { doorkeeper_authorize! :edit_products }
+  before_action { doorkeeper_authorize! :edit_products }
   before_action :fetch_installment, only: %i[show preview send_email destroy]
 
   RESULTS_PER_PAGE = 10
@@ -28,7 +25,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
       rescue ArgumentError
         return error_400("Invalid page_key.")
       end
-      installments = installments.where("created_at <= ? and id < ?", last_installment_created_at, last_installment_id)
+      installments = installments.where("(created_at < ?) OR (created_at = ? AND id < ?)", last_installment_created_at, last_installment_created_at, last_installment_id)
     end
 
     paginated_installments = installments
@@ -165,7 +162,8 @@ class Api::V2::EmailsController < Api::V2::BaseController
           message: params[:body],
           installment_type:,
           link_id: product_link_id,
-          send_emails: send_emails_param,
+          bought_products: (installment_type == Installment::PRODUCT_TYPE ? [product_link_id] : []),
+          send_emails: true,
           shown_on_profile: false,
           shown_in_profile_sections: [],
         },
@@ -204,7 +202,20 @@ class Api::V2::EmailsController < Api::V2::BaseController
         not_bought_products: installment.not_bought_products,
         not_bought_variants: installment.not_bought_variants,
         shown_in_profile_sections: shown_in_profile_sections_for(installment),
+        files: existing_files_for(installment),
       }
+    end
+
+    def existing_files_for(installment)
+      installment.alive_product_files.map do |file|
+        {
+          external_id: file.external_id,
+          url: file.url,
+          position: file.position,
+          stream_only: file.stream_only?,
+          subtitle_files: file.alive_subtitle_files.map { |subtitle| { url: subtitle.url, language: subtitle.language } },
+        }
+      end
     end
 
     def shown_in_profile_sections_for(installment)
@@ -213,14 +224,8 @@ class Api::V2::EmailsController < Api::V2::BaseController
       end
     end
 
-    def send_emails_param
-      return true unless params.key?(:send_emails)
-
-      boolean_param(:send_emails)
-    end
-
     def publish_requested?
-      boolean_param(:publish) || (params.key?(:draft) && !boolean_param(:draft))
+      boolean_param(:publish)
     end
 
     def boolean_param(key)
@@ -228,7 +233,9 @@ class Api::V2::EmailsController < Api::V2::BaseController
     end
 
     def preview_url_for(installment)
-      installment.published? ? installment.full_url : edit_email_path(installment.external_id, preview_post: true)
+      return installment.full_url if installment.published?
+
+      edit_email_url(installment.external_id, preview_post: true, host: UrlService.domain_with_protocol)
     end
 
     def installment_creation_error(message)

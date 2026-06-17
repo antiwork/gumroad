@@ -89,7 +89,7 @@ export const GetEmails = () => (
   -d "type=draft" \\
   -X GET`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad email list --type draft</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails list --type draft</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -123,7 +123,7 @@ export const GetEmail = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad email view bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails view bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -153,7 +153,7 @@ export const CreateEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails"
-    description="Create a draft audience email, or send it immediately by passing publish=true or draft=false."
+    description="Create a draft audience email, or send it immediately by passing publish=true. Scheduled emails can only be created in the Emails web editor."
   >
     <ApiParameters>
       <ApiParameter name="subject" description="Email subject line" />
@@ -161,9 +161,7 @@ export const CreateEmail = () => (
       <ApiParameter name="audience" description={AUDIENCE_PARAMETER_DESCRIPTION} />
       <ApiParameter name="product_id" description="Required when audience is product" />
       <ApiParameter name="link_id" description="Product permalink accepted when audience is product" />
-      <ApiParameter name="send_emails" description="(optional, true or false) Default: true" />
       <ApiParameter name="publish" description="(optional, true to send immediately)" />
-      <ApiParameter name="draft" description="(optional, false to send immediately)" />
     </ApiParameters>
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
@@ -171,14 +169,14 @@ export const CreateEmail = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -d "subject=Launch update" \\
   -d "body=<p>Hello, world!</p>" \\
-  -d "audience=audience" \\
+  -d "audience=all" \\
   -X POST`}
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">
-      {`gumroad email create \\
+      {`gumroad emails create \\
   --subject "Launch update" \\
-  --body "<p>Hello, world!</p>" \\
-  --audience audience`}
+  --body ./email.html \\
+  --audience all`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
@@ -217,7 +215,7 @@ export const PreviewEmail = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad email preview bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails send-preview bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -238,7 +236,7 @@ export const PreviewEmail = () => (
     "created_at": "2026-06-17T12:00:00.000Z",
     "updated_at": "2026-06-17T12:00:00.000Z"
   },
-  "preview_url": "/emails/bfi_30HLgGWL8H2wo_Gzlg==/edit?preview_post=true",
+  "preview_url": "https://gumroad.com/emails/bfi_30HLgGWL8H2wo_Gzlg==/edit?preview_post=true",
   "message": "A preview has been sent to your email."
 }`}
     </CodeSnippet>
@@ -257,7 +255,7 @@ export const SendEmail = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad email send bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails send bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
@@ -296,7 +294,7 @@ export const DeleteEmail = () => (
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
     </CodeSnippet>
-    <CodeSnippet caption="Gumroad CLI">gumroad email delete bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails delete bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,

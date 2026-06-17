@@ -20,10 +20,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
+    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
 
-    describe "when logged in with public scope" do
+    describe "when logged in with edit_products scope" do
       before do
-        @token = create_access_token("view_public")
+        @token = create_access_token("edit_products")
         @params.merge!(access_token: @token.token)
       end
 
@@ -87,8 +88,29 @@ describe Api::V2::EmailsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          emails: expected_installments[per_page..].as_json(api_scopes: ["view_public"])
+          emails: expected_installments[per_page..].as_json(api_scopes: ["edit_products"])
         }.as_json)
+      end
+
+      it "does not drop installments whose ids are not ordered by creation time" do
+        per_page = Api::V2::EmailsController::RESULTS_PER_PAGE
+        installments = (0..per_page).map do |index|
+          create(:audience_installment, seller: @user, created_at: index.minutes.ago)
+        end
+        expected_order = installments.sort_by { |installment| [installment.created_at, installment.id] }.reverse
+
+        get @action, params: @params
+        first_page_ids = response.parsed_body["emails"].map { _1["id"] }
+        expect(first_page_ids).to eq(expected_order.first(per_page).map(&:external_id))
+
+        next_page_key = response.parsed_body["next_page_key"]
+        expect(next_page_key).to be_present
+
+        get @action, params: @params.merge(page_key: next_page_key)
+        second_page_ids = response.parsed_body["emails"].map { _1["id"] }
+        expect(second_page_ids).to eq(expected_order[per_page..].map(&:external_id))
+
+        expect(first_page_ids + second_page_ids).to match_array(installments.map(&:external_id))
       end
 
       it "returns an empty list for another seller's installments" do
@@ -118,10 +140,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
+    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
 
-    describe "when logged in with public scope" do
+    describe "when logged in with edit_products scope" do
       before do
-        @token = create_access_token("view_public")
+        @token = create_access_token("edit_products")
         @params.merge!(access_token: @token.token)
       end
 
@@ -130,7 +153,7 @@ describe Api::V2::EmailsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          email: @installment.as_json(api_scopes: ["view_public"])
+          email: @installment.as_json(api_scopes: ["edit_products"])
         }.as_json)
       end
 
@@ -204,12 +227,15 @@ describe Api::V2::EmailsController do
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
-      it "publishes when draft is false" do
+      it "does not publish from a blank draft parameter" do
         allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
 
-        post @action, params: @params.merge(draft: "false")
+        expect do
+          post @action, params: @params.merge(draft: "")
+        end.not_to change(PostEmailBlast, :count)
 
-        expect(@user.installments.alive.sole).to be_published
+        expect(@user.installments.alive.sole.published?).to be(false)
+        expect(response.parsed_body["email"]["state"]).to eq("draft")
       end
 
       {
@@ -235,6 +261,17 @@ describe Api::V2::EmailsController do
           "Invalid audience. Valid values are: all, audience, customers, seller, followers, follower, product."
         )
         expect(@user.installments.alive.count).to eq(0)
+      end
+
+      it "targets a product audience to that product's buyers" do
+        product = create(:product, user: @user)
+
+        post @action, params: @params.merge(audience: "product", product_id: product.external_id)
+
+        installment = @user.installments.alive.sole
+        expect(installment.installment_type).to eq(Installment::PRODUCT_TYPE)
+        expect(installment.link).to eq(product)
+        expect(installment.bought_products).to eq([product.unique_permalink])
       end
 
       it "requires a product id for product audience emails" do
@@ -286,16 +323,17 @@ describe Api::V2::EmailsController do
         @params.merge!(access_token: @token.token)
       end
 
-      it "sends a preview email and returns the preview URL" do
+      it "sends a preview email and returns an absolute preview URL" do
         expect_any_instance_of(Installment).to receive(:send_preview_email).with(@user)
 
         post @action, params: @params
 
         expect(response.parsed_body).to include(
           "success" => true,
-          "preview_url" => edit_email_path(@installment.external_id, preview_post: true),
+          "preview_url" => edit_email_url(@installment.external_id, preview_post: true, host: UrlService.domain_with_protocol),
           "message" => "A preview has been sent to your email."
         )
+        expect(response.parsed_body["preview_url"]).to start_with("http")
         expect(response.parsed_body["email"]["id"]).to eq(@installment.external_id)
       end
 
@@ -339,6 +377,16 @@ describe Api::V2::EmailsController do
         expect(@installment.reload.published?).to be(true)
         expect(response.parsed_body["email"]["state"]).to eq("published")
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "keeps attached files when publishing a draft" do
+        file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+        @installment.product_files << file
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@installment.reload.alive_product_files.map(&:external_id)).to include(file.external_id)
       end
 
       it "returns an error for an already-published installment" do
