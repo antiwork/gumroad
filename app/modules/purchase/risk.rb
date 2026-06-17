@@ -77,7 +77,9 @@ module Purchase::Risk
     def chargebacks_within_grace_period?(chargebacked_purchases)
       return false if Feature.inactive?(:chargeback_grace_period)
 
-      unique_chargebacked_purchases = chargebacked_purchases.uniq(&:id)
+      unique_chargebacked_purchases = chargebacked_purchases.uniq do |purchase|
+        purchase.bundle_purchase&.id || purchase.id
+      end
       return false if unique_chargebacked_purchases.count > CHARGEBACK_GRACE_LIMIT
 
       unique_chargebacked_purchases.all? { _1.chargeback_date < CHARGEBACK_GRACE_PERIOD.ago }
