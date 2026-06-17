@@ -1494,6 +1494,7 @@ const LicenseSection = ({
   onReset: () => Promise<void>;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
+  const [confirmingReset, setConfirmingReset] = React.useState(false);
 
   const handleSave = async (enabled: boolean) => {
     setIsLoading(true);
@@ -1505,6 +1506,7 @@ const LicenseSection = ({
     setIsLoading(true);
     await onReset();
     setIsLoading(false);
+    setConfirmingReset(false);
   };
 
   return (
@@ -1527,13 +1529,30 @@ const LicenseSection = ({
             <Button
               outline
               disabled={isLoading}
-              onClick={() => void handleReset()}
+              onClick={() => setConfirmingReset(true)}
               aria-label="Reset uses"
               title="Reset uses to 0"
             >
               Reset
             </Button>
           ) : null}
+          <Modal
+            open={confirmingReset}
+            onClose={() => setConfirmingReset(false)}
+            title="Reset license uses?"
+            footer={
+              <>
+                <Button disabled={isLoading} onClick={() => setConfirmingReset(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" disabled={isLoading} onClick={() => void handleReset()}>
+                  Reset
+                </Button>
+              </>
+            }
+          >
+            <p>This sets the usage count for this license back to 0.</p>
+          </Modal>
         </CardContent>
         <CardContent>
           {license.enabled ? (
