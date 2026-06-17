@@ -380,13 +380,14 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         bank_account_visual: bank_account&.account_number_visual,
         paypal_email: payment.payment_address,
         trace_id: nil,
-        stripe_payout_id: payment.stripe_transfer_id,
+        stripe_transfer_id: payment.stripe_transfer_id,
         bank_account: serialize_payout_bank_account(bank_account)
       }
     end
 
     def serialize_payout_bank_account(bank_account)
       return nil if bank_account.nil?
+      return nil if bank_account.is_a?(CardBankAccount)
 
       {
         bank_number: bank_account.routing_number,

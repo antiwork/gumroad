@@ -65,7 +65,7 @@ describe Api::Internal::Admin::PayoutsController do
         "bank_account_visual" => "******6789",
         "paypal_email" => nil,
         "trace_id" => nil,
-        "stripe_payout_id" => payment1.stripe_transfer_id,
+        "stripe_transfer_id" => payment1.stripe_transfer_id,
         "bank_account" => {
           "bank_number" => "110000000",
           "account_holder_full_name" => "Stripe Test Account",
@@ -79,12 +79,12 @@ describe Api::Internal::Admin::PayoutsController do
         "bank_account_visual" => nil,
         "paypal_email" => "payme@example.com",
         "trace_id" => nil,
-        "stripe_payout_id" => nil,
+        "stripe_transfer_id" => nil,
         "bank_account" => nil
       )
     end
 
-    it "surfaces the Stripe payout id from stripe_transfer_id and leaves trace_id nil" do
+    it "surfaces the stored Stripe transfer id and leaves trace_id nil" do
       stripe_payment = create(:payment_completed,
                               user:,
                               processor: PayoutProcessorType::STRIPE,
@@ -97,7 +97,7 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response).to have_http_status(:ok)
       payout = response.parsed_body["recent_payouts"].find { _1["external_id"] == stripe_payment.external_id }
       expect(payout["processor"]).to eq(PayoutProcessorType::STRIPE)
-      expect(payout["stripe_payout_id"]).to eq("po_1Test")
+      expect(payout["stripe_transfer_id"]).to eq("po_1Test")
       expect(payout["trace_id"]).to be_nil
       expect(payout["bank_account"]).to include(
         "bank_number" => "110000000",
@@ -105,6 +105,10 @@ describe Api::Internal::Admin::PayoutsController do
         "account_type" => "checking",
         "currency" => "usd"
       )
+    end
+
+    it "omits the bank_account block for card payouts whose routing fields are card metadata, not real bank data" do
+      expect(controller.send(:serialize_payout_bank_account, CardBankAccount.new)).to be_nil
     end
 
     it "excludes soft-deleted payout notes from payout_note" do
