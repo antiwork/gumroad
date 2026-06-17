@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorized_oauth_v1_api_method"
 
-describe Api::V2::InstallmentsController do
+describe Api::V2::EmailsController do
   before do
     @user = create(:user, email: "seller@example.com")
     @app = create(:oauth_application, owner: create(:user))
@@ -44,7 +44,7 @@ describe Api::V2::InstallmentsController do
         get @action, params: @params
 
         expect(response.parsed_body["success"]).to eq(true)
-        expect(response.parsed_body["installments"].map { _1["id"] })
+        expect(response.parsed_body["emails"].map { _1["id"] })
           .to eq([scheduled, published, draft].map(&:external_id))
       end
 
@@ -60,17 +60,17 @@ describe Api::V2::InstallmentsController do
         )
 
         get @action, params: @params.merge(type: Installment::PUBLISHED)
-        expect(response.parsed_body["installments"].map { _1["id"] }).to eq([published.external_id])
+        expect(response.parsed_body["emails"].map { _1["id"] }).to eq([published.external_id])
 
         get @action, params: @params.merge(type: Installment::SCHEDULED)
-        expect(response.parsed_body["installments"].map { _1["id"] }).to eq([scheduled.external_id])
+        expect(response.parsed_body["emails"].map { _1["id"] }).to eq([scheduled.external_id])
 
         get @action, params: @params.merge(type: Installment::DRAFT)
-        expect(response.parsed_body["installments"].map { _1["id"] }).to eq([draft.external_id])
+        expect(response.parsed_body["emails"].map { _1["id"] }).to eq([draft.external_id])
       end
 
       it "paginates installments with a page key" do
-        per_page = Api::V2::InstallmentsController::RESULTS_PER_PAGE
+        per_page = Api::V2::EmailsController::RESULTS_PER_PAGE
         installments = (0..per_page).map do |index|
           create(:audience_installment, seller: @user, created_at: (per_page - index).minutes.ago)
         end
@@ -78,16 +78,16 @@ describe Api::V2::InstallmentsController do
 
         get @action, params: @params
 
-        expect(response.parsed_body["installments"].map { _1["id"] })
+        expect(response.parsed_body["emails"].map { _1["id"] })
           .to eq(expected_installments.first(per_page).map(&:external_id))
         expect(response.parsed_body["next_page_key"]).to be_present
-        expect(response.parsed_body["next_page_url"]).to include("/v2/installments")
+        expect(response.parsed_body["next_page_url"]).to include("/v2/emails")
 
         get @action, params: @params.merge(page_key: response.parsed_body["next_page_key"])
 
         expect(response.parsed_body).to eq({
           success: true,
-          installments: expected_installments[per_page..].as_json(api_scopes: ["view_public"])
+          emails: expected_installments[per_page..].as_json(api_scopes: ["view_public"])
         }.as_json)
       end
 
@@ -98,7 +98,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          installments: []
+          emails: []
         }.as_json)
       end
     end
@@ -130,7 +130,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          installment: @installment.as_json(api_scopes: ["view_public"])
+          email: @installment.as_json(api_scopes: ["view_public"])
         }.as_json)
       end
 
@@ -141,7 +141,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The installment was not found."
+          message: "The email was not found."
         }.as_json)
       end
 
@@ -150,7 +150,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The installment was not found."
+          message: "The email was not found."
         }.as_json)
       end
     end
@@ -183,7 +183,7 @@ describe Api::V2::InstallmentsController do
         expect(installment.installment_type).to eq(Installment::AUDIENCE_TYPE)
         expect(installment.send_emails?).to be(true)
         expect(installment.published?).to be(false)
-        expect(response.parsed_body["installment"]).to include(
+        expect(response.parsed_body["email"]).to include(
           "id" => installment.external_id,
           "subject" => "Launch update",
           "state" => "draft",
@@ -200,7 +200,7 @@ describe Api::V2::InstallmentsController do
 
         installment = @user.installments.alive.sole
         expect(installment.published?).to be(true)
-        expect(response.parsed_body["installment"]["state"]).to eq("published")
+        expect(response.parsed_body["email"]["state"]).to eq("published")
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
@@ -255,7 +255,7 @@ describe Api::V2::InstallmentsController do
         installment = @user.installments.alive.sole
         expect(installment.installment_type).to eq(Installment::PRODUCT_TYPE)
         expect(installment.link).to eq(product)
-        expect(response.parsed_body["installment"]["product_id"]).to eq(product.external_id)
+        expect(response.parsed_body["email"]["product_id"]).to eq(product.external_id)
       end
 
       it "threads link_id to the installment" do
@@ -296,7 +296,7 @@ describe Api::V2::InstallmentsController do
           "preview_url" => edit_email_path(@installment.external_id, preview_post: true),
           "message" => "A preview has been sent to your email."
         )
-        expect(response.parsed_body["installment"]["id"]).to eq(@installment.external_id)
+        expect(response.parsed_body["email"]["id"]).to eq(@installment.external_id)
       end
 
       it "returns preview email errors" do
@@ -337,7 +337,7 @@ describe Api::V2::InstallmentsController do
         end.to change(PostEmailBlast, :count).by(1)
 
         expect(@installment.reload.published?).to be(true)
-        expect(response.parsed_body["installment"]["state"]).to eq("published")
+        expect(response.parsed_body["email"]["state"]).to eq("published")
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
@@ -348,7 +348,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The installment has already been sent."
+          message: "The email has already been sent."
         }.as_json)
       end
     end
@@ -381,7 +381,7 @@ describe Api::V2::InstallmentsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          message: "The installment was deleted successfully."
+          message: "The email was deleted successfully."
         }.as_json)
       end
     end

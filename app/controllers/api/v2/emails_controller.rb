@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Api::V2::InstallmentsController < Api::V2::BaseController
+class Api::V2::EmailsController < Api::V2::BaseController
   before_action(only: [:index, :show]) do
     doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public]))
   end
@@ -40,11 +40,11 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
     paginated_installments = paginated_installments.first(RESULTS_PER_PAGE)
     additional_response = has_next_page ? pagination_info(paginated_installments.last) : {}
 
-    success_with_object(:installments, paginated_installments, additional_response)
+    success_with_object(:emails, paginated_installments, additional_response)
   end
 
   def show
-    success_with_installment(@installment)
+    success_with_email(@installment)
   end
 
   def create
@@ -62,7 +62,7 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
     )
 
     if service.process
-      success_with_installment(service.installment)
+      success_with_email(service.installment)
     else
       render_response(false, message: service.error)
     end
@@ -72,7 +72,7 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
     @installment.send_preview_email(current_seller)
     render_response(
       true,
-      installment: @installment,
+      email: @installment,
       preview_url: preview_url_for(@installment),
       message: "A preview has been sent to your email."
     )
@@ -81,7 +81,7 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
   end
 
   def send_email
-    return render_response(false, message: "The installment has already been sent.") if @installment.published?
+    return render_response(false, message: "The email has already been sent.") if @installment.published?
 
     service = SaveInstallmentService.new(
       seller: current_seller,
@@ -91,7 +91,7 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
     )
 
     if service.process
-      success_with_installment(service.installment)
+      success_with_email(service.installment)
     else
       render_response(false, message: service.error)
     end
@@ -99,9 +99,9 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
 
   def destroy
     if @installment.update(deleted_at: Time.current)
-      success_with_installment
+      success_with_email
     else
-      error_with_installment(@installment)
+      error_with_email(@installment)
     end
   end
 
@@ -134,7 +134,7 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
 
     def fetch_installment
       @installment = scoped_installments.find_by_external_id(params[:id])
-      error_with_installment if @installment.nil?
+      error_with_email if @installment.nil?
     end
 
     def installment_type_from_audience_param
@@ -234,15 +234,15 @@ class Api::V2::InstallmentsController < Api::V2::BaseController
     def installment_creation_error(message)
       installment = Installment.new
       installment.errors.add(:base, message)
-      error_with_creating_object(:installment, installment)
+      error_with_creating_object(:email, installment)
       nil
     end
 
-    def success_with_installment(installment = nil)
-      success_with_object(:installment, installment)
+    def success_with_email(installment = nil)
+      success_with_object(:email, installment)
     end
 
-    def error_with_installment(installment = nil)
-      error_with_object(:installment, installment)
+    def error_with_email(installment = nil)
+      error_with_object(:email, installment)
     end
 end

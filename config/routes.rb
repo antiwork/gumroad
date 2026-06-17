@@ -82,7 +82,7 @@ Rails.application.routes.draw do
           post "preview_custom_html"
         end
       end
-      resources :installments, only: [:index, :show, :create, :destroy] do
+      resources :emails, only: [:index, :show, :create, :destroy] do
         member do
           post :preview
           post :send, action: :send_email

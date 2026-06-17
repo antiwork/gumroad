@@ -12,12 +12,12 @@ const AUDIENCE_PARAMETER_DESCRIPTION = [
   'Default: "audience"',
 ].join(" ");
 
-const InstallmentResponseFields = () => (
+const EmailResponseFields = () => (
   <ApiResponseFields>
     {renderFields([
       { name: "success", type: "boolean", description: "Whether the request succeeded" },
       {
-        name: "installment",
+        name: "email",
         type: "object",
         description: "The email object",
         children: INSTALLMENT_FIELDS,
@@ -26,12 +26,12 @@ const InstallmentResponseFields = () => (
   </ApiResponseFields>
 );
 
-const InstallmentsResponseFields = () => (
+const EmailsResponseFields = () => (
   <ApiResponseFields>
     {renderFields([
       { name: "success", type: "boolean", description: "Whether the request succeeded" },
       {
-        name: "installments",
+        name: "emails",
         type: "array",
         description: "Array of email objects",
         children: INSTALLMENT_FIELDS,
@@ -57,7 +57,7 @@ const PreviewResponseFields = () => (
     {renderFields([
       { name: "success", type: "boolean", description: "Whether the request succeeded" },
       {
-        name: "installment",
+        name: "email",
         type: "object",
         description: "The email object",
         children: INSTALLMENT_FIELDS,
@@ -75,16 +75,16 @@ const PreviewResponseFields = () => (
 export const GetEmails = () => (
   <ApiEndpoint
     method="get"
-    path="/installments"
+    path="/emails"
     description="Retrieve the seller's audience emails. Use type to filter by published, scheduled, or draft emails."
   >
     <ApiParameters>
       <ApiParameter name="type" description='(optional, "published", "scheduled", or "draft")' />
       <ApiParameter name="page_key" description="(optional) Cursor returned by the previous page" />
     </ApiParameters>
-    <InstallmentsResponseFields />
+    <EmailsResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments \\
+      {`curl https://api.gumroad.com/v2/emails \\
   -d "access_token=ACCESS_TOKEN" \\
   -d "type=draft" \\
   -X GET`}
@@ -93,7 +93,7 @@ export const GetEmails = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "installments": [{
+  "emails": [{
     "id": "bfi_30HLgGWL8H2wo_Gzlg==",
     "subject": "Launch update",
     "message": "<p>Hello, world!</p>",
@@ -116,10 +116,10 @@ export const GetEmails = () => (
 );
 
 export const GetEmail = () => (
-  <ApiEndpoint method="get" path="/installments/:id" description="Retrieve the details of a specific audience email.">
-    <InstallmentResponseFields />
+  <ApiEndpoint method="get" path="/emails/:id" description="Retrieve the details of a specific audience email.">
+    <EmailResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments/bfi_30HLgGWL8H2wo_Gzlg== \\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X GET`}
     </CodeSnippet>
@@ -127,7 +127,7 @@ export const GetEmail = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "installment": {
+  "email": {
     "id": "bfi_30HLgGWL8H2wo_Gzlg==",
     "subject": "Launch update",
     "message": "<p>Hello, world!</p>",
@@ -152,7 +152,7 @@ export const GetEmail = () => (
 export const CreateEmail = () => (
   <ApiEndpoint
     method="post"
-    path="/installments"
+    path="/emails"
     description="Create a draft audience email, or send it immediately by passing publish=true or draft=false."
   >
     <ApiParameters>
@@ -165,9 +165,9 @@ export const CreateEmail = () => (
       <ApiParameter name="publish" description="(optional, true to send immediately)" />
       <ApiParameter name="draft" description="(optional, false to send immediately)" />
     </ApiParameters>
-    <InstallmentResponseFields />
+    <EmailResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments \\
+      {`curl https://api.gumroad.com/v2/emails \\
   -d "access_token=ACCESS_TOKEN" \\
   -d "subject=Launch update" \\
   -d "body=<p>Hello, world!</p>" \\
@@ -183,7 +183,7 @@ export const CreateEmail = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "installment": {
+  "email": {
     "id": "bfi_30HLgGWL8H2wo_Gzlg==",
     "subject": "Launch update",
     "message": "<p>Hello, world!</p>",
@@ -208,12 +208,12 @@ export const CreateEmail = () => (
 export const PreviewEmail = () => (
   <ApiEndpoint
     method="post"
-    path="/installments/:id/preview"
+    path="/emails/:id/preview"
     description="Send a preview of an audience email to the seller's email address."
   >
     <PreviewResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments/bfi_30HLgGWL8H2wo_Gzlg==/preview \\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/preview \\
   -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
@@ -221,7 +221,7 @@ export const PreviewEmail = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "installment": {
+  "email": {
     "id": "bfi_30HLgGWL8H2wo_Gzlg==",
     "subject": "Launch update",
     "message": "<p>Hello, world!</p>",
@@ -248,12 +248,12 @@ export const PreviewEmail = () => (
 export const SendEmail = () => (
   <ApiEndpoint
     method="post"
-    path="/installments/:id/send"
+    path="/emails/:id/send"
     description="Publish a draft audience email and send it to its audience."
   >
-    <InstallmentResponseFields />
+    <EmailResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments/bfi_30HLgGWL8H2wo_Gzlg==/send \\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/send \\
   -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
@@ -261,7 +261,7 @@ export const SendEmail = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "installment": {
+  "email": {
     "id": "bfi_30HLgGWL8H2wo_Gzlg==",
     "subject": "Launch update",
     "message": "<p>Hello, world!</p>",
@@ -284,7 +284,7 @@ export const SendEmail = () => (
 );
 
 export const DeleteEmail = () => (
-  <ApiEndpoint method="delete" path="/installments/:id" description="Delete an audience email.">
+  <ApiEndpoint method="delete" path="/emails/:id" description="Delete an audience email.">
     <ApiResponseFields>
       {renderFields([
         { name: "success", type: "boolean", description: "Whether the request succeeded" },
@@ -292,7 +292,7 @@ export const DeleteEmail = () => (
       ])}
     </ApiResponseFields>
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/installments/bfi_30HLgGWL8H2wo_Gzlg== \\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg== \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
     </CodeSnippet>
@@ -300,7 +300,7 @@ export const DeleteEmail = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "message": "The installment was deleted successfully."
+  "message": "The email was deleted successfully."
 }`}
     </CodeSnippet>
   </ApiEndpoint>
