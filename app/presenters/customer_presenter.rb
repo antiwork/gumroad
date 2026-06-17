@@ -92,7 +92,7 @@ class CustomerPresenter
         } : nil,
       license: purchase.linked_license.present? ?
         {
-          id: purchase.linked_license.external_id,
+          id: purchase.linked_license.secure_external_id(scope: License::MANAGE_SECURE_ID_SCOPE),
           key: purchase.linked_license.serial,
           enabled: !purchase.linked_license.disabled?,
           uses: purchase.linked_license.uses,

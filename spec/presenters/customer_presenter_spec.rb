@@ -70,6 +70,7 @@ describe CustomerPresenter do
     end
 
     it "returns the correct props for each customer" do
+      allow_any_instance_of(License).to receive(:secure_external_id).with(scope: License::MANAGE_SECURE_ID_SCOPE).and_return("secure-license-id")
       allow(purchase1).to receive(:transaction_url_for_seller).and_return("https://google.com")
       allow(purchase1).to receive(:stripe_partially_refunded?).and_return(true)
       allow(purchase1).to receive(:stripe_refunded?).and_return(true)
@@ -183,7 +184,7 @@ describe CustomerPresenter do
             type: "DirectAffiliate",
           },
           license: {
-            id: purchase2.license.external_id,
+            id: "secure-license-id",
             enabled: true,
             key: purchase2.license.serial,
             uses: purchase2.license.uses,
