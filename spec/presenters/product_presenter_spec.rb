@@ -183,6 +183,7 @@ describe ProductPresenter do
             id: purchase.external_id,
             email_digest: purchase.email_digest,
             created_at: purchase.created_at,
+            is_free: false,
             membership: nil,
             review: nil,
             should_show_receipt: true,
