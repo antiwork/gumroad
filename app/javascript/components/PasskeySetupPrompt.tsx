@@ -7,27 +7,30 @@ import { ResponseError } from "$app/utils/request";
 import { isPasskeySupported } from "$app/utils/webauthn";
 
 import { Button } from "$app/components/Button";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
 const SNOOZE_KEY_PREFIX = "passkeySetupPromptSnoozedUntil";
 const SNOOZE_MS = 90 * 24 * 60 * 60 * 1000;
 
-export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; accountId: number }) => {
-  const { authenticity_token, passkeys } = usePage<{ authenticity_token: string; passkeys?: unknown }>().props;
-  const snoozeKey = `${SNOOZE_KEY_PREFIX}:${accountId}`;
+export const PasskeySetupPrompt = () => {
+  const { authenticity_token, prompt_passkey_setup } = usePage<{
+    authenticity_token: string;
+    prompt_passkey_setup?: boolean;
+  }>().props;
+  const currentSeller = useCurrentSeller();
+  const snoozeKey = `${SNOOZE_KEY_PREFIX}:${currentSeller?.id}`;
   const [supported, setSupported] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
 
   React.useEffect(() => setSupported(isPasskeySupported()), []);
 
-  const onPasskeyManagementPage = passkeys !== undefined;
-
   if (
-    !show ||
+    !prompt_passkey_setup ||
+    !currentSeller ||
     !supported ||
-    onPasskeyManagementPage ||
     dismissed ||
     Number(localStorage.getItem(snoozeKey)) > Date.now()
   ) {
@@ -56,7 +59,7 @@ export const PasskeySetupPrompt = ({ show, accountId }: { show: boolean; account
   });
 
   return (
-    <div className="px-4 pt-4 pb-[14px] xl:pb-[22px]">
+    <div className="px-4 pt-4 md:px-8 md:pt-8">
       <Alert variant="info" role="status">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
