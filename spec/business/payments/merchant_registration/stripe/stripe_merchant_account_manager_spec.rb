@@ -10379,14 +10379,30 @@ describe StripeMerchantAccountManager, :vcr do
               end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
             end
 
-            it "clears the action-required notification flag when Stripe re-enables payouts" do
-              merchant_account.update!(stripe_payouts_action_required_notified: true)
+            it "clears the pause-email marker when Stripe re-enables payouts" do
+              merchant_account.update!(stripe_payouts_pause_email_sent: "action_required")
               user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
               stripe_event["data"]["object"]["payouts_enabled"] = true
 
               described_class.handle_stripe_event(stripe_event)
 
-              expect(merchant_account.reload.stripe_payouts_action_required_notified).to be_falsey
+              expect(merchant_account.reload.stripe_payouts_pause_email_sent).to be_nil
+            end
+
+            it "does not re-send the pause email when re-paused after a non-Stripe resume while Stripe stays disabled" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              # an admin or update_payout_method resume clears the internal pause but not the marker
+              user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+              expect(user.reload.payouts_paused_internally?).to be true
             end
 
             it "sends the action-required email for any disabled reason that still has outstanding requirements" do
