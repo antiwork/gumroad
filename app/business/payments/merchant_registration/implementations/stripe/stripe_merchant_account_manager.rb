@@ -906,12 +906,18 @@ module StripeMerchantAccountManager
     # after the lock commits; the dedupe marker is claimed inside it.
     pause_email_to_send = nil
     user.with_lock do
+      # Refresh under the lock so the dedupe marker reflects commits from any
+      # concurrent webhook that ran just before us (with_lock reloads the user,
+      # but not merchant_account, where the marker lives).
+      merchant_account.reload
       if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
         user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
         user.comments.create!(
           author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
           comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
-          content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
+          content: user.payouts_paused_by_user? ?
+            "Stripe re-enabled payouts on the connected account; payouts remain paused by the creator." :
+            "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
         merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
       elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?

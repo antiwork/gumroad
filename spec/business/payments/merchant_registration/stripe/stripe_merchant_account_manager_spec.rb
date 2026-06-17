@@ -10294,8 +10294,9 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.payouts_paused_for_reason).to eq(comment.content)
             end
 
-            it "applies the pause under a user lock so concurrent webhooks are serialized" do
+            it "applies the pause under a user lock and refreshes the merchant account so concurrent webhooks are serialized" do
               expect_any_instance_of(User).to receive(:with_lock).and_call_original
+              expect_any_instance_of(MerchantAccount).to receive(:reload).and_call_original
 
               expect do
                 described_class.handle_stripe_event(stripe_event)
@@ -10570,6 +10571,18 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.reload.payouts_paused_internally?).to be false
               expect(user.payouts_paused_by).to be nil
               expect(user.payouts_paused_by_source).to be nil
+            end
+
+            it "notes that payouts remain creator-paused when Stripe re-enables an account the creator also paused" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              user.update!(payouts_paused_by_user: true)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              user.reload
+              expect(user.payouts_paused_internally?).to be false
+              expect(user.payouts_paused?).to be true # still paused by the creator
+              expect(user.comments.with_type_payouts_resumed.last.content).to include("remain paused by the creator")
             end
 
             it "rolls back the resume when clearing the pause-email marker fails, so a retry can recover" do
