@@ -590,9 +590,7 @@ Rails.application.routes.draw do
           post :registration_options
         end
       end
-      resource :profile, only: %i[show update], controller: "profile" do
-        resources :products, only: :show, controller: "profile/products"
-      end
+      get "profile", as: :profile, to: redirect { |_params, request| "/profile?#{request.query_string}".chomp("?") }
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
       resource :billing, only: %i[show update], controller: "billing"
@@ -627,6 +625,9 @@ Rails.application.routes.draw do
         end
       end
       resource :dismiss_ai_product_generation_promo, only: [:create]
+    end
+    resource :profile, only: %i[show update], controller: "settings/profile" do
+      resources :products, only: :show, controller: "settings/profile/products"
     end
     resources :profile_sections, only: [:create, :update, :destroy]
 

@@ -41,7 +41,7 @@ class UsersController < ApplicationController
 
     authorize [:settings, :profile], :show?
 
-    redirect_to settings_profile_url(host: DOMAIN), allow_other_host: true
+    redirect_to profile_url(host: DOMAIN), allow_other_host: true
   end
 
   def coffee

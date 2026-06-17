@@ -36,7 +36,7 @@ module PunditAuthorization
       # This allows keeping the Nav link to settings_main_path, and redirect to the profile page for those roles
       # that don't have access to it
       # All roles have at least read-only access to the profile page
-      redirect_to settings_profile_path
+      redirect_to profile_path
     end
 
     # It could happen for reasons like:

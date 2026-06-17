@@ -1,4 +1,4 @@
-import { TwitterX } from "@boxicons/react";
+import { ArrowUpRight, TwitterX } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -6,7 +6,6 @@ import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile } from "$app/parsers/profile";
-import { SettingPage } from "$app/parsers/settings";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -22,11 +21,11 @@ import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
 
 type ProfileSettingsForm = {
@@ -37,14 +36,11 @@ type ProfileSettingsForm = {
 
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
-  settings_pages: SettingPage[];
   editable_profile: ProfileEditorProps;
 } & ProfileProps;
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, settings_pages, editable_profile } = typia.assert<ProfilePageProps>(
-    usePage().props,
-  );
+  const { creator_profile, profile_settings, editable_profile } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -169,13 +165,29 @@ export default function SettingsPage() {
   });
 
   return (
-    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canSave}>
+    <>
+      <PageHeader
+        className="sticky-top"
+        title="Profile"
+        actions={
+          <>
+            <NavigationButton
+              href={Routes.root_url({ host: creatorProfile.subdomain })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View profile
+              <ArrowUpRight className="size-5" />
+            </NavigationButton>
+            <Button color="accent" onClick={handleSave} disabled={!canSave}>
+              Update profile
+            </Button>
+          </>
+        }
+      />
       <WithPreviewSidebar>
         <div>
           <section className="grid gap-8 p-4! md:p-8!">
-            <header>
-              <h2>Profile</h2>
-            </header>
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-name`}>Name</Label>
@@ -245,17 +257,7 @@ export default function SettingsPage() {
             />
           </section>
         </div>
-        <PreviewSidebar
-          previewLink={(props) => (
-            <NavigationButton
-              {...props}
-              size="icon"
-              href={Routes.root_url({ host: creatorProfile.subdomain })}
-              target="_blank"
-              rel="noreferrer"
-            />
-          )}
-        >
+        <PreviewSidebar>
           <Preview
             scaleFactor={0.4}
             style={{
@@ -302,6 +304,6 @@ export default function SettingsPage() {
           </Preview>
         </PreviewSidebar>
       </WithPreviewSidebar>
-    </SettingsLayout>
+    </>
   );
 }

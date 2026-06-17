@@ -20,14 +20,14 @@ describe "User profile settings page", type: :system, js: true do
 
   describe "profile preview" do
     it "renders the header" do
-      visit settings_profile_path
+      visit profile_path
 
       expect(page).to have_text "Preview"
-      expect(page).to have_link "Preview", href: root_url(host: @user.subdomain)
+      expect(page).to have_link "View profile", href: root_url(host: @user.subdomain)
     end
 
     it "renders the profile" do
-      visit settings_profile_path
+      visit profile_path
 
       within_section "Preview", section_element: :aside do
         expect(page).to have_text @user.name
@@ -38,14 +38,14 @@ describe "User profile settings page", type: :system, js: true do
 
   describe "saving profile updates" do
     it "saves the name and bio" do
-      visit settings_profile_path
+      visit profile_path
       fill_in "Name", with: "Creator name", fill_options: { clear: :backspace }
       fill_in "Bio", with: "Creator bio", fill_options: { clear: :backspace }
       within_section "Preview", section_element: :aside do
         expect(page).to have_text("Creator name")
         expect(page).to have_text("Creator bio")
       end
-      click_on "Update settings"
+      click_on "Update profile"
       expect(page).to have_alert(text: "Changes saved!")
       expect(@user.reload.name).to eq "Creator name"
       expect(@user.bio).to eq "Creator bio"
@@ -61,12 +61,12 @@ describe "User profile settings page", type: :system, js: true do
 
       context "when the avatar is valid" do
         it "saves the avatar" do
-          visit settings_profile_path
+          visit profile_path
           upload_logo("test.png")
           within_section("Preview", section_element: :aside) do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
-          click_on "Update settings"
+          click_on "Update profile"
           expect(page).to have_alert(text: "Changes saved!")
           expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
         end
@@ -76,12 +76,12 @@ describe "User profile settings page", type: :system, js: true do
         # Purging an ActiveStorage::Blob in test environment returns Aws::S3::Errors::AccessDenied
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
 
-        visit settings_profile_path
+        visit profile_path
         upload_logo("test.png")
         within_section("Preview", section_element: :aside) do
           expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
         end
-        click_on "Update settings"
+        click_on "Update profile"
         expect(page).to have_alert(text: "Changes saved!")
         wait_for_ajax
         expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
@@ -90,7 +90,7 @@ describe "User profile settings page", type: :system, js: true do
           click_on "Remove"
           expect(page).to have_field("Upload", visible: false)
         end
-        click_on "Update settings"
+        click_on "Update profile"
         expect(page).to have_alert(text: "Changes saved!")
         wait_for_ajax
         expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
@@ -103,18 +103,18 @@ describe "User profile settings page", type: :system, js: true do
 
       context "when the avatar is invalid" do
         it "displays an error if either dimension is less than 200px" do
-          visit settings_profile_path
+          visit profile_path
           upload_logo("test-small.png")
           within_section("Preview", section_element: :aside) do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
-          click_on "Update settings"
+          click_on "Update profile"
           expect(page).to have_alert(text: "Please upload a profile picture that is at least 200x200px")
           expect(@user.reload.avatar.filename).to_not eq("smaller.png")
         end
 
         it "displays an error if format is unpermitted" do
-          visit settings_profile_path
+          visit profile_path
           upload_logo("test-svg.svg")
           expect(page).to have_alert(text: "Invalid file type")
         end
@@ -122,7 +122,7 @@ describe "User profile settings page", type: :system, js: true do
     end
 
     it "rejects avatar if file type is unsupported" do
-      visit settings_profile_path
+      visit profile_path
       within_fieldset "Avatar" do
         click_on "Remove"
         attach_file("Upload", file_fixture("test-small.gif"), visible: false)
@@ -131,7 +131,7 @@ describe "User profile settings page", type: :system, js: true do
     end
 
     it "saves connected or disconnected Twitter account" do
-      visit settings_profile_path
+      visit profile_path
       expect(page).to have_button("Connect to X")
       OmniAuth.config.test_mode = true
       OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
@@ -155,7 +155,7 @@ describe "User profile settings page", type: :system, js: true do
       end
 
       it "does not show social links" do
-        visit settings_profile_path
+        visit profile_path
 
         expect(page).not_to have_text("Social links")
         expect(page).not_to have_link("Connect to X", href: user_twitter_omniauth_authorize_path(state: "link_twitter_account", x_auth_access_type: "read"))

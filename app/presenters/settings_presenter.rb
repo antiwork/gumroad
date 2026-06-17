@@ -9,7 +9,6 @@ class SettingsPresenter
 
   ALL_PAGES = %w(
     main
-    profile
     team
     payments
     billing
@@ -31,7 +30,7 @@ class SettingsPresenter
       case page
       when "main", "payments", "password", "third_party_analytics", "advanced"
         Pundit.policy!(pundit_user, [:settings, page.to_sym, seller]).show?
-      when "profile", "billing"
+      when "billing"
         Pundit.policy!(pundit_user, [:settings, page.to_sym]).show?
       when "team"
         Pundit.policy!(pundit_user, [:settings, :team, seller]).show?
@@ -125,12 +124,6 @@ class SettingsPresenter
       end,
       allow_deactivation: Pundit.policy!(pundit_user, [:user]).deactivate?,
       formatted_balance_to_forfeit_on_account_deletion: seller.formatted_balance_to_forfeit(:account_closure),
-    }
-  end
-
-  def profile_props
-    {
-      settings_pages: pages
     }
   end
 

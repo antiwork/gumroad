@@ -411,7 +411,7 @@ describe UsersController do
 
       get :edit
 
-      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+      expect(response).to redirect_to(profile_url(host: DOMAIN))
     end
 
     context "with user signed in as admin for seller" do
@@ -422,7 +422,7 @@ describe UsersController do
 
         get :edit
 
-        expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+        expect(response).to redirect_to(profile_url(host: DOMAIN))
       end
     end
 
@@ -438,7 +438,7 @@ describe UsersController do
 
       get :edit, params: { username: seller.username }
 
-      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+      expect(response).to redirect_to(profile_url(host: DOMAIN))
     end
 
     it "redirects from a custom domain shortcut to profile settings" do
@@ -448,7 +448,7 @@ describe UsersController do
 
       get :edit
 
-      expect(response).to redirect_to(settings_profile_url(host: DOMAIN))
+      expect(response).to redirect_to(profile_url(host: DOMAIN))
     end
   end
 

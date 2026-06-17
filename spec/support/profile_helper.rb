@@ -8,9 +8,9 @@ module FillInUserProfileHelpers
     fill_in("Username", with: "gumbo")
     click_on("Update settings")
 
-    visit settings_profile_path
+    visit profile_path
     fill_in("Name", with: "Edgar Gumstein")
-    click_on("Update settings")
+    click_on("Update profile")
     expect(page).to have_alert(text: "Changes saved!")
   end
 

@@ -97,7 +97,7 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile_products_section, seller:)
         visit seller.subdomain_with_protocol
 
-        expect(page).to have_link("Edit profile", href: settings_profile_url(host: DOMAIN))
+        expect(page).to have_link("Edit profile", href: profile_url(host: DOMAIN))
         expect(page).not_to have_disclosure_button("Edit section")
         expect(page).not_to have_disclosure_button("Add section")
         expect(page).not_to have_button("Page settings")
@@ -194,7 +194,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       def save_changes
-        click_on "Update settings"
+        click_on "Update profile"
         expect(page).to have_alert(text: "Changes saved!")
         wait_for_ajax
       end
@@ -234,7 +234,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "shows the subscribe block when there are no sections" do
-        visit settings_profile_path
+        visit profile_path
         expect(page).to have_text "Subscribe to receive email updates from #{seller.name}"
 
         add_section "Products"
@@ -244,13 +244,13 @@ describe "User profile page", type: :system, js: true do
         expect(seller.seller_profile_sections.count).to eq 1
 
         seller.update!(bio: "Hello!")
-        visit settings_profile_path
+        visit profile_path
       end
 
       it "allows adding and deleting sections" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id, @product2.id, @product3.id, @product4.id])
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
-        visit settings_profile_path
+        visit profile_path
 
         within_section_form "Section 1" do
           fill_in "Section name", with: "", fill_options: { clear: :backspace }
@@ -291,7 +291,7 @@ describe "User profile page", type: :system, js: true do
         section = create(:seller_profile_products_section, seller:)
         section2 = create(:seller_profile_posts_section, seller:)
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }, { name: "Tab 2", sections: [section2.id] }] })
-        visit "#{settings_profile_path}?section=#{section2.external_id}"
+        visit "#{profile_path}?section=#{section2.external_id}"
 
         within_profile_section_editor do
           expect(page).to have_tab_button("Tab 2", open: true)
@@ -306,7 +306,7 @@ describe "User profile page", type: :system, js: true do
         unpublished_audience_installment = create(:audience_installment, seller:, shown_on_profile: true)
         published_follower_installment = create(:follower_installment, seller:, shown_on_profile: true, published_at: 1.day.ago)
 
-        visit settings_profile_path
+        visit profile_path
         within_profile_section_editor do
           expect(page).to have_text("Build your profile")
           click_on "Add page"
@@ -364,7 +364,7 @@ describe "User profile page", type: :system, js: true do
         section2 = create(:seller_profile_products_section, seller:, header: "Section 2")
         section3 = create(:seller_profile_products_section, seller:, header: "Section 3")
         create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section1, section2, section3].pluck(:id) }] })
-        visit settings_profile_path
+        visit profile_path
 
         expect_sections_in_order("Section 1", "Section 2", "Section 3")
 
@@ -390,7 +390,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating products sections" do
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Products"
 
@@ -438,7 +438,7 @@ describe "User profile page", type: :system, js: true do
       it "allows creating posts sections" do
         create(:published_installment, seller:)
         posts = create_list(:audience_installment, 2, published_at: Date.yesterday, seller:, shown_on_profile: true)
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Posts"
         within_section_form "Posts" do
@@ -465,7 +465,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating rich text sections" do
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Rich text"
         save_changes
@@ -496,7 +496,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "reflects unsaved rich text edits in the live preview" do
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Rich text"
         save_changes
@@ -515,14 +515,14 @@ describe "User profile page", type: :system, js: true do
         section = SellerProfileRichTextSection.create!(seller:, json_data: { "text" => {} })
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
 
-        visit settings_profile_path
+        visit profile_path
 
         expect(page).to have_css("[contenteditable=true]")
-        expect(page).to have_button("Update settings", disabled: true)
+        expect(page).to have_button("Update profile", disabled: true)
       end
 
       it "clears the unsaved-changes state after saving a rich text section" do
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Rich text"
         editor = within_section_form "Rich text" do
@@ -531,23 +531,23 @@ describe "User profile page", type: :system, js: true do
         editor.send_keys "Hello world"
         save_changes
 
-        expect(page).to have_button("Update settings", disabled: true)
+        expect(page).to have_button("Update profile", disabled: true)
       end
 
       it "does not flag the form changed when an empty rich text section is only focused and blurred" do
         section = SellerProfileRichTextSection.create!(seller:, json_data: { "text" => {} })
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
 
-        visit settings_profile_path
+        visit profile_path
 
         find("[contenteditable=true]").click
         find_field("Name").click
 
-        expect(page).to have_button("Update settings", disabled: true)
+        expect(page).to have_button("Update profile", disabled: true)
       end
 
       it "allows creating subscribe sections" do
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Subscribe"
 
@@ -578,7 +578,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "allows creating featured product sections" do
-        visit settings_profile_path
+        visit profile_path
         add_section "Featured product"
 
         expect(seller.seller_profile_sections.count).to eq 0
@@ -618,7 +618,7 @@ describe "User profile page", type: :system, js: true do
       it "allows creating coffee featured product sections" do
         coffee_product = create(:coffee_product, user: seller, name: "Buy me a coffee", description: "I need caffeine!")
 
-        visit settings_profile_path
+        visit profile_path
         add_section "Featured product"
 
         expect(seller.seller_profile_sections.count).to eq 0
@@ -651,7 +651,7 @@ describe "User profile page", type: :system, js: true do
           create(:wishlist, name: "First Wishlist", user: seller),
           create(:wishlist, name: "Second Wishlist", user: seller),
         ]
-        visit settings_profile_path
+        visit profile_path
 
         add_section "Wishlists"
         save_changes

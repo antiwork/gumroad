@@ -136,9 +136,8 @@ export const Nav = (props: Props) => {
           <ClientNavLink
             text="Profile"
             icon={<Store pack="filled" className="size-5" />}
-            href={Routes.root_url({ ...routeParams, host: currentSeller.subdomain ?? routeParams.host })}
+            href={Routes.profile_url(routeParams)}
             exactHrefMatch
-            prefetch={false}
           />
         ) : null}
         <ClientNavLink

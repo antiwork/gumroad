@@ -21,11 +21,8 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Settings/Profile/Show")
-      settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
       profile_presenter = ProfilePresenter.new(pundit_user: controller.pundit_user, seller:)
-      expected_props = settings_presenter.profile_props.merge(
-        profile_presenter.profile_settings_props(request:)
-      )
+      expected_props = profile_presenter.profile_settings_props(request:)
       # Compare only the expected props from inertia.props (ignore shared props)
       actual_props = inertia.props.slice(*expected_props.keys)
       expect(actual_props).to eq(expected_props)
@@ -60,7 +57,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
     it "submits the form successfully" do
       put :update, params: { user: { name: "New name" } }
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.name).to eq("New name")
@@ -71,7 +68,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       put :update, params: { seller_profile: { background_color: "#000000", highlight_color: "#009a49", font: "Roboto Mono" } }
 
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.seller_profile).to have_attributes(
@@ -88,7 +85,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       it "returns an error" do
         put :update, params: { user: { name: "New name" } }
-        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to redirect_to(profile_path)
         expect(response).to have_http_status :found
         expect(flash[:alert]).to eq("You have to confirm your email address before you can do that.")
       end
@@ -102,7 +99,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       seller.avatar.attach(file_fixture("test.png"))
 
       put :update, params: { tabs: [{ name: "Tab 1", sections: [section1.external_id] }, { name: "Tab 2", sections: [section2.external_id] }, { name: "Tab 3", sections: [] }] }
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.seller_profile_sections.count).to eq 3
@@ -122,7 +119,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
           }, as: :json
         end.to change { seller.seller_profile_sections.count }.from(0).to(1)
 
-        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to redirect_to(profile_path)
         expect(response).to have_http_status :see_other
         expect(flash[:notice]).to eq("Changes saved!")
         section = seller.seller_profile_subscribe_sections.sole
@@ -247,7 +244,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
           tabs: [{ name: "Tab 1", sections: [temp_id] }],
         }, as: :json
 
-        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to redirect_to(profile_path)
         expect(response).to have_http_status :found
         expect(flash[:alert]).to include("show_filters")
         expect(seller.reload.name).to_not eq("Updated name")
@@ -259,7 +256,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
           sections: [{ id: temp_id, type: "SellerProfileFakeSection" }],
         }, as: :json
 
-        expect(response).to redirect_to(settings_profile_path)
+        expect(response).to redirect_to(profile_path)
         expect(response).to have_http_status :found
         expect(flash[:alert]).to eq("Invalid section type")
         expect(seller.seller_profile_sections.count).to eq 0
@@ -277,7 +274,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       seller.avatar.purge
 
       put :update, params: { user: { name: "New name" }, profile_picture_blob_id: signed_id }
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :found
       expect(flash[:alert]).to eq("The logo is already removed. Please refresh the page and try again.")
     end
@@ -291,7 +288,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       put :update, params: { profile_picture_blob_id: blob.signed_id }
 
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.avatar.attached?).to be(true)
@@ -307,7 +304,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       put :update, params: { profile_picture_blob_id: blob.signed_id }
 
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
     end
@@ -326,7 +323,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         }
       end.to change { GenerateSubscribePreviewJob.jobs.size }.by(1)
 
-      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to redirect_to(profile_path)
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(seller.id)

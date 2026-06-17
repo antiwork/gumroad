@@ -31,7 +31,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
       <div className="ml-auto flex items-center gap-3">
         {creatorProfile.can_edit ? (
-          <NavigationButton color="filled" href={Routes.settings_profile_url({ host: appDomain })}>
+          <NavigationButton color="filled" href={Routes.profile_url({ host: appDomain })}>
             <Pencil className="size-5" />
             Edit profile
           </NavigationButton>

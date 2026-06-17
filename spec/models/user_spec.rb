@@ -1066,6 +1066,11 @@ describe User, :vcr do
         expect(@user).to be_invalid
       end
 
+      it "is invalid with the reserved \"profile\" username that collides with the /profile route" do
+        @user.username = "profile"
+        expect(@user).to be_invalid
+      end
+
       describe "validation condition" do
         before do
           @user2 = create(:user)

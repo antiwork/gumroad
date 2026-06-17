@@ -60,7 +60,7 @@ export const updateProfileSettings = async (
   const { profile_picture_blob_id, tabs, sections, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
-    url: Routes.settings_profile_path(),
+    url: Routes.profile_path(),
     accept: "json",
     data: {
       user,
@@ -76,7 +76,7 @@ export const updateProfileSettings = async (
 export const getProduct = async (id: string) => {
   const response = await request({
     method: "GET",
-    url: Routes.settings_profile_product_path(id),
+    url: Routes.profile_product_path(id),
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();
