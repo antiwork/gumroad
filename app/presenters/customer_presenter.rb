@@ -8,7 +8,7 @@ class CustomerPresenter
   end
 
   def missed_posts
-    posts = Installment.missed_for_purchase(purchase).order(published_at: :desc)
+    posts = Installment.missed_for_purchase(purchase).order(published_at: :desc, id: :asc)
     posts.map do |post|
       {
         id: post.external_id,
