@@ -27,7 +27,9 @@ const AdminResumePayoutsForm = ({
           {payouts_paused_by === "admin" ? (
             <p>Payouts are currently paused by Gumroad admin. Reason: {reason}</p>
           ) : payouts_paused_by === "system" ? (
-            <p>Payouts are currently automatically paused by the system. See comments below for details.</p>
+            <p>
+              {reason || "Payouts are currently automatically paused by the system. See comments below for details."}
+            </p>
           ) : payouts_paused_by === "stripe" ? (
             <p>{reason || "Payouts are currently paused by Stripe."}</p>
           ) : payouts_paused_by === "user" ? (

@@ -963,8 +963,15 @@ class User < ApplicationRecord
 
   def payouts_paused_for_reason
     return nil unless payouts_paused?
-    return nil unless payouts_paused_by_source.in?([PAYOUT_PAUSE_SOURCE_ADMIN, PAYOUT_PAUSE_SOURCE_STRIPE])
-    comments.with_type_payouts_paused.last&.content
+
+    case payouts_paused_by_source
+    when PAYOUT_PAUSE_SOURCE_ADMIN, PAYOUT_PAUSE_SOURCE_STRIPE
+      comments.with_type_payouts_paused.last&.content
+    when PAYOUT_PAUSE_SOURCE_SYSTEM
+      comments.with_type_on_probation
+              .where(author_name: SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS.values)
+              .last&.content
+    end
   end
 
   def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
