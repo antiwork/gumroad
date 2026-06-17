@@ -234,6 +234,12 @@ module User::Risk
     self.const_set("PAYOUT_PAUSE_SOURCE_#{source.upcase}", source)
   end
 
+  SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS = {
+    repeated_failed_payouts: "pause_payouts_after_repeated_failures",
+    high_chargeback_rate: "pause_payouts_for_seller_based_on_chargeback_rate",
+    recent_failed_purchases: "pause_payouts_for_seller_based_on_recent_failures",
+  }.freeze
+
   class_methods do
   end
 end

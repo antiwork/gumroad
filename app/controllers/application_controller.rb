@@ -185,11 +185,32 @@ class ApplicationController < ActionController::Base
       end
     end
 
+    PROMPT_PASSKEY_SETUP_SESSION_KEY = :prompt_passkey_setup
+    private_constant :PROMPT_PASSKEY_SETUP_SESSION_KEY
+
+    def refresh_passkey_setup_prompt(user)
+      if cookies[:is_gumroad_mobile_app].blank? && user.passkeys_setup_pending?
+        session[PROMPT_PASSKEY_SETUP_SESSION_KEY] = user.id
+      else
+        session.delete(PROMPT_PASSKEY_SETUP_SESSION_KEY)
+      end
+    end
+
+    def show_passkey_setup_prompt?
+      logged_in_user.present? &&
+        !impersonating? &&
+        cookies[:is_gumroad_mobile_app].blank? &&
+        session[PROMPT_PASSKEY_SETUP_SESSION_KEY] == logged_in_user.id &&
+        logged_in_user.role_owner_for?(current_seller) &&
+        logged_in_user.passkeys_setup_pending?
+    end
+
     def sign_in_or_prepare_for_two_factor_auth(user)
       if skip_two_factor_authentication?(user)
         sign_in user
         reset_two_factor_auth_login_session
         merge_guest_cart_with_user_cart
+        refresh_passkey_setup_prompt(user)
       else
         prepare_for_two_factor_authentication(user)
       end

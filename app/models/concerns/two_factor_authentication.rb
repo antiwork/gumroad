@@ -58,6 +58,10 @@ module TwoFactorAuthentication
     Feature.active?(:passkeys, self) && webauthn_credentials.exists?
   end
 
+  def passkeys_setup_pending?
+    Feature.active?(:passkeys, self) && webauthn_credentials.none?
+  end
+
   def has_logged_in_from_ip_before?(remote_ip)
     two_factor_auth_redis_namespace.get(two_factor_auth_ip_redis_key(remote_ip)).present?
   end

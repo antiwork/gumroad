@@ -29,7 +29,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write   # to add/remove the `auto-merge-eligible` label
   statuses: write
 
 jobs:
@@ -108,30 +108,60 @@ jobs:
           LABEL: ${{ steps.meta.outputs.label }}
         run: |
           set +e
-          ruby scripts/auto_merge_gate.rb \
+          out="$(ruby scripts/auto_merge_gate.rb \
             --base-sha "$BASE_SHA" \
             --head-sha "$HEAD_SHA" \
             --commit-signers "$SIGNERS" \
-            --label-verified "$LABEL"
-          echo "result=$?" >> "$GITHUB_OUTPUT"
+            --label-verified "$LABEL" 2>&1)"
+          rc=$?
+          echo "result=$rc" >> "$GITHUB_OUTPUT"
+          # Preserve the gate's human-readable reasoning for the job summary.
+          { echo "reasons<<__GATE_EOF__"; echo "$out"; echo "__GATE_EOF__"; } >> "$GITHUB_OUTPUT"
+          echo "$out"
           exit 0
 
-      # Publish an explicit commit status so branch protection can require it
-      # and the merge automation can read a stable context name.
-      - name: Publish commit status
+      # Always GREEN. A red check here used to be ambiguous — humans couldn't
+      # tell "not auto-merge-eligible (normal — routes to a human)" from a real
+      # failing spec. So eligibility is now carried by the `auto-merge-eligible`
+      # LABEL (the machine signal for native auto-merge to key on), the commit
+      # status is always success with a descriptive note, and the reasons go to
+      # the job summary. This job never fails and never merges anything.
+      - name: Publish eligibility (label + status + summary; never red)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RESULT: ${{ steps.gate.outputs.result }}
+          REASONS: ${{ steps.gate.outputs.reasons }}
         run: |
+          set -euo pipefail
           if [ "$RESULT" = "0" ]; then
-            state=success; desc="Eligible for safe-lane auto-merge"
+            desc="Eligible for safe-lane auto-merge"
+            verdict="✅ **Eligible for safe-lane auto-merge** — small, bot-signed, ticket-scoped, allowlisted paths only."
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/labels" -f "labels[]=auto-merge-eligible" >/dev/null 2>&1 || true
           else
-            state=failure; desc="Blocked — routes to human approval"
+            desc="Routes to human approval (advisory — not a failure)"
+            verdict="🔶 **Not auto-merge-eligible — routes to the human one-tap approval lane.** This is **not** a build/spec failure; a human reviews and merges. Reasons below."
+            gh api -X DELETE "repos/$REPO/issues/$PR_NUMBER/labels/auto-merge-eligible" >/dev/null 2>&1 || true
           fi
+          # ALWAYS success: eligibility is signaled by the label above, not by a red check.
           gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
-            -f state="$state" \
+            -f state="success" \
             -f context="auto-merge-gate" \
             -f description="$desc" >/dev/null
-          [ "$RESULT" = "0" ]
+          {
+            echo "## Auto-merge eligibility"
+            echo
+            echo "$verdict"
+            if [ "$RESULT" != "0" ] && [ -n "${REASONS:-}" ]; then
+              echo
+              echo "<details><summary>Why this routes to a human</summary>"
+              echo
+              echo '```'
+              echo "$REASONS"
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

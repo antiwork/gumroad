@@ -33,6 +33,7 @@ class Logins::PasskeysController < ApplicationController
     sign_in(user)
     reset_two_factor_auth_login_session
     merge_guest_cart_with_user_cart
+    refresh_passkey_setup_prompt(user)
 
     Rails.logger.info("passkey.authentication.succeeded user_id=#{user.id} webauthn_credential_id=#{stored_credential.id}")
 

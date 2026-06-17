@@ -47,5 +47,21 @@ describe SendStripeBalanceCheckNotificationJob do
 
       expect(InternalNotificationWorker.jobs.size).to eq(0)
     end
+
+    context "when the disable_stripe_balance_check_notification flag is active" do
+      before do
+        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 300_000_00 })
+        Feature.activate(:disable_stripe_balance_check_notification)
+      end
+
+      it "does not check the balance, notify, or set the redis key" do
+        expect(StripeBalanceCheckService).not_to receive(:new)
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker.jobs.size).to eq(0)
+        expect($redis.get(RedisKey.stripe_balance_topup_needed)).to be_nil
+      end
+    end
   end
 end

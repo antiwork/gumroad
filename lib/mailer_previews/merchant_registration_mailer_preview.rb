@@ -12,4 +12,8 @@ class MerchantRegistrationMailerPreview < ActionMailer::Preview
   def stripe_payouts_disabled
     MerchantRegistrationMailer.stripe_payouts_disabled(User.last&.id)
   end
+
+  def stripe_payouts_under_review
+    MerchantRegistrationMailer.stripe_payouts_under_review(User.last&.id)
+  end
 end

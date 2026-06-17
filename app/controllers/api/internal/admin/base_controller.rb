@@ -369,6 +369,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     end
 
     def serialize_payout(payment)
+      bank_account = payment.bank_account
       {
         external_id: payment.external_id,
         amount_cents: payment.amount_cents,
@@ -376,8 +377,23 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         state: payment.state,
         created_at: payment.created_at.as_json,
         processor: payment.processor,
-        bank_account_visual: payment.bank_account&.account_number_visual,
-        paypal_email: payment.payment_address
+        bank_account_visual: bank_account&.account_number_visual,
+        paypal_email: payment.payment_address,
+        trace_id: nil,
+        stripe_transfer_id: payment.stripe_transfer_id,
+        bank_account: serialize_payout_bank_account(bank_account)
+      }
+    end
+
+    def serialize_payout_bank_account(bank_account)
+      return nil if bank_account.nil?
+      return nil if bank_account.is_a?(CardBankAccount)
+
+      {
+        bank_number: bank_account.routing_number,
+        account_holder_full_name: bank_account.account_holder_full_name,
+        account_type: bank_account.account_type,
+        currency: bank_account.currency
       }
     end
 

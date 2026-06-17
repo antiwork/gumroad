@@ -285,7 +285,7 @@ class Payment < ApplicationRecord
       user.comments.create!(
         content: "Payouts paused automatically after #{failed_count} consecutive failed payouts to the same bank account. Verify the seller's payout details before resuming.",
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-        author_name: "pause_payouts_after_repeated_failures"
+        author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
       )
     end
 

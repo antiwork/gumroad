@@ -3,9 +3,10 @@ import * as React from "react";
 import typia from "typia";
 
 import { formatDate } from "$app/utils/date";
+import { PASSKEY_ADD_ERROR, type Passkey, registerPasskey } from "$app/utils/passkeyRegistration";
 import { asyncVoid } from "$app/utils/promise";
 import { request, ResponseError } from "$app/utils/request";
-import { createPasskey, isPasskeySupported, type PasskeyRegistrationOptions } from "$app/utils/webauthn";
+import { isPasskeySupported } from "$app/utils/webauthn";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -18,14 +19,8 @@ import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 const MAX_PASSKEYS = 10;
 const MAX_NICKNAME_LENGTH = 100;
 const GENERIC_ERROR = "Sorry, something went wrong. Please try again.";
-const ADD_ERROR = "Could not add this passkey. Please try again.";
 
-export type Passkey = {
-  id: string;
-  nickname: string;
-  created_at: string;
-  last_used_at: string | null;
-};
+export type { Passkey };
 
 const formatPasskeyDate = (value: string) => formatDate(parseISO(value), { dateStyle: "medium" });
 
@@ -43,41 +38,12 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
   const handleAdd = asyncVoid(async () => {
     setAdding(true);
     try {
-      const optionsResponse = await request({
-        url: Routes.registration_options_settings_passkeys_path(),
-        method: "POST",
-        accept: "json",
-      });
-      const optionsResult = typia.assert<{
-        success: boolean;
-        options?: PasskeyRegistrationOptions;
-        error_message?: string;
-      }>(await optionsResponse.json());
-      if (!optionsResponse.ok || !optionsResult.success || !optionsResult.options) {
-        throw new ResponseError(optionsResult.error_message ?? ADD_ERROR);
-      }
-
-      const credential = await createPasskey(optionsResult.options);
-
-      const createResponse = await request({
-        url: Routes.settings_passkeys_path(),
-        method: "POST",
-        accept: "json",
-        data: { credential },
-      });
-      const createResult = typia.assert<{ success: boolean; passkey?: Passkey; error_message?: string }>(
-        await createResponse.json(),
-      );
-      if (!createResponse.ok || !createResult.success || !createResult.passkey) {
-        throw new ResponseError(createResult.error_message ?? ADD_ERROR);
-      }
-
-      const added = createResult.passkey;
+      const added = await registerPasskey();
       setPasskeys((current) => [...current, added]);
       showAlert("Passkey added.", "success");
     } catch (e) {
       if (e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
-      showAlert(e instanceof ResponseError ? e.message : ADD_ERROR, "error");
+      showAlert(e instanceof ResponseError ? e.message : PASSKEY_ADD_ERROR, "error");
     } finally {
       setAdding(false);
     }

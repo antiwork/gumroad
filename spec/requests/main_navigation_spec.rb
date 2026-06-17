@@ -30,7 +30,7 @@ describe "Main Navigation", type: :system, js: true do
         expect(page).to have_link("Collaborators")
 
         expect(page).not_to have_link("Community")
-        expect(page).not_to have_link("Settings")
+        expect(page).to have_link("Settings")
 
         toggle_disclosure("Gum")
         within "div[role='menu']" do

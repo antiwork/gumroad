@@ -106,6 +106,21 @@ describe Settings::PasskeysController, type: :controller do
       expect(session[Settings::PasskeysController::REGISTRATION_CHALLENGE_SESSION_KEY]).to be_nil
     end
 
+    it "clears the setup prompt flag once a passkey is added" do
+      session[:prompt_passkey_setup] = true
+      post :registration_options, as: :json
+      credential_params = fake_client.create(
+        challenge: response.parsed_body.dig("options", "challenge"),
+        rp_id:,
+        user_verified: true
+      )
+
+      post :create, params: { credential: credential_params }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(session[:prompt_passkey_setup]).to be_nil
+    end
+
     it "ignores unexpected credential payload fields before verification" do
       post :registration_options, as: :json
       credential_params = valid_credential_params.merge("unexpected" => "ignored")

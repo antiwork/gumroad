@@ -84,6 +84,83 @@ describe Purchase::Risk do
       end
     end
 
+    context "when the chargeback grace period feature is inactive" do
+      before do
+        Feature.deactivate(:chargeback_grace_period)
+      end
+
+      it "adds the chargeback error for exactly one unreversed chargeback older than one year" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 2.years.ago)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+    end
+
+    context "when the chargeback grace period feature is active" do
+      before do
+        Feature.activate(:chargeback_grace_period)
+      end
+
+      after do
+        Feature.deactivate(:chargeback_grace_period)
+      end
+
+      it "does not add errors for exactly one unreversed chargeback older than one year" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 1.year.ago - 1.day)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+
+      it "still adds the chargeback error for one unreversed chargeback within the last year" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 1.year.ago + 1.day)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+
+      it "still adds the chargeback error for multiple old unreversed chargebacks" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 2.years.ago)
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 3.years.ago)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+
+      it "still adds the chargeback error when an old chargeback is accompanied by a recent chargeback" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 2.years.ago)
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 1.month.ago)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+
+      it "counts the same old chargeback once when it matches by both email and browser_guid" do
+        create(:purchase, link: product, email: "test@example.com", browser_guid: "test-guid-123", chargeback_date: 2.years.ago)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+
+      it "counts one old bundle chargeback once when bundle product purchases also match" do
+        bundle = create(:product, :bundle)
+        bundle_purchase = create(:purchase, link: bundle, email: "test@example.com",
+                                            browser_guid: "test-guid-123", is_bundle_purchase: true,
+                                            chargeback_date: 2.years.ago)
+
+        Purchase::CreateBundleProductPurchaseService.new(bundle_purchase, bundle.bundle_products.first).perform
+        bundle_purchase.product_purchases.first.update!(chargeback_date: bundle_purchase.chargeback_date)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+    end
+
     context "when there is a past chargeback by browser_guid" do
       before do
         create(:purchase, link: product, browser_guid: "test-guid-123", chargeback_date: Time.current)

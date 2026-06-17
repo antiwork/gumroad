@@ -9624,6 +9624,8 @@ describe StripeMerchantAccountManager, :vcr do
       allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:stripe_unknown_error)
       allow(active_bank_account).to receive(:is_a?) { |klass| klass == CardBankAccount }
       allow(user).to receive(:active_bank_account).and_return(active_bank_account, active_bank_account, active_bank_account, nil, nil)
+      allow(user).to receive(:with_lock).and_yield
+      allow(merchant_account).to receive(:reload).and_return(merchant_account)
     end
 
     it "captures the active bank once before enqueueing the retry worker" do
@@ -10279,7 +10281,7 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "pauses payouts on the account and notifies the creator by email if payouts are disabled due to info requirement" do
+            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement" do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
 
@@ -10288,6 +10290,30 @@ describe StripeMerchantAccountManager, :vcr do
               end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
 
               expect(user.reload.payouts_paused_internally?).to be true
+              comment = user.comments.with_type_payouts_paused.last
+              expect(comment).to be_present
+              expect(comment.content).to include("requirements.past_due")
+              expect(user.payouts_paused_for_reason).to eq(comment.content)
+            end
+
+            it "applies the pause under a user lock and refreshes the merchant account so concurrent webhooks are serialized" do
+              expect_any_instance_of(User).to receive(:with_lock).and_call_original
+              expect_any_instance_of(MerchantAccount).to receive(:reload).and_call_original
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.reload.payouts_paused_internally? }.from(false).to(true)
+            end
+
+            it "rolls back the pause when the reason comment cannot be written, so a retry can recover" do
+              allow_any_instance_of(MerchantAccount).to receive(:stripe_payouts_paused_comment).and_return("")
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to raise_error(ActiveRecord::RecordInvalid)
+
+              expect(user.reload.payouts_paused_internally?).to be false
+              expect(user.comments.with_type_payouts_paused).to be_empty
             end
 
             it "does not overwrite the payout pause source if payouts are already paused internally" do
@@ -10316,19 +10342,141 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.reload.payouts_paused_internally?).to be true
             end
 
-            it "does not email the creator if payouts are disabled due to a reason other than info requirement" do
-              expect(user.reload.payouts_paused_internally?).to be false
+            it "refreshes the pause reason comment when Stripe's disabled reason changes while already paused by Stripe" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              user.comments.create!(
+                author_name: "Stripe payouts sync",
+                comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+                content: "Payouts automatically paused by Stripe (disabled reason: requirements.past_due)."
+              )
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+              expect(user.reload.payouts_paused_for_reason).to include("rejected.listed")
+            end
+
+            it "does not duplicate the pause reason comment when the Stripe reason is unchanged while already paused by Stripe" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+              described_class.handle_stripe_event(stripe_event)
+              expect(user.comments.with_type_payouts_paused.count).to eq(1)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to change { user.comments.with_type_payouts_paused.count }
+            end
+
+            it "sends the action-required email once when Stripe escalates an account already paused for review" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+              stripe_event["data"]["object"]["requirements"]["currently_due"] = []
+              stripe_event["data"]["object"]["requirements"]["past_due"] = []
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+
+              stripe_event["data"]["object"]["requirements"]["currently_due"] = ["individual.id_number"]
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+            end
+
+            it "clears the pause-email marker when Stripe re-enables payouts" do
+              merchant_account.update!(stripe_payouts_pause_email_sent: "action_required")
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["payouts_enabled"] = true
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(merchant_account.reload.stripe_payouts_pause_email_sent).to be_nil
+            end
+
+            it "does not re-send the pause email when re-paused after a non-Stripe resume while Stripe stays disabled" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              # an admin or update_payout_method resume clears the internal pause but not the marker
+              user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+
               expect do
                 described_class.handle_stripe_event(stripe_event)
               end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
               expect(user.reload.payouts_paused_internally?).to be true
+            end
 
+            it "sends the action-required email for any disabled reason that still has outstanding requirements" do
+              expect(user.reload.payouts_paused_internally?).to be false
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "listed"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("listed")
+            end
+
+            it "does not email the creator when the platform paused payouts" do
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "platform_paused"
 
-              expect do
-                described_class.handle_stripe_event(stripe_event)
-              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_under_review)
+
+              described_class.handle_stripe_event(stripe_event)
+
               expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("platform_paused")
+            end
+
+            it "does not email the creator when Stripe rejected the account" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_disabled)
+              expect(MerchantRegistrationMailer).not_to receive(:stripe_payouts_under_review)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_for_reason).to include("rejected.listed")
+            end
+
+            context "when Stripe is not requesting any fields" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+              end
+
+              it "sends the under-review email for a non-rejected reason with no outstanding requirements" do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+
+                expect(user.reload.payouts_paused_internally?).to be true
+              end
+
+              it "sends the under-review email when only eventually-due (not yet required) fields exist" do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+                stripe_event["data"]["object"]["requirements"]["eventually_due"] = ["individual.id_number"]
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+
+                expect(user.reload.payouts_paused_internally?).to be true
+              end
             end
           end
 
@@ -10413,16 +10561,43 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "resumes payouts on the account if payouts are paused internally by stripe" do
+            it "resumes payouts on the account and records a resume comment if payouts are paused internally by stripe" do
               user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
               expect(user.reload.payouts_paused_internally?).to be true
               expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
 
-              described_class.handle_stripe_event(stripe_event)
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.comments.with_type_payouts_resumed.count }.by(1)
 
               expect(user.reload.payouts_paused_internally?).to be false
               expect(user.payouts_paused_by).to be nil
               expect(user.payouts_paused_by_source).to be nil
+            end
+
+            it "notes that payouts remain creator-paused when Stripe re-enables an account the creator also paused" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              user.update!(payouts_paused_by_user: true)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              user.reload
+              expect(user.payouts_paused_internally?).to be false
+              expect(user.payouts_paused?).to be true # still paused by the creator
+              expect(user.comments.with_type_payouts_resumed.last.content).to include("remain paused by the creator")
+            end
+
+            it "rolls back the resume when clearing the pause-email marker fails, so a retry can recover" do
+              merchant_account.update!(stripe_payouts_pause_email_sent: "action_required")
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              allow_any_instance_of(MerchantAccount).to receive(:update!).and_raise(ActiveRecord::RecordInvalid)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to raise_error(ActiveRecord::RecordInvalid)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.comments.with_type_payouts_resumed.count).to eq(0)
             end
 
             it "does not resume payouts if payouts are paused internally by admin" do

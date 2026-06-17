@@ -1027,7 +1027,7 @@ class Installment < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :post)
       return if result.passed
 
-      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "post"))
     end
 
     def normalize_tag(raw)
