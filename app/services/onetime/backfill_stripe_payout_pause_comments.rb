@@ -27,12 +27,14 @@ module Onetime
         user = merchant_account.user
         return if user.nil?
         return unless user.payouts_paused? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-        return if user.comments.with_type_payouts_paused.exists?
+
+        comment = merchant_account.stripe_payouts_paused_comment
+        return if user.comments.with_type_payouts_paused.last&.content == comment
 
         user.comments.create!(
           author_name: COMMENT_AUTHOR_NAME,
           comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-          content: merchant_account.stripe_payouts_paused_comment
+          content: comment
         )
         puts "Backfilled payout pause comment for User #{user.id} → #{merchant_account.stripe_disabled_reason.inspect}"
       end

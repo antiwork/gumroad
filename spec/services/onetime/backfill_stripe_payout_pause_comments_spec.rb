@@ -24,19 +24,35 @@ describe Onetime::BackfillStripePayoutPauseComments do
       expect(user.reload.payouts_paused_for_reason).to include("listed")
     end
 
-    it "is idempotent and does not write a second comment when one already exists" do
+    it "is idempotent and does not write a second comment when the latest comment already matches" do
       user = stripe_paused_user
-      create(:merchant_account, user:, charge_processor_merchant_id: "acct_two", stripe_disabled_reason: "listed")
+      merchant_account = create(:merchant_account, user:, charge_processor_merchant_id: "acct_two", stripe_disabled_reason: "listed")
       user.comments.create!(
         author_name: "Stripe payouts sync",
         comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-        content: "Payouts automatically paused by Stripe (disabled reason: requirements.past_due)."
+        content: merchant_account.stripe_payouts_paused_comment
       )
 
       expect do
         described_class.process
         described_class.process
       end.not_to change { user.comments.with_type_payouts_paused.count }
+    end
+
+    it "writes the Stripe reason even when an older, mismatched payouts_paused comment exists" do
+      user = stripe_paused_user
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_six", stripe_disabled_reason: "listed")
+      user.comments.create!(
+        author_name: "admin",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+        content: "Payouts paused by an admin for an unrelated earlier reason."
+      )
+
+      expect do
+        described_class.process
+      end.to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+      expect(user.reload.payouts_paused_for_reason).to include("listed")
     end
 
     it "skips users whose payouts are paused by the system, not Stripe" do
