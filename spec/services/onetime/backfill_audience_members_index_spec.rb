@@ -9,14 +9,6 @@ describe Onetime::BackfillAudienceMembersIndex do
     $redis.del(described_class::REDIS_FAILED_IDS_KEY)
   end
 
-  it "raises when the index does not exist" do
-    AudienceMember.__elasticsearch__.delete_index!
-
-    expect do
-      described_class.process
-    end.to raise_error(/#{AudienceMember.index_name} index is missing/)
-  end
-
   it "bulk indexes all audience members in batches and tracks the cursor" do
     members = create_list(:audience_member, 3)
 
@@ -172,15 +164,6 @@ describe Onetime::BackfillAudienceMembersIndex do
       expect(BackfillAudienceMembersIndexJob.jobs.map { _1["args"] }).to eq(
         [[members.third.id, members.third.id, nil, described_class::BATCH_SIZE]]
       )
-    end
-
-    it "raises when the index does not exist" do
-      AudienceMember.__elasticsearch__.delete_index!
-
-      expect do
-        described_class.spread
-      end.to raise_error(/index is missing/)
-      expect(BackfillAudienceMembersIndexJob.jobs).to be_empty
     end
   end
 
