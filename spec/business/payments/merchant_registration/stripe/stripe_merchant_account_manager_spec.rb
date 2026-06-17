@@ -10358,6 +10358,37 @@ describe StripeMerchantAccountManager, :vcr do
               end.not_to change { user.comments.with_type_payouts_paused.count }
             end
 
+            it "sends the action-required email once when Stripe escalates an account already paused for review" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+              stripe_event["data"]["object"]["requirements"]["currently_due"] = []
+              stripe_event["data"]["object"]["requirements"]["past_due"] = []
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+
+              stripe_event["data"]["object"]["requirements"]["currently_due"] = ["individual.id_number"]
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+            end
+
+            it "clears the action-required notification flag when Stripe re-enables payouts" do
+              merchant_account.update!(stripe_payouts_action_required_notified: true)
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["payouts_enabled"] = true
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(merchant_account.reload.stripe_payouts_action_required_notified).to be_falsey
+            end
+
             it "sends the action-required email for any disabled reason that still has outstanding requirements" do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "listed"

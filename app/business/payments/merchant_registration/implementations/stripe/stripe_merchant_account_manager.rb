@@ -875,6 +875,11 @@ module StripeMerchantAccountManager
       MerchantRegistrationMailer.stripe_charges_disabled(user.id).deliver_later(queue: "critical")
     end
 
+    action_required_fields_present = [requirements["currently_due"], requirements["past_due"],
+                                      future_requirements["currently_due"], future_requirements["past_due"],
+                                      alternative_fields_due].compact.flatten.any?
+    pause_email_type = stripe_payouts_pause_email_type(requirements["disabled_reason"], action_required_fields_present)
+
     if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
       ActiveRecord::Base.transaction do
         user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
@@ -884,6 +889,7 @@ module StripeMerchantAccountManager
           content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
       end
+      merchant_account.update!(stripe_payouts_action_required_notified: false) if merchant_account.stripe_payouts_action_required_notified
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
       ActiveRecord::Base.transaction do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
@@ -893,12 +899,10 @@ module StripeMerchantAccountManager
           content: merchant_account.stripe_payouts_paused_comment
         )
       end
-      action_required_fields_present = [requirements["currently_due"], requirements["past_due"],
-                                        future_requirements["currently_due"], future_requirements["past_due"],
-                                        alternative_fields_due].compact.flatten.any?
-      case stripe_payouts_pause_email_type(requirements["disabled_reason"], action_required_fields_present)
+      case pause_email_type
       when :action_required
         MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
+        merchant_account.update!(stripe_payouts_action_required_notified: true)
       when :under_review
         MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
       end
@@ -910,6 +914,10 @@ module StripeMerchantAccountManager
           comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
           content: refreshed_comment
         )
+      end
+      if pause_email_type == :action_required && !merchant_account.stripe_payouts_action_required_notified
+        MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
+        merchant_account.update!(stripe_payouts_action_required_notified: true)
       end
     end
 
