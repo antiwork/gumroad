@@ -16,7 +16,7 @@ module Onetime
 
       scope.in_batches(of: batch_size) do |batch|
         ReplicaLagWatcher.watch
-        batch.each { |merchant_account| backfill_comment(merchant_account) }
+        batch.includes(:user).each { |merchant_account| backfill_comment(merchant_account) }
       end
     end
 
@@ -26,8 +26,10 @@ module Onetime
 
         user = merchant_account.user
         return if user.nil?
-        return unless merchant_account == user.stripe_account
+        # Cheap flag checks first; the canonical-account query only runs for the
+        # small set of Stripe-paused users (vs. every alive Stripe account).
         return unless user.payouts_paused? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+        return unless merchant_account == user.stripe_account
 
         comment = merchant_account.stripe_payouts_paused_comment
         return if user.comments.with_type_payouts_paused.last&.content == comment
