@@ -31,5 +31,21 @@ describe LicensesController do
       expect(response).to be_successful
       expect(license.reload.disabled_at).to be_nil
     end
+
+    it "resets the license uses when reset_uses is passed" do
+      license.update!(uses: 7)
+      put :update, format: :json, params: { id: license.external_id, reset_uses: true }
+      expect(response).to be_successful
+      expect(license.reload.uses).to eq 0
+    end
+
+    it "does not change the enabled status when resetting uses" do
+      license.update!(uses: 3)
+      expect(license.disabled_at).to be_nil
+      put :update, format: :json, params: { id: license.external_id, reset_uses: true }
+      expect(response).to be_successful
+      expect(license.reload.disabled_at).to be_nil
+      expect(license.uses).to eq 0
+    end
   end
 end

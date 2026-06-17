@@ -80,6 +80,21 @@ describe License do
     end
   end
 
+  describe "#reset_uses!" do
+    let(:license) { create(:license, uses: 5) }
+
+    it "resets the uses count to zero" do
+      expect(license.reset_uses!).to be(true)
+      expect(license.reload.uses).to eq 0
+    end
+
+    it "is a no-op result-wise when uses is already zero" do
+      license.update!(uses: 0)
+      expect(license.reset_uses!).to be(true)
+      expect(license.reload.uses).to eq 0
+    end
+  end
+
   describe "search index callbacks" do
     let!(:purchase) { create(:purchase, :with_license) }
     let!(:license) { purchase.license }

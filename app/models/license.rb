@@ -41,6 +41,10 @@ class License < ApplicationRecord
     save!
   end
 
+  def reset_uses!
+    update!(uses: 0)
+  end
+
   def rotate!
     self.serial = nil
     generate_serial

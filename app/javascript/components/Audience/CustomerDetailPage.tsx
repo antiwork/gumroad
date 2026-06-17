@@ -30,6 +30,7 @@ import {
   resendPing,
   resendPost,
   resendReceipt,
+  resetLicenseUses,
   revokeAccess,
   undoRevokeAccess,
   updateCallUrl,
@@ -551,6 +552,18 @@ const CustomerDetailPage = ({
                   () => {
                     showAlert("Changes saved!", "success");
                     updateCustomer({ license: { ...license, enabled } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  },
+                )
+              }
+              onReset={() =>
+                resetLicenseUses(license.id).then(
+                  () => {
+                    showAlert("License uses reset", "success");
+                    updateCustomer({ license: { ...license, uses: 0 } });
                   },
                   (e: unknown) => {
                     assertResponseError(e);
@@ -1471,12 +1484,26 @@ const OptionSection = ({
   );
 };
 
-const LicenseSection = ({ license, onSave }: { license: License; onSave: (enabled: boolean) => Promise<void> }) => {
+const LicenseSection = ({
+  license,
+  onSave,
+  onReset,
+}: {
+  license: License;
+  onSave: (enabled: boolean) => Promise<void>;
+  onReset: () => Promise<void>;
+}) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleSave = async (enabled: boolean) => {
     setIsLoading(true);
     await onSave(enabled);
+    setIsLoading(false);
+  };
+
+  const handleReset = async () => {
+    setIsLoading(true);
+    await onReset();
     setIsLoading(false);
   };
 
@@ -1496,6 +1523,17 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
         <CardContent>
           <h5 className="grow font-bold">Uses</h5>
           {license.uses}
+          {license.uses > 0 ? (
+            <Button
+              outline
+              disabled={isLoading}
+              onClick={() => void handleReset()}
+              aria-label="Reset uses"
+              title="Reset uses to 0"
+            >
+              Reset
+            </Button>
+          ) : null}
         </CardContent>
         <CardContent>
           {license.enabled ? (

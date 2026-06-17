@@ -5,7 +5,9 @@ class LicensesController < Sellers::BaseController
     license = License.find_by_external_id!(params[:id])
     authorize [:audience, license.purchase], :manage_license?
 
-    if ActiveModel::Type::Boolean.new.cast(params[:enabled])
+    if params.key?(:reset_uses)
+      license.reset_uses!
+    elsif ActiveModel::Type::Boolean.new.cast(params[:enabled])
       license.enable!
     else
       license.disable!
