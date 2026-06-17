@@ -1489,7 +1489,7 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
           </header>
         </CardContent>
         <CardContent>
-          <pre className="grow whitespace-pre-wrap break-all">
+          <pre className="grow break-all whitespace-pre-wrap">
             <code>{license.key}</code>
           </pre>
         </CardContent>
