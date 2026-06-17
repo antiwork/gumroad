@@ -9624,6 +9624,8 @@ describe StripeMerchantAccountManager, :vcr do
       allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:stripe_unknown_error)
       allow(active_bank_account).to receive(:is_a?) { |klass| klass == CardBankAccount }
       allow(user).to receive(:active_bank_account).and_return(active_bank_account, active_bank_account, active_bank_account, nil, nil)
+      allow(user).to receive(:with_lock).and_yield
+      allow(merchant_account).to receive(:reload).and_return(merchant_account)
     end
 
     it "captures the active bank once before enqueueing the retry worker" do
