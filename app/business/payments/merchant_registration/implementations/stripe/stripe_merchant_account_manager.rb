@@ -902,6 +902,15 @@ module StripeMerchantAccountManager
       when :under_review
         MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
       end
+    elsif stripe_account["payouts_enabled"] == false && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+      refreshed_comment = merchant_account.stripe_payouts_paused_comment
+      if user.comments.with_type_payouts_paused.last&.content != refreshed_comment
+        user.comments.create!(
+          author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+          content: refreshed_comment
+        )
+      end
     end
 
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at

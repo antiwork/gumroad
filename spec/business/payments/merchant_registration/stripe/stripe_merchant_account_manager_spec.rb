@@ -10331,6 +10331,33 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.reload.payouts_paused_internally?).to be true
             end
 
+            it "refreshes the pause reason comment when Stripe's disabled reason changes while already paused by Stripe" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              user.comments.create!(
+                author_name: "Stripe payouts sync",
+                comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+                content: "Payouts automatically paused by Stripe (disabled reason: requirements.past_due)."
+              )
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.comments.with_type_payouts_paused.count }.by(1)
+
+              expect(user.reload.payouts_paused_for_reason).to include("rejected.listed")
+            end
+
+            it "does not duplicate the pause reason comment when the Stripe reason is unchanged while already paused by Stripe" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+              described_class.handle_stripe_event(stripe_event)
+              expect(user.comments.with_type_payouts_paused.count).to eq(1)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to change { user.comments.with_type_payouts_paused.count }
+            end
+
             it "sends the action-required email for any disabled reason that still has outstanding requirements" do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "listed"
