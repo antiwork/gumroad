@@ -206,6 +206,17 @@ describe LoginsController, type: :controller, inertia: true do
 
         expect(Rails.logger).not_to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
       end
+
+      it "does not log the fallback event while the login is still pending 2FA" do
+        create(:webauthn_credential, user: @user)
+        @user.update!(two_factor_authentication_enabled: true)
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(controller.user_signed_in?).to be(false)
+        expect(Rails.logger).not_to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
+      end
     end
 
     it "logs in if user already exists" do

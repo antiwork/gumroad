@@ -48,13 +48,13 @@ class LoginsController < Devise::SessionsController
 
     return redirect_with_login_error("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!") if @user.deleted?
 
-    if @user.passkeys_enabled?
-      Rails.logger.info("passkey.password_fallback user_id=#{@user.id}")
-    end
-
     @user.remember_me = true # Always "remember" user sessions
 
     sign_in_or_prepare_for_two_factor_auth(@user)
+
+    if user_signed_in? && @user.passkeys_enabled?
+      Rails.logger.info("passkey.password_fallback user_id=#{@user.id}")
+    end
 
     if @user.respond_to?(:pwned?) && @user.pwned?
       flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."
