@@ -17,7 +17,8 @@ name: auto-merge-gate
 #
 #   Authorization (finding #4) comes from VERIFIED per-commit signatures pulled
 #   from the API — not the mutable PR author field. The label is read from the
-#   API too. The job has read-only permissions and no build/test of PR code.
+#   API too. The job has only the permissions needed to label the PR and publish
+#   the gate status, and no build/test of PR code.
 #
 # This check is advisory until added as a REQUIRED status check in branch
 # protection. The merge itself is GitHub native auto-merge, which only fires
@@ -120,13 +121,11 @@ jobs:
           echo "$out"
           exit 0
 
-      # Always GREEN. A red check here used to be ambiguous — humans couldn't
-      # tell "not auto-merge-eligible (normal — routes to a human)" from a real
-      # failing spec. So eligibility is now carried by the `auto-merge-eligible`
-      # LABEL (the machine signal for native auto-merge to key on), the commit
-      # status is always success with a descriptive note, and the reasons go to
-      # the job summary. This job never fails and never merges anything.
-      - name: Publish eligibility (label + status + summary; never red)
+      # Publish a status that matches the gate result so branch protection and
+      # native auto-merge can continue to treat this workflow as an enforceable
+      # security boundary. The job itself still exits successfully after posting
+      # the explicit status and human-readable summary.
+      - name: Publish eligibility (label + status + summary)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -137,17 +136,18 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$RESULT" = "0" ]; then
+            state="success"
             desc="Eligible for safe-lane auto-merge"
             verdict="✅ **Eligible for safe-lane auto-merge** — small, bot-signed, ticket-scoped, allowlisted paths only."
             gh api -X POST "repos/$REPO/issues/$PR_NUMBER/labels" -f "labels[]=auto-merge-eligible" >/dev/null 2>&1 || true
           else
-            desc="Routes to human approval (advisory — not a failure)"
-            verdict="🔶 **Not auto-merge-eligible — routes to the human one-tap approval lane.** This is **not** a build/spec failure; a human reviews and merges. Reasons below."
+            state="failure"
+            desc="Blocked from safe-lane auto-merge; routes to human approval"
+            verdict="🔴 **Not auto-merge-eligible — blocked from the safe-lane auto-merge path and routed to the human one-tap approval lane.** This is **not** a build/spec failure; a human reviews and merges. Reasons below."
             gh api -X DELETE "repos/$REPO/issues/$PR_NUMBER/labels/auto-merge-eligible" >/dev/null 2>&1 || true
           fi
-          # ALWAYS success: eligibility is signaled by the label above, not by a red check.
           gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
-            -f state="success" \
+            -f state="$state" \
             -f context="auto-merge-gate" \
             -f description="$desc" >/dev/null
           {
