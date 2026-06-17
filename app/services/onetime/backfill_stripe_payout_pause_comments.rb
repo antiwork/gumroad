@@ -26,6 +26,7 @@ module Onetime
 
         user = merchant_account.user
         return if user.nil?
+        return unless merchant_account == user.stripe_account
         return unless user.payouts_paused? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
 
         comment = merchant_account.stripe_payouts_paused_comment

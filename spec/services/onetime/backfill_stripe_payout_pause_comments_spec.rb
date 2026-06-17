@@ -77,5 +77,19 @@ describe Onetime::BackfillStripePayoutPauseComments do
 
       expect { described_class.process }.not_to change { user.comments.with_type_payouts_paused.count }
     end
+
+    it "writes one comment from the canonical account and stays idempotent when a user has multiple Stripe accounts" do
+      user = stripe_paused_user
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_a", stripe_disabled_reason: "requirements.past_due")
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_b", stripe_disabled_reason: "listed")
+      canonical_reason = user.stripe_account.stripe_payouts_paused_comment
+
+      expect do
+        described_class.process
+        described_class.process
+      end.to change { user.comments.with_type_payouts_paused.count }.from(0).to(1)
+
+      expect(user.reload.payouts_paused_for_reason).to eq(canonical_reason)
+    end
   end
 end
