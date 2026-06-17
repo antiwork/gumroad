@@ -10564,6 +10564,19 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.payouts_paused_by_source).to be nil
             end
 
+            it "rolls back the resume when clearing the pause-email marker fails, so a retry can recover" do
+              merchant_account.update!(stripe_payouts_pause_email_sent: "action_required")
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              allow_any_instance_of(MerchantAccount).to receive(:update!).and_raise(ActiveRecord::RecordInvalid)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to raise_error(ActiveRecord::RecordInvalid)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.comments.with_type_payouts_resumed.count).to eq(0)
+            end
+
             it "does not resume payouts if payouts are paused internally by admin" do
               user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
               expect(user.reload.payouts_paused_internally?).to be true

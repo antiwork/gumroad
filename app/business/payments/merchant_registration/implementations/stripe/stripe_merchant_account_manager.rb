@@ -907,8 +907,8 @@ module StripeMerchantAccountManager
           comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
           content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
+        merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
       end
-      merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
       ActiveRecord::Base.transaction do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
