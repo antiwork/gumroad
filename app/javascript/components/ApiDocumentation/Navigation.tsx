@@ -50,6 +50,9 @@ export const Navigation = () => (
             <a href="#offer-codes">Offer codes</a>
           </li>
           <li>
+            <a href="#emails">Emails</a>
+          </li>
+          <li>
             <a href="#custom-fields">Custom fields</a>
           </li>
           <li>

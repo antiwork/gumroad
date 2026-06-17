@@ -12,6 +12,14 @@ import {
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
 import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
 import {
+  CreateEmail,
+  DeleteEmail,
+  GetEmail,
+  GetEmails,
+  PreviewEmail,
+  SendEmail,
+} from "$app/components/ApiDocumentation/Endpoints/Emails";
+import {
   AbortFile,
   AttachFile,
   CompleteFile,
@@ -178,6 +186,15 @@ export default function Api() {
                 <CreateOfferCode />
                 <UpdateOfferCode />
                 <DeleteOfferCode />
+              </ApiResource>
+
+              <ApiResource name="Emails" id="emails">
+                <GetEmails />
+                <GetEmail />
+                <CreateEmail />
+                <PreviewEmail />
+                <SendEmail />
+                <DeleteEmail />
               </ApiResource>
 
               <ApiResource name="Custom fields" id="custom-fields">

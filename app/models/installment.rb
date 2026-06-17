@@ -613,6 +613,32 @@ class Installment < ApplicationRecord
     ready_to_publish? ? "scheduled" : "draft"
   end
 
+  def as_json(options = {})
+    return as_json_for_api if options[:api_scopes].present?
+
+    super
+  end
+
+  def as_json_for_api(include_audience_count: false)
+    {
+      id: external_id,
+      subject: name,
+      message:,
+      audience_type: installment_type,
+      product_id: link&.external_id,
+      state: display_type,
+      published_at:,
+      scheduled_at: installment_rule&.to_be_published_at,
+      send_emails: send_emails?,
+      shown_on_profile: shown_on_profile?,
+      audience_count: include_audience_count ? api_audience_members_count : nil,
+      recipients_count: published? ? customer_count : nil,
+      url: published? ? full_url : nil,
+      created_at:,
+      updated_at:,
+    }
+  end
+
   def publish!(published_at: nil)
     enforce_user_email_confirmation!
     transcode_videos!
@@ -855,6 +881,12 @@ class Installment < ApplicationRecord
     else
       AudienceMember.filter(seller_id:, params: audience_members_filter_params).limit(limit).count
     end
+  end
+
+  def api_audience_members_count
+    audience_members_count
+  rescue StandardError
+    nil
   end
 
   def self.receivable_by_customers_of_product(product:, variant_external_id:)
