@@ -191,6 +191,7 @@ class ApplicationController < ActionController::Base
     def refresh_passkey_setup_prompt(user)
       if cookies[:is_gumroad_mobile_app].blank? && user.passkeys_setup_pending?
         session[PROMPT_PASSKEY_SETUP_SESSION_KEY] = user.id
+        Rails.logger.info("passkey.prompt.eligible user_id=#{user.id}")
       else
         session.delete(PROMPT_PASSKEY_SETUP_SESSION_KEY)
       end

@@ -47,6 +47,14 @@ describe Settings::PasskeysController, type: :controller do
       expect(options["excludeCredentials"]).to contain_exactly("type" => "public-key", "id" => credential.webauthn_id)
     end
 
+    it "logs the enrollment-started analytics event" do
+      allow(Rails.logger).to receive(:info)
+
+      post :registration_options, as: :json
+
+      expect(Rails.logger).to have_received(:info).with("passkey.registration.started user_id=#{user.id}")
+    end
+
     it "returns an error when the user already has the maximum number of passkeys" do
       create_list(:webauthn_credential, WebauthnCredential::MAX_PER_USER, user:)
 

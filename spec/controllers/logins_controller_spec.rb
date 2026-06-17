@@ -144,6 +144,14 @@ describe LoginsController, type: :controller, inertia: true do
         expect(session[:prompt_passkey_setup]).to eq(@user.id)
       end
 
+      it "logs the prompt-eligible analytics event after an eligible login" do
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).to have_received(:info).with("passkey.prompt.eligible user_id=#{@user.id}")
+      end
+
       it "does not flag the prompt when the user already has a passkey" do
         create(:webauthn_credential, user: @user)
 
@@ -175,6 +183,28 @@ describe LoginsController, type: :controller, inertia: true do
         post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
         expect(session[:prompt_passkey_setup]).to be_nil
+      end
+    end
+
+    describe "passkey password fallback" do
+      before { Feature.activate(:passkeys) }
+      after { Feature.deactivate(:passkeys) }
+
+      it "logs the password-fallback analytics event when a passkey user signs in with a password" do
+        create(:webauthn_credential, user: @user)
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
+      end
+
+      it "does not log the fallback event for a user without a passkey" do
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).not_to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
       end
     end
 

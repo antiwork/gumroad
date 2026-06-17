@@ -14,6 +14,8 @@ class Logins::PasskeysController < ApplicationController
   end
 
   def create
+    Rails.logger.info("passkey.authentication.started")
+
     challenge = session.delete(AUTHENTICATION_CHALLENGE_SESSION_KEY)
     raise VerificationError, "missing_challenge" if challenge.blank?
 

@@ -32,6 +32,8 @@ class Settings::PasskeysController < Settings::BaseController
 
     session[REGISTRATION_CHALLENGE_SESSION_KEY] = options.challenge
 
+    Rails.logger.info("passkey.registration.started user_id=#{@user.id}")
+
     render json: { success: true, options: options.as_json }
   end
 

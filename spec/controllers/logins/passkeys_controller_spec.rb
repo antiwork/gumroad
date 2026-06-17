@@ -88,6 +88,14 @@ describe Logins::PasskeysController, type: :controller do
       expect(session.delete(Logins::PasskeysController::AUTHENTICATION_CHALLENGE_SESSION_KEY)).to be_nil
     end
 
+    it "logs the login-started analytics event when an assertion is submitted" do
+      allow(Rails.logger).to receive(:info)
+
+      post :create, as: :json
+
+      expect(Rails.logger).to have_received(:info).with("passkey.authentication.started")
+    end
+
     it "persists the updated sign count" do
       credential = store_credential(fake_register)
 
