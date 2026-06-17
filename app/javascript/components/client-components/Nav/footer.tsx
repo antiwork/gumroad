@@ -30,11 +30,10 @@ function NavbarFooter() {
         icon={<Book pack="filled" className="size-5" />}
         href={Routes.help_center_root_url(routeParams)}
       />
-      <NavLink
+      <ClientNavLink
         text="Settings"
         icon={<Cog pack="filled" className="size-5" />}
         href={Routes.settings_main_url(routeParams)}
-        component={Link}
       />
       <DashboardNavProfilePopover user={currentSeller}>
         <Menu className="flex flex-col border-0! shadow-none! dark:border!">
