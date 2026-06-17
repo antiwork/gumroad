@@ -25,24 +25,25 @@ module StripeMerchantAccountManager
   end
   private_class_method :stripe_payouts_pause_email_type
 
-  # Sends at most one of each pause email per Stripe-disabled episode, surviving
-  # admin/payout-method resumes (the marker is cleared only when Stripe re-enables
-  # payouts). Action-required is sent on first notice or on escalation from
-  # under-review; under-review is sent only as the first notice.
-  def self.deliver_stripe_payouts_pause_email(user, merchant_account, pause_email_type)
+  # Claims (at most one of each) pause email per Stripe-disabled episode,
+  # surviving admin/payout-method resumes (the marker is cleared only when
+  # Stripe re-enables payouts). Action-required is claimed on first notice or on
+  # escalation from under-review; under-review only as the first notice. Updates
+  # the marker (called inside the user lock) and returns the email type to
+  # enqueue after the lock commits, or nil.
+  def self.claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
     case pause_email_type
     when :action_required
-      return if merchant_account.stripe_payouts_pause_email_sent == "action_required"
-      MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
+      return nil if merchant_account.stripe_payouts_pause_email_sent == "action_required"
     when :under_review
-      return unless merchant_account.stripe_payouts_pause_email_sent.nil?
-      MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
+      return nil unless merchant_account.stripe_payouts_pause_email_sent.nil?
     else
-      return
+      return nil
     end
     merchant_account.update!(stripe_payouts_pause_email_sent: pause_email_type.to_s)
+    pause_email_type
   end
-  private_class_method :deliver_stripe_payouts_pause_email
+  private_class_method :claim_stripe_payouts_pause_email
 
   def self.account_holder_name_synced_to_stripe?(user)
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
@@ -899,8 +900,13 @@ module StripeMerchantAccountManager
                                       alternative_fields_due].compact.flatten.any?
     pause_email_type = stripe_payouts_pause_email_type(requirements["disabled_reason"], action_required_fields_present)
 
-    if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-      ActiveRecord::Base.transaction do
+    # Serialize concurrent account.updated webhooks for the same user so two
+    # near-simultaneous events can't both pass the "not yet paused" check and
+    # write duplicate comments / send duplicate emails. The email is enqueued
+    # after the lock commits; the dedupe marker is claimed inside it.
+    pause_email_to_send = nil
+    user.with_lock do
+      if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
         user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
         user.comments.create!(
           author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
@@ -908,27 +914,32 @@ module StripeMerchantAccountManager
           content: "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
         merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
-      end
-    elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
-      ActiveRecord::Base.transaction do
+      elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.comments.create!(
           author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
           comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
           content: merchant_account.stripe_payouts_paused_comment
         )
+        pause_email_to_send = claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
+      elsif stripe_account["payouts_enabled"] == false && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+        refreshed_comment = merchant_account.stripe_payouts_paused_comment
+        if user.comments.with_type_payouts_paused.last&.content != refreshed_comment
+          user.comments.create!(
+            author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+            comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+            content: refreshed_comment
+          )
+        end
+        pause_email_to_send = claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
       end
-      deliver_stripe_payouts_pause_email(user, merchant_account, pause_email_type)
-    elsif stripe_account["payouts_enabled"] == false && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-      refreshed_comment = merchant_account.stripe_payouts_paused_comment
-      if user.comments.with_type_payouts_paused.last&.content != refreshed_comment
-        user.comments.create!(
-          author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
-          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-          content: refreshed_comment
-        )
-      end
-      deliver_stripe_payouts_pause_email(user, merchant_account, pause_email_type)
+    end
+
+    case pause_email_to_send
+    when :action_required
+      MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
+    when :under_review
+      MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
 
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at

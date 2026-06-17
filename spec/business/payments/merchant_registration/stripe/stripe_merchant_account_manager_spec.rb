@@ -10294,6 +10294,14 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.payouts_paused_for_reason).to eq(comment.content)
             end
 
+            it "applies the pause under a user lock so concurrent webhooks are serialized" do
+              expect_any_instance_of(User).to receive(:with_lock).and_call_original
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { user.reload.payouts_paused_internally? }.from(false).to(true)
+            end
+
             it "rolls back the pause when the reason comment cannot be written, so a retry can recover" do
               allow_any_instance_of(MerchantAccount).to receive(:stripe_payouts_paused_comment).and_return("")
 
