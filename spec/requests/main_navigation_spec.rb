@@ -36,7 +36,7 @@ describe "Main Navigation", type: :system, js: true do
           expect(page).not_to have_text(user.display_name)
           expect(page).to have_menuitem("Profile")
           expect(page).to have_menuitem("Settings")
-          expect(page).to have_menuitem("Teams")
+          expect(page).not_to have_menuitem("Teams")
           expect(page).not_to have_menuitem("Affiliates")
           expect(page).to have_menuitem("Logout")
         end
@@ -99,6 +99,7 @@ describe "Main Navigation", type: :system, js: true do
           within "div[role='menu']" do
             expect(page).to have_text(user.display_name)
             expect(page).to have_text(seller.display_name)
+            expect(page).to have_menuitem("Teams")
           end
         end
       end
