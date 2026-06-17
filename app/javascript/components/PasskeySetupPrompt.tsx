@@ -15,10 +15,7 @@ const SNOOZE_KEY_PREFIX = "passkeySetupPromptSnoozedUntil";
 const SNOOZE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const PasskeySetupPrompt = () => {
-  const { authenticity_token, prompt_passkey_setup } = usePage<{
-    authenticity_token: string;
-    prompt_passkey_setup?: boolean;
-  }>().props;
+  const { prompt_passkey_setup } = usePage<{ prompt_passkey_setup?: boolean }>().props;
   const currentSeller = useCurrentSeller();
   const snoozeKey = `${SNOOZE_KEY_PREFIX}:${currentSeller?.id}`;
   const [supported, setSupported] = React.useState(false);
@@ -47,7 +44,7 @@ export const PasskeySetupPrompt = () => {
   const handleSetup = asyncVoid(async () => {
     setAdding(true);
     try {
-      await registerPasskey(authenticity_token);
+      await registerPasskey();
       setDismissed(true);
       showAlert("You're set — next time, sign in with your passkey.", "success");
     } catch (e) {

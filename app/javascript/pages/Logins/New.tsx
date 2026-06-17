@@ -106,7 +106,6 @@ function LoginPage() {
       signal?: AbortSignal;
       surfaceErrors: boolean;
     }) => {
-      const csrfHeaders = { "X-CSRF-Token": authenticity_token };
       try {
         let options = embeddedOptions;
         if (!options) {
@@ -114,7 +113,6 @@ function LoginPage() {
             url: Routes.login_passkey_options_path(),
             method: "POST",
             accept: "json",
-            headers: csrfHeaders,
             abortSignal: signal,
           });
           const optionsResult = typia.assert<{
@@ -137,7 +135,6 @@ function LoginPage() {
           method: "POST",
           accept: "json",
           data: { credential, next },
-          headers: csrfHeaders,
           abortSignal: signal,
         });
         const loginResult = typia.assert<{ success: boolean; redirect_location?: string; error_message?: string }>(
@@ -155,7 +152,7 @@ function LoginPage() {
         if (surfaceErrors) setPasskeyError(e instanceof ResponseError ? e.message : PASSKEY_ERROR);
       }
     },
-    [authenticity_token, next],
+    [next],
   );
 
   const handlePasskeyLogin = asyncVoid(async () => {

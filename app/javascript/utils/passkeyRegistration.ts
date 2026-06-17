@@ -12,14 +12,11 @@ export type Passkey = {
 
 export const PASSKEY_ADD_ERROR = "Could not add this passkey. Please try again.";
 
-export const registerPasskey = async (csrfToken?: string): Promise<Passkey> => {
-  const headers = csrfToken ? { "X-CSRF-Token": csrfToken } : undefined;
-
+export const registerPasskey = async (): Promise<Passkey> => {
   const optionsResponse = await request({
     url: Routes.registration_options_settings_passkeys_path(),
     method: "POST",
     accept: "json",
-    headers,
   });
   const optionsResult = typia.assert<{
     success: boolean;
@@ -37,7 +34,6 @@ export const registerPasskey = async (csrfToken?: string): Promise<Passkey> => {
     method: "POST",
     accept: "json",
     data: { credential },
-    headers,
   });
   const createResult = typia.assert<{ success: boolean; passkey?: Passkey; error_message?: string }>(
     await createResponse.json(),
