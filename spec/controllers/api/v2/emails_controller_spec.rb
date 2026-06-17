@@ -399,6 +399,25 @@ describe Api::V2::EmailsController do
           message: "The email has already been sent."
         }.as_json)
       end
+
+      it "does not immediately send a scheduled email" do
+        scheduled = create(
+          :scheduled_installment,
+          seller: @user,
+          link: nil,
+          installment_type: Installment::AUDIENCE_TYPE
+        )
+
+        expect do
+          post @action, params: @params.merge(id: scheduled.external_id)
+        end.not_to change(PostEmailBlast, :count)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email is scheduled to be sent at its scheduled time."
+        }.as_json)
+        expect(scheduled.reload.published?).to be(false)
+      end
     end
   end
 

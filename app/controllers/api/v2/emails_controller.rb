@@ -79,6 +79,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
 
   def send_email
     return render_response(false, message: "The email has already been sent.") if @installment.published?
+    return render_response(false, message: "The email is scheduled to be sent at its scheduled time.") if @installment.ready_to_publish?
 
     service = SaveInstallmentService.new(
       seller: current_seller,
