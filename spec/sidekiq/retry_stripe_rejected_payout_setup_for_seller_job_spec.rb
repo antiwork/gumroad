@@ -77,7 +77,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       let!(:merchant_account) { create(:merchant_account, user:) }
       let!(:note) { add_note(postal_prefix) }
 
-      it "records the resolution instead of a failed attempt" do
+      it "stops quietly without a false resolution or a recorded attempt" do
         allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do
           note.mark_deleted!
           raise Stripe::InvalidRequestError.new("Representative information is invalid", "person")
@@ -86,7 +86,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
         described_class.new.perform(user.id)
 
         expect(note.reload).not_to be_alive
-        expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::RESOLVED_NOTE)
+        expect(user.comments.alive.with_type_payout_note.where("content LIKE ?", "#{described_class::RESOLVED_NOTE[0, 20]}%")).to be_empty
         expect(note.json_data["retry_count"]).to be_nil
       end
     end

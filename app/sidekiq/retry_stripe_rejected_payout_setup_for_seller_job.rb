@@ -4,8 +4,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed
 
-  RESOLVED_NOTE = "Stripe accepted the previously rejected postal code / bank account on automated retry; " \
-                  "payout setup is no longer blocked."
+  RESOLVED_NOTE = "Stripe accepted the previously rejected postal code / bank account on automated retry."
   GAVE_UP_NOTE = "Automated retries to fix the rejected postal code / bank account were exhausted. " \
                  "Manual follow-up is needed."
 
@@ -22,9 +21,9 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     end
 
     remediated = attempt_remediation(user, note)
-    if remediated || !note.reload.alive?
+    if remediated
       resolve!(user, note)
-    else
+    elsif note.reload.alive?
       record_attempt!(note)
     end
   rescue => e
