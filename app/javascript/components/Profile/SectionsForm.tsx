@@ -811,6 +811,10 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
       ) : null}
 
       <section className="grid gap-8 border-t border-border p-4! md:p-8!">
+        <header className="grid content-start gap-3">
+          <h2>Pages</h2>
+          <small>Each page is a tab on your profile.</small>
+        </header>
         <Fieldset disabled={disabled}>
           {tabs.length === 0 ? (
             <Placeholder>

@@ -200,6 +200,9 @@ export default function SettingsPage() {
       <WithPreviewSidebar>
         <div>
           <section className="grid gap-8 p-4! md:p-8!">
+            <header>
+              <h2>About you</h2>
+            </header>
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-name`}>Name</Label>
