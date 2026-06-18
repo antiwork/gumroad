@@ -211,12 +211,12 @@ class LinksController < ApplicationController
     if in_section
       user = User.find_by_external_id(search_params[:user_id])
       section = user && user.seller_profile_products_sections.find_by_external_id(search_params[:section_id])
-      return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if section.nil?
-      search_params[:section] = section
+      return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if user.nil? || (section.nil? && search_params[:ids].blank?)
+      search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true
       search_params[:user_id] = user.id
-      search_params[:sort] = section.default_product_sort if search_params[:sort].nil?
-      search_params[:sort] = ProductSortKey::PAGE_LAYOUT if search_params[:sort] == "default"
+      search_params[:sort] = section&.default_product_sort if search_params[:sort].nil?
+      search_params[:sort] = ProductSortKey::PAGE_LAYOUT if search_params[:sort] == "default" || search_params[:sort].nil?
       search_params[:ids]&.map! { ObfuscateIds.decrypt(_1) }
     else
       search_params[:sort] = ProductSortKey::FEATURED if search_params[:sort] == "default"

@@ -14,7 +14,13 @@ import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDragHandle } from "$app/components/ui/Rows";
 import { CardWishlist, DummyCardGrid } from "$app/components/Wishlist/Card";
 
-export const WishlistsSectionView = ({ section }: { section: WishlistsSection }) => {
+export const WishlistsSectionView = ({
+  section,
+  controls = true,
+}: {
+  section: WishlistsSection;
+  controls?: boolean;
+}) => {
   const [state, dispatch] = useReducer();
   const uid = React.useId();
   const selectedWishlistsCount = state.wishlist_options.filter((wishlist) =>
@@ -31,13 +37,14 @@ export const WishlistsSectionView = ({ section }: { section: WishlistsSection })
     dispatch({ type: "update-section", updated: { ...section, ...updated } });
 
   const wishlistIds = wishlists.map((wishlist) => wishlist.id);
-  React.useEffect(
-    () =>
-      updateSection({
-        shown_wishlists: sortBy(section.shown_wishlists, (id) => wishlistIds.indexOf(id)),
-      }),
-    [wishlistIds.join()],
-  );
+  const visibleWishlistIds = controls ? wishlistIds : section.shown_wishlists;
+  React.useEffect(() => {
+    if (!controls) return;
+
+    updateSection({
+      shown_wishlists: sortBy(section.shown_wishlists, (id) => wishlistIds.indexOf(id)),
+    });
+  }, [controls, wishlistIds.join()]);
 
   const [loadedWishlists, setLoadedWishlists] = React.useState<CardWishlist[] | null>(null);
   React.useEffect(() => {
@@ -56,51 +63,58 @@ export const WishlistsSectionView = ({ section }: { section: WishlistsSection })
   return (
     <SectionLayout
       section={section}
-      menuItems={[
-        <EditorSubmenu
-          key="0"
-          heading="Wishlists"
-          text={`${selectedWishlistsCount} ${selectedWishlistsCount === 1 ? "wishlist" : "wishlists"}`}
-        >
-          <div className="flex flex-col gap-4 overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
-            {wishlists.length > 0 ? (
-              <Sortable list={wishlists} setList={setWishlists} tag={ProductList} handle="[aria-grabbed]">
-                {wishlists.map((wishlist) => (
-                  <Row asChild key={wishlist.id}>
-                    <Label role="listitem">
-                      <RowContent>
-                        <RowDragHandle aria-grabbed={wishlist.chosen} />
-                        <span className="truncate">{wishlist.name}</span>
-                      </RowContent>
-                      <RowActions>
-                        <Checkbox
-                          id={`${uid}-productVisibility-${wishlist.id}`}
-                          checked={section.shown_wishlists.includes(wishlist.id)}
-                          onChange={() => {
-                            updateSection({
-                              shown_wishlists: section.shown_wishlists.includes(wishlist.id)
-                                ? section.shown_wishlists.filter((id) => id !== wishlist.id)
-                                : wishlists.flatMap(({ id }) =>
-                                    wishlist.id === id || section.shown_wishlists.includes(id) ? id : [],
-                                  ),
-                            });
-                          }}
-                        />
-                      </RowActions>
-                    </Label>
-                  </Row>
-                ))}
-              </Sortable>
-            ) : null}
-          </div>
-        </EditorSubmenu>,
-      ]}
+      controls={controls}
+      menuItems={
+        controls
+          ? [
+              <EditorSubmenu
+                key="0"
+                heading="Wishlists"
+                text={`${selectedWishlistsCount} ${selectedWishlistsCount === 1 ? "wishlist" : "wishlists"}`}
+              >
+                <div className="flex flex-col gap-4 overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
+                  {wishlists.length > 0 ? (
+                    <Sortable list={wishlists} setList={setWishlists} tag={ProductList} handle="[aria-grabbed]">
+                      {wishlists.map((wishlist) => (
+                        <Row asChild key={wishlist.id}>
+                          <Label role="listitem">
+                            <RowContent>
+                              <RowDragHandle aria-grabbed={wishlist.chosen} />
+                              <span className="truncate">{wishlist.name}</span>
+                            </RowContent>
+                            <RowActions>
+                              <Checkbox
+                                id={`${uid}-productVisibility-${wishlist.id}`}
+                                checked={section.shown_wishlists.includes(wishlist.id)}
+                                onChange={() => {
+                                  updateSection({
+                                    shown_wishlists: section.shown_wishlists.includes(wishlist.id)
+                                      ? section.shown_wishlists.filter((id) => id !== wishlist.id)
+                                      : wishlists.flatMap(({ id }) =>
+                                          wishlist.id === id || section.shown_wishlists.includes(id) ? id : [],
+                                        ),
+                                  });
+                                }}
+                              />
+                            </RowActions>
+                          </Label>
+                        </Row>
+                      ))}
+                    </Sortable>
+                  ) : null}
+                </div>
+              </EditorSubmenu>,
+            ]
+          : []
+      }
     >
       {section.shown_wishlists.length > 0 && !loadedWishlists ? (
         <DummyCardGrid count={section.shown_wishlists.length} />
       ) : (
         <WishlistsView
-          wishlists={loadedWishlists ? sortBy(loadedWishlists, (wishlist) => wishlistIds.indexOf(wishlist.id)) : []}
+          wishlists={
+            loadedWishlists ? sortBy(loadedWishlists, (wishlist) => visibleWishlistIds.indexOf(wishlist.id)) : []
+          }
         />
       )}
     </SectionLayout>

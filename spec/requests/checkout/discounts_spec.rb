@@ -592,6 +592,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(page).to have_field("Tier 2 starting month", with: "12")
 
         fill_in "Tier 2 percentage", with: "25"
+        page.scroll_to find_button("Save changes"), align: :center
         click_on "Save changes"
         expect(page).to have_alert(text: "Successfully updated discount!")
 

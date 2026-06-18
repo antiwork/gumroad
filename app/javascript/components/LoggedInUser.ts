@@ -45,10 +45,12 @@ type Policies = {
   settings_payments_user: {
     show: boolean;
   };
+  settings_main_user: {
+    update_username: boolean;
+  };
   settings_profile: {
     manage_social_connections: boolean;
     update: boolean;
-    update_username: boolean;
   };
   settings_third_party_analytics_user: {
     update: boolean;

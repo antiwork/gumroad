@@ -17,6 +17,7 @@ describe "Main Navigation", type: :system, js: true do
         expect(page).to have_link("Workflows")
         expect(page).to have_link("Sales")
         expect(page).to have_link("Products")
+        expect(page).to have_link("Profile", href: %r{://[^/]+/profile\z})
         expect(page).to have_link("Emails")
         expect(page).to have_link("Analytics")
 
@@ -29,14 +30,13 @@ describe "Main Navigation", type: :system, js: true do
         expect(page).to have_link("Collaborators")
 
         expect(page).not_to have_link("Community")
-        expect(page).to have_link("Settings")
 
         toggle_disclosure("Gum")
         within "div[role='menu']" do
           expect(page).not_to have_text(user.display_name)
-          expect(page).to have_menuitem("Profile")
-          expect(page).not_to have_menuitem("Settings")
-          expect(page).not_to have_menuitem("Teams")
+          expect(page).not_to have_menuitem("Profile")
+          expect(page).to have_menuitem("Settings")
+          expect(page).to have_menuitem("Teams")
           expect(page).not_to have_menuitem("Affiliates")
           expect(page).to have_menuitem("Logout")
         end

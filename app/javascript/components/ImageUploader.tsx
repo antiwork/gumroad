@@ -19,6 +19,7 @@ export const ImageUploader = ({
   imageAlt,
   disabled,
   defaultImageUrl,
+  circular = false,
 }: {
   id?: string;
   helpText: string;
@@ -29,21 +30,23 @@ export const ImageUploader = ({
   onRemove: () => void;
   imageAlt: string;
   disabled?: boolean;
+  circular?: boolean;
 }) => {
   const [uploading, setUploading] = React.useState(false);
 
   const overlayColor = "rgb(var(--filled) / calc(1 - var(--disabled-opacity)))";
   const background =
     defaultImageUrl && `linear-gradient(${overlayColor}, ${overlayColor}), url(${defaultImageUrl}) center / cover`;
+  const shape = circular ? "rounded-full" : "rounded-sm";
 
   return (
-    <div className="grid grid-cols-[12.5rem_1fr] gap-5">
+    <div className="grid grid-cols-[12.5rem_1fr] items-center gap-5">
       {uploading ? (
-        <Placeholder className="aspect-square items-center">
+        <Placeholder className={classNames("aspect-square items-center", shape)}>
           <LoadingSpinner className="size-8" />
         </Placeholder>
       ) : imageUrl == null ? (
-        <Placeholder className="aspect-square items-center" style={{ background }}>
+        <Placeholder className={classNames("aspect-square items-center", shape)} style={{ background }}>
           <label className={classNames(buttonVariants({ size: "default", color: "primary" }), "relative")}>
             <input
               type="file"
@@ -67,11 +70,15 @@ export const ImageUploader = ({
         </Placeholder>
       ) : (
         <figure className="relative aspect-square">
-          <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded-sm border border-border bg-background" />
+          <img
+            alt={imageAlt}
+            src={imageUrl}
+            className={classNames("h-full w-full border border-border bg-background", shape)}
+          />
           <Button
             color="primary"
             size="icon"
-            className="absolute top-2 right-2"
+            className={classNames("absolute", circular ? "right-3 bottom-3" : "top-2 right-2")}
             aria-label="Remove"
             onClick={onRemove}
             disabled={disabled}

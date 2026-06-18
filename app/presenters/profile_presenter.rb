@@ -18,11 +18,12 @@ class ProfilePresenter
       twitter_handle: seller.twitter_handle,
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
+      can_edit: can_edit_profile?,
     }
   end
 
   def profile_props(seller_custom_domain_url:, request:)
-    shared_profile_props(seller_custom_domain_url:, request:)
+    shared_profile_props(seller_custom_domain_url:, request:, as_logged_out_user: true).merge(creator_profile:)
   end
 
   def profile_settings_props(request:)
@@ -30,14 +31,11 @@ class ProfilePresenter
     shared_profile_props(seller_custom_domain_url: nil, request:, as_logged_out_user: true).merge(
       {
         profile_settings: {
-          username: seller.read_attribute(:username).to_s,
           name: seller.name,
           bio: seller.bio,
-          font: seller.seller_profile.font,
-          background_color: seller.seller_profile.background_color,
-          highlight_color: seller.seller_profile.highlight_color,
           profile_picture_blob_id: seller.avatar.signed_id,
         },
+        editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
       }
     )
@@ -56,5 +54,11 @@ class ProfilePresenter
 
     def profile_sections_presenter
       ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile)
+    end
+
+    def can_edit_profile?
+      pundit_user&.user.present? &&
+        pundit_user.seller == seller &&
+        Pundit.policy!(pundit_user, [:settings, :profile]).update?
     end
 end

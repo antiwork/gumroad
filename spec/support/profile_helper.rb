@@ -4,12 +4,14 @@
 # Used in auth specs where dashboard and logout option are visible only after profile is filled in
 module FillInUserProfileHelpers
   def fill_in_profile
-    visit settings_profile_path
-
+    visit settings_main_path
     fill_in("Username", with: "gumbo")
-    fill_in("Name", with: "Edgar Gumstein")
-
     click_on("Update settings")
+
+    visit profile_path
+    fill_in("Name", with: "Edgar Gumstein")
+    click_on("Update profile")
+    expect(page).to have_alert(text: "Changes saved!")
   end
 
   def submit_follow_form(with: nil)

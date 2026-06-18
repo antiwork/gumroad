@@ -46,17 +46,27 @@ export type WishlistsSection = Section & {
   shown_wishlists: string[];
 };
 
-export const updateProfileSettings = async (profileSettings: Partial<ProfileSettings> & { tabs?: Tab[] }) => {
-  const { background_color, highlight_color, font, profile_picture_blob_id, tabs, ...user } = profileSettings;
+export type ProfileSection =
+  | ProductsSection
+  | PostsSection
+  | RichTextSection
+  | SubscribeSection
+  | FeaturedProductSection
+  | WishlistsSection;
+
+export const updateProfileSettings = async (
+  profileSettings: Partial<ProfileSettings> & { tabs?: Tab[]; sections?: ProfileSection[] },
+) => {
+  const { profile_picture_blob_id, tabs, sections, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
-    url: Routes.settings_profile_path(),
+    url: Routes.profile_path(),
     accept: "json",
     data: {
       user,
-      seller_profile: { background_color, highlight_color, font },
       profile_picture_blob_id,
       tabs,
+      sections,
     },
   });
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
@@ -66,7 +76,7 @@ export const updateProfileSettings = async (profileSettings: Partial<ProfileSett
 export const getProduct = async (id: string) => {
   const response = await request({
     method: "GET",
-    url: Routes.settings_profile_product_path(id),
+    url: Routes.profile_product_path(id),
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();

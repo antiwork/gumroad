@@ -29,18 +29,18 @@ describe ProfilePresenter do
                      .profile_settings_props(request:)[:profile_settings]
     end
 
-    it "renders the persisted username, not the fallback username" do
+    it "does not include username in profile settings" do
       seller = create_seller!(username: "tommygkendrick", email: "tx-actor@example.com")
 
       allow(seller).to receive(:username).and_return("txactorexamplecom")
 
-      expect(profile_settings_for(seller)[:username]).to eq("tommygkendrick")
+      expect(profile_settings_for(seller)).not_to have_key(:username)
     end
 
-    it "renders an empty string when the username is nil" do
-      seller = create_seller!(username: nil, email: "foo@example.com")
+    it "does not include profile design settings" do
+      seller = create_seller!(username: "designless", email: "designless@example.com")
 
-      expect(profile_settings_for(seller)[:username]).to eq("")
+      expect(profile_settings_for(seller)).not_to include(:background_color, :highlight_color, :font)
     end
   end
 end
