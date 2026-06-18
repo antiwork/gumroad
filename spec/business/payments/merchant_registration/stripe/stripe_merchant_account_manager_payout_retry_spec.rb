@@ -96,7 +96,7 @@ describe StripeMerchantAccountManager do
       user.reload
     end
 
-    it "clears the postal-code note once the account update succeeds, even if a later person update fails" do
+    it "clears the postal-code note when the account update succeeds but a later person update fails for an unrelated reason" do
       note = user.add_payout_note(
         content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
       )
@@ -106,6 +106,18 @@ describe StripeMerchantAccountManager do
 
       expect { described_class.update_account(user, passphrase:) }.to raise_error(Stripe::InvalidRequestError)
       expect(note.reload).not_to be_alive
+    end
+
+    it "keeps the postal-code note when the person update is itself rejected for an invalid postal code" do
+      note = user.add_payout_note(
+        content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+      )
+      allow(Stripe::Account).to receive(:update_person).and_raise(
+        Stripe::InvalidRequestError.new("The postal code you entered is not valid.", "person[address][postal_code]", code: "postal_code_invalid")
+      )
+
+      expect { described_class.update_account(user, passphrase:, notify: false) }.to raise_error(Stripe::InvalidRequestError)
+      expect(note.reload).to be_alive
     end
   end
 end

@@ -90,6 +90,23 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
         expect(note.json_data["retry_count"]).to be_nil
       end
     end
+
+    context "when remediation keeps failing and the marker is preserved" do
+      let!(:merchant_account) { create(:merchant_account, user:) }
+      let!(:note) { add_note(postal_prefix) }
+
+      it "records a failed attempt without falsely resolving" do
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(
+          Stripe::InvalidRequestError.new("The postal code you entered is not valid.", "person", code: "postal_code_invalid")
+        )
+
+        described_class.new.perform(user.id)
+
+        expect(note.reload).to be_alive
+        expect(note.json_data["retry_count"]).to eq(1)
+        expect(user.comments.alive.with_type_payout_note.where("content LIKE ?", "#{described_class::RESOLVED_NOTE[0, 20]}%")).to be_empty
+      end
+    end
   end
 
   describe "giving up after exhausting retries" do
