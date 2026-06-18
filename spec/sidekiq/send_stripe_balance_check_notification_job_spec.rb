@@ -7,17 +7,16 @@ describe SendStripeBalanceCheckNotificationJob do
     before do
       allow(Rails.env).to receive(:production?).and_return(true)
       allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents).and_return(300_000_00)
-      $redis.set(RedisKey.stripe_minimum_balance_cents, 100_000_00)
     end
 
     context "when the balance is insufficient" do
       before do
-        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 300_000_00 })
+        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 200_000_00 })
       end
 
       it "sends a notification with the required top-up and sets the redis key to true" do
-        notification_msg = "Stripe balance needs to be $400,000 ($300,000 for upcoming payouts + $100,000 Stripe minimum balance) to pay out all creators.\n"\
-                           "Current Stripe balance is $300,000.\n"\
+        notification_msg = "Stripe balance needs to be $300,000 to cover upcoming payouts.\n"\
+                           "Current Stripe balance is $200,000.\n"\
                            "A top-up of $100,000 is needed."
 
         described_class.new.perform
@@ -50,7 +49,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
     context "when the disable_stripe_balance_check_notification flag is active" do
       before do
-        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 300_000_00 })
+        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 200_000_00 })
         Feature.activate(:disable_stripe_balance_check_notification)
       end
 
