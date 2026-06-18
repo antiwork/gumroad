@@ -606,7 +606,8 @@ export const RichTextEditorToolbar = ({
             ) : null}
           </>
         )}
-        <div className="ml-auto flex">
+        <div className="grow" />
+        <div className="flex">
           <MenuItem
             name="Undo last change"
             icon={<Undo className="size-5" />}
