@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::EmailsController < Api::V2::BaseController
-  before_action { doorkeeper_authorize! :edit_products }
+  before_action { doorkeeper_authorize! :edit_emails }
   before_action :fetch_installment, only: %i[show preview send_email destroy]
 
   RESULTS_PER_PAGE = 10
@@ -66,6 +66,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
   end
 
   def preview
+    @installment.seller ||= current_seller
     @installment.send_preview_email(current_seller)
     render_response(
       true,
@@ -78,9 +79,10 @@ class Api::V2::EmailsController < Api::V2::BaseController
   end
 
   def send_email
-    return render_response(false, message: "The email has already been sent.") if @installment.published?
-    return render_response(false, message: "The email is scheduled to be sent at its scheduled time.") if @installment.ready_to_publish?
+    return render_response(false, message: "The email has already been sent.") if @installment.has_been_blasted?
+    return render_response(false, message: "The email is scheduled to be sent at its scheduled time.") if !@installment.published? && @installment.ready_to_publish?
 
+    @installment.seller ||= current_seller
     service = SaveInstallmentService.new(
       seller: current_seller,
       params: service_params_for_publish(@installment),
@@ -109,7 +111,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
     end
 
     def scoped_installments
-      current_seller.installments.alive.not_workflow_installment
+      Installment.ordered_updates(current_seller, nil).reorder(nil)
     end
 
     def filter_installments_by_type(installments)
@@ -195,7 +197,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
         created_before: installment.created_before,
         bought_from: installment.bought_from,
         shown_on_profile: installment.shown_on_profile?,
-        send_emails: installment.send_emails?,
+        send_emails: true,
         allow_comments: installment.allow_comments?,
         bought_products: installment.bought_products,
         bought_variants: installment.bought_variants,
@@ -234,7 +236,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
     end
 
     def preview_url_for(installment)
-      return installment.full_url if installment.published?
+      return installment.public_page_location if installment.published?
 
       edit_email_url(installment.external_id, preview_post: true, host: UrlService.domain_with_protocol)
     end

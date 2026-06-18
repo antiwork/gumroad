@@ -13,6 +13,10 @@ describe Api::V2::EmailsController do
     create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes:)
   end
 
+  def create_product_owned_installment(**attributes)
+    create(:product_installment, { link: create(:product, user: @user), seller: nil }.merge(attributes))
+  end
+
   describe "GET 'index'" do
     before do
       @action = :index
@@ -20,11 +24,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
       end
 
@@ -88,7 +92,7 @@ describe Api::V2::EmailsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          emails: expected_installments[per_page..].as_json(api_scopes: ["edit_products"])
+          emails: expected_installments[per_page..].as_json(api_scopes: ["edit_emails"])
         }.as_json)
       end
 
@@ -123,6 +127,21 @@ describe Api::V2::EmailsController do
           emails: []
         }.as_json)
       end
+
+      it "returns installments owned through the seller's products" do
+        product_owned_installment = create_product_owned_installment
+        other_seller_product_owned_installment = create(
+          :product_installment,
+          link: create(:product, user: create(:user)),
+          seller: nil
+        )
+
+        get @action, params: @params
+
+        email_ids = response.parsed_body["emails"].map { _1["id"] }
+        expect(email_ids).to include(product_owned_installment.external_id)
+        expect(email_ids).not_to include(other_seller_product_owned_installment.external_id)
+      end
     end
 
     it "grants access with the account scope" do
@@ -140,11 +159,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
       end
 
@@ -153,8 +172,16 @@ describe Api::V2::EmailsController do
 
         expect(response.parsed_body).to eq({
           success: true,
-          email: @installment.as_json(api_scopes: ["edit_products"])
+          email: @installment.as_json(api_scopes: ["edit_emails"])
         }.as_json)
+      end
+
+      it "returns an installment owned through one of the seller's products" do
+        product_owned_installment = create_product_owned_installment
+
+        get @action, params: @params.merge(id: product_owned_installment.external_id)
+
+        expect(response.parsed_body["email"]["id"]).to eq(product_owned_installment.external_id)
       end
 
       it "does not return another seller's installment" do
@@ -176,6 +203,19 @@ describe Api::V2::EmailsController do
           message: "The email was not found."
         }.as_json)
       end
+
+      it "returns an absolute URL for a published installment" do
+        @installment.update!(published_at: Time.current)
+        allow_any_instance_of(User).to receive(:subdomain_with_protocol).and_return(nil)
+
+        get @action, params: @params
+
+        expect(response.parsed_body["email"]["url"]).to eq(view_post_url(
+          host: UrlService.domain_with_protocol,
+          username: @installment.user.username,
+          slug: @installment.slug
+        ))
+      end
     end
   end
 
@@ -189,11 +229,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
       end
 
@@ -316,6 +356,15 @@ describe Api::V2::EmailsController do
         expect(installment.link).to eq(product)
       end
     end
+
+    it "grants create access with the account scope used by the CLI" do
+      token = create_access_token("account")
+
+      post @action, params: @params.merge(access_token: token.token)
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(@user.installments.alive.sole).not_to be_published
+    end
   end
 
   describe "POST 'preview'" do
@@ -326,11 +375,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
       end
 
@@ -346,6 +395,36 @@ describe Api::V2::EmailsController do
         )
         expect(response.parsed_body["preview_url"]).to start_with("http")
         expect(response.parsed_body["email"]["id"]).to eq(@installment.external_id)
+      end
+
+      it "sends a preview for an email owned through one of the seller's products" do
+        product_owned_installment = create_product_owned_installment
+        expect(PostEmailApi).to receive(:process) do |post:, recipients:, preview:|
+          expect(post).to eq(product_owned_installment)
+          expect(post.seller).to eq(@user)
+          expect(recipients).to eq([{ email: @user.email }])
+          expect(preview).to be(true)
+        end
+
+        post @action, params: @params.merge(id: product_owned_installment.external_id)
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["email"]["id"]).to eq(product_owned_installment.external_id)
+        expect(product_owned_installment.reload.seller).to be_nil
+      end
+
+      it "returns an absolute preview URL for a published email" do
+        @installment.update!(published_at: Time.current)
+        allow_any_instance_of(User).to receive(:subdomain_with_protocol).and_return(nil)
+        expect_any_instance_of(Installment).to receive(:send_preview_email).with(@user)
+
+        post @action, params: @params
+
+        expect(response.parsed_body["preview_url"]).to eq(view_post_url(
+          host: UrlService.domain_with_protocol,
+          username: @installment.user.username,
+          slug: @installment.slug
+        ))
       end
 
       it "returns preview email errors" do
@@ -371,11 +450,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
         allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
       end
@@ -390,6 +469,99 @@ describe Api::V2::EmailsController do
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
+      it "sends an email owned through one of the seller's products" do
+        product_owned_installment = create_product_owned_installment
+
+        expect do
+          post @action, params: @params.merge(id: product_owned_installment.external_id)
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(product_owned_installment.reload).to be_published
+        expect(product_owned_installment.seller).to eq(@user)
+        expect(response.parsed_body["email"]["id"]).to eq(product_owned_installment.external_id)
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "sends a published product-owned profile-only post that has not been blasted" do
+        product_owned_installment = create_product_owned_installment(published_at: 1.hour.ago)
+        product_owned_installment.assign_attributes(send_emails: false, shown_on_profile: true)
+        product_owned_installment.save!(validate: false)
+
+        expect do
+          post @action, params: @params.merge(id: product_owned_installment.external_id)
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(product_owned_installment.reload.seller).to eq(@user)
+        expect(PostEmailBlast.last.seller).to eq(@user)
+        expect(response.parsed_body["email"]).to include(
+          "id" => product_owned_installment.external_id,
+          "send_emails" => true,
+          "shown_on_profile" => true,
+          "state" => "published"
+        )
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "turns a profile-only draft into an email blast" do
+        @installment.update!(send_emails: false, shown_on_profile: true)
+
+        expect do
+          post @action, params: @params
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(@installment.reload.send_emails?).to be(true)
+        expect(@installment.published?).to be(true)
+        expect(response.parsed_body["email"]).to include(
+          "send_emails" => true,
+          "shown_on_profile" => true,
+          "state" => "published"
+        )
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "sends a published profile-only post that has not been blasted" do
+        @installment.update!(published_at: 1.hour.ago, send_emails: false, shown_on_profile: true)
+
+        expect do
+          post @action, params: @params
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(@installment.reload.send_emails?).to be(true)
+        expect(@installment.published?).to be(true)
+        expect(response.parsed_body["email"]).to include(
+          "send_emails" => true,
+          "shown_on_profile" => true,
+          "state" => "published"
+        )
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "sends a published scheduled profile-only post that has not been blasted" do
+        scheduled = create(
+          :scheduled_installment,
+          seller: @user,
+          link: nil,
+          installment_type: Installment::AUDIENCE_TYPE,
+          published_at: 1.hour.ago
+        )
+        scheduled.assign_attributes(send_emails: false, shown_on_profile: true)
+        scheduled.save!(validate: false)
+        scheduled.installment_rule.mark_deleted!
+
+        expect do
+          post @action, params: @params.merge(id: scheduled.external_id)
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(scheduled.reload.send_emails?).to be(true)
+        expect(scheduled.published?).to be(true)
+        expect(response.parsed_body["email"]).to include(
+          "send_emails" => true,
+          "shown_on_profile" => true,
+          "state" => "published"
+        )
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
       it "keeps attached files when publishing a draft" do
         file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
         @installment.product_files << file
@@ -400,8 +572,9 @@ describe Api::V2::EmailsController do
         expect(@installment.reload.alive_product_files.map(&:external_id)).to include(file.external_id)
       end
 
-      it "returns an error for an already-published installment" do
+      it "returns an error for an already-blasted email" do
         @installment.update!(published_at: Time.current)
+        create(:blast, post: @installment)
 
         post @action, params: @params
 
@@ -430,6 +603,18 @@ describe Api::V2::EmailsController do
         expect(scheduled.reload.published?).to be(false)
       end
     end
+
+    it "grants send access with the account scope used by the CLI" do
+      token = create_access_token("account")
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+
+      expect do
+        post @action, params: @params.merge(access_token: token.token)
+      end.to change(PostEmailBlast, :count).by(1)
+
+      expect(@installment.reload).to be_published
+      expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+    end
   end
 
   describe "DELETE 'destroy'" do
@@ -440,11 +625,11 @@ describe Api::V2::EmailsController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
-    it_behaves_like "authorized oauth v1 api method only for edit_products scope"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    describe "when logged in with edit_products scope" do
+    describe "when logged in with edit_emails scope" do
       before do
-        @token = create_access_token("edit_products")
+        @token = create_access_token("edit_emails")
         @params.merge!(access_token: @token.token)
       end
 
@@ -452,6 +637,14 @@ describe Api::V2::EmailsController do
         delete @action, params: @params
 
         expect(@installment.reload.deleted_at).to be_present
+      end
+
+      it "soft-deletes an email owned through one of the seller's products" do
+        product_owned_installment = create_product_owned_installment
+
+        delete @action, params: @params.merge(id: product_owned_installment.external_id)
+
+        expect(product_owned_installment.reload.deleted_at).to be_present
       end
 
       it "returns the deleted response" do

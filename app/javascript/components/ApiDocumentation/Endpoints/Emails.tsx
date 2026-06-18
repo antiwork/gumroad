@@ -76,7 +76,7 @@ export const GetEmails = () => (
   <ApiEndpoint
     method="get"
     path="/emails"
-    description="Retrieve the seller's audience emails. Use type to filter by published, scheduled, or draft emails."
+    description="Retrieve the seller's audience emails. Use type to filter by published, scheduled, or draft emails. Requires the edit_emails or account scope."
   >
     <ApiParameters>
       <ApiParameter name="type" description='(optional, "published", "scheduled", or "draft")' />
@@ -116,7 +116,11 @@ export const GetEmails = () => (
 );
 
 export const GetEmail = () => (
-  <ApiEndpoint method="get" path="/emails/:id" description="Retrieve the details of a specific audience email.">
+  <ApiEndpoint
+    method="get"
+    path="/emails/:id"
+    description="Retrieve the details of a specific audience email. Requires the edit_emails or account scope."
+  >
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg== \\
@@ -153,7 +157,7 @@ export const CreateEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails"
-    description="Create a draft audience email, or send it immediately by passing publish=true (or draft=false). Scheduled emails can only be created in the Emails web editor."
+    description="Create a draft audience email, or send it immediately by passing publish=true (or draft=false). Scheduled emails can only be created in the Emails web editor. Requires the edit_emails or account scope."
   >
     <ApiParameters>
       <ApiParameter name="subject" description="Email subject line" />
@@ -208,7 +212,7 @@ export const PreviewEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails/:id/preview"
-    description="Send a preview of an audience email to the seller's email address."
+    description="Send a preview of an audience email to the seller's email address. Requires the edit_emails or account scope."
   >
     <PreviewResponseFields />
     <CodeSnippet caption="cURL example">
@@ -248,7 +252,7 @@ export const SendEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails/:id/send"
-    description="Publish a draft audience email and send it to its audience."
+    description="Publish a draft audience email and send it to its audience. Requires the edit_emails or account scope."
   >
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
@@ -273,7 +277,7 @@ export const SendEmail = () => (
     "shown_on_profile": false,
     "audience_count": null,
     "recipients_count": 0,
-    "url": "/seller/p/launch-update",
+    "url": "https://seller.gumroad.com/p/launch-update",
     "created_at": "2026-06-17T12:00:00.000Z",
     "updated_at": "2026-06-17T12:15:00.000Z"
   }
@@ -283,7 +287,11 @@ export const SendEmail = () => (
 );
 
 export const DeleteEmail = () => (
-  <ApiEndpoint method="delete" path="/emails/:id" description="Delete an audience email.">
+  <ApiEndpoint
+    method="delete"
+    path="/emails/:id"
+    description="Delete an audience email. Requires the edit_emails or account scope."
+  >
     <ApiResponseFields>
       {renderFields([
         { name: "success", type: "boolean", description: "Whether the request succeeded" },

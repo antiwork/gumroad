@@ -522,6 +522,24 @@ class Installment < ApplicationRecord
     end
   end
 
+  def public_page_location(purchase_id: nil)
+    return unless slug.present?
+    if user.subdomain_with_protocol.present?
+      custom_domain_view_post_url(
+        host: user.subdomain_with_protocol,
+        slug:,
+        purchase_id: purchase_id.presence
+      )
+    else
+      view_post_url(
+        host: UrlService.domain_with_protocol,
+        username: user.username.presence || user.external_id,
+        slug:,
+        purchase_id: purchase_id.presence
+      )
+    end
+  end
+
   def generate_url_redirect_for_imported_customer(imported_customer, product: nil)
     return unless imported_customer
     product ||= imported_customer.link
@@ -620,20 +638,21 @@ class Installment < ApplicationRecord
   end
 
   def as_json_for_api(include_audience_count: false)
+    state = display_type
     {
       id: external_id,
       subject: name,
       message:,
       audience_type: installment_type,
       product_id: link&.external_id,
-      state: display_type,
+      state:,
       published_at:,
-      scheduled_at: installment_rule&.to_be_published_at,
+      scheduled_at: state == SCHEDULED && installment_rule&.alive? ? installment_rule.to_be_published_at : nil,
       send_emails: send_emails?,
       shown_on_profile: shown_on_profile?,
       audience_count: include_audience_count ? api_audience_members_count : nil,
       recipients_count: published? ? customer_count : nil,
-      url: published? ? full_url : nil,
+      url: published? ? public_page_location : nil,
       created_at:,
       updated_at:,
     }
