@@ -23,7 +23,13 @@ class ProfilePresenter
   end
 
   def profile_props(seller_custom_domain_url:, request:)
-    shared_profile_props(seller_custom_domain_url:, request:, as_logged_out_user: true).merge(creator_profile:)
+    # The public profile always renders the visitor section shape - editing moved to /profile, so the
+    # public component no longer carries the owner/editing shape. Keep the real viewer though, so
+    # "you own this", "already following this wishlist", and currency reflect them. The only viewer
+    # that resolves as owner here is the seller on their own page; route them to a logged-out context
+    # so the sections stay visitor-shaped (their viewer state on their own profile is moot anyway).
+    viewer = pundit_user&.seller == seller ? SellerContext.logged_out : pundit_user
+    shared_profile_props(seller_custom_domain_url:, request:, pundit_user: viewer).merge(creator_profile:)
   end
 
   def profile_settings_props(request:)
@@ -32,7 +38,7 @@ class ProfilePresenter
     # between, the payload may be newer than this token — which makes the next save a harmless
     # false-stale rejection rather than letting a stale token wave a lost update through.
     profile_version = seller.seller_profile.layout_version&.iso8601(6)
-    shared_profile_props(seller_custom_domain_url: nil, request:, as_logged_out_user: true).merge(
+    shared_profile_props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.logged_out).merge(
       {
         profile_settings: {
           name: seller.name,
@@ -49,8 +55,7 @@ class ProfilePresenter
   end
 
   private
-    def shared_profile_props(seller_custom_domain_url:, request:, as_logged_out_user: false)
-      pundit_user = as_logged_out_user ? SellerContext.logged_out : @pundit_user
+    def shared_profile_props(seller_custom_domain_url:, request:, pundit_user: @pundit_user)
       {
         **profile_sections_presenter.props(request:, pundit_user:, seller_custom_domain_url:),
         bio: seller.bio,

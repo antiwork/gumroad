@@ -93,6 +93,19 @@ describe ProfilePresenter do
       expect(props).not_to have_key(:wishlist_options)
       expect(props[:sections].first).not_to have_key(:shown_products)
     end
+
+    it "reflects the logged-in viewer's state rather than a logged-out view" do
+      wishlist = create(:wishlist, user: seller)
+      follower = create(:user)
+      create(:wishlist_follower, wishlist:, follower_user: follower)
+      wishlist_section = create(:seller_profile_wishlists_section, seller:, shown_wishlists: [wishlist.id])
+
+      pundit_user = SellerContext.new(user: follower, seller: follower)
+      props = described_class.new(pundit_user:, seller: seller.reload).profile_props(seller_custom_domain_url: nil, request:)
+
+      wishlist_props = props[:sections].find { _1[:id] == wishlist_section.external_id }[:wishlists].first
+      expect(wishlist_props[:following]).to eq(true)
+    end
   end
 
   describe "#profile_settings_props" do
