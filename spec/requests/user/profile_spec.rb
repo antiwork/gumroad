@@ -307,6 +307,25 @@ describe "User profile page", type: :system, js: true do
         expect(seller.reload.bio).to eq "Bio edit that must not touch sections"
       end
 
+      it "keeps a settings-only save settings-only even with a rich text section open" do
+        rich_text = create(:seller_profile_rich_text_section, seller:, header: "About", text: {})
+        create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [rich_text.id] }] })
+        visit profile_path
+        within_section_form "About" do
+          expect(page).to have_field("Section name", with: "About")
+        end
+
+        # The mounted rich text editor must not mark the form dirty, or this bio-only save would
+        # resend the section list and falsely conflict with the section added below.
+        concurrent_section = create(:seller_profile_products_section, seller:, header: "Added elsewhere", shown_products: [@product1.id])
+
+        fill_in "Bio", with: "Bio only, sections untouched"
+        save_changes
+
+        expect(SellerProfileSection.exists?(concurrent_section.id)).to be true
+        expect(seller.reload.bio).to eq "Bio only, sections untouched"
+      end
+
       it "rejects a pages/sections save when the profile was changed in another session" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id])
         profile = create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
