@@ -18,7 +18,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
     if RetryStripeRejectedPayoutSetupsJob.retry_count(note) >= RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
       give_up!(user, note)
-    elsif attempt_remediation(user, note)
+      return
+    end
+
+    remediated = attempt_remediation(user, note)
+    if remediated || !note.reload.alive?
       resolve!(user, note)
     else
       record_attempt!(note)
