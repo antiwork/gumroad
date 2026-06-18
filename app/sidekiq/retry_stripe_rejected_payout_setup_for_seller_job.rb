@@ -62,7 +62,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         true
       end
     rescue => e
-      ErrorNotifier.notify(e)
+      Rails.logger.error("RetryStripeRejectedPayoutSetupForSellerJob remediation failed for user #{user.id}: #{e.class}: #{e.message}")
       false
     end
 

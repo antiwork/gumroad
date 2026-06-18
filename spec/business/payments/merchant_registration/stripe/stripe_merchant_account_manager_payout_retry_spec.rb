@@ -86,4 +86,26 @@ describe StripeMerchantAccountManager do
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
     end
   end
+
+  describe "postal code note clearing on account update for a business account" do
+    let(:zip_code) { "94107" }
+    let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+    end
+
+    it "clears the postal-code note once the account update succeeds, even if a later person update fails" do
+      note = user.add_payout_note(
+        content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+      )
+      allow(Stripe::Account).to receive(:update_person).and_raise(
+        Stripe::InvalidRequestError.new("Representative information is invalid", "person")
+      )
+
+      expect { described_class.update_account(user, passphrase:) }.to raise_error(Stripe::InvalidRequestError)
+      expect(note.reload).not_to be_alive
+    end
+  end
 end
