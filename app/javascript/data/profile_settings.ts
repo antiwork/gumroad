@@ -55,9 +55,13 @@ export type ProfileSection =
   | WishlistsSection;
 
 export const updateProfileSettings = async (
-  profileSettings: Partial<ProfileSettings> & { tabs?: Tab[]; sections?: ProfileSection[] },
+  profileSettings: Partial<ProfileSettings> & {
+    tabs?: Tab[];
+    sections?: ProfileSection[];
+    profileVersion?: string | null;
+  },
 ) => {
-  const { profile_picture_blob_id, tabs, sections, ...user } = profileSettings;
+  const { profile_picture_blob_id, tabs, sections, profileVersion, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
     url: Routes.profile_path(),
@@ -66,9 +70,11 @@ export const updateProfileSettings = async (
       user,
       profile_picture_blob_id,
       // Omit pages/sections entirely when the caller didn't pass them, so a settings-only save
-      // doesn't replace (and prune) the server's section list.
+      // doesn't replace (and prune) the server's section list. When they are sent, profile_version
+      // lets the server reject the write if the layout changed elsewhere since this editor loaded.
       ...(tabs !== undefined ? { tabs } : {}),
       ...(sections !== undefined ? { sections } : {}),
+      ...(profileVersion !== undefined ? { profile_version: profileVersion } : {}),
     },
   });
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());

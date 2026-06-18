@@ -37,10 +37,13 @@ type ProfileSettingsForm = {
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
+  profile_version: string | null;
 } & ProfileProps;
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, editable_profile } = typia.assert<ProfilePageProps>(usePage().props);
+  const { creator_profile, profile_settings, editable_profile, profile_version } = typia.assert<ProfilePageProps>(
+    usePage().props,
+  );
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -127,11 +130,15 @@ export default function SettingsPage() {
     const { sections, tabs } = editableProfile;
     // Only submit pages/sections when they actually changed. A save that left them untouched
     // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
-    // prune sections another tab/device added in the meantime.
+    // prune sections another tab/device added in the meantime. When they did change, profileVersion
+    // lets the server reject the save if the layout changed elsewhere since this editor loaded.
     const profileChanged =
       !isEqual(sections, lastSavedProfile.current.sections) || !isEqual(tabs, lastSavedProfile.current.tabs);
     try {
-      await saveProfileSettings({ ...settings, ...(profileChanged ? { tabs, sections } : {}) });
+      await saveProfileSettings({
+        ...settings,
+        ...(profileChanged ? { tabs, sections, profileVersion: profile_version } : {}),
+      });
       lastSavedSettings.current = settings;
       lastSavedProfile.current = { sections, tabs };
       isDirtyRef.current = false;

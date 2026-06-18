@@ -28,6 +28,10 @@ class ProfilePresenter
 
   def profile_settings_props(request:)
     memberships = seller.products.membership.alive.not_archived.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
+    # Sample the version before reading the editor payload below. If a concurrent save lands in
+    # between, the payload may be newer than this token — which makes the next save a harmless
+    # false-stale rejection rather than letting a stale token wave a lost update through.
+    profile_version = seller.seller_profile.layout_version&.iso8601(6)
     shared_profile_props(seller_custom_domain_url: nil, request:, as_logged_out_user: true).merge(
       {
         profile_settings: {
@@ -36,6 +40,9 @@ class ProfilePresenter
           profile_picture_blob_id: seller.avatar.signed_id,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
+        # Version stamp for optimistic concurrency: the editor sends it back on save so the server
+        # can reject a stale pages/sections write. Nil for a not-yet-saved profile.
+        profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
       }
     )

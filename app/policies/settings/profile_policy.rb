@@ -25,6 +25,7 @@ class Settings::ProfilePolicy < ApplicationPolicy
     user_attributes = [:name, :bio]
     [
       :profile_picture_blob_id,
+      :profile_version,
       {
         user: user_attributes,
         tabs: [:name, { sections: [] }],

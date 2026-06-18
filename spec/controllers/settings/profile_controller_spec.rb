@@ -138,6 +138,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
             { id: temp_id, type: "SellerProfileProductsSection", header: "New", shown_products: [], default_product_sort: "page_layout", show_filters: false, add_new_products: true },
           ],
           tabs: [{ name: "Tab 1", sections: [existing.external_id, temp_id] }],
+          profile_version: seller.seller_profile.layout_version.iso8601(6),
         }, as: :json
 
         expect(response).to have_http_status :see_other
@@ -157,6 +158,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         put :update, params: {
           sections: [{ id: existing.external_id, header: "Updated", shown_posts: [post1.external_id, post2.external_id] }],
           tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
+          profile_version: seller.seller_profile.layout_version.iso8601(6),
         }, as: :json
 
         expect(response).to have_http_status :see_other
@@ -171,12 +173,56 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         put :update, params: {
           sections: [{ id: kept.external_id, header: "Kept" }],
           tabs: [{ name: "Tab 1", sections: [kept.external_id] }],
+          profile_version: seller.seller_profile.layout_version.iso8601(6),
         }, as: :json
 
         expect(response).to have_http_status :see_other
         expect(seller.seller_profile_sections.sole).to eq kept
         expect(kept.reload.header).to eq("Kept")
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [kept.id] }].as_json
+      end
+
+      it "rejects the save and keeps the current layout when the profile changed since it was loaded" do
+        section = create(:seller_profile_products_section, seller:, header: "Section 1")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+        stale_version = seller.seller_profile.layout_version.iso8601(6)
+
+        # Another session adds a section and saves, advancing the profile's version.
+        concurrent = create(:seller_profile_products_section, seller:, header: "Added elsewhere")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id, concurrent.id] }] })
+
+        put :update, params: {
+          sections: [{ id: section.external_id, header: "Renamed" }],
+          tabs: [{ name: "Tab 1", sections: [section.external_id] }],
+          profile_version: stale_version,
+        }, as: :json
+
+        expect(response).to redirect_to(profile_path)
+        expect(flash[:alert]).to include("changed somewhere else")
+        # The stale write is rejected wholesale: the other session's section and the layout survive.
+        expect(SellerProfileSection.exists?(concurrent.id)).to be true
+        expect(section.reload.header).to eq "Section 1"
+        expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [section.id, concurrent.id] }].as_json
+      end
+
+      it "rejects the save when a section's content was edited in another session" do
+        section = create(:seller_profile_products_section, seller:, header: "Section 1")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+        stale_version = seller.seller_profile.layout_version.iso8601(6)
+
+        # Another session edits the section's content. That bumps the section row's updated_at, not
+        # the profile's, so the version must fold in section timestamps to notice the change.
+        section.update!(header: "Edited elsewhere")
+
+        put :update, params: {
+          sections: [{ id: section.external_id, header: "My rename" }],
+          tabs: [{ name: "Tab 1", sections: [section.external_id] }],
+          profile_version: stale_version,
+        }, as: :json
+
+        expect(response).to redirect_to(profile_path)
+        expect(flash[:alert]).to include("changed somewhere else")
+        expect(section.reload.header).to eq "Edited elsewhere"
       end
 
       it "drops tab section references that no longer resolve to a saved section" do
@@ -198,6 +244,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
         put :update, params: {
           tabs: [{ name: "Tab 1", sections: [kept.external_id, temp_id] }],
+          profile_version: seller.seller_profile.layout_version.iso8601(6),
         }, as: :json
 
         expect(response).to have_http_status :see_other
