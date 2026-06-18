@@ -143,6 +143,42 @@ describe Payouts do
       end
     end
 
+    describe "below the minimum payout amount held by a processor" do
+      let(:payout_date) { Date.today }
+      let(:seller) { create(:singaporean_user_with_compliance_info, user_risk_state: "compliant", payment_address: "bob1@example.com") }
+
+      before do
+        create(:balance, user: seller, amount_cents: 50_00, date: payout_date - 2)
+        allow(PaypalPayoutProcessor).to receive(:is_user_payable).and_return(true)
+        allow(StripePayoutProcessor).to receive(:is_user_payable).and_return(true)
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents_up_to_date_held_by_gumroad).and_return(0)
+      end
+
+      it "considers the user NOT payable from admin without bypass_minimum_payout" do
+        expect(described_class.is_user_payable(seller, payout_date, from_admin: true)).to eq(false)
+      end
+
+      it "considers the user payable from admin with bypass_minimum_payout" do
+        expect(described_class.is_user_payable(seller, payout_date, from_admin: true, bypass_minimum_payout: true)).to eq(true)
+      end
+
+      it "ignores bypass_minimum_payout when the request is not from admin" do
+        expect(described_class.is_user_payable(seller, payout_date, bypass_minimum_payout: true)).to eq(false)
+      end
+
+      it "does not add a skipped-below-minimum note when the payout is forced from admin" do
+        expect do
+          described_class.is_user_payable(seller, payout_date, from_admin: true, bypass_minimum_payout: true, add_comment: true)
+        end.not_to change { seller.comments.with_type_payout_note.count }
+      end
+
+      it "still rejects a forced payout when the balance is not positive" do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents_up_to_date).and_return(0)
+        allow_any_instance_of(User).to receive(:paid_payments_cents_for_date).and_return(0)
+        expect(described_class.is_user_payable(seller, payout_date, from_admin: true, bypass_minimum_payout: true)).to eq(false)
+      end
+    end
+
     describe "instant payouts" do
       let(:seller) { create(:compliant_user) }
 
