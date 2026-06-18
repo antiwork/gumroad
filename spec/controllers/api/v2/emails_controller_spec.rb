@@ -410,7 +410,9 @@ describe Api::V2::EmailsController do
 
         expect(response.parsed_body["success"]).to be(true)
         expect(response.parsed_body["email"]["id"]).to eq(product_owned_installment.external_id)
-        expect(product_owned_installment.reload.seller).to be_nil
+        expect(response.parsed_body["preview_url"]).to eq(edit_email_url(product_owned_installment.external_id, preview_post: true, host: UrlService.domain_with_protocol))
+        expect(product_owned_installment.reload.seller).to eq(@user)
+        expect(@user.installments.alive.find_by_external_id(product_owned_installment.external_id)).to eq(product_owned_installment)
       end
 
       it "returns an absolute preview URL for a published email" do
@@ -437,6 +439,21 @@ describe Api::V2::EmailsController do
         expect(response.parsed_body).to eq({
           success: false,
           message: "Preview failed."
+        }.as_json)
+      end
+
+      it "returns a JSON error and notifies for unexpected preview failures" do
+        error = StandardError.new("Provider unavailable.")
+        allow_any_instance_of(Installment)
+          .to receive(:send_preview_email)
+          .and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Provider unavailable."
         }.as_json)
       end
     end
@@ -478,7 +495,31 @@ describe Api::V2::EmailsController do
 
         expect(product_owned_installment.reload).to be_published
         expect(product_owned_installment.seller).to eq(@user)
+        expect(product_owned_installment.bought_products).to eq([product_owned_installment.link.unique_permalink])
         expect(response.parsed_body["email"]["id"]).to eq(product_owned_installment.external_id)
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "sends a variant-owned email to buyers of the variant" do
+        product = create(:product, user: @user)
+        variant = create(:variant, variant_category: create(:variant_category, link: product))
+        variant_owned_installment = create(
+          :variant_installment,
+          link: product,
+          seller: nil,
+          base_variant: variant,
+          bought_products: [],
+          bought_variants: []
+        )
+
+        expect do
+          post @action, params: @params.merge(id: variant_owned_installment.external_id)
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(variant_owned_installment.reload).to be_published
+        expect(variant_owned_installment.seller).to eq(@user)
+        expect(variant_owned_installment.bought_products).to be_nil
+        expect(variant_owned_installment.bought_variants).to eq([variant.external_id])
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
@@ -493,12 +534,31 @@ describe Api::V2::EmailsController do
 
         expect(product_owned_installment.reload.seller).to eq(@user)
         expect(PostEmailBlast.last.seller).to eq(@user)
+        expect(product_owned_installment.bought_products).to eq([product_owned_installment.link.unique_permalink])
         expect(response.parsed_body["email"]).to include(
           "id" => product_owned_installment.external_id,
           "send_emails" => true,
           "shown_on_profile" => true,
           "state" => "published"
         )
+        expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
+      end
+
+      it "sends a published variant-owned profile-only post to buyers of the variant" do
+        product = create(:product, user: @user)
+        variant = create(:variant, variant_category: create(:variant_category, link: product))
+        variant_owned_installment = create(:variant_installment, link: product, seller: nil, base_variant: variant, published_at: 1.hour.ago)
+        variant_owned_installment.assign_attributes(send_emails: false, shown_on_profile: true, bought_products: [], bought_variants: [])
+        variant_owned_installment.save!(validate: false)
+
+        expect do
+          post @action, params: @params.merge(id: variant_owned_installment.external_id)
+        end.to change(PostEmailBlast, :count).by(1)
+
+        expect(variant_owned_installment.reload.seller).to eq(@user)
+        expect(variant_owned_installment.bought_products).to be_nil
+        expect(variant_owned_installment.bought_variants).to eq([variant.external_id])
+        expect(PostEmailBlast.last.seller).to eq(@user)
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 

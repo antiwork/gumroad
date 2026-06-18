@@ -9,6 +9,10 @@ module VisibleScopes
   def public_scopes
     %i[edit_products edit_emails view_sales mark_sales_as_shipped edit_sales revenue_share ifttt view_profile view_payouts view_tax_data account]
   end
+
+  def public_api_read_scopes
+    public_scopes - %i[edit_emails]
+  end
 end
 
 Doorkeeper.configure do

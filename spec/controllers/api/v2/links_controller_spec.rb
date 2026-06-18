@@ -153,6 +153,13 @@ describe Api::V2::LinksController do
       expect(response.parsed_body["products"]).to be_present
     end
 
+    it "does not grant product index access with only edit_emails scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_emails")
+      get @action, params: { access_token: token.token }
+      expect(response.status).to eq(403)
+      expect(response.body.strip).to be_empty
+    end
+
     describe "query count" do
       def count_sql_queries(&block)
         count = 0
@@ -1162,6 +1169,13 @@ describe Api::V2::LinksController do
       get :show, params: { id: @product.external_id, access_token: token.token }
       expect(response).to be_successful
       expect(response.parsed_body["product"]).to have_key("sales_count")
+    end
+
+    it "does not grant product detail access with only edit_emails scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_emails")
+      get :show, params: { id: @product.external_id, access_token: token.token }
+      expect(response.status).to eq(403)
+      expect(response.body.strip).to be_empty
     end
 
     context "when product is a tiered membership with no default tier" do

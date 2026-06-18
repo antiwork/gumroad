@@ -66,7 +66,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
   end
 
   def preview
-    @installment.seller ||= current_seller
+    ensure_installment_seller
     @installment.send_preview_email(current_seller)
     render_response(
       true,
@@ -76,13 +76,17 @@ class Api::V2::EmailsController < Api::V2::BaseController
     )
   rescue Installment::PreviewEmailError => e
     render_response(false, message: e.message)
+  rescue => e
+    ErrorNotifier.notify(e)
+    render_response(false, message: e.message)
   end
 
   def send_email
     return render_response(false, message: "The email has already been sent.") if @installment.has_been_blasted?
     return render_response(false, message: "The email is scheduled to be sent at its scheduled time.") if !@installment.published? && @installment.ready_to_publish?
 
-    @installment.seller ||= current_seller
+    ensure_installment_seller
+    ensure_implicit_purchase_filters
     service = SaveInstallmentService.new(
       seller: current_seller,
       params: service_params_for_publish(@installment),
@@ -135,6 +139,18 @@ class Api::V2::EmailsController < Api::V2::BaseController
     def fetch_installment
       @installment = scoped_installments.find_by_external_id(params[:id])
       error_with_email if @installment.nil?
+    end
+
+    def ensure_installment_seller
+      return if @installment.seller_id.present?
+
+      @installment.update_column(:seller_id, current_seller.id)
+      @installment.seller = current_seller
+    end
+
+    def ensure_implicit_purchase_filters
+      @installment.bought_products = bought_products_for_publish(@installment)
+      @installment.bought_variants = bought_variants_for_publish(@installment)
     end
 
     def installment_type_from_audience_param
@@ -199,14 +215,30 @@ class Api::V2::EmailsController < Api::V2::BaseController
         shown_on_profile: installment.shown_on_profile?,
         send_emails: true,
         allow_comments: installment.allow_comments?,
-        bought_products: installment.bought_products,
-        bought_variants: installment.bought_variants,
+        bought_products: bought_products_for_publish(installment),
+        bought_variants: bought_variants_for_publish(installment),
         affiliate_products: installment.affiliate_products,
         not_bought_products: installment.not_bought_products,
         not_bought_variants: installment.not_bought_variants,
         shown_in_profile_sections: shown_in_profile_sections_for(installment),
         files: existing_files_for(installment),
       }
+    end
+
+    def bought_products_for_publish(installment)
+      return installment.bought_products if has_purchase_filter?(installment) || !installment.product_type?
+
+      Array(installment.link&.unique_permalink).compact
+    end
+
+    def bought_variants_for_publish(installment)
+      return installment.bought_variants if has_purchase_filter?(installment) || !installment.variant_type?
+
+      Array(installment.base_variant&.external_id).compact
+    end
+
+    def has_purchase_filter?(installment)
+      installment.bought_products.present? || installment.bought_variants.present?
     end
 
     def existing_files_for(installment)
