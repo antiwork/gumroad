@@ -113,6 +113,7 @@ describe ProfilePresenter do
             tabs: encrypted_tabs,
           },
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
+          profile_version: a_kind_of(String),
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
         }
       )

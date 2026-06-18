@@ -15,9 +15,15 @@ class Settings::ProfileController < Settings::BaseController
   def update
     return respond_error("You have to confirm your email address before you can do that.") unless current_seller.confirmed?
 
-    blob_id = permitted_params[:profile_picture_blob_id]
-    if blob_id.present? && ActiveStorage::Blob.find_signed(blob_id).nil?
-      return respond_error("The logo is already removed. Please refresh the page and try again.")
+    if permitted_params[:profile_picture_blob_id].present?
+      return respond_error("The logo is already removed. Please refresh the page and try again.") if ActiveStorage::Blob.find_signed(permitted_params[:profile_picture_blob_id]).nil?
+      begin
+        current_seller.avatar.attach permitted_params[:profile_picture_blob_id]
+      rescue ActiveRecord::RecordNotUnique
+        current_seller.avatar.reload
+      end
+    elsif permitted_params.has_key?(:profile_picture_blob_id) && current_seller.avatar.attached?
+      current_seller.avatar.purge
     end
 
     begin
@@ -70,19 +76,7 @@ class Settings::ProfileController < Settings::BaseController
         seller_profile.assign_attributes(permitted_params[:seller_profile]) if permitted_params[:seller_profile].present?
         seller_profile.save!
         current_seller.update!(permitted_params[:user]) if permitted_params[:user]
-      end
-
-      # Apply the avatar only after the layout save is accepted, so a rejected stale save leaves it
-      # untouched, and outside the transaction so purge's storage deletion isn't exposed to a rollback.
-      if blob_id.present?
-        begin
-          current_seller.avatar.attach blob_id
-        rescue ActiveRecord::RecordNotUnique
-          current_seller.avatar.reload
-        end
-        current_seller.clear_products_cache
-      elsif permitted_params.has_key?(:profile_picture_blob_id) && current_seller.avatar.attached?
-        current_seller.avatar.purge
+        current_seller.clear_products_cache if permitted_params[:profile_picture_blob_id].present?
       end
       respond_success
     rescue StaleProfileError
