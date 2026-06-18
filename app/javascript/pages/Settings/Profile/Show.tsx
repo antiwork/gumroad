@@ -125,8 +125,13 @@ export default function SettingsPage() {
     setIsSaving(true);
     const settings = profileSettings;
     const { sections, tabs } = editableProfile;
+    // Only submit pages/sections when they actually changed. A save that left them untouched
+    // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
+    // prune sections another tab/device added in the meantime.
+    const profileChanged =
+      !isEqual(sections, lastSavedProfile.current.sections) || !isEqual(tabs, lastSavedProfile.current.tabs);
     try {
-      await saveProfileSettings({ ...settings, tabs, sections });
+      await saveProfileSettings({ ...settings, ...(profileChanged ? { tabs, sections } : {}) });
       lastSavedSettings.current = settings;
       lastSavedProfile.current = { sections, tabs };
       isDirtyRef.current = false;

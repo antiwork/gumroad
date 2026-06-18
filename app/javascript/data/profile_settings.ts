@@ -65,8 +65,10 @@ export const updateProfileSettings = async (
     data: {
       user,
       profile_picture_blob_id,
-      tabs,
-      sections,
+      // Omit pages/sections entirely when the caller didn't pass them, so a settings-only save
+      // doesn't replace (and prune) the server's section list.
+      ...(tabs !== undefined ? { tabs } : {}),
+      ...(sections !== undefined ? { sections } : {}),
     },
   });
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());

@@ -289,6 +289,24 @@ describe "User profile page", type: :system, js: true do
         expect(seller.seller_profile_sections.reload.sole).to_not eq section
       end
 
+      it "keeps sections added by another session when saving unrelated settings" do
+        section = create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id])
+        create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
+        visit profile_path
+        within_section_form "Section 1" do
+          expect(page).to have_field("Section name", with: "Section 1")
+        end
+
+        # Another tab/device adds a section while this editor holds a now-stale section list.
+        concurrent_section = create(:seller_profile_products_section, seller:, header: "Added elsewhere", shown_products: [@product2.id])
+
+        fill_in "Bio", with: "Bio edit that must not touch sections"
+        save_changes
+
+        expect(SellerProfileSection.exists?(concurrent_section.id)).to be true
+        expect(seller.reload.bio).to eq "Bio edit that must not touch sections"
+      end
+
       it "allows copying the link to a section" do
         section = create(:seller_profile_products_section, seller:, header: "Section one")
         section2 = create(:seller_profile_posts_section, seller:, header: "Section two")
