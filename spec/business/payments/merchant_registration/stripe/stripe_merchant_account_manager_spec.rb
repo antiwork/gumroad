@@ -11981,7 +11981,7 @@ describe StripeMerchantAccountManager, :vcr do
         before { merchant_account }
 
         it "calls update account for the user" do
-          expect(subject).to receive(:update_account).with(user, passphrase: "1234")
+          expect(subject).to receive(:update_account).with(user, passphrase: "1234", notify: true)
           subject.handle_new_user_compliance_info(user_compliance_info)
         end
       end
