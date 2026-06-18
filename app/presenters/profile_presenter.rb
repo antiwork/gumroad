@@ -23,13 +23,11 @@ class ProfilePresenter
   end
 
   def profile_props(seller_custom_domain_url:, request:)
-    # The public profile always renders the visitor section shape - editing moved to /profile, so the
-    # public component no longer carries the owner/editing shape. Keep the real viewer though, so
-    # "you own this", "already following this wishlist", and currency reflect them. The only viewer
-    # that resolves as owner here is the seller on their own page; route them to a logged-out context
-    # so the sections stay visitor-shaped (their viewer state on their own profile is moot anyway).
-    viewer = pundit_user&.seller == seller ? SellerContext.logged_out : pundit_user
-    shared_profile_props(seller_custom_domain_url:, request:, pundit_user: viewer).merge(creator_profile:)
+    # editing: false keeps the public profile on the visitor section shape - the inline editor moved
+    # to /profile, so the public component no longer renders the owner/editing shape. The real viewer
+    # is still passed through, so "you own this", "already following this wishlist", and currency
+    # reflect them (including the seller viewing their own page).
+    shared_profile_props(seller_custom_domain_url:, request:, editing: false).merge(creator_profile:)
   end
 
   def profile_settings_props(request:)
@@ -55,9 +53,9 @@ class ProfilePresenter
   end
 
   private
-    def shared_profile_props(seller_custom_domain_url:, request:, pundit_user: @pundit_user)
+    def shared_profile_props(seller_custom_domain_url:, request:, pundit_user: @pundit_user, editing: pundit_user.seller == seller)
       {
-        **profile_sections_presenter.props(request:, pundit_user:, seller_custom_domain_url:),
+        **profile_sections_presenter.props(request:, pundit_user:, seller_custom_domain_url:, editing:),
         bio: seller.bio,
         tabs: (seller.seller_profile.json_data["tabs"] || [])
                 .map { |tab| { name: tab["name"], sections: tab["sections"].map { ObfuscateIds.encrypt(_1) } } },

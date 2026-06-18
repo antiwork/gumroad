@@ -106,6 +106,16 @@ describe ProfilePresenter do
       wishlist_props = props[:sections].find { _1[:id] == wishlist_section.external_id }[:wishlists].first
       expect(wishlist_props[:following]).to eq(true)
     end
+
+    it "keeps the seller's own viewer state while serving visitor-shaped sections" do
+      seller.update!(currency_type: "eur")
+      pundit_user = SellerContext.new(user: seller, seller:)
+      props = described_class.new(pundit_user:, seller: seller.reload).profile_props(seller_custom_domain_url: nil, request:)
+
+      expect(props[:currency_code]).to eq("eur")
+      expect(props).not_to have_key(:products)
+      expect(props[:sections].first).not_to have_key(:shown_products)
+    end
   end
 
   describe "#profile_settings_props" do

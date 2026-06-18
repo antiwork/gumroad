@@ -12,7 +12,7 @@ class ProfileSectionsPresenter
     @query = query
   end
 
-  def props(request:, pundit_user:, seller_custom_domain_url:)
+  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller)
     sections = query.to_a
 
     props = {
@@ -20,10 +20,10 @@ class ProfileSectionsPresenter
       show_ratings_filter: seller.links.alive.any?(&:display_product_reviews?),
       creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
       sections: cached_sections.map do |props|
-        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:)
+        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:)
       end
     }
-    if pundit_user.seller == seller
+    if editing
       props[:products] = seller.products.alive.not_archived.select(:id, :name).map { { id: ObfuscateIds.encrypt(_1.id), name: _1.name } }
       props[:posts] = visible_posts
       props[:wishlist_options] = seller.wishlists.alive.map { { id: _1.external_id, name: _1.name } }
@@ -69,8 +69,8 @@ class ProfileSectionsPresenter
   private
     attr_reader :seller, :query
 
-    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:)
-      is_owner = pundit_user.seller == seller
+    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:)
+      is_owner = editing
       params = request.query_parameters
       if is_owner
         cached_props.merge!(
