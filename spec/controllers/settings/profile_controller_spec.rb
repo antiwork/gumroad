@@ -205,6 +205,29 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [section.id, concurrent.id] }].as_json
       end
 
+      it "leaves the avatar unchanged when a stale layout save is rejected" do
+        seller.avatar.attach(file_fixture("test.png"))
+        original_blob_id = seller.avatar.blob.id
+        section = create(:seller_profile_products_section, seller:, header: "Section 1")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+        stale_version = seller.seller_profile.layout_version.iso8601(6)
+
+        # Another session edits the section, advancing the profile's version.
+        section.update!(header: "Changed elsewhere")
+
+        new_blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+
+        put :update, params: {
+          profile_picture_blob_id: new_blob.signed_id,
+          sections: [{ id: section.external_id, header: "Renamed" }],
+          tabs: [{ name: "Tab 1", sections: [section.external_id] }],
+          profile_version: stale_version,
+        }, as: :json
+
+        expect(flash[:alert]).to include("changed somewhere else")
+        expect(seller.reload.avatar.blob.id).to eq(original_blob_id)
+      end
+
       it "rejects the save when a section's content was edited in another session" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1")
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })

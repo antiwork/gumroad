@@ -3,6 +3,8 @@
 class Settings::ProfileController < Settings::BaseController
   StaleProfileError = Class.new(StandardError)
   private_constant :StaleProfileError
+  STALE_PROFILE_MESSAGE = "Your profile was changed somewhere else. Please reload the page and try again."
+  private_constant :STALE_PROFILE_MESSAGE
 
   before_action :authorize
 
@@ -14,6 +16,12 @@ class Settings::ProfileController < Settings::BaseController
 
   def update
     return respond_error("You have to confirm your email address before you can do that.") unless current_seller.confirmed?
+
+    # Reject a stale layout before mutating anything (including the avatar), so a rejected save leaves
+    # the profile untouched. The locked re-check inside the transaction is authoritative; this is an
+    # early-out that avoids a partial write - e.g. attaching/purging the avatar - when we already know
+    # the layout is stale.
+    return respond_error(STALE_PROFILE_MESSAGE) if stale_layout_submission?
 
     if permitted_params[:profile_picture_blob_id].present?
       return respond_error("The logo is already removed. Please refresh the page and try again.") if ActiveStorage::Blob.find_signed(permitted_params[:profile_picture_blob_id]).nil?
@@ -37,10 +45,9 @@ class Settings::ProfileController < Settings::BaseController
           seller_profile.lock!
           # A persisted profile must be saved against a matching version. A missing/blank version
           # means the editor loaded before this profile row existed (another session has created it
-          # since), so the submitted layout is stale too.
-          if permitted_params[:profile_version].blank? || seller_profile.layout_version.iso8601(6) != permitted_params[:profile_version]
-            raise StaleProfileError
-          end
+          # since), so the submitted layout is stale too. Re-checked here under the lock in case the
+          # layout changed between the early-out above and this transaction.
+          raise StaleProfileError if submitted_version_stale?(seller_profile)
         end
         section_ids_by_param_id = {}
         if permitted_params[:sections]
@@ -80,7 +87,7 @@ class Settings::ProfileController < Settings::BaseController
       end
       respond_success
     rescue StaleProfileError
-      respond_error("Your profile was changed somewhere else. Please reload the page and try again.")
+      respond_error(STALE_PROFILE_MESSAGE)
     rescue ActiveRecord::RecordInvalid => e
       respond_error(e.record.errors.full_messages.to_sentence)
     rescue ActiveRecord::SubclassNotFound
@@ -89,6 +96,17 @@ class Settings::ProfileController < Settings::BaseController
   end
 
   private
+    def stale_layout_submission?
+      return false unless permitted_params[:tabs] || permitted_params[:sections]
+
+      seller_profile = current_seller.seller_profile
+      seller_profile.persisted? && submitted_version_stale?(seller_profile)
+    end
+
+    def submitted_version_stale?(seller_profile)
+      permitted_params[:profile_version].blank? || seller_profile.layout_version.iso8601(6) != permitted_params[:profile_version]
+    end
+
     def authorize
       super(profile_policy)
     end
