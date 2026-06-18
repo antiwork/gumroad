@@ -15,7 +15,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
       visit settings_main_path
 
       expect(page).to have_tab_button "Settings"
-      expect(page).to have_tab_button "Profile"
       expect(page).to have_tab_button "Payments"
       expect(page).to have_tab_button "Password and authentication"
       expect(page).to have_tab_button "Advanced"

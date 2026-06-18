@@ -211,9 +211,12 @@ const SectionRow = ({
   const sectionTitle = section.header || SECTION_TYPE_LABELS[section.type];
   const update = (updated: Section) => updateSection(updated);
   const copyLink = () => {
+    const profileUrl = state.creator_profile.subdomain
+      ? Routes.root_url({ host: state.creator_profile.subdomain })
+      : window.location.href;
     try {
       void navigator.clipboard
-        .writeText(new URL(`?section=${section.id}#${section.id}`, window.location.href).toString())
+        .writeText(new URL(`?section=${section.id}#${section.id}`, profileUrl).toString())
         .then(() => showAlert("Section link copied!", "success"))
         .catch(() => showAlert("Clipboard is not available.", "error"));
     } catch {

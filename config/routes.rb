@@ -1230,7 +1230,6 @@ Rails.application.routes.draw do
     get "/follow", to: redirect("/subscribe")
     get "/coffee", to: "users#coffee", as: :custom_domain_coffee
     get "/edit", to: "users#edit", as: nil
-    get "/settings/profile/products/:id", to: "settings/profile/products#show", as: nil
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :custom_domain_url_redirect_expired_page
