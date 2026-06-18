@@ -105,7 +105,7 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       return render json: { success: false, message: "payout_period_end_date must be in the past" }, status: :bad_request
     end
 
-    bypass_minimum_payout = ActiveModel::Type::Boolean.new.cast(params[:bypass_minimum_payout]) || false
+    bypass_minimum_payout = ActiveModel::Type::Boolean.new.cast(params[:bypass_minimum_payout]) == true
 
     record_admin_write(action: "payouts.issue", target: @user) do
       if processor_param == PayoutProcessorType::PAYPAL && ActiveModel::Type::Boolean.new.cast(params[:should_split_the_amount])
