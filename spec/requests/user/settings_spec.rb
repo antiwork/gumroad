@@ -23,7 +23,7 @@ describe "User profile settings page", type: :system, js: true do
       visit profile_path
 
       expect(page).to have_text "Preview"
-      expect(page).to have_link "View profile", href: root_url(host: @user.subdomain)
+      expect(page).to have_link "Preview", href: root_url(host: @user.subdomain)
     end
 
     it "renders the profile" do

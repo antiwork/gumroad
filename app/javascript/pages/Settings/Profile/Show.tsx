@@ -1,4 +1,4 @@
-import { ArrowUpRight, TwitterX } from "@boxicons/react";
+import { TwitterX } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -123,8 +123,8 @@ export default function SettingsPage() {
     };
   }, []);
 
-  const handleSave = asyncVoid(async () => {
-    if (isSaving) return;
+  const save = async (): Promise<boolean> => {
+    if (isSaving) return false;
     setIsSaving(true);
     const settings = profileSettings;
     const { sections, tabs } = editableProfile;
@@ -144,13 +144,15 @@ export default function SettingsPage() {
       isDirtyRef.current = false;
       await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
       showAlert("Changes saved!", "success");
+      return true;
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
+      return false;
     } finally {
       setIsSaving(false);
     }
-  });
+  };
 
   const profileColors = currentSeller
     ? {
@@ -182,19 +184,9 @@ export default function SettingsPage() {
         className="sticky-top"
         title="Profile"
         actions={
-          <>
-            <NavigationButton
-              href={Routes.root_url({ host: creatorProfile.subdomain })}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View profile
-              <ArrowUpRight className="size-5" />
-            </NavigationButton>
-            <Button color="accent" onClick={handleSave} disabled={!canSave}>
-              Update profile
-            </Button>
-          </>
+          <Button color="accent" onClick={() => void save()} disabled={!canSave}>
+            Update profile
+          </Button>
         }
       />
       <WithPreviewSidebar>
@@ -272,7 +264,32 @@ export default function SettingsPage() {
             />
           </section>
         </div>
-        <PreviewSidebar>
+        <PreviewSidebar
+          previewLink={(props) => {
+            const profileUrl = Routes.root_url({ host: creatorProfile.subdomain });
+            return (
+              <NavigationButton
+                {...props}
+                size="icon"
+                disabled={isSaving}
+                href={profileUrl}
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  // Persist pending edits before previewing, but only when there's something to save -
+                  // settings (name/bio/avatar) are sent on every save with no freshness check, so an
+                  // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
+                  // Open only after a successful save so a failed save doesn't surface a stale preview.
+                  const openProfile = () => window.open(profileUrl, "_blank");
+                  if (canSave)
+                    void save().then((saved) => {
+                      if (saved) openProfile();
+                    });
+                  else openProfile();
+                }}
+              />
+            );
+          }}
+        >
           <Preview
             scaleFactor={0.4}
             style={{
