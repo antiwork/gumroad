@@ -2762,6 +2762,7 @@ describe Purchase, :vcr do
       allow(url_redirect).to receive(:redirect_or_s3_location).and_return(url)
 
       expect(Purchase.purchase_info(url_redirect, link, purchase)).to eq(should_show_receipt: true,
+                                                                         was_paid: true,
                                                                          show_view_content_button_on_product_page: true,
                                                                          is_recurring_billing: false,
                                                                          is_physical: false,
