@@ -48,6 +48,8 @@ jobs:
 
               let lastActivity = new Date(pr.created_at).getTime();
               let staleLabeledAt = null;
+              let humanReopenedAt = null;
+              let lastBotCloseAt = null;
 
               for (const event of events) {
                 let ts = null;
@@ -70,10 +72,36 @@ jobs:
                       staleLabeledAt = new Date(event.created_at).getTime();
                     }
                     break;
+                  case "closed":
+                    if (event.actor?.type === "Bot") lastBotCloseAt = new Date(event.created_at).getTime();
+                    break;
+                  case "reopened":
+                    // A human reopening is an explicit "keep this" signal.
+                    if (event.actor?.type !== "Bot") {
+                      humanReopenedAt = new Date(event.created_at).getTime();
+                      ts = humanReopenedAt;
+                    }
+                    break;
                 }
 
                 if (ts && ts > lastActivity) lastActivity = ts;
               }
+
+              // A human reopened this PR after the bot last closed it (or it was never
+              // bot-closed) — protect it: strip any stale label and skip stale processing.
+              const humanRevived = humanReopenedAt && (!lastBotCloseAt || humanReopenedAt > lastBotCloseAt);
+              if (humanRevived) {
+                if (pr.labels.some(l => l.name === "stale")) {
+                  await github.rest.issues.removeLabel({
+                    owner, repo, issue_number: pr.number, name: "stale"
+                  }).catch(() => {});
+                  core.info(`#${pr.number} — removed stale label (human reopened; protected from auto-close)`);
+                } else {
+                  core.info(`#${pr.number} — skipped (human reopened; protected from auto-close)`);
+                }
+                continue;
+              }
+
 
               const staleDays = (now - lastActivity) / MS_PER_DAY;
               const lastActivityDate = new Date(lastActivity).toISOString().split("T")[0];

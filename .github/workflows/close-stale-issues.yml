@@ -46,6 +46,8 @@ jobs:
 
               let lastActivity = new Date(issue.created_at).getTime();
               let staleLabeledAt = null;
+              let humanReopenedAt = null;
+              let lastBotCloseAt = null;
 
               for (const event of events) {
                 if (event.event === "commented" && event.user?.type !== "Bot") {
@@ -63,7 +65,37 @@ jobs:
                 if (event.event === "labeled" && event.label?.name === "stale") {
                   staleLabeledAt = new Date(event.created_at).getTime();
                 }
+
+                // Track the last time the bot closed this issue
+                if (event.event === "closed" && event.actor?.type === "Bot") {
+                  lastBotCloseAt = new Date(event.created_at).getTime();
+                }
+
+                // A human reopening the issue is an explicit "keep this" signal.
+                // Count it as activity AND remember it so we never auto-close again.
+                if (event.event === "reopened" && event.actor?.type !== "Bot") {
+                  const ts = new Date(event.created_at).getTime();
+                  if (ts > lastActivity) lastActivity = ts;
+                  humanReopenedAt = ts;
+                }
               }
+
+              // A human reopened this issue AFTER the bot last closed it (or it was
+              // never bot-closed) — treat it as protected: strip any stale label and
+              // skip all stale processing so the bot can't re-close what a human revived.
+              const humanRevived = humanReopenedAt && (!lastBotCloseAt || humanReopenedAt > lastBotCloseAt);
+              if (humanRevived) {
+                if (issue.labels.some(l => l.name === "stale")) {
+                  await github.rest.issues.removeLabel({
+                    owner, repo, issue_number: issue.number, name: "stale"
+                  }).catch(() => {});
+                  core.info(`#${issue.number} — removed stale label (human reopened; protected from auto-close)`);
+                } else {
+                  core.info(`#${issue.number} — skipped (human reopened; protected from auto-close)`);
+                }
+                continue;
+              }
+
 
               const staleDays = (now - lastActivity) / MS_PER_DAY;
               const lastActivityDate = new Date(lastActivity).toISOString().split("T")[0];
