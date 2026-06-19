@@ -1,4 +1,4 @@
-import { ArrowInDownSquareHalf, MenuFilter, Truck } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Envelope, MenuFilter, Truck } from "@boxicons/react";
 import { router, useRemember } from "@inertiajs/react";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
@@ -40,7 +40,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
 
-type Product = { id: string; name: string; variants: { id: string; name: string }[] };
+type Product = { id: string; permalink: string; name: string; variants: { id: string; name: string }[] };
 
 export type CustomerPageProps = {
   customers: Customer[];
@@ -53,6 +53,7 @@ export type CustomerPageProps = {
   can_ping: boolean;
   show_refund_fee_notice: boolean;
   license_uses_filter_enabled: boolean;
+  can_send_emails: boolean;
 };
 
 const year = new Date().getFullYear();
@@ -70,6 +71,7 @@ const CustomersPage = ({
   can_ping,
   show_refund_fee_notice,
   license_uses_filter_enabled,
+  can_send_emails,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -187,6 +189,29 @@ const CustomersPage = ({
         : null,
     [includedItems, products],
   );
+
+  const emailFilterParams = React.useMemo(() => {
+    const boughtPermalinks = includedItems.flatMap((item) => {
+      if (item.type === "variant") return [item.id];
+      const product = products.find(({ id }) => id === item.id);
+      return product ? [product.permalink] : [];
+    });
+    const notBoughtPermalinks = excludedItems.flatMap((item) => {
+      if (item.type === "variant") return [item.id];
+      const product = products.find(({ id }) => id === item.id);
+      return product ? [product.permalink] : [];
+    });
+    return {
+      template: "filtered_customers" as const,
+      bought: boughtPermalinks.length > 0 ? boughtPermalinks : undefined,
+      not_bought: notBoughtPermalinks.length > 0 ? notBoughtPermalinks : undefined,
+      paid_more_than: minimumAmount != null ? String(minimumAmount) : undefined,
+      paid_less_than: maximumAmount != null ? String(maximumAmount) : undefined,
+      created_after: createdAfter || undefined,
+      created_before: createdBefore || undefined,
+      from_country: country || undefined,
+    };
+  }, [includedItems, excludedItems, products, minimumAmount, maximumAmount, createdAfter, createdBefore, country]);
 
   if (!currentSeller) return null;
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
@@ -393,6 +418,12 @@ const CustomersPage = ({
                 </div>
               </PopoverContent>
             </Popover>
+            {can_send_emails ? (
+              <NavigationButton href={Routes.new_email_path(emailFilterParams)}>
+                <Envelope aria-hidden="true" className="size-5" />
+                Send email to these customers
+              </NavigationButton>
+            ) : null}
           </div>
         }
       />

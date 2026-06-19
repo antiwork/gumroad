@@ -31,11 +31,13 @@ describe CustomersPresenter do
           products: [
             {
               id: product.external_id,
+              permalink: product.unique_permalink,
               name: "Product",
               variants: [],
             },
             {
               id: membership.external_id,
+              permalink: membership.unique_permalink,
               name: "Membership",
               variants: [
                 {
@@ -50,6 +52,7 @@ describe CustomersPresenter do
             },
             {
               id: coffee.external_id,
+              permalink: coffee.unique_permalink,
               name: "Coffee",
               variants: [
                 {
@@ -68,6 +71,7 @@ describe CustomersPresenter do
           can_ping: true,
           show_refund_fee_notice: false,
           license_uses_filter_enabled: false,
+          can_send_emails: true,
         }
       )
     end
