@@ -428,7 +428,7 @@ const CustomersPage = ({
               </PopoverContent>
             </Popover>
             {can_send_emails && hasActiveFilters ? (
-              <NavigationButton href={Routes.new_email_path(emailFilterParams)}>
+              <NavigationButton color="accent" href={Routes.new_email_path(emailFilterParams)}>
                 <Envelope aria-hidden="true" className="size-5" />
                 Send email to these customers
               </NavigationButton>
