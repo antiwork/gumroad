@@ -190,6 +190,7 @@ const CustomersPage = ({
 
   if (!currentSeller) return null;
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
+  const showNameColumn = customers.some((customer) => customer.name);
 
   return (
     <div className="h-full">
@@ -404,7 +405,7 @@ const CustomersPage = ({
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
-                  <TableHead>Name</TableHead>
+                  {showNameColumn ? <TableHead>Name</TableHead> : null}
                   <TableHead>Product</TableHead>
                   <TableHead {...thProps("created_at")}>Purchase Date</TableHead>
                   <TableHead {...thProps("price_cents")}>Price</TableHead>
@@ -439,7 +440,7 @@ const CustomersPage = ({
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
                       </TableCell>
-                      <TableCell>{customer.name}</TableCell>
+                      {showNameColumn ? <TableCell>{customer.name}</TableCell> : null}
                       <TableCell>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
