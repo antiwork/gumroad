@@ -5,14 +5,10 @@ class BackfillEditEmailsScopeForDefaultOauthApplications < ActiveRecord::Migrati
   NEW_SCOPE = "edit_emails"
 
   def up
-    oauth_applications.find_each do |application|
-      scopes = application.scopes.to_s.split
-      next if scopes.include?(NEW_SCOPE)
-      next unless old_default_scopes?(scopes)
-
-      scopes.insert(scopes.index("edit_products").to_i + 1, NEW_SCOPE)
-      application.update_columns(scopes: scopes.join(" "), updated_at: Time.current)
-    end
+    # Intentionally do not backfill this newly introduced write scope onto
+    # existing OAuth applications. Granting edit_emails to already-authorized
+    # apps would let those apps create and send audience emails without a new
+    # explicit user consent flow.
   end
 
   def down
