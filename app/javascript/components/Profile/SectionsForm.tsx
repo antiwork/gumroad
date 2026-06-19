@@ -13,6 +13,7 @@ import { SORT_BY_LABELS } from "$app/components/Product/CardGrid";
 import { TabWithId, tabsWithoutIds, useTabs } from "$app/components/Profile";
 import type { ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { Section, useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
+import { reorderShownIds } from "$app/components/Profile/reorderShownIds";
 import { ImageUploadSettingsContext, RichTextEditorToolbar, useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
@@ -310,8 +311,10 @@ const ProductsSectionFields = ({
     });
 
   const reorderProducts = (newOrder: string[]) => {
+    if (isEqual(newOrder, orderedProductIds)) return;
     setOrderedProductIds(newOrder);
-    update({ ...section, shown_products: sortBy(section.shown_products, (id) => newOrder.indexOf(id)) });
+    const reordered = reorderShownIds(section.shown_products, newOrder);
+    if (!isEqual(reordered, section.shown_products)) update({ ...section, shown_products: reordered });
   };
 
   return (
@@ -528,8 +531,10 @@ const WishlistsSectionFields = ({
     });
 
   const reorderWishlists = (newOrder: string[]) => {
+    if (isEqual(newOrder, orderedWishlistIds)) return;
     setOrderedWishlistIds(newOrder);
-    update({ ...section, shown_wishlists: sortBy(section.shown_wishlists, (id) => newOrder.indexOf(id)) });
+    const reordered = reorderShownIds(section.shown_wishlists, newOrder);
+    if (!isEqual(reordered, section.shown_wishlists)) update({ ...section, shown_wishlists: reordered });
   };
 
   return (
