@@ -4279,6 +4279,18 @@ describe Link, :vcr do
           it "returns purchase_info" do
             expect(product.purchase_info_for_product_page(user, nil)).to eq(purchase.purchase_info)
           end
+
+          it "marks the purchase as paid" do
+            expect(product.purchase_info_for_product_page(user, nil)[:was_paid]).to eq(true)
+          end
+        end
+
+        context "when the user's previous purchase was free" do
+          let!(:purchase) { create(:free_purchase, link: product, purchaser: user) }
+
+          it "marks the purchase as not paid" do
+            expect(product.purchase_info_for_product_page(user, nil)[:was_paid]).to eq(false)
+          end
         end
 
         context "when the user has a previous gift sender purchase" do

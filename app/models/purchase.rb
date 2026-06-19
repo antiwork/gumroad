@@ -1142,6 +1142,7 @@ class Purchase < ApplicationRecord
     json = {
       created_at: purchase.created_at,
       should_show_receipt: !purchase.is_test_purchase? && purchase.successful_and_not_reversed?(include_gift: true),
+      was_paid: purchase.present? && purchase.paid?,
       show_view_content_button_on_product_page: purchase.show_view_content_button_on_product_page?,
       is_recurring_billing: link.is_recurring_billing,
       is_physical: link.is_physical,

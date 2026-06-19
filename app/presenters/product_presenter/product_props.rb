@@ -108,6 +108,7 @@ class ProductPresenter::ProductProps
         created_at: purchase_info[:created_at],
         review: purchase_info[:review],
         should_show_receipt: purchase_info[:should_show_receipt],
+        was_paid: purchase_info[:was_paid],
         is_gift_receiver_purchase: purchase_info[:is_gift_receiver_purchase],
         show_view_content_button_on_product_page: purchase_info[:show_view_content_button_on_product_page],
         total_price_including_tax_and_shipping: purchase_info[:total_price_including_tax_and_shipping],
