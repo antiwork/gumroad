@@ -1457,10 +1457,14 @@ class Purchase < ApplicationRecord
       minimum_price = preorder.authorization_purchase.displayed_price_cents
     else
       minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+      # We allow offer codes larger than the product price, which would make this negative. Floor it
+      # at 0 here, before splitting into installments, so a snapshot-backed installment price stays
+      # authoritative rather than being overwritten when the live product price later drops.
+      minimum_price_cents = 0 if offer_code_for_pricing.present? && minimum_price_cents < 0
       # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
       minimum_price_cents *= quantity
 
-      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
       minimum_price = minimum_price_cents
 
@@ -1472,11 +1476,8 @@ class Purchase < ApplicationRecord
         minimum_price = calculate_installment_payment_price_cents(minimum_price_cents)
       end
 
-      # We allow offer codes that are larger than the price of the product. In that case minimum_price_cents could be negative here. Set it to 0.
-      if original_offer_code.present? && minimum_price_cents < 0
-        minimum_price = 0
       # If a PPP discount decreases the price to a value lower than the minimum, round the price up to the minimum.
-      elsif is_purchasing_power_parity_discounted && minimum_price_cents != 0 && minimum_price_cents < link.currency["min_price"]
+      if is_purchasing_power_parity_discounted && minimum_price_cents != 0 && minimum_price_cents < link.currency["min_price"]
         minimum_price = link.currency["min_price"]
       end
     end
@@ -3014,7 +3015,7 @@ class Purchase < ApplicationRecord
 
     minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
     minimum_price_cents *= quantity
-    minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+    minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
     calculated_price = minimum_price_cents.round
     calculated_price > 0 ? calculated_price : price_cents
@@ -3080,11 +3081,17 @@ class Purchase < ApplicationRecord
       Rails.logger.warn("Failed to auto-delete single-use offer code #{offer_code.id}: #{e.message}")
     end
 
+    # The offer code whose discount applies to this purchase's PRICE. Unlike #original_offer_code
+    # (used for display), pricing honors the cached discount even after the live code is soft
+    # deleted — so legacy installment charges keep the agreed discount — and applies a commission
+    # deposit's code to its completion purchase. Must be used consistently across the discount
+    # amount, the negative-price clamp, and the PPP guard so they never disagree.
+    def offer_code_for_pricing
+      original_offer_code(include_deleted: is_commission_completion_purchase? || has_cached_offer_code?)
+    end
+
     def offer_amount_off(purchase_min_price)
-      # For commissions, apply deposit purchase's offer code to its completion
-      # purchase even if it has been soft deleted.
-      original_offer_code(include_deleted: is_commission_completion_purchase?)
-        &.amount_off(purchase_min_price) || 0
+      offer_code_for_pricing&.amount_off(purchase_min_price) || 0
     end
 
     def displayed_price_usd_cents

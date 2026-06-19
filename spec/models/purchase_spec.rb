@@ -4914,6 +4914,24 @@ describe Purchase, :vcr do
       end
     end
 
+    context "when the offer code was deleted but a discount is cached" do
+      it "still applies the cached discount to the purchase price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(250)
+      end
+
+      it "clamps the price to zero when a cached fixed discount exceeds the price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 600, offer_code_is_percent: false, pre_discount_minimum_price_cents: 500)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(0)
+      end
+    end
+
     it "returns offer_code if the offer_code is not deleted" do
       expect(purchase_with_valid_offer_code.original_offer_code).to eq offer_code
     end
