@@ -10,6 +10,11 @@
 # purchase_offer_code_discount on the original purchase — independent of any later price drift. After
 # this runs, those subscriptions charge exactly like ones created after the snapshot feature shipped.
 #
+# Scope: only plans that used a discount code (i.e. have a cached discount) are backfilled — that is
+# the population affected by #1410, where deleting the code drops the discount. Legacy plans bought
+# without a discount code are intentionally left alone; their price can only drift if the seller
+# edits the product price, a separate concern outside this fix.
+#
 # Idempotent and dry-run by default. Only touches subscriptions that still have charges remaining.
 #
 #   Onetime::BackfillInstallmentPlanSnapshots.process                 # dry run, logs what it would do
@@ -95,6 +100,9 @@ module Onetime
         # place (OfferCode#amount_off). Only the amount is needed, so the deleted code isn't loaded.
         offer_code_attrs = discount.offer_code_is_percent ? { amount_percentage: discount.offer_code_amount } : { amount_cents: discount.offer_code_amount }
         amount_off = OfferCode.new(offer_code_attrs).amount_off(per_unit_before)
+        # No Purchasing Power Parity factor: PPP and offer codes are mutually exclusive in pricing
+        # (Purchase#minimum_paid_price_cents only applies the PPP factor when no offer code is set),
+        # so a plan with a cached discount never had a PPP component in its price.
         [per_unit_before - amount_off, 0].max * (original_purchase.quantity || 1)
       end
 
