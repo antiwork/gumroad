@@ -395,17 +395,18 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
         const paidLessThan = searchParams.get("paid_less_than");
         if (paidMoreThan !== null && paidMoreThan !== "") {
           const parsed = Number.parseInt(paidMoreThan, 10);
-          if (!Number.isNaN(parsed)) setPaidMoreThanCents(parsed);
+          if (!Number.isNaN(parsed) && parsed >= 0) setPaidMoreThanCents(parsed);
         }
         if (paidLessThan !== null && paidLessThan !== "") {
           const parsed = Number.parseInt(paidLessThan, 10);
-          if (!Number.isNaN(parsed)) setPaidLessThanCents(parsed);
+          if (!Number.isNaN(parsed) && parsed >= 0) setPaidLessThanCents(parsed);
         }
 
+        const isValidDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/u.test(value);
         const createdAfter = searchParams.get("created_after");
         const createdBefore = searchParams.get("created_before");
-        if (createdAfter) setAfterDate(createdAfter);
-        if (createdBefore) setBeforeDate(createdBefore);
+        if (createdAfter && isValidDate(createdAfter)) setAfterDate(createdAfter);
+        if (createdBefore && isValidDate(createdBefore)) setBeforeDate(createdBefore);
 
         const fromCountry = searchParams.get("from_country");
         if (fromCountry && context.countries.includes(fromCountry)) setFromCountry(fromCountry);
