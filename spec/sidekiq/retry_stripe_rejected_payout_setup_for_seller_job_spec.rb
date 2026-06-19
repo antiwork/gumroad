@@ -73,24 +73,6 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       end
     end
 
-    context "when remediation clears the marker but then raises an unrelated error" do
-      let!(:merchant_account) { create(:merchant_account, user:) }
-      let!(:note) { add_note(postal_prefix) }
-
-      it "stops quietly without a false resolution or a recorded attempt" do
-        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do
-          note.mark_deleted!
-          raise Stripe::InvalidRequestError.new("Representative information is invalid", "person")
-        end
-
-        described_class.new.perform(user.id)
-
-        expect(note.reload).not_to be_alive
-        expect(user.comments.alive.with_type_payout_note.where("content LIKE ?", "#{described_class::RESOLVED_NOTE[0, 20]}%")).to be_empty
-        expect(note.json_data["retry_count"]).to be_nil
-      end
-    end
-
     context "when remediation keeps failing and the marker is preserved" do
       let!(:merchant_account) { create(:merchant_account, user:) }
       let!(:note) { add_note(postal_prefix) }

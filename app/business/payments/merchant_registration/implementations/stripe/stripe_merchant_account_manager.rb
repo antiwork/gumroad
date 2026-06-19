@@ -242,7 +242,6 @@ module StripeMerchantAccountManager
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
     Stripe::Account.update(stripe_account.id, diff_attributes)
-    account_updated = true
 
     if user_compliance_info.is_business?
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
@@ -250,11 +249,7 @@ module StripeMerchantAccountManager
 
     clear_stale_postal_code_failure_notes(user)
   rescue Stripe::InvalidRequestError => e
-    if postal_code_invalid_error?(e)
-      record_postal_code_failure_note(user, e) if notify
-    elsif account_updated
-      clear_stale_postal_code_failure_notes(user)
-    end
+    record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
   end
 
