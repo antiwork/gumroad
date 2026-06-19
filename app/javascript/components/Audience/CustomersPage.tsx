@@ -430,7 +430,7 @@ const CustomersPage = ({
             {can_send_emails && hasActiveFilters ? (
               <NavigationButton color="accent" href={Routes.new_email_path(emailFilterParams)}>
                 <Envelope aria-hidden="true" className="size-5" />
-                Send email to these customers
+                Email these customers
               </NavigationButton>
             ) : null}
           </div>
