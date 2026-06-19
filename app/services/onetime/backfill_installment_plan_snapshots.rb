@@ -60,7 +60,9 @@ module Onetime
         return tick(:skipped_no_installment_count) if number_of_installments <= 0
 
         original_purchase = subscription.original_purchase
-        discount = original_purchase&.purchase_offer_code_discount
+        return tick(:skipped_no_original_purchase) if original_purchase.nil?
+
+        discount = original_purchase.purchase_offer_code_discount
         return tick(:skipped_no_cached_discount) if discount.nil?
 
         total_price_cents = agreed_total_cents(original_purchase, discount)

@@ -3086,6 +3086,11 @@ class Purchase < ApplicationRecord
     # deleted — so legacy installment charges keep the agreed discount — and applies a commission
     # deposit's code to its completion purchase. Must be used consistently across the discount
     # amount, the negative-price clamp, and the PPP guard so they never disagree.
+    #
+    # Deliberately not memoized: a purchase's discount state changes during its lifecycle (the
+    # cached discount is built mid-pricing; the offer code can be deleted), so each caller must
+    # resolve against the current state. The cost is negligible — no query, since the discount
+    # and its offer code are already loaded on the pricing path.
     def offer_code_for_pricing
       original_offer_code(include_deleted: is_commission_completion_purchase? || has_cached_offer_code?)
     end
