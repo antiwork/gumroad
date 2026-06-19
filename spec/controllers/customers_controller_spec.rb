@@ -453,9 +453,10 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
   describe "GET missed_posts" do
     before do
       @product = create(:product, user: seller)
-      @post1 = create(:installment, link: @product, published_at: Time.current)
-      @post2 = create(:installment, link: @product, published_at: Time.current)
-      @post3 = create(:installment, link: @product, published_at: Time.current)
+      published_at = Time.current
+      @post1 = create(:installment, link: @product, published_at:)
+      @post2 = create(:installment, link: @product, published_at:)
+      @post3 = create(:installment, link: @product, published_at:)
       @unpublished_post = create(:installment, link: @product)
       @purchase = create(:purchase, link: @product)
       create(:creator_contacting_customers_email_info_delivered, installment: @post1, purchase: @purchase)
