@@ -190,6 +190,15 @@ const CustomersPage = ({
     [includedItems, products],
   );
 
+  const hasActiveFilters =
+    includedItems.length > 0 ||
+    excludedItems.length > 0 ||
+    minimumAmount != null ||
+    maximumAmount != null ||
+    createdAfter != null ||
+    createdBefore != null ||
+    country != null;
+
   const emailFilterParams = React.useMemo(() => {
     const boughtPermalinks = includedItems.flatMap((item) => {
       if (item.type === "variant") return [item.id];
@@ -207,8 +216,8 @@ const CustomersPage = ({
       not_bought: notBoughtPermalinks.length > 0 ? notBoughtPermalinks : undefined,
       paid_more_than: minimumAmount != null ? String(minimumAmount) : undefined,
       paid_less_than: maximumAmount != null ? String(maximumAmount) : undefined,
-      created_after: createdAfter || undefined,
-      created_before: createdBefore || undefined,
+      created_after: createdAfter ? lightFormat(createdAfter, "yyyy-MM-dd") : undefined,
+      created_before: createdBefore ? lightFormat(createdBefore, "yyyy-MM-dd") : undefined,
       from_country: country || undefined,
     };
   }, [includedItems, excludedItems, products, minimumAmount, maximumAmount, createdAfter, createdBefore, country]);
@@ -418,7 +427,7 @@ const CustomersPage = ({
                 </div>
               </PopoverContent>
             </Popover>
-            {can_send_emails ? (
+            {can_send_emails && hasActiveFilters ? (
               <NavigationButton href={Routes.new_email_path(emailFilterParams)}>
                 <Envelope aria-hidden="true" className="size-5" />
                 Send email to these customers

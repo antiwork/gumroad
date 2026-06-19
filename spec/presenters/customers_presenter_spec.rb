@@ -71,7 +71,7 @@ describe CustomersPresenter do
           can_ping: true,
           show_refund_fee_notice: false,
           license_uses_filter_enabled: false,
-          can_send_emails: true,
+          can_send_emails: false,
         }
       )
     end
@@ -81,6 +81,22 @@ describe CustomersPresenter do
 
       it "returns license_uses_filter_enabled as true" do
         expect(presenter.customers_props[:license_uses_filter_enabled]).to eq(true)
+      end
+    end
+
+    describe "can_send_emails" do
+      context "when the seller has a customers audience" do
+        before { create(:purchase, link: product, seller:, email: "contactable@gumroad.com", can_contact: true) }
+
+        it "returns true" do
+          expect(presenter.customers_props[:can_send_emails]).to eq(true)
+        end
+      end
+
+      context "when the seller has no customers audience" do
+        it "returns false" do
+          expect(presenter.customers_props[:can_send_emails]).to eq(false)
+        end
       end
     end
   end

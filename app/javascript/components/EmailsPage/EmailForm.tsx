@@ -393,8 +393,14 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
 
         const paidMoreThan = searchParams.get("paid_more_than");
         const paidLessThan = searchParams.get("paid_less_than");
-        if (paidMoreThan !== null && paidMoreThan !== "") setPaidMoreThanCents(Number.parseInt(paidMoreThan, 10));
-        if (paidLessThan !== null && paidLessThan !== "") setPaidLessThanCents(Number.parseInt(paidLessThan, 10));
+        if (paidMoreThan !== null && paidMoreThan !== "") {
+          const parsed = Number.parseInt(paidMoreThan, 10);
+          if (!Number.isNaN(parsed)) setPaidMoreThanCents(parsed);
+        }
+        if (paidLessThan !== null && paidLessThan !== "") {
+          const parsed = Number.parseInt(paidLessThan, 10);
+          if (!Number.isNaN(parsed)) setPaidLessThanCents(parsed);
+        }
 
         const createdAfter = searchParams.get("created_after");
         const createdBefore = searchParams.get("created_before");
