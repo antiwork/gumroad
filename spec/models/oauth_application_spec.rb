@@ -120,6 +120,15 @@ describe OauthApplication do
       end.to change(Doorkeeper::AccessToken, :count).by(1)
     end
 
+    it "generates access tokens and grants using the application scopes" do
+      @oauth_application.update!(scopes: "edit_products view_sales")
+
+      access_token = @oauth_application.get_or_generate_access_token
+
+      expect(access_token.scopes.to_s).to eq("edit_products view_sales")
+      expect(@oauth_application.access_grants.last.scopes.to_s).to eq("edit_products view_sales")
+    end
+
     it "generates new access token if existing ones are revoked" do
       @oauth_application.get_or_generate_access_token
       Doorkeeper::AccessToken.revoke_all_for(@oauth_application.id, @oauth_application.owner)
