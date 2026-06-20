@@ -107,6 +107,43 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response.parsed_body).to eq("success" => false, "message" => "Customer cannot be emailed.")
     end
 
+    it "returns a JSON 422 for a gift sale even via a direct POST" do
+      # Keep the seller's customers-audience non-empty via a separate normal sale,
+      # so the request reaches the gift guard rather than the audience check.
+      create(:purchase, seller:, link: product, email: "normal@example.com", can_contact: true)
+      create(:gift, gifter_purchase: purchase, giftee_email: "giftee@example.com", link: product)
+      purchase.update!(is_gift_sender_purchase: true)
+      expect(PostEmailApi).to_not receive(:process)
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count).and not_change(PostEmailBlast, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.media_type).to eq("application/json")
+      expect(response.parsed_body).to eq("success" => false, "message" => "Customer cannot be emailed.")
+    end
+
+    it "delivers the email after the installment and blast are committed" do
+      purchase.create_url_redirect!
+
+      expect(PostEmailApi).to receive(:process) do
+        # The installment + blast must already be persisted (committed) before
+        # the external send runs, so a send is never made for a record that a
+        # later rollback would erase.
+        installment = Installment.last
+        expect(installment).to be_persisted
+        expect(installment).to be_published
+        expect(installment.blasts.count).to eq(1)
+        create(:creator_contacting_customers_email_info_sent, installment:, purchase:)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
     it "returns a JSON 404 when the seller does not have a customers email audience" do
       purchase
       seller.audience_members.destroy_all

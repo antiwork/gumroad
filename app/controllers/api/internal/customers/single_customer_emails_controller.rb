@@ -11,13 +11,13 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     authorize Installment, :send_for_purchase?
 
     return render_error("Customer not found.", :not_found) unless seller_can_email_customers?
-    return render_error("Customer cannot be emailed.", :unprocessable_entity) unless purchase.can_contact? && EmailFormatValidator.valid?(purchase.email)
+    return render_error("Customer cannot be emailed.", :unprocessable_entity) unless purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && purchase.giftee_email.blank?
     return render_error("You are not eligible to send emails.", :unauthorized) unless current_seller.eligible_to_send_emails?
     return render_error("Please set a title.", :unprocessable_entity) if permitted_params[:name].blank?
     return render_error("Please include a message as part of the update.", :unprocessable_entity) if permitted_params[:message].blank?
 
-    ActiveRecord::Base.transaction do
-      installment = current_seller.installments.build(
+    installment = ActiveRecord::Base.transaction do
+      record = current_seller.installments.build(
         name: permitted_params[:name],
         message: permitted_params[:message],
         installment_type: Installment::SELLER_TYPE,
@@ -25,17 +25,25 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
         shown_on_profile: false,
         allow_comments: false
       )
-      installment.save!
-      SaveFilesService.perform(installment, files_params(permitted_params))
-      installment.publish!
+      record.save!
+      SaveFilesService.perform(record, files_params(permitted_params))
+      record.publish!
       blast_timestamp = Time.current
       PostEmailBlast.create!(
-        post: installment,
+        post: record,
         requested_at: blast_timestamp,
         started_at: blast_timestamp,
         completed_at: blast_timestamp
       )
+      record
+    end
 
+    # Deliver AFTER the transaction commits. PostEmailApi.process hits an
+    # external provider (Resend/SendGrid), so it must not run inside the DB
+    # transaction: a post-send rollback would orphan an already-delivered
+    # email, and a retry could double-send. The Rails.cache guard provides
+    # idempotency, mirroring PostsController#send_for_purchase.
+    Rails.cache.fetch("single_customer_email:#{installment.id}:#{purchase.id}", expires_in: 8.hours) do
       CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
       PostEmailApi.process(
         post: installment,
@@ -48,6 +56,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
           }.compact_blank
         ]
       )
+      true
     end
 
     render json: { success: true }
