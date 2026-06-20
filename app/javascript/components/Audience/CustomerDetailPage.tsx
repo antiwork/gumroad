@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUpRightSquare, Paperclip, Trash } from "@boxicons/react";
+import { ArrowDown, ArrowUpRightSquare, Envelope, Paperclip, Trash } from "@boxicons/react";
 import { Deferred, Link } from "@inertiajs/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import * as React from "react";
@@ -177,6 +177,7 @@ const CustomerDetailPage = ({
   const [charges, setCharges] = React.useState<Charge[]>(initialCharges);
 
   const isCoffee = customer.product.native_type === "coffee";
+  const canEmailCustomer = isValidEmail(customer.email) && customer.can_contact && !customer.giftee_email;
 
   const formatDateWithoutTime = (date: Date) =>
     date.toLocaleDateString(userAgentInfo.locale, {
@@ -231,6 +232,21 @@ const CustomerDetailPage = ({
             {customer.product.name}
             {statusPills}
           </div>
+        }
+        actions={
+          canEmailCustomer ? (
+            <NavigationButton
+              color="accent"
+              href={Routes.new_email_path({
+                template: "single_customer",
+                purchase_id: customer.id,
+                email: customer.email,
+              })}
+            >
+              <Envelope aria-hidden="true" className="size-5" />
+              Email customer
+            </NavigationButton>
+          ) : null
         }
       />
 
