@@ -1073,6 +1073,8 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
+        post "/customers/:purchase_id/single_customer_email", to: "customers/single_customer_emails#create", as: :single_customer_email
+
         resources :installments, only: [] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count

@@ -244,6 +244,27 @@ export const resendPost = async (purchaseId: string, postId: string) => {
   if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
 };
 
+type SingleCustomerEmailFile = {
+  external_id: string;
+  position: number;
+  url: string;
+  stream_only: boolean;
+  subtitle_files: { url: string; language: string }[];
+};
+
+export const sendSingleCustomerEmail = async (
+  purchaseId: string,
+  data: { name: string; message: string; files: SingleCustomerEmailFile[] },
+) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_single_customer_email_path(purchaseId),
+    data,
+  });
+  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
+};
+
 export const updatePurchase = (
   purchaseId: string,
   update: Partial<{ email: string; giftee_email: string; quantity: number } & Address>,

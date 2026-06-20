@@ -85,6 +85,7 @@ export type CustomerDetailPageProps = {
   customer: Customer;
   countries: string[];
   can_ping: boolean;
+  can_email: boolean;
   show_refund_fee_notice: boolean;
   emails: CustomerEmail[];
   missed_posts?: MissedPost[];
@@ -130,6 +131,7 @@ const CustomerDetailPage = ({
   customer: initialCustomer,
   countries,
   can_ping: canPing,
+  can_email: canEmail,
   show_refund_fee_notice: showRefundFeeNotice,
   emails: initialEmails,
   missed_posts: initialMissedPosts,
@@ -177,7 +179,7 @@ const CustomerDetailPage = ({
   const [charges, setCharges] = React.useState<Charge[]>(initialCharges);
 
   const isCoffee = customer.product.native_type === "coffee";
-  const canEmailCustomer = isValidEmail(customer.email) && customer.can_contact && !customer.giftee_email;
+  const canEmailCustomer = canEmail && isValidEmail(customer.email) && customer.can_contact && !customer.giftee_email;
 
   const formatDateWithoutTime = (date: Date) =>
     date.toLocaleDateString(userAgentInfo.locale, {

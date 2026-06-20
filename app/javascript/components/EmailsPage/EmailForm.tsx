@@ -6,14 +6,14 @@ import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
 import typia from "typia";
 
-import { resendPost } from "$app/data/customers";
+import { sendSingleCustomerEmail } from "$app/data/customers";
 import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import Countdown from "$app/utils/countdown";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError, request, ResponseError } from "$app/utils/request";
+import { AbortError, assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -76,6 +76,14 @@ type SaveAction =
   | "save_and_preview_post"
   | "save_and_schedule"
   | "save_and_publish";
+
+const hasMessageContent = (message: string) => {
+  const document = new DOMParser().parseFromString(message, "text/html");
+  return (
+    (document.body.textContent ?? "").trim().length > 0 ||
+    document.body.querySelector("img, video, audio, iframe, figure") !== null
+  );
+};
 
 const getRecipientType = (audienceType: AudienceType, boughtItems: ProductOrVariantOption[]) => {
   if (audienceType === "everyone") return "audience";
@@ -198,16 +206,6 @@ const parseInitialValue = (value: string): string | JSONContent => {
     }
   } catch {}
   return value;
-};
-
-const getSavedInstallmentExternalId = (page: unknown) => {
-  try {
-    const { props } = typia.assert<{ props: { installment: { external_id: string } } }>(page);
-    if (props.installment.external_id.length === 0) throw new Error("missing external_id");
-    return props.installment.external_id;
-  } catch {
-    throw new ResponseError("Email saved, but the saved draft could not be found.");
-  }
 };
 
 const TAB_TO_PATH: Record<EmailTab, string> = {
@@ -744,58 +742,41 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
   });
 
   const [isSendingSingleRecipient, setIsSendingSingleRecipient] = React.useState(false);
-  const saveSingleRecipientDraft = () =>
-    new Promise<string>((resolve, reject) => {
-      const singleRecipientFiltersPayload = {
-        paid_more_than_cents: null,
-        paid_less_than_cents: null,
-        bought_from: null,
-        installment_type: "seller",
-        created_after: "",
-        created_before: "",
-        bought_products: null,
-        bought_variants: null,
-        not_bought_products: null,
-        not_bought_variants: null,
-        affiliate_products: null,
-        send_emails: true,
-        shown_on_profile: false,
-        allow_comments: false,
-      };
+  const validateSingleRecipientEmail = () => {
+    const invalidFieldNames = new Set<InvalidFieldName>();
+    const hasMessage = hasMessageContent(form.data.installment.message);
 
-      form.transform(() => buildPayload("save", singleRecipientFiltersPayload, null, null));
+    if (form.data.installment.name.trim() === "") {
+      invalidFieldNames.add("title");
+      titleRef.current?.focus();
+      showAlert("Please set a title.", "error");
+    } else if (!hasMessage) {
+      showAlert("Please include a message as part of the update.", "error");
+    }
 
-      const options = {
-        onSuccess: (page: unknown) => {
-          try {
-            resolve(installment?.external_id ?? getSavedInstallmentExternalId(page));
-          } catch (error) {
-            reject(error instanceof Error ? error : new ResponseError("Email could not be saved."));
-          }
-        },
-        onError: (errors: Record<string, string>) => {
-          reject(new ResponseError(Object.values(errors)[0] ?? "Email could not be saved."));
-        },
-        onFinish: () => finishPublishing(),
-      };
-
-      if (installment?.external_id) {
-        form.put(Routes.email_path(installment.external_id), options);
-      } else {
-        form.post(Routes.emails_path(), options);
-      }
-    });
+    setInvalidFields(invalidFieldNames);
+    return invalidFieldNames.size === 0 && hasMessage;
+  };
 
   const sendToSingleCustomer = asyncVoid(async () => {
     if (!singleRecipient) return;
 
     await Promise.resolve();
-    if (!validate("save")) return;
+    if (!validateSingleRecipientEmail()) return;
 
     setIsSendingSingleRecipient(true);
     try {
-      const installmentExternalId = await saveSingleRecipientDraft();
-      await resendPost(singleRecipient.purchaseId, installmentExternalId);
+      await sendSingleCustomerEmail(singleRecipient.purchaseId, {
+        name: form.data.installment.name,
+        message: form.data.installment.message,
+        files: files.map((file, position) => ({
+          external_id: file.id,
+          position,
+          url: file.url,
+          stream_only: file.is_streamable && isStreamOnly,
+          subtitle_files: file.subtitle_files,
+        })),
+      });
       showAlert("Email sent", "success");
       router.visit(Routes.customer_sale_path(singleRecipient.purchaseId));
     } catch (error) {

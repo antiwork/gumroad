@@ -71,6 +71,28 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "GET show" do
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, seller:, link: product, email: "buyer@example.com", can_contact: true) }
+
+    before { Feature.activate_user(:react_customers_page, seller) }
+
+    it "exposes whether the seller can email customers" do
+      get :show, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(inertia).to render_component("Customers/Show")
+      expect(inertia.props[:can_email]).to eq(true)
+
+      seller.audience_members.destroy_all
+
+      get :show, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(inertia.props[:can_email]).to eq(false)
+    end
+  end
+
   describe "GET paged" do
     let(:product) { create(:product, user: seller, name: "Product 1", price_cents: 100) }
     let!(:purchases) do

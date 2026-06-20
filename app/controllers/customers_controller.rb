@@ -33,12 +33,14 @@ class CustomersController < Sellers::BaseController
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
     presenter = CustomerPresenter.new(purchase:)
     customer_data = presenter.customer(pundit_user:)
+    user_presenter = UserPresenter.new(user: current_seller)
 
     render inertia: "Customers/Show",
            props: {
              customer: customer_data,
              countries: Compliance::Countries.for_select.map(&:last),
              can_ping: current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
+             can_email: user_presenter.audience_types.include?(:customers),
              show_refund_fee_notice: current_seller.show_refund_fee_notice?,
              emails: build_customer_emails(purchase),
              missed_posts: InertiaRails.defer { presenter.missed_posts },
