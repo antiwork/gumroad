@@ -11,6 +11,8 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
       :paid_more_than_cents,
       :paid_less_than_cents,
       :bought_from,
+      :active_customers_only,
+      :minimum_license_uses,
       :installment_type,
       :created_after,
       :created_before,

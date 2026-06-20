@@ -29,6 +29,12 @@
           },
           "price_cents": {
             "type": "integer"
+          },
+          "subscription_cancelled": {
+            "type": "boolean"
+          },
+          "license_uses": {
+            "type": "integer"
           }
         },
         "required": ["id", "created_at", "product_id", "price_cents"],

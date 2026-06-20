@@ -21,6 +21,8 @@ module WithFiltering
     attr_json_data_accessor :created_after
     attr_json_data_accessor :created_before
     attr_json_data_accessor :bought_from
+    attr_json_data_accessor :active_customers_only
+    attr_json_data_accessor :minimum_license_uses
     attr_json_data_accessor :bought_variants
     attr_json_data_accessor :not_bought_variants
     attr_json_data_accessor :affiliate_products
@@ -79,6 +81,13 @@ module WithFiltering
     created_before_date = safe_parse_filter_date(params[:created_before])
     self.created_before = created_before_date ? created_before_date.in_time_zone(user.timezone).end_of_day : nil
     self.bought_from = seller_or_product_or_variant_type? ? params[:bought_from].presence : nil
+    self.active_customers_only = if seller_or_product_or_variant_type?
+      ActiveModel::Type::Boolean.new.cast(params[:active_customers_only])
+    end
+    self.minimum_license_uses = if seller_or_product_or_variant_type? && params[:minimum_license_uses].present?
+      minimum_license_uses = params[:minimum_license_uses].to_i
+      minimum_license_uses if minimum_license_uses.positive?
+    end
     self.bought_variants = (!audience_type? && params[:bought_variants].present?) ? Array.wrap(params[:bought_variants]) : []
     self.not_bought_variants = params[:not_bought_variants].present? ? Array.wrap(params[:not_bought_variants]) : []
     self.affiliate_products = (!audience_type? && params[:affiliate_products].present?) ? Array.wrap(params[:affiliate_products]) : []
@@ -192,6 +201,11 @@ module WithFiltering
     json[:created_after] = convert_to_date(created_after) if created_after.present?
     json[:created_before] = convert_to_date(created_before) if created_before.present?
     json[:bought_from] = bought_from if bought_from.present?
+    json[:active_customers_only] = true if ActiveModel::Type::Boolean.new.cast(active_customers_only)
+    if minimum_license_uses.present?
+      license_uses = minimum_license_uses.to_i
+      json[:minimum_license_uses] = license_uses if license_uses.positive?
+    end
     json[:affiliate_products] = affiliate_products if affiliate_products.present?
     json[:workflow_trigger] = workflow_trigger if workflow_trigger.present?
     json

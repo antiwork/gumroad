@@ -29,6 +29,8 @@ export type Installment = {
   created_after?: string;
   created_before?: string;
   bought_from?: string;
+  active_customers_only?: boolean;
+  minimum_license_uses?: number | null;
   allow_comments: boolean;
   full_url: string;
   has_been_blasted: boolean;
@@ -111,6 +113,8 @@ type RecipientCountRequestPayload = {
   paid_more_than_cents: number | null;
   paid_less_than_cents: number | null;
   bought_from: string | null;
+  active_customers_only?: boolean;
+  minimum_license_uses: number | null;
   installment_type: string;
   created_after: string;
   created_before: string;

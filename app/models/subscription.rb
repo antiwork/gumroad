@@ -85,6 +85,7 @@ class Subscription < ApplicationRecord
       subscription.deactivated_at_previously_changed? &&
       subscription.deactivated_at_previous_change.first.nil?
   }
+  after_commit :update_original_purchase_audience_member_details, if: :cancelled_at_previously_changed?
 
   attr_writer :price
 
@@ -1203,6 +1204,10 @@ class Subscription < ApplicationRecord
 
     def assign_seller
       self.seller_id = link.user_id
+    end
+
+    def update_original_purchase_audience_member_details
+      original_purchase&.add_to_audience_member_details
     end
 
     def sync_inventory_counter_caches_for_purchases

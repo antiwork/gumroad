@@ -262,6 +262,10 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
   const [afterDate, setAfterDate] = React.useState(installment?.created_after ?? "");
   const [beforeDate, setBeforeDate] = React.useState(installment?.created_before ?? "");
   const [fromCountry, setFromCountry] = React.useState(installment?.bought_from ?? "");
+  const [activeCustomersOnly, setActiveCustomersOnly] = React.useState(installment?.active_customers_only ?? false);
+  const [minimumLicenseUses, setMinimumLicenseUses] = React.useState<number | null>(
+    installment?.minimum_license_uses ?? null,
+  );
   const [allowComments, setAllowComments] = React.useState(
     installment?.allow_comments ?? context.allow_comments_by_default,
   );
@@ -411,6 +415,13 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
         const fromCountry = searchParams.get("from_country");
         if (fromCountry && context.countries.includes(fromCountry)) setFromCountry(fromCountry);
 
+        setActiveCustomersOnly(searchParams.get("active_customers_only") === "true");
+        const minimumLicenseUses = searchParams.get("minimum_license_uses");
+        if (minimumLicenseUses !== null && minimumLicenseUses !== "") {
+          const parsed = Number.parseInt(minimumLicenseUses, 10);
+          if (!Number.isNaN(parsed) && parsed > 0) setMinimumLicenseUses(parsed);
+        }
+
         setChannel({ profile: false, email: true });
       }
       return;
@@ -554,6 +565,8 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
     paid_more_than_cents: audienceType === "customers" ? paidMoreThanCents : null,
     paid_less_than_cents: audienceType === "customers" ? paidLessThanCents : null,
     bought_from: audienceType === "customers" ? fromCountry : null,
+    active_customers_only: audienceType === "customers" ? activeCustomersOnly : false,
+    minimum_license_uses: audienceType === "customers" ? minimumLicenseUses : null,
     installment_type: recipientType,
     created_after: afterDate,
     created_before: beforeDate,
@@ -1144,23 +1157,66 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
             ) : null}
             {audienceType === "customers" ? (
               <CardContent>
-                <Fieldset className="grow basis-0">
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}-from_country`}>From</Label>
-                  </FieldsetTitle>
-                  <Select
-                    id={`${uid}-from_country`}
-                    value={fromCountry}
-                    disabled={isPublished}
-                    onChange={(event) => setFromCountry(event.target.value)}
-                  >
-                    <option value="">Anywhere</option>
-                    {context.countries.map((country) => (
-                      <option key={country} value={country}>
-                        {country}
-                      </option>
-                    ))}
-                  </Select>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--spacer-4)",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                  }}
+                  className="grow"
+                >
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-from_country`}>From</Label>
+                    </FieldsetTitle>
+                    <Select
+                      id={`${uid}-from_country`}
+                      value={fromCountry}
+                      disabled={isPublished}
+                      onChange={(event) => setFromCountry(event.target.value)}
+                    >
+                      <option value="">Anywhere</option>
+                      {context.countries.map((country) => (
+                        <option key={country} value={country}>
+                          {country}
+                        </option>
+                      ))}
+                    </Select>
+                  </Fieldset>
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-minimum_license_uses`}>Minimum license uses</Label>
+                    </FieldsetTitle>
+                    <Input
+                      id={`${uid}-minimum_license_uses`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={minimumLicenseUses ?? ""}
+                      disabled={isPublished}
+                      onChange={(event) => {
+                        const parsed = Number.parseInt(event.target.value, 10);
+                        setMinimumLicenseUses(Number.isNaN(parsed) || parsed <= 0 ? null : parsed);
+                      }}
+                      placeholder="1"
+                    />
+                  </Fieldset>
+                </div>
+              </CardContent>
+            ) : null}
+            {audienceType === "customers" ? (
+              <CardContent>
+                <Fieldset className="grow basis-0" role="group">
+                  <Label htmlFor={`${uid}-active_customers_only`} className="w-full">
+                    Active customers only
+                    <Checkbox
+                      wrapperClassName="ml-auto"
+                      id={`${uid}-active_customers_only`}
+                      checked={activeCustomersOnly}
+                      disabled={isPublished}
+                      onChange={(event) => setActiveCustomersOnly(event.target.checked)}
+                    />
+                  </Label>
                 </Fieldset>
               </CardContent>
             ) : null}

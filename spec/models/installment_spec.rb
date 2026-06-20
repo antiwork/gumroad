@@ -968,6 +968,16 @@ const b = 2;</code></pre>
         affiliate_product_ids: [product_1.id],
       }
       expect(@post.audience_members_filter_params).to eq(expected_params)
+
+      @post.update!(installment_type: "seller", active_customers_only: true, minimum_license_uses: 3)
+      expect(@post.audience_members_filter_params).to include(
+        type: "customer",
+        active_customers_only: true,
+        minimum_license_uses: 3,
+      )
+
+      @post.update_column(:installment_type, "follower")
+      expect(@post.audience_members_filter_params).not_to include(:active_customers_only, :minimum_license_uses)
     end
   end
 

@@ -11,6 +11,7 @@ describe SaveInstallmentService do
       installment: {
         affiliate_products: nil,
         allow_comments: true,
+        active_customers_only: true,
         bought_from: "United States",
         bought_products: [product.unique_permalink],
         bought_variants: [],
@@ -23,6 +24,7 @@ describe SaveInstallmentService do
         name: "Hello",
         not_bought_products: [],
         not_bought_variants: [],
+        minimum_license_uses: 3,
         paid_less_than_cents: 2000,
         paid_more_than_cents: 1000,
         send_emails: true,
@@ -76,6 +78,8 @@ describe SaveInstallmentService do
       expect(installment.product_type?).to be(true)
       expect(installment.link).to eq(product)
       expect(installment.bought_from).to eq("United States")
+      expect(installment.active_customers_only).to be(true)
+      expect(installment.minimum_license_uses).to eq(3)
       expect(installment.bought_products).to eq([product.unique_permalink])
       expect(installment.bought_variants).to be_nil
       expect(installment.created_after.to_date).to eq(Date.parse("2024-01-01"))
@@ -325,6 +329,8 @@ describe SaveInstallmentService do
       expect(installment.bought_products).to eq([product.unique_permalink])
       expect(installment.bought_variants).to be_nil
       expect(installment.bought_from).to eq("United States")
+      expect(installment.active_customers_only).to be(true)
+      expect(installment.minimum_license_uses).to eq(3)
       expect(installment.paid_less_than_cents).to eq(2000)
       expect(installment.paid_more_than_cents).to eq(1000)
       expect(installment.created_after.to_date).to eq(Date.parse("2024-01-01"))

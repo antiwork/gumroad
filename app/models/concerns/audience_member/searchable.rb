@@ -3,7 +3,9 @@
 module AudienceMember::Searchable
   extend ActiveSupport::Concern
 
-  PURCHASE_DETAIL_KEYS = %w[id product_id variant_ids price_cents created_at country].freeze
+  PURCHASE_DETAIL_KEYS = %w[
+    id product_id variant_ids price_cents created_at country subscription_cancelled license_uses
+  ].freeze
   AFFILIATE_DETAIL_KEYS = %w[id product_id created_at].freeze
 
   # Audience members churn on every purchase and follow across all sellers, so only
@@ -55,6 +57,8 @@ module AudienceMember::Searchable
         indexes :price_cents, type: :long
         indexes :created_at, type: :date
         indexes :country, type: :keyword
+        indexes :subscription_cancelled, type: :boolean
+        indexes :license_uses, type: :long
       end
       indexes :affiliates, type: :nested do
         indexes :id, type: :long
@@ -158,6 +162,14 @@ module AudienceMember::Searchable
         filter << { nested: { path: "purchases", query: { term: { "purchases.country" => params[:bought_from] } } } }
       end
 
+      if params[:active_customers_only]
+        filter << active_customers_only_clause
+      end
+
+      if params[:minimum_license_uses]
+        filter << minimum_license_uses_clause(params[:minimum_license_uses])
+      end
+
       if params[:affiliate_product_ids]
         filter << { nested: { path: "affiliates", query: { terms: { "affiliates.product_id" => params[:affiliate_product_ids] } } } }
       end
@@ -175,14 +187,32 @@ module AudienceMember::Searchable
       # they must all match within a single purchase / follower / affiliate record of the member,
       # not across different records.
       def filter_single_record_clause(params)
+        purchase_detail_filter_present = params.values_at(
+          :paid_more_than_cents,
+          :paid_less_than_cents,
+          :created_after,
+          :created_before,
+          :bought_from,
+          :active_customers_only,
+          :minimum_license_uses,
+        ).any?
         single_record_filtering = (
           (params[:bought_product_ids] || params[:bought_variant_ids] || params[:affiliate_product_ids]) \
-          && (params[:paid_more_than_cents] || params[:paid_less_than_cents] || params[:created_after] || params[:created_before] || params[:bought_from]))
+          && purchase_detail_filter_present)
         single_record_filtering ||= (params[:paid_more_than_cents] && params[:paid_less_than_cents])
         single_record_filtering ||= (params[:created_after] && params[:created_before])
+        single_record_filtering ||= params[:active_customers_only] || params[:minimum_license_uses]
         return nil unless single_record_filtering
 
-        has_purchase_conditions = params.values_at(:bought_product_ids, :bought_variant_ids, :paid_more_than_cents, :paid_less_than_cents, :bought_from).any?
+        has_purchase_conditions = params.values_at(
+          :bought_product_ids,
+          :bought_variant_ids,
+          :paid_more_than_cents,
+          :paid_less_than_cents,
+          :bought_from,
+          :active_customers_only,
+          :minimum_license_uses,
+        ).any?
         has_affiliate_conditions = params[:affiliate_product_ids].present?
         has_date_conditions = params[:created_after].present? || params[:created_before].present?
         date_fields = single_record_date_fields(params)
@@ -195,6 +225,8 @@ module AudienceMember::Searchable
           conditions << { range: { "purchases.price_cents" => { gt: params[:paid_more_than_cents] } } } if params[:paid_more_than_cents]
           conditions << { range: { "purchases.price_cents" => { lt: params[:paid_less_than_cents] } } } if params[:paid_less_than_cents]
           conditions << { term: { "purchases.country" => params[:bought_from] } } if params[:bought_from]
+          conditions << active_customers_only_query if params[:active_customers_only]
+          conditions << minimum_license_uses_query(params[:minimum_license_uses]) if params[:minimum_license_uses]
           conditions << { range: { "purchases.created_at" => { gt: params[:created_after] } } } if params[:created_after]
           conditions << { range: { "purchases.created_at" => { lt: params[:created_before] } } } if params[:created_before]
           should << { nested: { path: "purchases", query: { bool: { filter: conditions } } } } if conditions.any?
@@ -244,6 +276,22 @@ module AudienceMember::Searchable
         bought << { terms: { "purchases.product_id" => params[:bought_product_ids] } } if params[:bought_product_ids]
         bought << { terms: { "purchases.variant_ids" => params[:bought_variant_ids] } } if params[:bought_variant_ids]
         { bool: { should: bought, minimum_should_match: 1 } }
+      end
+
+      def active_customers_only_clause
+        { nested: { path: "purchases", query: active_customers_only_query } }
+      end
+
+      def active_customers_only_query
+        { bool: { must_not: [{ term: { "purchases.subscription_cancelled" => true } }] } }
+      end
+
+      def minimum_license_uses_clause(minimum_license_uses)
+        { nested: { path: "purchases", query: minimum_license_uses_query(minimum_license_uses) } }
+      end
+
+      def minimum_license_uses_query(minimum_license_uses)
+        { range: { "purchases.license_uses" => { gte: minimum_license_uses.to_i } } }
       end
   end
 end

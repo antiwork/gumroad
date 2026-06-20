@@ -5252,6 +5252,25 @@ describe Purchase, :vcr do
       end
     end
 
+    describe "#audience_member_details" do
+      it "includes subscription cancellation and license use details" do
+        purchase = create(:membership_purchase, :with_license)
+        purchase.subscription.update!(cancelled_at: 1.day.from_now)
+        purchase.license.update!(uses: 4)
+
+        expect(purchase.reload.audience_member_details).to include(
+          subscription_cancelled: true,
+          license_uses: 4,
+        )
+      end
+
+      it "omits subscription cancellation and license use details when absent" do
+        purchase = create(:purchase)
+
+        expect(purchase.audience_member_details).not_to include(:subscription_cancelled, :license_uses)
+      end
+    end
+
     it "adds member when successful" do
       purchase = create(:purchase_in_progress)
 
