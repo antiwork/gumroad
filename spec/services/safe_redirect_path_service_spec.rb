@@ -77,6 +77,15 @@ describe "SafeRedirectPathService" do
       end
     end
 
+    context "when path uses a percent-encoded backslash to disguise an external host" do
+      it "treats the decoded backslash as a path separator like browsers do and returns a relative path on the current host" do
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
+        @path = "https://evil.com%5C@username.test.gumroad.com/l/ggocri"
+
+        expect(service.process).to eq "/@username.test.gumroad.com/l/ggocri"
+      end
+    end
+
     context "when a same-host path has a backslash in the query string" do
       it "preserves the backslash because browsers do not treat it as a separator in the query" do
         @request = OpenStruct.new(host: "test2.gumroad.com")

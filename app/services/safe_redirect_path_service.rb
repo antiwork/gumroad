@@ -21,7 +21,8 @@ class SafeRedirectPathService
     def normalize_path_separators(path)
       return path if path.nil?
       authority_and_path, separator, query_and_fragment = path.partition(/[?#]/)
-      "#{authority_and_path.tr("\\", "/")}#{separator}#{query_and_fragment}"
+      normalized_authority_and_path = authority_and_path.tr("\\", "/").gsub(/%5[Cc]/, "/")
+      "#{normalized_authority_and_path}#{separator}#{query_and_fragment}"
     end
 
     def relative_path
