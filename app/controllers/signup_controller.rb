@@ -147,7 +147,7 @@ class SignupController < Devise::RegistrationsController
       if !user.deleted? && user.try(:valid_password?, params[:user][:password])
         sign_in_or_prepare_for_two_factor_auth(user)
         respond_to do |format|
-          format.html { redirect_to login_path_for(user) }
+          format.html { redirect_to login_path_for(user), allow_other_host: true }
           format.json { render json: { success: true, redirect_location: login_path_for(user) } }
         end
       else
