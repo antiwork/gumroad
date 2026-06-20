@@ -2,7 +2,7 @@
 
 class SafeRedirectPathService
   def initialize(path, request, allow_subdomain_host: true)
-    @path = path
+    @path = normalize_path_separators(path)
     @allow_subdomain_host = allow_subdomain_host
     @request = request
   end
@@ -17,6 +17,12 @@ class SafeRedirectPathService
 
   private
     attr_reader :path, :request, :allow_subdomain_host
+
+    def normalize_path_separators(path)
+      return path if path.nil?
+      authority_and_path, separator, query_and_fragment = path.partition(/[?#]/)
+      "#{authority_and_path.tr("\\", "/")}#{separator}#{query_and_fragment}"
+    end
 
     def relative_path
       _path = url.path.gsub(/^\/+/, "/")
