@@ -127,11 +127,13 @@ module WithFiltering
     params[:max_price_cents] = purchase.price_cents
     params[:product_permalinks] = [purchase.link.unique_permalink]
     params[:variant_external_ids] = purchase.variant_attributes.map(&:external_id)
+    params[:subscription_cancelled] = purchase.subscription&.cancelled_at.present?
+    params[:license_uses] = purchase.license&.uses
 
     seller_post_passes_filters(**params.symbolize_keys, permalink_to_link_id:, seller_sales:, seller_post_filter_cache:)
   end
 
-  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [], permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil)
+  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [], subscription_cancelled: nil, license_uses: nil, permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil)
     return false if created_after.present? && (min_created_at.nil? || (min_created_at.present? && min_created_at < created_after))
     return false if created_before.present? && (max_created_at.nil? || (max_created_at.present? && max_created_at > created_before))
     excludes_product = bought_products.present? && (product_permalinks.empty? || (bought_products & product_permalinks).empty?)
@@ -147,6 +149,8 @@ module WithFiltering
     return false if paid_more_than_cents.present? && (min_price_cents.nil? || (min_price_cents.present? && min_price_cents < paid_more_than_cents))
     return false if paid_less_than_cents.present? && (max_price_cents.nil? || (max_price_cents.present? && max_price_cents > paid_less_than_cents))
     return false if bought_from.present? && !(country == bought_from || (country.nil? && ip_country == bought_from))
+    return false if ActiveModel::Type::Boolean.new.cast(active_customers_only) && ActiveModel::Type::Boolean.new.cast(subscription_cancelled)
+    return false if minimum_license_uses.present? && (license_uses.blank? || license_uses.to_i < minimum_license_uses.to_i)
 
     exclude_product_ids = if not_bought_products.present?
       if permalink_to_link_id
