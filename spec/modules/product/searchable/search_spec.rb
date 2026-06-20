@@ -428,6 +428,19 @@ describe "Product::Searchable - Search scenarios" do
       end
     end
 
+    describe "search_options with String size param" do
+      it "does not raise TypeError when size is a String from HTTP params" do
+        expect do
+          Link.search_options({ size: "10" })
+        end.not_to raise_error
+      end
+
+      it "casts the String size to an integer" do
+        options = Link.search_options({ size: "10" }).to_hash
+        expect(options[:size]).to eq(10)
+      end
+    end
+
     describe "on indexed products with reviews" do
       before do
         creator = create(:compliant_user, username: "username")
