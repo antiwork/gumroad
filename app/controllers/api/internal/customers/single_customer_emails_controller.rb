@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::BaseController
   before_action :authenticate_user!
   after_action :verify_authorized
@@ -16,34 +18,33 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     return render_error("Please set a title.", :unprocessable_entity) if permitted_params[:name].blank?
     return render_error("Please include a message as part of the update.", :unprocessable_entity) if permitted_params[:message].blank?
 
-    installment = ActiveRecord::Base.transaction do
-      record = current_seller.installments.build(
-        name: permitted_params[:name],
-        message: permitted_params[:message],
-        installment_type: Installment::SELLER_TYPE,
-        send_emails: true,
-        shown_on_profile: false,
-        allow_comments: false
-      )
-      record.save!
-      SaveFilesService.perform(record, files_params(permitted_params))
-      record.publish!
-      blast_timestamp = Time.current
-      PostEmailBlast.create!(
-        post: record,
-        requested_at: blast_timestamp,
-        started_at: blast_timestamp,
-        completed_at: blast_timestamp
-      )
-      record
-    end
+    Rails.cache.fetch(single_customer_email_idempotency_key(purchase, permitted_params), expires_in: 8.hours) do
+      installment = ActiveRecord::Base.transaction do
+        record = current_seller.installments.build(
+          name: permitted_params[:name],
+          message: permitted_params[:message],
+          installment_type: Installment::SELLER_TYPE,
+          send_emails: true,
+          shown_on_profile: false,
+          allow_comments: false
+        )
+        record.save!
+        SaveFilesService.perform(record, files_params(permitted_params))
+        record.publish!
+        blast_timestamp = Time.current
+        PostEmailBlast.create!(
+          post: record,
+          requested_at: blast_timestamp,
+          started_at: blast_timestamp,
+          completed_at: blast_timestamp
+        )
+        record
+      end
 
-    # Deliver AFTER the transaction commits. PostEmailApi.process hits an
-    # external provider (Resend/SendGrid), so it must not run inside the DB
-    # transaction: a post-send rollback would orphan an already-delivered
-    # email, and a retry could double-send. The Rails.cache guard provides
-    # idempotency, mirroring PostsController#send_for_purchase.
-    Rails.cache.fetch("single_customer_email:#{installment.id}:#{purchase.id}", expires_in: 8.hours) do
+      # Deliver AFTER the transaction commits. PostEmailApi.process hits an
+      # external provider (Resend/SendGrid), so it must not run inside the DB
+      # transaction: a post-send rollback would orphan an already-delivered
+      # email, and a retry could double-send.
       CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
       PostEmailApi.process(
         post: installment,
@@ -76,6 +77,31 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
 
     def files_params(permitted_params)
       { files: permitted_params[:files] || [] }.with_indifferent_access
+    end
+
+    def single_customer_email_idempotency_key(purchase, permitted_params)
+      content_digest = Digest::SHA256.hexdigest(
+        [
+          permitted_params[:name].to_s,
+          permitted_params[:message].to_s,
+          canonical_idempotency_value(files_params(permitted_params)[:files]).to_json,
+        ].join("\x00")
+      )
+
+      "single_customer_email:#{current_seller.id}:#{purchase.id}:#{content_digest}"
+    end
+
+    def canonical_idempotency_value(value)
+      case value
+      when ActionController::Parameters
+        canonical_idempotency_value(value.to_h)
+      when Hash
+        value.to_h.transform_keys(&:to_s).sort.to_h.transform_values { |inner_value| canonical_idempotency_value(inner_value) }
+      when Array
+        value.map { |inner_value| canonical_idempotency_value(inner_value) }
+      else
+        value
+      end
     end
 
     def seller_can_email_customers?

@@ -18,6 +18,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
   include_context "with user signed in as admin for seller"
 
   before do
+    Rails.cache.clear
     create(:payment_completed, user: seller)
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
   end
@@ -68,6 +69,55 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       email_info = CreatorContactingCustomersEmailInfo.where(purchase:, installment:).sole
       expect(email_info.state).to eq("sent")
       expect(purchase.installments.alive.published.seller_type).to include(installment)
+    end
+
+    it "deduplicates identical retries and sends different content separately" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        expect(recipients).to eq(
+          [
+            {
+              email: purchase.email,
+              purchase:,
+            }
+          ]
+        )
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(PostEmailApi).to have_received(:process).once
+      first_installment = Installment.last
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(PostEmailApi).to have_received(:process).once
+      expect(Installment.last).to eq(first_installment)
+
+      different_request_params = request_params.merge(
+        name: "Another quick update",
+        message: "<p>Thanks again for your purchase.</p>"
+      )
+
+      expect do
+        post :create, params: different_request_params, as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(PostEmailApi).to have_received(:process).twice
+      expect(Installment.last).to_not eq(first_installment)
     end
 
     it "returns a JSON 404 when the purchase does not belong to the seller" do
