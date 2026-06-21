@@ -20,8 +20,8 @@ import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/compon
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
-import { postToMobileApp } from "$app/components/Settings/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
+import { postToMobileApp } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
