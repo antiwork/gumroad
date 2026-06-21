@@ -73,6 +73,12 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     @purchase.country = Compliance::Countries.find_by_name(params[:country])&.common_name if params[:country].present?
     @purchase.quantity = params[:quantity] if @purchase.is_multiseat_license? && params[:quantity].to_i > 0
 
+    if params[:giftee_email].present?
+      gift = @purchase.gift
+      return fetch_error("This sale is not a gift", status: :unprocessable_entity) if gift.nil?
+      return fetch_error("This gift is missing a giftee purchase", status: :unprocessable_entity) if gift.giftee_purchase.nil?
+    end
+
     giftee_purchase = nil
     ActiveRecord::Base.transaction do
       @purchase.save!
@@ -81,7 +87,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
         @purchase.product_purchases.each { _1.update!(email: params[:email]) }
       end
 
-      if params[:giftee_email] && @purchase.gift
+      if params[:giftee_email].present? && @purchase.gift
         gift = @purchase.gift
         giftee_purchase = gift.giftee_purchase
 

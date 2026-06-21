@@ -128,6 +128,19 @@ describe Api::Mobile::SalesController, :vcr do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to eq(false)
     end
+
+    it "returns a controlled error without writing when a gift sale has no giftee purchase" do
+      gift = create(:gift, gifter_purchase: @purchase, giftee_purchase: nil)
+      @purchase.update!(gift_given: gift, is_gift_sender_purchase: true)
+
+      expect do
+        put :update, params: @params.merge(id: @purchase.external_id, email: "new@example.com", giftee_email: "giftee@example.com")
+      end.to not_change { @purchase.reload.email }
+         .and not_change { gift.reload.giftee_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "This gift is missing a giftee purchase")
+    end
   end
 
   describe "POST change_can_contact" do
