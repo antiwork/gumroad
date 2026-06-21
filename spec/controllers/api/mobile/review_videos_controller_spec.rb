@@ -34,7 +34,7 @@ describe Api::Mobile::ReviewVideosController do
       expect(video.reload.approved?).to eq(false)
     end
 
-    it "returns 404 without crashing for an orphaned review video missing a link" do
+    it "returns 404 without crashing for an orphaned review video missing a purchase" do
       video = orphaned_video
 
       post :approve, params: @params.merge(id: video.external_id)
@@ -74,7 +74,7 @@ describe Api::Mobile::ReviewVideosController do
     end
 
     def orphaned_video
-      @product_review.update_columns(link_id: nil)
+      @product_review.update_columns(purchase_id: nil)
       @video
     end
 end
