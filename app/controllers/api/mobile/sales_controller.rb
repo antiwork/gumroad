@@ -134,12 +134,18 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
 
   def mark_as_shipped
     shipment = @purchase.shipment || Shipment.create(purchase: @purchase)
+    unless shipment.persisted?
+      return render json: { success: false, message: shipment.errors.full_messages.to_sentence.presence || "Could not mark as shipped" }, status: :unprocessable_entity
+    end
+
     if params[:tracking_url].present?
       shipment.tracking_url = params[:tracking_url]
       shipment.save!
     end
     shipment.mark_shipped!
     render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, message: e.message }, status: :unprocessable_entity
   end
 
   def resend_ping

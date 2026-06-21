@@ -17,7 +17,7 @@ class Api::Mobile::ReviewVideosController < Api::Mobile::BaseController
   private
     def fetch_video
       @video = ProductReviewVideo.alive.find_by_external_id(params[:id])
-      if @video.nil? || @video.product_review.link.user_id != current_resource_owner.id
+      if @video.nil? || @video.product_review&.link&.user_id != current_resource_owner.id
         fetch_error("Could not find review video")
       end
     end

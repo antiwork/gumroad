@@ -139,6 +139,31 @@ describe Api::Mobile::SalesController, :vcr do
     end
   end
 
+  describe "POST mark_as_shipped" do
+    it "marks the purchase as shipped" do
+      post :mark_as_shipped, params: @params.merge(id: @purchase.external_id, tracking_url: "https://example.com/track")
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(@purchase.reload.shipment.shipped?).to eq(true)
+      expect(@purchase.shipment.tracking_url).to eq("https://example.com/track")
+    end
+
+    it "returns a controlled error and does not mark shipped when the shipment fails to persist" do
+      shipment = Shipment.new(purchase: @purchase)
+      shipment.errors.add(:base, "Something went wrong")
+      allow(shipment).to receive(:persisted?).and_return(false)
+      allow(Shipment).to receive(:create).and_return(shipment)
+
+      post :mark_as_shipped, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to eq("Something went wrong")
+      expect(@purchase.reload.shipment).to be_nil
+    end
+  end
+
   describe "PUT revoke_access and undo_revoke_access" do
     it "toggles access revocation" do
       put :revoke_access, params: @params.merge(id: @purchase.external_id)

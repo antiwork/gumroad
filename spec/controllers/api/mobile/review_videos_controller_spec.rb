@@ -33,6 +33,16 @@ describe Api::Mobile::ReviewVideosController do
       expect(response.parsed_body["success"]).to eq(false)
       expect(video.reload.approved?).to eq(false)
     end
+
+    it "returns 404 without crashing for an orphaned review video missing a link" do
+      video = orphaned_video
+
+      post :approve, params: @params.merge(id: video.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(video.reload.approved?).to eq(false)
+    end
   end
 
   describe "POST reject" do
@@ -61,5 +71,10 @@ describe Api::Mobile::ReviewVideosController do
       other_purchase = create(:purchase, link: other_product, seller: other_seller)
       other_review = create(:product_review, purchase: other_purchase, link: other_product)
       create(:product_review_video, product_review: other_review, approval_status: :pending_review)
+    end
+
+    def orphaned_video
+      @product_review.update_columns(link_id: nil)
+      @video
     end
 end
