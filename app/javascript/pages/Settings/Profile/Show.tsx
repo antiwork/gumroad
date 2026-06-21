@@ -20,6 +20,7 @@ import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/compon
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
+import { postToMobileApp } from "$app/components/Settings/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -163,7 +164,7 @@ export default function SettingsPage() {
 
   React.useEffect(() => {
     if (!isMobileAppWebView) return;
-    window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "settingsCanUpdate", canUpdate: canSave }));
+    postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
   const profileColors = currentSeller

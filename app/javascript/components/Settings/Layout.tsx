@@ -28,7 +28,7 @@ type Props = {
   canUpdate?: boolean;
 };
 
-const postToMobileApp = (message: object) => window.ReactNativeWebView?.postMessage(JSON.stringify(message));
+export const postToMobileApp = (message: object) => window.ReactNativeWebView?.postMessage(JSON.stringify(message));
 
 export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Props) => {
   const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
