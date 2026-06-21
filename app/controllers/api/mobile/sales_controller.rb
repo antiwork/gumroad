@@ -75,7 +75,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
 
     giftee_purchase = nil
     ActiveRecord::Base.transaction do
-      @purchase.save
+      @purchase.save!
 
       if params[:email].present? && @purchase.is_bundle_purchase?
         @purchase.product_purchases.each { _1.update!(email: params[:email]) }
@@ -106,6 +106,8 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def resend_receipt
+    return fetch_error("Could not find receipt") if receipt_orderable_missing?(@purchase)
+
     @purchase.resend_receipt
     render json: { success: true }
   end
@@ -174,10 +176,15 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def send_post
+    return fetch_error("You are not eligible to resend this email.", status: :unauthorized) unless current_resource_owner.eligible_to_send_emails?
+
     post = Installment.alive.where(seller_id: current_resource_owner.id).find_by_external_id(params[:post_id])
     return fetch_error("Could not find post") if post.nil?
 
-    Rails.cache.fetch("post_email:#{post.id}:#{@purchase.id}", expires_in: 8.hours) do
+    cache_key = "post_email:#{post.id}:#{@purchase.id}"
+    sent = false
+    Rails.cache.fetch(cache_key, expires_in: 8.hours) do
+      sent = true
       CreatorContactingCustomersEmailInfo.where(purchase: @purchase, installment: post).destroy_all
 
       PostEmailApi.process(
@@ -193,7 +200,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
       true
     end
 
-    render json: { success: true }
+    render json: { success: true, sent: }
   end
 
   def update_review_response
@@ -221,7 +228,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
 
   def blob_url
     blob = ActiveStorage::Blob.find_by_key(params[:key])
-    return fetch_error("Could not find file") if blob.nil?
+    return fetch_error("Could not find file") if blob.nil? || !seller_owns_blob?(blob)
 
     render json: { success: true, url: cdn_url_for(blob.url) }
   end
@@ -230,6 +237,27 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     def fetch_purchase
       @purchase = current_resource_owner.sales.find_by_external_id(params[:id])
       fetch_error("Could not find purchase") if @purchase.nil?
+    end
+
+    # Blob keys are only surfaced to the mobile app via CustomerPresenter#file_details,
+    # which exposes commission files and file-type purchase custom field files attached to
+    # the seller's own sales. Authorize the blob against exactly those records so a seller
+    # cannot resolve arbitrary blobs belonging to other sellers.
+    def seller_owns_blob?(blob)
+      seller_sales = current_resource_owner.sales.select(:id)
+
+      commission_ids = blob.attachments.where(record_type: "Commission").select(:record_id)
+      commissions = Commission.where(id: commission_ids)
+      return true if commissions.where(deposit_purchase_id: seller_sales).or(commissions.where(completion_purchase_id: seller_sales)).exists?
+
+      custom_field_ids = blob.attachments.where(record_type: "PurchaseCustomField").select(:record_id)
+      PurchaseCustomField.where(id: custom_field_ids, purchase_id: seller_sales).exists?
+    end
+
+    def receipt_orderable_missing?(purchase)
+      Charge::Chargeable.find_by_purchase_or_charge!(purchase:).orderable.email.blank?
+    rescue ActiveRecord::RecordNotFound
+      true
     end
 
     def seller_context

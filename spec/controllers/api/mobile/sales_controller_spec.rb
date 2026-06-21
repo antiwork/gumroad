@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe Api::Mobile::SalesController, :vcr do
+  include CdnUrlHelper
+
   before do
     @seller = create(:user)
     @product = create(:product, user: @seller)
@@ -105,6 +107,26 @@ describe Api::Mobile::SalesController, :vcr do
 
       expect(response.parsed_body["success"]).to eq(true)
       expect(@purchase.reload.email).to eq("new@example.com")
+    end
+
+    it "rolls back gift updates when the main purchase save fails" do
+      gift = create(:gift, gifter_purchase: @purchase)
+      giftee_purchase = create(:purchase, link: @product, seller: @seller, is_gift_receiver_purchase: true)
+      gift.update!(giftee_purchase:)
+      @purchase.update!(gift_given: gift, is_gift_sender_purchase: true)
+
+      allow_any_instance_of(Purchase).to receive(:save!).and_wrap_original do |method, *args|
+        raise ActiveRecord::RecordInvalid, method.receiver if method.receiver.id == @purchase.id
+        method.call(*args)
+      end
+
+      expect do
+        put :update, params: @params.merge(id: @purchase.external_id, email: "new@example.com", giftee_email: "giftee@example.com")
+      end.to not_change { gift.reload.giftee_email }
+         .and not_change { giftee_purchase.reload.email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to eq(false)
     end
   end
 
@@ -350,6 +372,154 @@ describe Api::Mobile::SalesController, :vcr do
         expect(response.parsed_body).to eq "success" => false, "message" => "Sorry, something went wrong."
         expect(response).to have_http_status(:unprocessable_content)
       end
+    end
+  end
+
+  describe "POST resend_receipt" do
+    it "resends the receipt" do
+      expect_any_instance_of(Purchase).to receive(:resend_receipt)
+
+      post :resend_receipt, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
+    it "responds with a controlled 404 when the chargeable order has no buyer email" do
+      allow_any_instance_of(Api::Mobile::SalesController).to receive(:receipt_orderable_missing?).and_return(true)
+      expect_any_instance_of(Purchase).not_to receive(:resend_receipt)
+
+      post :resend_receipt, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find receipt")
+    end
+  end
+
+  describe "POST send_post" do
+    before do
+      @post = create(:installment, link: @product, seller: @seller, published_at: Time.current)
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+    end
+
+    it "sends the post and reports it as sent" do
+      expect(PostEmailApi).to receive(:process)
+
+      post :send_post, params: @params.merge(id: @purchase.external_id, post_id: @post.external_id)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true, "sent" => true)
+    end
+
+    it "does not resend within the 8-hour rate limit window and reports it as not sent" do
+      Rails.cache.write("post_email:#{@post.id}:#{@purchase.id}", true)
+      expect(PostEmailApi).not_to receive(:process)
+
+      post :send_post, params: @params.merge(id: @purchase.external_id, post_id: @post.external_id)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true, "sent" => false)
+    end
+
+    it "rejects sellers who are not eligible to send emails" do
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(false)
+      expect(PostEmailApi).not_to receive(:process)
+
+      post :send_post, params: @params.merge(id: @purchase.external_id, post_id: @post.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "You are not eligible to resend this email.")
+    end
+  end
+
+  describe "GET blob_url" do
+    let(:build_blob) do
+      ->(filename) { ActiveStorage::Blob.create_before_direct_upload!(filename:, byte_size: 100, checksum: "abc", content_type: "application/octet-stream", metadata: { analyzed: true, identified: true }) }
+    end
+
+    before do
+      @seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+    end
+
+    it "returns the cdn url for a blob attached to the seller's commission" do
+      commission_product = create(:commission_product, user: @seller)
+      deposit_purchase = create(:purchase, seller: @seller, link: commission_product, price_cents: 100, displayed_price_cents: 100)
+      commission = create(:commission, deposit_purchase:)
+      blob = build_blob.call("test.pdf")
+      commission.files.attach(blob)
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true, "url" => cdn_url_for(blob.url))
+    end
+
+    it "returns the cdn url for a blob attached to the seller's commission completion purchase" do
+      commission_product = create(:commission_product, user: @seller)
+      deposit_purchase = create(:purchase, seller: @seller, link: commission_product, price_cents: 100, displayed_price_cents: 100)
+      completion_purchase = create(:purchase, seller: @seller, link: commission_product, price_cents: 100, displayed_price_cents: 100)
+      commission = create(:commission, deposit_purchase:, completion_purchase:)
+      blob = build_blob.call("test.pdf")
+      commission.files.attach(blob)
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true, "url" => cdn_url_for(blob.url))
+    end
+
+    it "returns the cdn url for a blob attached to a file custom field on the seller's sale" do
+      custom_field = create(:purchase_custom_field, field_type: CustomField::TYPE_FILE, purchase: @purchase, name: CustomField::FILE_FIELD_NAME, value: nil)
+      blob = build_blob.call("smilie.png")
+      custom_field.files.attach(blob)
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true, "url" => cdn_url_for(blob.url))
+    end
+
+    it "returns 404 for a blob belonging to another seller's commission" do
+      other_seller = create(:user, :eligible_for_service_products)
+      other_purchase = create(:purchase, seller: other_seller, link: create(:commission_product, user: other_seller), price_cents: 100, displayed_price_cents: 100)
+      other_commission = create(:commission, deposit_purchase: other_purchase)
+      blob = build_blob.call("test.pdf")
+      other_commission.files.attach(blob)
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find file")
+    end
+
+    it "returns 404 for a blob attached to another seller's file custom field" do
+      other_seller = create(:user)
+      other_product = create(:product, user: other_seller)
+      other_purchase = create(:purchase, seller: other_seller, link: other_product)
+      custom_field = create(:purchase_custom_field, field_type: CustomField::TYPE_FILE, purchase: other_purchase, name: CustomField::FILE_FIELD_NAME, value: nil)
+      blob = build_blob.call("smilie.png")
+      custom_field.files.attach(blob)
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find file")
+    end
+
+    it "returns 404 for a blob that is not attached to any owned record" do
+      blob = build_blob.call("smilie.png")
+
+      get :blob_url, params: @params.merge(key: blob.key)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find file")
+    end
+
+    it "returns 404 for an unknown key" do
+      get :blob_url, params: @params.merge(key: "does-not-exist")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find file")
     end
   end
 end
