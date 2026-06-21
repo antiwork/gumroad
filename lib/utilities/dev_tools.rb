@@ -38,6 +38,10 @@ class DevTools
           print "Importing #{model.name} user_id=#{user.id} => #{rel.count} records..."
           es_import_with_time(rel)
         end
+
+        rel = AudienceMember.where(seller_id: user.id)
+        print "Importing audience members seller_id=#{user.id} => #{rel.count} records..."
+        es_import_with_time(rel)
       end
 
       nil
@@ -54,7 +58,7 @@ class DevTools
       end
       ActiveRecord::Base.connection.enable_query_cache!
       without_loggers do
-        [Purchase, Link, Balance, Installment].each do |model|
+        [Purchase, Link, Balance, Installment, AudienceMember].each do |model|
           print "Recreating index and importing #{model.name} => #{model.count} records..."
           es_import_with_time(model, force: true)
         end

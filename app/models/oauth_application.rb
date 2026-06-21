@@ -66,10 +66,11 @@ class OauthApplication < Doorkeeper::Application
 
   # Returns an existing active access token or creates one if none exist
   def get_or_generate_access_token
-    ensure_access_grant_exists
+    allowed_scopes = scopes.to_s
+    ensure_access_grant_exists(allowed_scopes:)
     access_tokens.where(resource_owner_id: owner.id,
                         revoked_at: nil,
-                        scopes: Doorkeeper.configuration.public_scopes.join(" ")).first_or_create!
+                        scopes: allowed_scopes).first_or_create!
   end
 
   def revoke_access_for(user)
@@ -109,9 +110,9 @@ class OauthApplication < Doorkeeper::Application
         .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at:, updated_at: denied_at)
     end
 
-    def ensure_access_grant_exists
+    def ensure_access_grant_exists(allowed_scopes:)
       access_grants.where(resource_owner_id: owner.id,
-                          scopes: Doorkeeper.configuration.public_scopes.join(" "),
+                          scopes: allowed_scopes,
                           redirect_uri:).first_or_create! { |access_grant| access_grant.expires_in = 60.years }
     end
 

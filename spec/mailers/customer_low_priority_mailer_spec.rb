@@ -700,4 +700,27 @@ describe CustomerLowPriorityMailer do
       end
     end
   end
+
+  describe "deposit" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:payment) { create(:payment_completed, user: seller) }
+
+    context "when the payout period has only Stripe Connect revenue" do
+      before do
+        allow_any_instance_of(User).to receive(:paypal_revenue_by_product_for_duration).and_return({})
+        allow_any_instance_of(User).to receive(:stripe_connect_revenue_by_product_for_duration).and_return({ product.id => 1_000 })
+      end
+
+      it "renders the Stripe Connect revenue without raising when there is no Gumroad or PayPal revenue" do
+        expect(payment.revenue_by_link).to be_blank
+
+        mail = CustomerLowPriorityMailer.deposit(payment.id)
+
+        expect(mail.subject).to eq "It's pay day!"
+        expect(mail.body.encoded).to include product.name
+        expect(mail.body.encoded).to include Money.new(1_000, "USD").format(symbol: true)
+      end
+    end
+  end
 end

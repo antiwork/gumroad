@@ -790,12 +790,21 @@ const BankAccountSection = ({
   ];
 
   const isGibraltar = user.country_code === "GI";
+  const isOman = user.country_code === "OM";
   const nonIbanAccountNumberInputProps: Pick<
     React.ComponentPropsWithoutRef<"input">,
-    "placeholder" | "maxLength" | "pattern" | "inputMode"
+    "placeholder" | "maxLength" | "pattern" | "inputMode" | "title"
   > = isGibraltar
     ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
-    : { placeholder: "1234567890" };
+    : isOman
+      ? {
+          placeholder: "000123456789",
+          maxLength: 16,
+          pattern: "[0-9]{6,16}",
+          inputMode: "numeric",
+          title: "Enter your 6 to 16 digit account number, not your IBAN",
+        }
+      : { placeholder: "1234567890" };
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {

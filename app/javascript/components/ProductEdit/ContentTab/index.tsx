@@ -1196,7 +1196,9 @@ export const ContentTab = () => {
         accept: "json",
       });
       if (!response.ok) throw new ResponseError();
-      const parsedResponse = typia.assert<{ posts: Post[]; total: number; next_page: number | null }>(await response.json());
+      const parsedResponse = typia.assert<{ posts: Post[]; total: number; next_page: number | null }>(
+        await response.json(),
+      );
       loadedPostsData.current.set(
         selectedVariantId,
         refresh

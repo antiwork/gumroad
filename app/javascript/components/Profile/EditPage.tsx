@@ -1,4 +1,4 @@
-import { Pencil, Trash } from "@boxicons/react";
+import { Trash } from "@boxicons/react";
 import CharacterCount from "@tiptap/extension-character-count";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { isEqual } from "lodash-es";
@@ -10,19 +10,16 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
 import AutoLink from "$app/components/AutoLink";
-import { Button, NavigationButton } from "$app/components/Button";
-import { useAppDomain } from "$app/components/DomainSettings";
+import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
-import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
+import { ProfileProps, TabWithId, tabsWithoutIds, useTabs } from "$app/components/Profile";
 import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
   Action,
@@ -37,7 +34,13 @@ import {
 } from "./EditSections";
 import { FollowFormBlock } from "./FollowForm";
 
-export type Props = ProfileProps & SectionsProps;
+export type ProfileEditorProps = ProfileProps & SectionsProps;
+export type ProfileEditorState = Pick<ProfileEditorProps, "sections" | "tabs">;
+export type Props = ProfileEditorProps & {
+  controls?: boolean;
+  selectedTabIndex?: number;
+  onChange?: (state: ProfileEditorState) => void;
+};
 
 const EditTab = ({
   tab,
@@ -108,13 +111,18 @@ const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>
 ));
 TabList.displayName = "TabList";
 
-export const EditProfile = (props: Props) => {
-  const appDomain = useAppDomain();
-
+export const EditProfile = ({ controls = true, selectedTabIndex, onChange, ...props }: Props) => {
   const [sections, setSections] = React.useState(props.sections);
-  const { tabs, setTabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
+  const { tabs, setTabs, selectedTab: activeTab, setSelectedTab } = useTabs(props.tabs);
+  const selectedTab = selectedTabIndex != null ? (tabs[selectedTabIndex] ?? activeTab) : activeTab;
   const updateTab = (tab: TabWithId) => setTabs(tabs.map((existing) => (existing.id === tab.id ? tab : existing)));
   const [hasAddedTab, setHasAddedTab] = React.useState(false);
+
+  React.useEffect(() => {
+    setSections((currentSections) => (isEqual(currentSections, props.sections) ? currentSections : props.sections));
+  }, [props.sections]);
+
+  React.useEffect(() => onChange?.({ sections, tabs: tabsWithoutIds(tabs) }), [onChange, sections, tabs]);
 
   const addTab = () => {
     const tab = { id: GuidGenerator.generate(), name: "New page", sections: [] };
@@ -190,80 +198,75 @@ export const EditProfile = (props: Props) => {
   const [draggedTab, setDraggedTab] = React.useState<string | null>();
   const visibleSections =
     selectedTab?.sections.flatMap((id) => sections.find((section) => section.id === id) ?? []) ?? [];
-  const reducer = React.useMemo(() => [{ ...props, sections: visibleSections }, dispatch] as const, [visibleSections]);
+  const reducer = React.useMemo(
+    () => [{ ...props, sections: visibleSections }, dispatch] as const,
+    [props, visibleSections],
+  );
 
   const imageUploadSettings = useSectionImageUploadSettings();
-  const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="relative grid gap-4 border-b border-border px-4 py-8">
-        {/* Work around position:absolute being affected by header's grid */}
-        <SectionToolbar>
-          <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
-            <EditorSubmenu heading="Pages" text={tabs.length}>
-              {tabs.length > 0 ? (
-                <Sortable
-                  list={tabs}
-                  setList={setTabs}
-                  tag={TabList}
-                  handle="[aria-grabbed]"
-                  onChoose={(e) => setDraggedTab(tabs[e.oldIndex ?? -1]?.id ?? null)}
-                  onUnchoose={() => setDraggedTab(null)}
-                >
-                  {tabs.map((tab) => (
-                    <EditTab
-                      key={tab.id}
-                      tab={tab}
-                      dragging={tab.id === draggedTab}
-                      focus={hasAddedTab}
-                      update={updateTab}
-                      remove={() => setTabs(tabs.filter((existing) => existing !== tab))}
-                    />
-                  ))}
-                </Sortable>
-              ) : null}
-              <Button onClick={addTab}>New page</Button>
-            </EditorSubmenu>
-          </EditorMenu>
-        </SectionToolbar>
-        <div className="mx-auto grid w-full max-w-6xl gap-4">
-          {props.bio ? (
-            <h1 className="whitespace-pre-line">
-              <AutoLink text={props.bio} />
-            </h1>
+      {controls || props.bio || tabs.length > 1 ? (
+        <header className="relative grid gap-4 border-b border-border px-4 py-8">
+          {controls ? (
+            <SectionToolbar>
+              <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
+                <EditorSubmenu heading="Pages" text={tabs.length}>
+                  {tabs.length > 0 ? (
+                    <Sortable
+                      list={tabs}
+                      setList={setTabs}
+                      tag={TabList}
+                      handle="[aria-grabbed]"
+                      onChoose={(e) => setDraggedTab(tabs[e.oldIndex ?? -1]?.id ?? null)}
+                      onUnchoose={() => setDraggedTab(null)}
+                    >
+                      {tabs.map((tab) => (
+                        <EditTab
+                          key={tab.id}
+                          tab={tab}
+                          dragging={tab.id === draggedTab}
+                          focus={hasAddedTab}
+                          update={updateTab}
+                          remove={() => setTabs(tabs.filter((existing) => existing !== tab))}
+                        />
+                      ))}
+                    </Sortable>
+                  ) : null}
+                  <Button onClick={addTab}>New page</Button>
+                </EditorSubmenu>
+              </EditorMenu>
+            </SectionToolbar>
           ) : null}
-          <Tabs aria-label="Profile Tabs">
-            {tabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                isSelected={tab === selectedTab}
-                onClick={() => {
-                  if (imageUploadSettings.isUploading) {
-                    showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
-                    return;
-                  }
-                  setSelectedTab(tab);
-                }}
-              >
-                {tab.name}
-              </Tab>
-            ))}
-          </Tabs>
-        </div>
-      </header>
-      <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
-        <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
-          <NavigationButton
-            color="filled"
-            size="icon"
-            href={Routes.settings_profile_url({ host: appDomain })}
-            aria-label="Edit profile"
-          >
-            <Pencil className="size-5" />
-          </NavigationButton>
-        </WithTooltip>
-      </div>
+          <div className="mx-auto grid w-full max-w-6xl gap-4">
+            {props.bio ? (
+              <h1 className="whitespace-pre-line">
+                <AutoLink text={props.bio} />
+              </h1>
+            ) : null}
+            {controls || tabs.length > 1 ? (
+              <Tabs aria-label="Profile Tabs">
+                {tabs.map((tab) => (
+                  <Tab
+                    key={tab.id}
+                    isSelected={tab === selectedTab}
+                    onClick={() => {
+                      if (imageUploadSettings.isUploading) {
+                        showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
+                        return;
+                      }
+                      setSelectedTab(tab);
+                    }}
+                  >
+                    {tab.name}
+                  </Tab>
+                ))}
+              </Tabs>
+            ) : null}
+          </div>
+        </header>
+      ) : null}
       {visibleSections.length ? (
         visibleSections.map((section, i) => (
           <SectionLayout
@@ -271,18 +274,18 @@ export const EditProfile = (props: Props) => {
             id={section.id}
             style={{ overflowAnchor: section.id === movedSectionId ? "none" : undefined }}
           >
-            <AddSectionButton index={i} />
+            {controls ? <AddSectionButton index={i} /> : null}
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
-              <EditSection section={section} />
+              <EditSection section={section} controls={controls} />
             </ImageUploadSettingsContext.Provider>
-            {i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
+            {controls && i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))
       ) : (
         <SectionLayout className="grid flex-1">
-          <AddSectionButton index={0} />
+          {controls ? <AddSectionButton index={0} /> : null}
           <FollowFormBlock creatorProfile={props.creator_profile} />
-          <AddSectionButton index={0} side="top" />
+          {controls ? <AddSectionButton index={0} side="top" /> : null}
         </SectionLayout>
       )}
     </SectionReducerContext.Provider>

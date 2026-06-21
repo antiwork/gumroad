@@ -51,7 +51,10 @@ class OmanBankAccount < BankAccount
     def validate_account_number
       return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
       iban = Ibandit::IBAN.new(account_number_decrypted)
-      return if iban.valid? && iban.country_code == "OM"
-      errors.add :base, "The account number is invalid."
+      if iban.valid? && iban.country_code == "OM"
+        errors.add :base, "Please enter your bank account number, not your IBAN."
+      else
+        errors.add :base, "The account number is invalid."
+      end
     end
 end

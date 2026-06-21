@@ -131,7 +131,7 @@ module Purchase::Blockable
     seller.comments.create(
       content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
       comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-      author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
     )
   end
 
@@ -236,7 +236,7 @@ module Purchase::Blockable
         seller.comments.create(
           content: "Payouts paused due to high volume of failed purchases (#{failed_price_amount} USD in #{failed_seller_purchases_watch_minutes} minutes).",
           comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-          author_name: "pause_payouts_for_seller_based_on_recent_failures"
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:recent_failed_purchases]
         )
       end
     end

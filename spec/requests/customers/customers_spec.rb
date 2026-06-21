@@ -48,6 +48,27 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_table_row({ "Email" => "customer3hasaninsanelylonge...", "Name" => "Customer 3", "Product" => "Product 2Bundle", "Price" => "$3" })
     end
 
+    it "hides the Name column when no sale on the page has a name" do
+      Purchase.update_all(full_name: nil)
+      Purchase.all.find_each { |purchase| purchase.purchaser&.update(name: nil) }
+      index_model_records(Purchase)
+
+      login_as seller
+      visit customers_path
+
+      expect(page).to have_table("All sales (6)")
+      expect(page).not_to have_selector(:columnheader, "Name")
+      expect(page).to have_selector(:columnheader, "Email")
+      expect(page).to have_selector(:columnheader, "Product")
+    end
+
+    it "shows the Name column when at least one sale on the page has a name" do
+      login_as seller
+      visit customers_path
+
+      expect(page).to have_selector(:columnheader, "Name")
+    end
+
     it "sorts and paginates sales in the table" do
       login_as seller
       visit customers_path

@@ -15,7 +15,7 @@ class PayoutUsersService
 
     PayoutProcessorType.get(processor_type).process_payments(payments) if payments.present?
     cross_border_payments.each do |payment|
-      ProcessPaymentWorker.perform_in(25.hours, payment.id)
+      ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
     end
 
     payments + cross_border_payments
@@ -38,11 +38,8 @@ class PayoutUsersService
 
       if payment_errors.blank? && payment.present?
         # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
-        # so schedule those payouts for 25 hours from now instead of processing them immediately.
-        cross_border_payout = payment.processor == PayoutProcessorType::STRIPE &&
-            !payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)&.is_a_stripe_connect_account? &&
-            Country.new(user.alive_user_compliance_info.legal_entity_country_code).supports_stripe_cross_border_payouts?
-        if cross_border_payout
+        # so schedule those payouts later instead of processing them immediately.
+        if StripePayoutProcessor.cross_border_payout?(payment)
           cross_border_payments << payment
         else
           payments << payment

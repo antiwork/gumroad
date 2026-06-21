@@ -135,12 +135,12 @@ describe AppStoreWalksJwsVerifier do
 
       it "returns valid?: true for a current ProSub subscription" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Sandbox",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-          originalTransactionId: "1000000123",
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Sandbox",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                   originalTransactionId: "1000000123",
+                                                 }))
         expect(result.valid?).to be(true)
         expect(result.product_id).to eq("ProSub")
         expect(result.original_transaction_id).to eq("1000000123")
@@ -148,63 +148,63 @@ describe AppStoreWalksJwsVerifier do
 
       it "rejects an expired subscription" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Sandbox",
-          expiresDate: (Time.current.to_i - 86_400) * 1000,
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Sandbox",
+                                                   expiresDate: (Time.current.to_i - 86_400) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
         expect(result.error).to eq("not_entitled")
       end
 
       it "rejects a revoked subscription" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Sandbox",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-          revocationDate: (Time.current.to_i - 60) * 1000,
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Sandbox",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                   revocationDate: (Time.current.to_i - 60) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
       end
 
       it "rejects a subscription for a different product id" do
         result = described_class.verify(make_jws({
-          productId: "OtherSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Sandbox",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-        }))
+                                                   productId: "OtherSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Sandbox",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
       end
 
       it "rejects a subscription from the wrong bundle" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.other.app",
-          environment: "Sandbox",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.other.app",
+                                                   environment: "Sandbox",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
       end
 
       it "rejects a Production-signed subscription in a non-production env (test env accepts only Sandbox)" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Production",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Production",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
       end
 
       it "rejects an unknown environment value" do
         result = described_class.verify(make_jws({
-          productId: "ProSub",
-          bundleId: "com.gumroad.walks",
-          environment: "Xcode",
-          expiresDate: (Time.current.to_i + 86_400) * 1000,
-        }))
+                                                   productId: "ProSub",
+                                                   bundleId: "com.gumroad.walks",
+                                                   environment: "Xcode",
+                                                   expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                 }))
         expect(result.valid?).to be(false)
       end
 
@@ -213,31 +213,31 @@ describe AppStoreWalksJwsVerifier do
 
         it "accepts a Production-signed ProSub subscription" do
           result = described_class.verify(make_jws({
-            productId: "ProSub",
-            bundleId: "com.gumroad.walks",
-            environment: "Production",
-            expiresDate: (Time.current.to_i + 86_400) * 1000,
-          }))
+                                                     productId: "ProSub",
+                                                     bundleId: "com.gumroad.walks",
+                                                     environment: "Production",
+                                                     expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                   }))
           expect(result.valid?).to be(true)
         end
 
         it "accepts a Sandbox-signed ProSub subscription (TestFlight / sandbox tester on prod)" do
           result = described_class.verify(make_jws({
-            productId: "ProSub",
-            bundleId: "com.gumroad.walks",
-            environment: "Sandbox",
-            expiresDate: (Time.current.to_i + 86_400) * 1000,
-          }))
+                                                     productId: "ProSub",
+                                                     bundleId: "com.gumroad.walks",
+                                                     environment: "Sandbox",
+                                                     expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                   }))
           expect(result.valid?).to be(true)
         end
 
         it "still rejects an unknown environment value" do
           result = described_class.verify(make_jws({
-            productId: "ProSub",
-            bundleId: "com.gumroad.walks",
-            environment: "Xcode",
-            expiresDate: (Time.current.to_i + 86_400) * 1000,
-          }))
+                                                     productId: "ProSub",
+                                                     bundleId: "com.gumroad.walks",
+                                                     environment: "Xcode",
+                                                     expiresDate: (Time.current.to_i + 86_400) * 1000,
+                                                   }))
           expect(result.valid?).to be(false)
         end
       end

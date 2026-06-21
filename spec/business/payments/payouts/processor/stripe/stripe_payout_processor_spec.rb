@@ -293,8 +293,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_096_45, currency: "eur" }],
-                                          pending: [{ amount: 0, currency: "eur" }])
+                                         available: [{ amount: 1_096_45, currency: "eur" }],
+                                         pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -321,8 +321,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_096_45, currency: "eur" }],
-                                          pending: [{ amount: 26_000, currency: "eur" }])
+                                         available: [{ amount: 1_096_45, currency: "eur" }],
+                                         pending: [{ amount: 26_000, currency: "eur" }])
         )
       end
 
@@ -338,8 +338,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_500_00, currency: "eur" }],
-                                          pending: [{ amount: -50_000, currency: "eur" }])
+                                         available: [{ amount: 1_500_00, currency: "eur" }],
+                                         pending: [{ amount: -50_000, currency: "eur" }])
         )
       end
 
@@ -355,8 +355,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_400_00, currency: "eur" }],
-                                          pending: [{ amount: 0, currency: "eur" }])
+                                         available: [{ amount: 1_400_00, currency: "eur" }],
+                                         pending: [{ amount: 0, currency: "eur" }])
         )
       end
 
@@ -373,8 +373,8 @@ describe StripePayoutProcessor, :vcr do
       before do
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance",
-                                          available: [{ amount: 1_400_00, currency: "usd" }],
-                                          pending: [{ amount: 50_000, currency: "usd" }])
+                                         available: [{ amount: 1_400_00, currency: "usd" }],
+                                         pending: [{ amount: 50_000, currency: "usd" }])
         )
       end
 
@@ -1243,6 +1243,7 @@ describe StripePayoutProcessor, :vcr do
         errors = described_class.perform_payment(payment)
         expect(errors).to be_present
         expect(errors.first).to match(/You have insufficient funds in your Stripe account for this transfer/)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
       end
     end
   end
@@ -1669,6 +1670,7 @@ describe StripePayoutProcessor, :vcr do
         errors = described_class.perform_payment(payment)
         expect(errors).to be_present
         expect(errors.first).to match(/You have insufficient funds in your Stripe account for this transfer/)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
       end
     end
   end
@@ -4174,6 +4176,31 @@ describe StripePayoutProcessor, :vcr do
         expect { described_class.perform_payment(payment) }.to raise_error(Stripe::APIConnectionError)
         expect(payment.reload.error_message).to eq("Stripe::APIConnectionError: connection refused")
       end
+    end
+  end
+
+  describe ".cross_border_payout?" do
+    let(:user) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_cbp_test") }
+    let(:payment) do
+      create(:payment, user:, processor: PayoutProcessorType::STRIPE, state: "processing", correlation_id: nil,
+                       stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+    end
+
+    it "is true for a Gumroad-managed account in a cross-border-payouts country" do
+      create(:user_compliance_info, user:, country: "Thailand")
+      expect(described_class.cross_border_payout?(payment)).to eq(true)
+    end
+
+    it "is false for a country that does not require cross-border payouts" do
+      create(:user_compliance_info, user:, country: "United States")
+      expect(described_class.cross_border_payout?(payment)).to eq(false)
+    end
+
+    it "is false for non-Stripe payouts" do
+      create(:user_compliance_info, user:, country: "Thailand")
+      paypal_payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, state: "processing")
+      expect(described_class.cross_border_payout?(paypal_payment)).to eq(false)
     end
   end
 end

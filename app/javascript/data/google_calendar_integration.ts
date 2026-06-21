@@ -38,9 +38,9 @@ export const fetchCalendarList = async (accessToken: string, refreshToken: strin
     }),
     accept: "json",
   });
-  const responseData = typia.assert<{ success: true; calendar_list: { id: string; summary: string }[] } | { success: false }>(
-    await response.json(),
-  );
+  const responseData = typia.assert<
+    { success: true; calendar_list: { id: string; summary: string }[] } | { success: false }
+  >(await response.json());
   if (!responseData.success) throw new ResponseError();
   return responseData.calendar_list;
 };

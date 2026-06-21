@@ -67,7 +67,9 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
         accept: "json",
         data: { code },
       });
-      const json = typia.assert<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(await response.json());
+      const json = typia.assert<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(
+        await response.json(),
+      );
       if (json.success && json.recovery_codes) {
         setRecoveryCodes(json.recovery_codes);
         setStep("recovery");

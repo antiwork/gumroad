@@ -185,7 +185,9 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
     router.reload({
       only: ["additional_metadata"],
       onSuccess: (page) => {
-        const additionalMetadata = typia.assert<UtmLinkFormAdditionalMetadata | undefined>(page.props.additional_metadata);
+        const additionalMetadata = typia.assert<UtmLinkFormAdditionalMetadata | undefined>(
+          page.props.additional_metadata,
+        );
         const newPermalink = additionalMetadata?.new_permalink;
         if (newPermalink) {
           setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));

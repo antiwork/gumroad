@@ -23,11 +23,19 @@ export const GetEarnings = () => (
         { name: "success", type: "boolean", description: "Whether the request succeeded" },
         { name: "year", type: "integer", description: "The tax year the earnings cover" },
         { name: "currency", type: "string", description: 'Always "usd"' },
-        { name: "gross_cents", type: "integer", description: "Gross earnings in cents, summed across all successful non-refunded sales" },
+        {
+          name: "gross_cents",
+          type: "integer",
+          description: "Gross earnings in cents, summed across all successful non-refunded sales",
+        },
         { name: "fees_cents", type: "integer", description: "Gumroad fees in cents" },
         { name: "taxes_cents", type: "integer", description: "Gumroad-collected and seller-collected taxes in cents" },
         { name: "affiliate_credit_cents", type: "integer", description: "Affiliate credit in cents" },
-        { name: "net_cents", type: "integer", description: "gross_cents - fees_cents - taxes_cents - affiliate_credit_cents" },
+        {
+          name: "net_cents",
+          type: "integer",
+          description: "gross_cents - fees_cents - taxes_cents - affiliate_credit_cents",
+        },
       ])}
     </ApiResponseFields>
     <CodeSnippet caption="cURL example">

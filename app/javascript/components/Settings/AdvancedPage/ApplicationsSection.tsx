@@ -1,5 +1,4 @@
 import { Link, router } from "@inertiajs/react";
-import placeholderAppIcon from "$assets/images/gumroad_app.png";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -7,6 +6,8 @@ import { showAlert } from "$app/components/server-components/Alert";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+
+import placeholderAppIcon from "$assets/images/gumroad_app.png";
 
 export type Application = {
   id: string;

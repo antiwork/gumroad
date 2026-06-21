@@ -7,7 +7,7 @@ class Payouts
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 
-  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     unless user.compliant? || from_admin
@@ -26,13 +26,17 @@ class Payouts
 
     account_balance = amount_payable + user.paid_payments_cents_for_date(date)
     if account_balance < user.minimum_payout_amount_cents
-      if add_comment && account_balance > 0
-        current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
-        minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
-        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.") if add_comment
+      is_payable_from_admin = from_admin && account_balance > 0 &&
+        (bypass_minimum_payout || user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance)
+
+      unless is_payable_from_admin
+        if add_comment && account_balance > 0
+          current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
+          minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
+          user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.")
+        end
+        return false
       end
-      is_payable_from_admin = from_admin && account_balance > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance
-      return false unless is_payable_from_admin
     end
 
     if payout_type == Payouts::PAYOUT_TYPE_INSTANT
@@ -83,7 +87,7 @@ class Payouts
     self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: true, add_comment: true)
   end
 
-  def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false)
+  def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false, bypass_minimum_payout: false)
     raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
 
     user_ids_to_pay = []
@@ -93,7 +97,8 @@ class Payouts
         user, date,
         processor_type:,
         add_comment: true,
-        from_admin:
+        from_admin:,
+        bypass_minimum_payout:
       ) &&
       (
         from_admin ||

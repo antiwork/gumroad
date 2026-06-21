@@ -80,12 +80,12 @@ describe Api::V2::TaxFormsController do
 
         expect(response).to be_successful
         expect(response.parsed_body["tax_forms"]).to eq([
-          {
-            tax_year: form_2025.tax_year,
-            tax_form_type: form_2025.tax_form_type,
-            filed_at: nil
-          }.as_json
-        ])
+                                                          {
+                                                            tax_year: form_2025.tax_year,
+                                                            tax_form_type: form_2025.tax_form_type,
+                                                            filed_at: nil
+                                                          }.as_json
+                                                        ])
       end
 
       it "returns filed_at as ISO-8601 when the form has been filed" do

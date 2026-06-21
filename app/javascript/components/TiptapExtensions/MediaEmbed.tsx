@@ -11,12 +11,12 @@ import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
 import { MenuItem } from "$app/components/RichTextEditor";
-import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -211,7 +211,10 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
     return ReactNodeViewRenderer(({ editor, node, deleteNode }: NodeViewProps) => (
       <NodeViewWrapper>
         <Row className="embed">
-          <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(typia.assert<string>(node.attrs.html)) }} />
+          <RowDetails
+            className="preview"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(typia.assert<string>(node.attrs.html)) }}
+          />
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
             <div>

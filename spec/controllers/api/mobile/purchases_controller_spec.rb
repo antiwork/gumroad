@@ -718,7 +718,7 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:success]).to be true
         expect(response.parsed_body[:purchases].size).to eq(3)
         expect(per_row_queries).to be_empty,
-          "Expected zero per-row SELECTs for sellers/products, got:\n#{per_row_queries.join("\n")}"
+                                   "Expected zero per-row SELECTs for sellers/products, got:\n#{per_row_queries.join("\n")}"
       end
     end
 

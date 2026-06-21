@@ -3,6 +3,8 @@
 module Purchase::Risk
   IP_PROXY_THRESHOLD = 2
   CHECK_FOR_FRAUD_TIMEOUT_SECONDS = 4
+  CHARGEBACK_GRACE_PERIOD = 1.year
+  CHARGEBACK_GRACE_LIMIT = 1
 
   def check_for_fraud
     Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
@@ -64,10 +66,23 @@ module Purchase::Risk
     end
 
     def check_for_past_chargebacks
-      return if find_past_chargebacked_purchases.none?
+      chargebacked_purchases = find_past_chargebacked_purchases
+      return if chargebacked_purchases.none?
+      return if chargebacks_within_grace_period?(chargebacked_purchases)
 
       self.error_code = PurchaseErrorCode::BUYER_CHARGED_BACK
       errors.add :base, "There's an active chargeback on one of your past Gumroad purchases. Please withdraw it by contacting your charge processor and try again later."
+    end
+
+    def chargebacks_within_grace_period?(chargebacked_purchases)
+      return false if Feature.inactive?(:chargeback_grace_period)
+
+      unique_chargebacked_purchases = chargebacked_purchases.uniq do |purchase|
+        purchase.bundle_purchase&.id || purchase.id
+      end
+      return false if unique_chargebacked_purchases.count > CHARGEBACK_GRACE_LIMIT
+
+      unique_chargebacked_purchases.all? { _1.chargeback_date < CHARGEBACK_GRACE_PERIOD.ago }
     end
 
     def check_for_past_fraudulent_buyers

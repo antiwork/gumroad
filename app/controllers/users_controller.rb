@@ -8,10 +8,10 @@ class UsersController < ApplicationController
 
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data]
 
-  after_action :verify_authorized, only: %i[deactivate]
+  after_action :verify_authorized, only: %i[deactivate edit]
 
   before_action :set_as_modal, only: %i[show]
-  before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
+  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
@@ -31,6 +31,17 @@ class UsersController < ApplicationController
       format.json { render json: ProfilePresenter::PublicApiProps.new(seller: @user, seller_custom_domain_url:).props }
       format.any { e404 }
     end
+  end
+
+  def edit
+    if @user != current_seller
+      skip_authorization
+      e404
+    end
+
+    authorize [:settings, :profile], :show?
+
+    redirect_to profile_url(host: DOMAIN), allow_other_host: true
   end
 
   def coffee

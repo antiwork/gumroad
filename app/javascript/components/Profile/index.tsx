@@ -1,10 +1,10 @@
+import { isEqual } from "lodash-es";
 import * as React from "react";
 
 import { Tab } from "$app/parsers/profile";
 import GuidGenerator from "$app/utils/guid_generator";
 
 import AutoLink from "$app/components/AutoLink";
-import { EditProfile, Props as EditProps } from "$app/components/Profile/EditPage";
 import { FollowUserFormBlock } from "$app/components/Profile/FollowUserForm";
 import { Layout } from "$app/components/Profile/Layout";
 import { PageProps as SectionsProps, Section, SectionLayout } from "$app/components/Profile/Sections";
@@ -21,8 +21,37 @@ export type Props = SectionsProps & ProfileProps;
 
 export type TabWithId = Tab & { id: string };
 
+const tabWithoutId = ({ id: _id, ...tab }: TabWithId): Tab => tab;
+
+export const tabsWithoutIds = (tabs: TabWithId[]): Tab[] => tabs.map(tabWithoutId);
+
+const sharedSectionCount = (tab: Tab, currentTab: TabWithId) => {
+  const currentSectionIds = new Set(currentTab.sections);
+  return tab.sections.filter((sectionId) => currentSectionIds.has(sectionId)).length;
+};
+
+const tabWithStableIds = (initial: Tab[], currentTabs: TabWithId[] = []) => {
+  const usedTabIds = new Set<string>();
+  const unusedTabs = () => currentTabs.filter((tab) => !usedTabIds.has(tab.id));
+
+  return initial.map((tab) => {
+    const exactMatch = unusedTabs().find((currentTab) => isEqual(tabWithoutId(currentTab), tab));
+    const sectionMatch =
+      exactMatch ??
+      (tab.sections.length
+        ? unusedTabs()
+            .map((currentTab) => ({ tab: currentTab, sharedSections: sharedSectionCount(tab, currentTab) }))
+            .filter(({ sharedSections }) => sharedSections > 0)
+            .sort((a, b) => b.sharedSections - a.sharedSections)[0]?.tab
+        : unusedTabs().find((currentTab) => currentTab.sections.length === 0 && currentTab.name === tab.name));
+    const id = sectionMatch?.id ?? GuidGenerator.generate();
+    usedTabIds.add(id);
+    return { ...tab, id };
+  });
+};
+
 export function useTabs(initial: Tab[]) {
-  const [tabs, setTabs] = React.useState(() => initial.map((tab) => ({ ...tab, id: GuidGenerator.generate() })));
+  const [tabs, setTabs] = React.useState(() => tabWithStableIds(initial));
 
   const location = new URL(useOriginalLocation());
   const urlSection = React.useRef(location.searchParams.get("section"));
@@ -39,6 +68,25 @@ export function useTabs(initial: Tab[]) {
   };
 
   const tabsRef = useRefToLatest(tabs);
+  React.useEffect(() => {
+    setTabs((currentTabs) => {
+      if (
+        isEqual(
+          currentTabs.map(({ id: _id, ...tab }) => tab),
+          initial,
+        )
+      )
+        return currentTabs;
+
+      return tabWithStableIds(initial, currentTabs);
+    });
+  }, [initial]);
+
+  React.useEffect(() => {
+    if (selectedTabId && tabs.some((tab) => tab.id === selectedTabId)) return;
+    setSelectedTabId(tabs[0]?.id);
+  }, [selectedTabId, tabs]);
+
   React.useEffect(() => {
     const listener = () => {
       const tabs = tabsRef.current;
@@ -71,8 +119,8 @@ const PublicProfile = (props: Props) => {
             ) : null}
             {props.tabs.length > 1 ? (
               <UITabs aria-label="Profile Tabs">
-                {tabs.map((tab, i) => (
-                  <UITab key={i} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
+                {tabs.map((tab) => (
+                  <UITab key={tab.id} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
                     {tab.name}
                   </UITab>
                 ))}
@@ -92,8 +140,8 @@ const PublicProfile = (props: Props) => {
   );
 };
 
-export const Profile = (props: Props | EditProps) => (
+export const Profile = (props: Props) => (
   <Layout creatorProfile={props.creator_profile} hideFollowForm={!props.sections.length}>
-    {"products" in props ? <EditProfile {...props} /> : <PublicProfile {...props} />}
+    <PublicProfile {...props} />
   </Layout>
 );

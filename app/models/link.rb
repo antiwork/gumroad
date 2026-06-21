@@ -1152,13 +1152,15 @@ class Link < ApplicationRecord
   end
 
   def show_in_sections!(section_external_ids)
-    user.seller_profile_products_sections.each do |section|
-      shown = section.shown_products.include?(id)
-      selected = section_external_ids.include?(section.external_id)
-      if selected && !shown
-        section.update!(shown_products: section.shown_products + [id])
-      elsif !selected && shown
-        section.update!(shown_products: section.shown_products - [id])
+    user.with_profile_sections_lock do
+      user.seller_profile_products_sections.reload.each do |section|
+        shown = section.shown_products.include?(id)
+        selected = section_external_ids.include?(section.external_id)
+        if selected && !shown
+          section.update!(shown_products: section.shown_products + [id])
+        elsif !selected && shown
+          section.update!(shown_products: section.shown_products - [id])
+        end
       end
     end
   end
@@ -1382,10 +1384,11 @@ class Link < ApplicationRecord
     end
 
     def add_to_profile_sections
-      user.seller_profile_products_sections.each do |section|
-        next unless section.add_new_products
-        section.shown_products = section.shown_products << id
-        section.save!
+      user.with_profile_sections_lock do
+        user.seller_profile_products_sections.reload.each do |section|
+          next unless section.add_new_products
+          section.update!(shown_products: section.shown_products + [id])
+        end
       end
     end
 
@@ -1482,6 +1485,6 @@ class Link < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :product)
       return if result.passed
 
-      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "product"))
     end
 end

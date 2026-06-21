@@ -130,6 +130,37 @@ describe MerchantAccount do
     end
   end
 
+  describe "#stripe_disabled_reason_description" do
+    it "returns a human-readable description for a known reason" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: "requirements.past_due")
+      expect(merchant_account.stripe_disabled_reason_description).to eq("Stripe requires additional verification information that is now past due.")
+    end
+
+    it "returns a generic description for an unknown reason" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: "some.new.reason")
+      expect(merchant_account.stripe_disabled_reason_description).to eq("Stripe disabled payouts on the account.")
+    end
+
+    it "returns nil when the reason is blank" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: nil)
+      expect(merchant_account.stripe_disabled_reason_description).to be_nil
+    end
+  end
+
+  describe "#stripe_payouts_paused_comment" do
+    it "includes the raw reason code and its description" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: "listed")
+      expect(merchant_account.stripe_payouts_paused_comment).to eq(
+        "Payouts automatically paused by Stripe (disabled reason: listed). Stripe is reviewing the account against its restricted and prohibited business lists."
+      )
+    end
+
+    it "falls back to 'not specified' when there is no reason" do
+      merchant_account = create(:merchant_account, stripe_disabled_reason: nil)
+      expect(merchant_account.stripe_payouts_paused_comment).to eq("Payouts automatically paused by Stripe (disabled reason: not specified).")
+    end
+  end
+
   describe "#holder_of_funds" do
     it "returns the holder of funds for a known charge processor" do
       merchant_account = create(:merchant_account, charge_processor_id: ChargeProcessor.charge_processor_ids.first)

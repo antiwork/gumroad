@@ -65,7 +65,7 @@ const PurchaseNewInvoicePage = () => {
     form_metadata.display_vat_id && form.data.address_fields.country_code === initialCountryCode
       ? form_metadata.vat_id_label
       : (form_metadata.business_id_labels[form.data.address_fields.country_code] ?? form_metadata.vat_id_label);
-  const businessIdLabel = /\bID\b|Registration/i.test(rawBusinessIdLabel)
+  const businessIdLabel = /\bID\b|Registration/iu.test(rawBusinessIdLabel)
     ? rawBusinessIdLabel
     : `${rawBusinessIdLabel} ID`;
 

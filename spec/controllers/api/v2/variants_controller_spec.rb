@@ -32,9 +32,9 @@ describe Api::V2::VariantsController do
       it "returns error for nonexistent variant_category_id" do
         get @action, params: @params.merge(variant_category_id: "nonexistent")
         expect(response.parsed_body).to eq({
-          "success" => false,
-          "message" => "The variant_category was not found."
-        })
+                                             "success" => false,
+                                             "message" => "The variant_category was not found."
+                                           })
       end
 
       it "shows the 0 variants in that variant category" do
@@ -85,9 +85,9 @@ describe Api::V2::VariantsController do
       it "returns error for nonexistent variant_category_id" do
         post @action, params: @params.merge(variant_category_id: "nonexistent")
         expect(response.parsed_body).to eq({
-          "success" => false,
-          "message" => "The variant_category was not found."
-        })
+                                             "success" => false,
+                                             "message" => "The variant_category was not found."
+                                           })
       end
 
       describe "usd" do
@@ -173,9 +173,9 @@ describe Api::V2::VariantsController do
       it "returns error for nonexistent variant_category_id" do
         get @action, params: @params.merge(variant_category_id: "nonexistent")
         expect(response.parsed_body).to eq({
-          "success" => false,
-          "message" => "The variant_category was not found."
-        })
+                                             "success" => false,
+                                             "message" => "The variant_category was not found."
+                                           })
       end
 
       it "returns the right response" do
@@ -260,9 +260,9 @@ describe Api::V2::VariantsController do
         it "returns error for nonexistent variant_category_id" do
           put @action, params: @params.merge(variant_category_id: "nonexistent")
           expect(response.parsed_body).to eq({
-            "success" => false,
-            "message" => "The variant_category was not found."
-          })
+                                               "success" => false,
+                                               "message" => "The variant_category was not found."
+                                             })
         end
       end
 
@@ -557,9 +557,9 @@ describe Api::V2::VariantsController do
       it "returns error for nonexistent variant_category_id" do
         delete @action, params: @params.merge(variant_category_id: "nonexistent")
         expect(response.parsed_body).to eq({
-          "success" => false,
-          "message" => "The variant_category was not found."
-        })
+                                             "success" => false,
+                                             "message" => "The variant_category was not found."
+                                           })
       end
 
       describe "usd" do

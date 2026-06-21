@@ -729,6 +729,142 @@ describe Purchase, :vcr do
       expect(@purchase.as_json[:full_name]).to eq "Sahil Lavingia"
     end
 
+    it "includes web CSV parity fields for v2 only" do
+      purchase = create(:purchase)
+      utm_link = create(:utm_link, seller: purchase.seller, utm_source: "newsletter", utm_medium: "email", utm_campaign: "launch", utm_term: "founders", utm_content: "hero")
+      create(:utm_link_driven_sale, utm_link:, purchase:)
+      create(:tip, purchase:, value_usd_cents: 350)
+      category = create(:variant_category, link: purchase.link, title: "Format")
+      variant = create(:variant, variant_category: category, name: "Premium", price_difference_cents: 250)
+      purchase.variant_attributes << variant
+      create(:product_review, purchase:, rating: 5, message: "Worth it")
+      cancellation_date = Time.zone.parse("2026-01-02 03:04:05")
+      subscription = create(:subscription, user: purchase.seller, link: purchase.link)
+      subscription.update!(user_requested_cancellation_at: cancellation_date, cancelled_at: Date.new(2026, 1, 10))
+      preorder = create(:preorder, seller: purchase.seller, preorder_link: create(:preorder_link, link: purchase.link), created_at: Time.zone.parse("2025-12-01 08:00:00"))
+      cart = create(:cart, order: create(:order, purchases: [purchase]))
+      workflow = create(:abandoned_cart_workflow, seller: purchase.seller)
+      create(:sent_abandoned_cart_email, cart:, installment: workflow.installments.sole)
+      merchant_account = create(:merchant_account_stripe_connect, user: purchase.seller)
+
+      purchase.update!(
+        was_purchase_taxable: true,
+        was_tax_excluded_from_price: false,
+        tax_cents: 123,
+        shipping_cents: 456,
+        is_access_revoked: true,
+        subscription:,
+        preorder:,
+        is_original_subscription_purchase: true,
+        is_preorder_authorization: false,
+        merchant_account:,
+        processor_fee_cents: 78,
+        processor_fee_cents_currency: "usd",
+        stripe_transaction_id: "ch_123"
+      )
+
+      v2_json = purchase.reload.as_json(version: 2)
+      expect(v2_json).to include(
+        utm_source: "newsletter",
+        utm_medium: "email",
+        utm_campaign: "launch",
+        utm_term: "founders",
+        utm_content: "hero",
+        tip_cents: 350,
+        tax_cents: 123,
+        shipping_cents: 456,
+        tax_label: "Sales tax",
+        tax_included_in_price: true,
+        payment_processor: "stripe_connect",
+        processor_transaction_id: "ch_123",
+        processor_fee_cents: 78,
+        processor_fee_currency: "usd",
+        access_revoked: true,
+        preorder_authorization_time: preorder.reload.created_at,
+        variants_price_cents: 250,
+        review: "Worth it",
+        cancellation_date: subscription.reload.user_requested_cancellation_at,
+        subscription_end_date: Date.new(2026, 1, 10),
+        sent_abandoned_cart_email: true
+      )
+
+      expect(purchase.as_json.keys).not_to include(
+        :utm_source,
+        :utm_medium,
+        :utm_campaign,
+        :utm_term,
+        :utm_content,
+        :tip_cents,
+        :tax_cents,
+        :shipping_cents,
+        :tax_label,
+        :tax_included_in_price,
+        :payment_processor,
+        :processor_transaction_id,
+        :processor_fee_cents,
+        :processor_fee_currency,
+        :access_revoked,
+        :preorder_authorization_time,
+        :variants_price_cents,
+        :review,
+        :cancellation_date,
+        :subscription_end_date,
+        :sent_abandoned_cart_email
+      )
+    end
+
+    it "omits optional web CSV parity fields when no corresponding data exists" do
+      json = @purchase.as_json(version: 2)
+
+      expect(json).to include(
+        tax_cents: 0,
+        shipping_cents: 0,
+        access_revoked: false,
+        variants_price_cents: 0,
+        sent_abandoned_cart_email: false
+      )
+      expect(json.keys).not_to include(
+        :utm_source,
+        :tip_cents,
+        :tax_label,
+        :tax_included_in_price,
+        :payment_processor,
+        :processor_transaction_id,
+        :processor_fee_cents,
+        :processor_fee_currency,
+        :preorder_authorization_time,
+        :review,
+        :cancellation_date,
+        :subscription_end_date
+      )
+    end
+
+    it "includes the giftee review for gift sender purchases in v2 web CSV parity fields" do
+      product = create(:product)
+      gift_sender_purchase = create(:purchase, :gift_sender, link: product)
+      giftee_purchase = create(:purchase, :gift_receiver, link: product)
+      create(:gift, link: product, gifter_purchase: gift_sender_purchase, giftee_purchase:)
+      create(:product_review, purchase: giftee_purchase, rating: 5, message: "The giftee loved it")
+
+      expect(gift_sender_purchase.reload.as_json(version: 2)).to include(review: "The giftee loved it")
+    end
+
+    it "exposes processor fields for PayPal marketplace sales" do
+      @purchase.update!(
+        paypal_order_id: "paypal_order_123",
+        stripe_transaction_id: "paypal_tx_123",
+        processor_fee_cents: 91,
+        processor_fee_cents_currency: "usd"
+      )
+
+      expect(@purchase.reload.as_json(version: 2)).to include(
+        payment_processor: "paypal",
+        processor_transaction_id: "paypal_tx_123",
+        processor_fee_cents: 91,
+        processor_fee_currency: "usd"
+      )
+    end
+
     it "returns paypal_refund_expired as true for unrefundable PayPal purchases and false for others" do
       @unrefundable_paypal_purchase = create(:purchase, created_at: 7.months.ago, card_type: CardType::PAYPAL)
       expect(@purchase.as_json[:paypal_refund_expired]).to be(false)
@@ -2626,6 +2762,7 @@ describe Purchase, :vcr do
       allow(url_redirect).to receive(:redirect_or_s3_location).and_return(url)
 
       expect(Purchase.purchase_info(url_redirect, link, purchase)).to eq(should_show_receipt: true,
+                                                                         was_paid: true,
                                                                          show_view_content_button_on_product_page: true,
                                                                          is_recurring_billing: false,
                                                                          is_physical: false,
@@ -4778,6 +4915,24 @@ describe Purchase, :vcr do
       end
     end
 
+    context "when the offer code was deleted but a discount is cached" do
+      it "still applies the cached discount to the purchase price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(250)
+      end
+
+      it "clamps the price to zero when a cached fixed discount exceeds the price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 600, offer_code_is_percent: false, pre_discount_minimum_price_cents: 500)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(0)
+      end
+    end
+
     it "returns offer_code if the offer_code is not deleted" do
       expect(purchase_with_valid_offer_code.original_offer_code).to eq offer_code
     end
@@ -5671,7 +5826,10 @@ describe Purchase, :vcr do
       expect(flow_of_funds.settled_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.gumroad_amount.cents).to eq(-3_00)
       expect(flow_of_funds.gumroad_amount.currency).to eq(Currency::USD)
-      expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(-52_74)
+      # p2's gross share is -52_73 (not -52_74): with the largest-remainder
+      # split, the three purchases' gross shares now sum to exactly -125_00
+      # (was -125_01 before the fix). p1 -23_44 + p2 -52_73 + p3 -48_83 = -125_00.
+      expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(-52_73)
       expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.merchant_account_net_amount.cents).to eq(-33_75)
       expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::CAD)
@@ -5688,6 +5846,37 @@ describe Purchase, :vcr do
       expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::CAD)
       expect(flow_of_funds.merchant_account_net_amount.cents).to eq(-31_25)
       expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::CAD)
+    end
+
+    it "splits each amount so the per-purchase shares sum exactly to the combined charge amounts" do
+      charge = create(:charge, amount_cents: 100_01, gumroad_amount_cents: 10_01)
+
+      purchase1 = create(:purchase, total_transaction_cents: 33_34)
+      purchase1.update!(fee_cents: 3_34)
+      purchase2 = create(:purchase, total_transaction_cents: 33_34)
+      purchase2.update!(fee_cents: 3_34)
+      purchase3 = create(:purchase, total_transaction_cents: 33_33)
+      purchase3.update!(fee_cents: 3_33)
+
+      charge.purchases << purchase1
+      charge.purchases << purchase2
+      charge.purchases << purchase3
+
+      combined_flow_of_funds = FlowOfFunds.new(
+        issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_01),
+        settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_01),
+        gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 10_01),
+        merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_01),
+        merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 112_51)
+      )
+
+      flows = [purchase1, purchase2, purchase3].map { |purchase| purchase.build_flow_of_funds_from_combined_charge(combined_flow_of_funds) }
+
+      expect(flows.sum { |flow| flow.issued_amount.cents }).to eq(100_01)
+      expect(flows.sum { |flow| flow.settled_amount.cents }).to eq(125_01)
+      expect(flows.sum { |flow| flow.gumroad_amount.cents }).to eq(10_01)
+      expect(flows.sum { |flow| flow.merchant_account_gross_amount.cents }).to eq(125_01)
+      expect(flows.sum { |flow| flow.merchant_account_net_amount.cents }).to eq(112_51)
     end
   end
 

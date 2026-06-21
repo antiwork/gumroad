@@ -103,7 +103,7 @@ class Settings::PaymentsController < Settings::BaseController
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
         if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
           country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
-          return redirect_with_error("The postal code you entered is not valid for #{country}.")
+          return redirect_with_error("We couldn't verify the postal code you entered for #{country}. If you're sure it's correct, such as a newly built address, contact support and we'll look into it.")
         end
         if e.is_a?(MerchantRegistrationUserNotReadyError)
           return redirect_with_error("Bank payouts are not supported in your country yet. Please use PayPal instead.")

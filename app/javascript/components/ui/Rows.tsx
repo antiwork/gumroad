@@ -21,6 +21,9 @@ export const Row = React.forwardRef<
       ref={ref}
       className={classNames(
         "grid items-center gap-4 border-border p-4 not-last:border-b sm:grid-cols-[minmax(30%,1fr)_auto]",
+        // While dragging, react-sortablejs lifts the row out of its container; give the drag image a
+        // solid background/shadow so it doesn't render transparent, and dim the placeholder it leaves.
+        "[&.sortable-chosen]:rounded-sm [&.sortable-chosen]:bg-muted [&.sortable-chosen]:shadow [&.sortable-ghost]:opacity-50",
         className,
       )}
       {...props}

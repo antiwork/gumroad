@@ -186,6 +186,7 @@ describe ProductPresenter do
             membership: nil,
             review: nil,
             should_show_receipt: true,
+            was_paid: true,
             is_gift_receiver_purchase: false,
             show_view_content_button_on_product_page: false,
             subscription_has_lapsed: false,

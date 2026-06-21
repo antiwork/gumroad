@@ -92,10 +92,12 @@ module RenderingExtension
         settings_payments_user: {
           show: Pundit.policy!(pundit_user, [:settings, :payments, pundit_user.seller]).show?,
         },
+        settings_main_user: {
+          update_username: Pundit.policy!(pundit_user, [:settings, :main, pundit_user.seller]).update_username?,
+        },
         settings_profile: {
           manage_social_connections: Pundit.policy!(pundit_user, [:settings, :profile]).manage_social_connections?,
           update: Pundit.policy!(pundit_user, [:settings, :profile]).update?,
-          update_username: Pundit.policy!(pundit_user, [:settings, :profile]).update_username?
         },
         settings_third_party_analytics_user: {
           update: Pundit.policy!(pundit_user, [:settings, :third_party_analytics, pundit_user.seller]).update?

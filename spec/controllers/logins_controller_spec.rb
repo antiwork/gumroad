@@ -35,6 +35,31 @@ describe LoginsController, type: :controller, inertia: true do
       end
     end
 
+    context "when the passkeys feature is active" do
+      before { Feature.activate(:passkeys) }
+      after { Feature.deactivate(:passkeys) }
+
+      it "embeds passkey login options and stores the challenge in the session" do
+        get :new
+
+        expect(inertia.props[:show_passkey_login]).to be(true)
+        options = inertia.props[:passkey_login_options].with_indifferent_access
+        expect(options[:challenge]).to be_present
+        expect(options[:rpId]).to eq(WebAuthn.configuration.rp_id)
+        expect(session[:webauthn_authentication_challenge]).to eq(options[:challenge])
+      end
+    end
+
+    context "when the passkeys feature is inactive" do
+      it "does not embed passkey login options or store a challenge" do
+        get :new
+
+        expect(inertia.props[:show_passkey_login]).to be(false)
+        expect(inertia.props[:passkey_login_options]).to be_nil
+        expect(session[:webauthn_authentication_challenge]).to be_nil
+      end
+    end
+
     context "with an email in the query parameters" do
       it "renders successfully" do
         get :new, params: { email: "test@example.com" }
@@ -108,6 +133,90 @@ describe LoginsController, type: :controller, inertia: true do
   describe "POST create" do
     before do
       @user = create(:user, password: "password")
+    end
+
+    describe "passkey setup prompt" do
+      before { Feature.activate(:passkeys) }
+
+      it "flags the prompt after an eligible login" do
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to eq(@user.id)
+      end
+
+      it "logs the prompt-eligible analytics event after an eligible login" do
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).to have_received(:info).with("passkey.prompt.eligible user_id=#{@user.id}")
+      end
+
+      it "does not flag the prompt when the user already has a passkey" do
+        create(:webauthn_credential, user: @user)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "clears a stale prompt flag when the logging-in user is no longer eligible" do
+        create(:webauthn_credential, user: @user)
+        session[:prompt_passkey_setup] = true
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "does not flag the prompt when the passkeys feature is inactive" do
+        Feature.deactivate(:passkeys)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+
+      it "does not flag the prompt inside the mobile app webview" do
+        cookies[:is_gumroad_mobile_app] = "true"
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
+      end
+    end
+
+    describe "passkey password fallback" do
+      before { Feature.activate(:passkeys) }
+      after { Feature.deactivate(:passkeys) }
+
+      it "logs the password-fallback analytics event when a passkey user signs in with a password" do
+        create(:webauthn_credential, user: @user)
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
+      end
+
+      it "does not log the fallback event for a user without a passkey" do
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(Rails.logger).not_to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
+      end
+
+      it "does not log the fallback event while the login is still pending 2FA" do
+        create(:webauthn_credential, user: @user)
+        @user.update!(two_factor_authentication_enabled: true)
+        allow(Rails.logger).to receive(:info)
+
+        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(controller.user_signed_in?).to be(false)
+        expect(Rails.logger).not_to have_received(:info).with("passkey.password_fallback user_id=#{@user.id}")
+      end
     end
 
     it "logs in if user already exists" do

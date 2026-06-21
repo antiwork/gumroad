@@ -11,7 +11,7 @@ class Api::V2::RefundPoliciesController < Api::V2::BaseController
   }.freeze
   ACCOUNT_LEVEL_REFUND_POLICY_NOT_IN_EFFECT_MESSAGE = "The account-level refund policy is not in effect for this seller."
 
-  before_action(only: [:show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:update]) { doorkeeper_authorize! :edit_products }
 
   def show

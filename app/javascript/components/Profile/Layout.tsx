@@ -1,4 +1,4 @@
-import { TwitterX } from "@boxicons/react";
+import { Pencil, TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -6,6 +6,7 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
+import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
@@ -22,12 +23,19 @@ type LayoutProps = {
 
 export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps) => {
   const cartItemsCount = useCartItemsCount();
+  const appDomain = useAppDomain();
   const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
 
   const headerButtons =
-    creatorProfile.twitter_handle || cartItemsCount ? (
+    creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
       <div className="ml-auto flex items-center gap-3">
+        {creatorProfile.can_edit ? (
+          <NavigationButton color="filled" href={Routes.profile_url({ host: appDomain })}>
+            <Pencil className="size-5" />
+            Edit profile
+          </NavigationButton>
+        ) : null}
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
             <TwitterX pack="brands" className="size-5" />
@@ -46,6 +54,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             creatorProfile.external_id !== loggedInUser.id ? (
               <NavigationButton
                 href={Routes.admin_impersonate_url({
+                  host: appDomain,
                   user_identifier: creatorProfile.external_id,
                 })}
                 className="left-3"
@@ -54,7 +63,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 Impersonate
               </NavigationButton>
             ) : null}
-            <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" />
+            {creatorProfile.avatar_url ? <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" /> : null}
             <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
               {creatorProfile.name}
               {creatorProfile.is_verified ? (
@@ -75,7 +84,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       </header>
       <main className="flex flex-1 flex-col">
         {children}
-        <PoweredByFooter className="mx-auto w-full max-w-6xl lg:py-6 lg:text-left" />
+        <PoweredByFooter className="mx-auto w-full max-w-6xl" />
       </main>
     </div>
   );

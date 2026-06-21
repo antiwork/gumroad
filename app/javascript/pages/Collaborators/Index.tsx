@@ -27,9 +27,8 @@ type CollaboratorsPageProps = {
 const CollaboratorsPage = () => {
   const loggedInUser = useLoggedInUser();
 
-  const { collaborators, collaborators_disabled_reason, has_incoming_collaborators } = typia.assert<CollaboratorsPageProps>(
-    usePage().props,
-  );
+  const { collaborators, collaborators_disabled_reason, has_incoming_collaborators } =
+    typia.assert<CollaboratorsPageProps>(usePage().props);
   const [selectedCollaborator, setSelectedCollaborator] = React.useState<Collaborator | null>(null);
 
   const deleteForm = useForm({});

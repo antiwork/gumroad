@@ -2,11 +2,11 @@ import typia from "typia";
 
 import { SearchRequest } from "$app/data/search";
 
-const rawCategoryImages = import.meta.glob("$assets/images/discover/*", {
+const rawCategoryImages = import.meta.glob<string>("$assets/images/discover/*", {
   eager: true,
   query: "?url",
   import: "default",
-}) as Record<string, string>;
+});
 const categoryImages = Object.fromEntries(
   Object.entries(rawCategoryImages).map(([key, value]) => [`./${key.split("/").pop()}`, value]),
 );

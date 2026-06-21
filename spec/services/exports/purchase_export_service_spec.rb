@@ -5,6 +5,14 @@ require "spec_helper"
 describe Exports::PurchaseExportService do
   describe "#perform" do
     before do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+      MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id) ||
+        create(:merchant_account_paypal, user: nil, charge_processor_merchant_id: "paypal_#{SecureRandom.hex(8)}")
+      MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+                                  charge_processor_merchant_id: "braintree_#{SecureRandom.hex(8)}")
+
       @seller = create(:user)
       @product = create(:product, user: @seller, price_cents: 100_00)
       @purchase = create(:purchase, link: @product, street_address: "Søéad", full_name: "Кочергина Дарья", ip_address: "216.38.135.1")
@@ -644,6 +652,65 @@ describe Exports::PurchaseExportService do
         end
       end
     end
+
+    it "keeps v2 API web CSV parity fields aligned with export values" do
+      utm_link = create(:utm_link, seller: @seller, utm_source: "newsletter", utm_medium: "email", utm_campaign: "launch", utm_term: "founders", utm_content: "hero")
+      create(:utm_link_driven_sale, utm_link:, purchase: @purchase)
+      create(:tip, purchase: @purchase, value_usd_cents: 350)
+      category = create(:variant_category, link: @product, title: "Format")
+      variant = create(:variant, variant_category: category, name: "Premium", price_difference_cents: 250)
+      @purchase.variant_attributes << variant
+      create(:product_review, purchase: @purchase, rating: 5, message: "Worth it")
+      subscription = create(:subscription, user: @seller, link: @product)
+      subscription.update!(user_requested_cancellation_at: Time.zone.parse("2026-01-02 03:04:05"), cancelled_at: Date.new(2026, 1, 10))
+      preorder = create(:preorder, seller: @seller, preorder_link: create(:preorder_link, link: @product), created_at: Time.zone.parse("2025-12-01 08:00:00"))
+      cart = create(:cart, order: create(:order, purchases: [@purchase]))
+      workflow = create(:abandoned_cart_workflow, seller: @seller)
+      create(:sent_abandoned_cart_email, cart:, installment: workflow.installments.sole)
+
+      @purchase.update!(
+        was_purchase_taxable: true,
+        was_tax_excluded_from_price: false,
+        tax_cents: 123,
+        shipping_cents: 456,
+        is_access_revoked: true,
+        subscription:,
+        preorder:,
+        is_original_subscription_purchase: true,
+        is_preorder_authorization: false,
+        merchant_account: create(:merchant_account_stripe_connect, user: @seller),
+        processor_fee_cents: 78,
+        processor_fee_cents_currency: "usd",
+        stripe_transaction_id: "ch_123"
+      )
+
+      row = last_data_row
+      api_json = @purchase.reload.as_json(version: 2)
+
+      expect(api_json).to include(
+        utm_source: field_value(row, "UTM Source"),
+        utm_medium: field_value(row, "UTM Medium"),
+        utm_campaign: field_value(row, "UTM Campaign"),
+        utm_term: field_value(row, "UTM Term"),
+        utm_content: field_value(row, "UTM Content"),
+        tax_label: field_value(row, "Tax Type"),
+        tax_included_in_price: field_value(row, "Tax Included in Price?") == "1",
+        payment_processor: "stripe_connect",
+        processor_transaction_id: field_value(row, "Stripe Transaction ID"),
+        processor_fee_currency: field_value(row, "Stripe Fee Currency"),
+        access_revoked: field_value(row, "Access Revoked?") == "1",
+        preorder_authorization_time: preorder.reload.created_at,
+        review: field_value(row, "Review"),
+        cancellation_date: subscription.reload.user_requested_cancellation_at,
+        subscription_end_date: subscription.termination_date,
+        sent_abandoned_cart_email: field_value(row, "Sent Abandoned Cart Email?") == "1"
+      )
+      expect(api_json[:tip_cents]).to eq(cents_from_csv_dollars(field_value(row, "Tip ($)")))
+      expect(api_json[:tax_cents]).to eq(cents_from_csv_dollars(field_value(row, "Taxes ($)")))
+      expect(api_json[:shipping_cents]).to eq(cents_from_csv_dollars(field_value(row, "Shipping ($)")))
+      expect(api_json[:processor_fee_cents]).to eq(cents_from_csv_dollars(field_value(row, "Stripe Fee Amount")))
+      expect(api_json[:variants_price_cents]).to eq(cents_from_csv_dollars(field_value(row, "Variants Price ($)")))
+    end
   end
 
   describe ".export" do
@@ -680,6 +747,10 @@ describe Exports::PurchaseExportService do
 
   def field_value(row, name)
     row.fetch(field_index(name))
+  end
+
+  def cents_from_csv_dollars(value)
+    (BigDecimal(value) * 100).to_i
   end
 
   def generate_csv(purchases = @seller.sales.where(purchase_state: Purchase::NON_GIFT_SUCCESS_STATES))

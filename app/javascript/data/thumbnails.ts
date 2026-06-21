@@ -35,7 +35,9 @@ export const deleteThumbnail = async (permalink: string, thumbnailId: string) =>
   });
 
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; thumbnail: Thumbnail } | { success: false }>(await response.json());
+    const responseData = typia.assert<{ success: true; thumbnail: Thumbnail } | { success: false }>(
+      await response.json(),
+    );
     if (responseData.success) return;
   }
 

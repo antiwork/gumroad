@@ -46,38 +46,37 @@ describe ShippingDestination::Destinations do
   end
 
   private
+    def shipping_countries_expected
+      first_countries = {
+        "US" => "United States",
+        ShippingDestination::Destinations::ASIA => "Asia",
+        ShippingDestination::Destinations::EUROPE => "Europe",
+        ShippingDestination::Destinations::NORTH_AMERICA => "North America",
+        ShippingDestination::Destinations::ELSEWHERE => "Elsewhere"
+      }
+      first_countries.merge!(
+        Compliance::Countries.for_select.reject { |c| Compliance::Countries.blocked?(c[0]) }.to_h
+      )
+    end
 
-  def shipping_countries_expected
-    first_countries = {
-      "US" => "United States",
-      ShippingDestination::Destinations::ASIA => "Asia",
-      ShippingDestination::Destinations::EUROPE => "Europe",
-      ShippingDestination::Destinations::NORTH_AMERICA => "North America",
-      ShippingDestination::Destinations::ELSEWHERE => "Elsewhere"
-    }
-    first_countries.merge!(
-      Compliance::Countries.for_select.reject { |c| Compliance::Countries.blocked?(c[0]) }.to_h
-    )
-  end
+    def continent_expected(continent_name)
+      ISO3166::Country.all
+        .select { |c| c.continent == continent_name }
+        .reject { |c| Compliance::Countries.blocked?(c.alpha2) || Compliance::Countries.risk_physical_blocked?(c.alpha2) }
+        .map { |c| [c.alpha2, c.common_name] }
+        .sort_by { |pair| pair.last }
+        .to_h
+    end
 
-  def continent_expected(continent_name)
-    ISO3166::Country.all
-      .select { |c| c.continent == continent_name }
-      .reject { |c| Compliance::Countries.blocked?(c.alpha2) || Compliance::Countries.risk_physical_blocked?(c.alpha2) }
-      .map { |c| [c.alpha2, c.common_name] }
-      .sort_by { |pair| pair.last }
-      .to_h
-  end
+    def europe_shipping_countries_expected
+      continent_expected("Europe")
+    end
 
-  def europe_shipping_countries_expected
-    continent_expected("Europe")
-  end
+    def asia_shipping_countries_expected
+      continent_expected("Asia")
+    end
 
-  def asia_shipping_countries_expected
-    continent_expected("Asia")
-  end
-
-  def north_america_shipping_countries_expected
-    continent_expected("North America")
-  end
+    def north_america_shipping_countries_expected
+      continent_expected("North America")
+    end
 end

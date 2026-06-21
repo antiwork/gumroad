@@ -845,7 +845,8 @@ class Purchase < ApplicationRecord
       can_update: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).update? : nil,
       invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
-      paypal_refund_expired: paypal_refund_expired?
+      paypal_refund_expired: paypal_refund_expired?,
+      **(version == 2 ? web_csv_parity_fields : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
@@ -925,6 +926,18 @@ class Purchase < ApplicationRecord
     json[:quantity] = quantity
     json[:message] = messages.unread.last if options[:unread_message]
     json
+  end
+
+  def tax_included_in_price
+    return unless was_purchase_taxable?
+
+    !was_tax_excluded_from_price
+  end
+
+  def sent_abandoned_cart_email?
+    return false if order&.cart.blank?
+
+    order.cart.sent_abandoned_cart_emails.any? { _1.installment.seller_id == link.user_id }
   end
 
   def receipt_url
@@ -1129,6 +1142,7 @@ class Purchase < ApplicationRecord
     json = {
       created_at: purchase.created_at,
       should_show_receipt: !purchase.is_test_purchase? && purchase.successful_and_not_reversed?(include_gift: true),
+      was_paid: purchase.present? && purchase.paid?,
       show_view_content_button_on_product_page: purchase.show_view_content_button_on_product_page?,
       is_recurring_billing: link.is_recurring_billing,
       is_physical: link.is_physical,
@@ -1443,10 +1457,14 @@ class Purchase < ApplicationRecord
       minimum_price = preorder.authorization_purchase.displayed_price_cents
     else
       minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+      # We allow offer codes larger than the product price, which would make this negative. Floor it
+      # at 0 here, before splitting into installments, so a snapshot-backed installment price stays
+      # authoritative rather than being overwritten when the live product price later drops.
+      minimum_price_cents = 0 if offer_code_for_pricing.present? && minimum_price_cents < 0
       # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
       minimum_price_cents *= quantity
 
-      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
       minimum_price = minimum_price_cents
 
@@ -1458,11 +1476,8 @@ class Purchase < ApplicationRecord
         minimum_price = calculate_installment_payment_price_cents(minimum_price_cents)
       end
 
-      # We allow offer codes that are larger than the price of the product. In that case minimum_price_cents could be negative here. Set it to 0.
-      if original_offer_code.present? && minimum_price_cents < 0
-        minimum_price = 0
       # If a PPP discount decreases the price to a value lower than the minimum, round the price up to the minimum.
-      elsif is_purchasing_power_parity_discounted && minimum_price_cents != 0 && minimum_price_cents < link.currency["min_price"]
+      if is_purchasing_power_parity_discounted && minimum_price_cents != 0 && minimum_price_cents < link.currency["min_price"]
         minimum_price = link.currency["min_price"]
       end
     end
@@ -2379,7 +2394,7 @@ class Purchase < ApplicationRecord
       existing_redirects = UrlRedirect.where(purchase_id: purchase_ids, installment_id: installment_ids)
                                       .order(:id)
                                       .reverse_each
-                                      .each_with_object({}) { |ur, h| h[[ur.purchase_id, ur.installment_id]] = ur }
+                                      .index_by { |ur| [ur.purchase_id, ur.installment_id] }
 
       # Key email_infos on original_purchase.id to match action_at_for_purchase's
       # behavior — otherwise renewal purchases get post.published_at instead of the
@@ -2388,7 +2403,7 @@ class Purchase < ApplicationRecord
       email_infos = CreatorContactingCustomersEmailInfo
                       .where(installment_id: installment_ids, purchase_id: original_purchase_ids)
                       .order(:id)
-                      .each_with_object({}) { |ei, h| h[[ei.installment_id, ei.purchase_id]] = ei }
+                      .index_by { |ei| [ei.installment_id, ei.purchase_id] }
     else
       existing_redirects = {}
       email_infos = {}
@@ -2928,29 +2943,41 @@ class Purchase < ApplicationRecord
   end
 
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
-    total_issued_amount_cents = combined_flow_of_funds.issued_amount.cents
-    purchase_portion = total_transaction_cents * 1.0 / charge.amount_cents
-    purchase_gumroad_amount_portion = if charge.gumroad_amount_cents == 0
+    charge_purchases = charge.purchases.to_a.sort_by(&:id)
+    purchase_index = charge_purchases.index { |purchase| purchase.id == id }
+    raise ArgumentError, "Purchase #{id} is not part of charge #{charge&.id}" if purchase_index.nil?
+
+    # The "portion" ratios use total_transaction_cents (whole charge), the
+    # gumroad amount, and the seller (complement) amount respectively. Each
+    # amount is split across all purchases in the charge with the
+    # largest-remainder method so the per-purchase shares always reconcile to
+    # the combined charge amount; this purchase takes its own share by index.
+    transaction_weights = charge_purchases.map(&:total_transaction_cents)
+    gumroad_weights = charge_purchases.map(&:total_transaction_amount_for_gumroad_cents)
+    seller_weights = charge_purchases.map { |purchase| purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents }
+
+    share = lambda do |total_cents, weights, weight_total|
+      Charge.allocate_by_largest_remainder(total_cents, weights, weight_total)[purchase_index]
+    end
+
+    issued_amount_cents = share.call(combined_flow_of_funds.issued_amount.cents, transaction_weights, charge.amount_cents)
+    settled_amount_cents = share.call(combined_flow_of_funds.settled_amount.cents, transaction_weights, charge.amount_cents)
+    gumroad_amount_cents = if charge.gumroad_amount_cents == 0
       0
     else
-      total_transaction_amount_for_gumroad_cents * 1.0 / charge.gumroad_amount_cents
+      share.call(combined_flow_of_funds.gumroad_amount.cents, gumroad_weights, charge.gumroad_amount_cents)
     end
-    purchase_seller_portion = (total_transaction_cents - total_transaction_amount_for_gumroad_cents) * 1.0 /
-        (charge.amount_cents - charge.gumroad_amount_cents)
-
-    issued_amount_cents = (total_issued_amount_cents * purchase_portion).floor
-    settled_amount_cents = (combined_flow_of_funds.settled_amount.cents * purchase_portion).floor
-    gumroad_amount_cents = (combined_flow_of_funds.gumroad_amount.cents * purchase_gumroad_amount_portion).floor
 
     issued_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.issued_amount.currency, cents: issued_amount_cents)
     settled_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.settled_amount.currency, cents: settled_amount_cents)
     gumroad_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.gumroad_amount.currency, cents: gumroad_amount_cents)
 
     if combined_flow_of_funds.merchant_account_gross_amount.present?
-      merchant_account_gross_amount_cents = (combined_flow_of_funds.merchant_account_gross_amount.cents * purchase_seller_portion).floor
+      seller_weight_total = charge.amount_cents - charge.gumroad_amount_cents
+      merchant_account_gross_amount_cents = share.call(combined_flow_of_funds.merchant_account_gross_amount.cents, seller_weights, seller_weight_total)
       merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.merchant_account_gross_amount.currency,
                                                               cents: merchant_account_gross_amount_cents)
-      merchant_account_net_amount_cents = (combined_flow_of_funds.merchant_account_net_amount.cents * purchase_seller_portion).floor
+      merchant_account_net_amount_cents = share.call(combined_flow_of_funds.merchant_account_net_amount.cents, seller_weights, seller_weight_total)
       merchant_account_net_amount = FlowOfFunds::Amount.new(currency: combined_flow_of_funds.merchant_account_net_amount.currency,
                                                             cents: merchant_account_net_amount_cents)
     end
@@ -2991,13 +3018,49 @@ class Purchase < ApplicationRecord
 
     minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
     minimum_price_cents *= quantity
-    minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+    minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
     calculated_price = minimum_price_cents.round
     calculated_price > 0 ? calculated_price : price_cents
   end
 
   private
+    def web_csv_parity_fields
+      {
+        utm_source: utm_link&.utm_source,
+        utm_medium: utm_link&.utm_medium,
+        utm_campaign: utm_link&.utm_campaign,
+        utm_term: utm_link&.utm_term,
+        utm_content: utm_link&.utm_content,
+        tip_cents: tip&.value_usd_cents,
+        tax_cents: web_csv_tax_cents,
+        shipping_cents:,
+        tax_label: (tax_label(include_tax_rate: false) if has_tax_label?),
+        tax_included_in_price:,
+        payment_processor: web_csv_payment_processor,
+        processor_transaction_id: (stripe_transaction_id if web_csv_payment_processor.present?),
+        processor_fee_cents: (processor_fee_cents if web_csv_payment_processor.present?),
+        processor_fee_currency: (processor_fee_cents_currency if web_csv_payment_processor.present?),
+        access_revoked: is_access_revoked,
+        preorder_authorization_time: (preorder.created_at if is_preorder_charge?),
+        variants_price_cents: variant_extra_cost,
+        review: original_product_review&.message,
+        cancellation_date: subscription&.user_requested_cancellation_at,
+        subscription_end_date: subscription&.termination_date,
+        sent_abandoned_cart_email: sent_abandoned_cart_email?
+      }
+    end
+
+    def web_csv_tax_cents
+      gumroad_responsible_for_tax? ? gumroad_tax_cents : tax_cents
+    end
+
+    def web_csv_payment_processor
+      return "paypal" if paypal_order_id?
+
+      "stripe_connect" if charged_using_stripe_connect_account?
+    end
+
     def resolved_offer_code_discount_for_buyer
       if offer_code.existing_customers_only? || offer_code.tiered?
         evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer, product: link)
@@ -3021,11 +3084,22 @@ class Purchase < ApplicationRecord
       Rails.logger.warn("Failed to auto-delete single-use offer code #{offer_code.id}: #{e.message}")
     end
 
+    # The offer code whose discount applies to this purchase's PRICE. Unlike #original_offer_code
+    # (used for display), pricing honors the cached discount even after the live code is soft
+    # deleted — so legacy installment charges keep the agreed discount — and applies a commission
+    # deposit's code to its completion purchase. Must be used consistently across the discount
+    # amount, the negative-price clamp, and the PPP guard so they never disagree.
+    #
+    # Deliberately not memoized: a purchase's discount state changes during its lifecycle (the
+    # cached discount is built mid-pricing; the offer code can be deleted), so each caller must
+    # resolve against the current state. The cost is negligible — no query, since the discount
+    # and its offer code are already loaded on the pricing path.
+    def offer_code_for_pricing
+      original_offer_code(include_deleted: is_commission_completion_purchase? || has_cached_offer_code?)
+    end
+
     def offer_amount_off(purchase_min_price)
-      # For commissions, apply deposit purchase's offer code to its completion
-      # purchase even if it has been soft deleted.
-      original_offer_code(include_deleted: is_commission_completion_purchase?)
-        &.amount_off(purchase_min_price) || 0
+      offer_code_for_pricing&.amount_off(purchase_min_price) || 0
     end
 
     def displayed_price_usd_cents

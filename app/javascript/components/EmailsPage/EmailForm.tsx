@@ -379,6 +379,43 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
     const template = searchParams.get("template");
     const isBundleMarketing = template === "bundle_marketing";
 
+    if (template === "filtered_customers") {
+      if (canSendToCustomers) {
+        setAudienceType("customers");
+        const boughtIds = searchParams
+          .getAll("bought[]")
+          .filter((id) => productOptions.findIndex((option) => option.id === id) !== -1);
+        const notBoughtIds = searchParams
+          .getAll("not_bought[]")
+          .filter((id) => productOptions.findIndex((option) => option.id === id) !== -1);
+        if (boughtIds.length > 0) setBought(boughtIds);
+        if (notBoughtIds.length > 0) setNotBought(notBoughtIds);
+
+        const paidMoreThan = searchParams.get("paid_more_than");
+        const paidLessThan = searchParams.get("paid_less_than");
+        if (paidMoreThan !== null && paidMoreThan !== "") {
+          const parsed = Number.parseInt(paidMoreThan, 10);
+          if (!Number.isNaN(parsed) && parsed >= 0) setPaidMoreThanCents(parsed);
+        }
+        if (paidLessThan !== null && paidLessThan !== "") {
+          const parsed = Number.parseInt(paidLessThan, 10);
+          if (!Number.isNaN(parsed) && parsed >= 0) setPaidLessThanCents(parsed);
+        }
+
+        const isValidDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/u.test(value);
+        const createdAfter = searchParams.get("created_after");
+        const createdBefore = searchParams.get("created_before");
+        if (createdAfter && isValidDate(createdAfter)) setAfterDate(createdAfter);
+        if (createdBefore && isValidDate(createdBefore)) setBeforeDate(createdBefore);
+
+        const fromCountry = searchParams.get("from_country");
+        if (fromCountry && context.countries.includes(fromCountry)) setFromCountry(fromCountry);
+
+        setChannel({ profile: false, email: true });
+      }
+      return;
+    }
+
     if (template === "content_updates" && permalink) {
       const bought = searchParams.getAll("bought[]");
       form.setData("installment.name", `New content added to ${productName}`);

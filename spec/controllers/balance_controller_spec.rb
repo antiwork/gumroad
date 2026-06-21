@@ -60,11 +60,11 @@ describe BalanceController, type: :controller, inertia: true do
           get :index
 
           expect(inertia.props[:scheduled_payout]).to eq({
-            action: "payout",
-            status: "pending",
-            scheduled_at: sp.scheduled_at,
-            payout_amount_cents: 50_000
-          })
+                                                           action: "payout",
+                                                           status: "pending",
+                                                           scheduled_at: sp.scheduled_at,
+                                                           payout_amount_cents: 50_000
+                                                         })
         end
 
         it "returns executed payout props" do
@@ -73,11 +73,11 @@ describe BalanceController, type: :controller, inertia: true do
           get :index
 
           expect(inertia.props[:scheduled_payout]).to eq({
-            action: "refund",
-            status: "executed",
-            scheduled_at: sp.scheduled_at,
-            payout_amount_cents: 30_000
-          })
+                                                           action: "refund",
+                                                           status: "executed",
+                                                           scheduled_at: sp.scheduled_at,
+                                                           payout_amount_cents: 30_000
+                                                         })
         end
 
         it "returns the most recent scheduled payout" do

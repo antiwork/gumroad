@@ -123,7 +123,7 @@ describe Api::V2::SubscribersController do
           per_row_patterns.each do |pattern, label|
             hits = queries.grep(pattern)
             expect(hits).to be_empty,
-              "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
+                            "Expected no per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
           end
         end
       end

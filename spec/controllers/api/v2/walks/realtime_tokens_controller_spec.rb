@@ -31,9 +31,9 @@ describe Api::V2::Walks::RealtimeTokensController do
         .with(headers: { "Authorization" => "Bearer sk-test-openai" })
         .to_return(status: 200, body: openai_response.to_json, headers: { "Content-Type" => "application/json" })
 
-      expect {
+      expect do
         post :create, params: { topic: "How I built my SaaS" }
-      }.to change(WalksFreeTrial, :count).by(1)
+      end.to change(WalksFreeTrial, :count).by(1)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["value"]).to eq("ek_proj_xyz")
@@ -74,9 +74,9 @@ describe Api::V2::Walks::RealtimeTokensController do
       stub_request(:post, "https://api.openai.com/v1/realtime/client_secrets")
         .to_return(status: 200, body: { "value" => "ek_x" }.to_json, headers: { "Content-Type" => "application/json" })
 
-      expect {
+      expect do
         post :create, params: { topic: "x" }
-      }.not_to change(WalksFreeTrial, :count)
+      end.not_to change(WalksFreeTrial, :count)
 
       expect(response).to have_http_status(:ok)
     end

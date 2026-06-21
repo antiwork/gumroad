@@ -63,6 +63,7 @@ describe OauthApplication do
     let(:doorkeeper_scopes) { Doorkeeper.configuration.scopes.map(&:to_sym) }
     let(:default_scopes) { Doorkeeper.configuration.default_scopes.map(&:to_sym) }
     let(:public_scopes) { Doorkeeper.configuration.public_scopes.map(&:to_sym) }
+    let(:public_api_read_scopes) { Doorkeeper.configuration.public_api_read_scopes.map(&:to_sym) }
     let(:private_scopes) { %i[refund_sales mobile_api creator_api helper_api unfurl] }
 
     it "all public scopes are included in Doorkeeper's scopes" do
@@ -79,6 +80,13 @@ describe OauthApplication do
 
     it "defines private scopes as neither public nor default" do
       expect(private_scopes).to match_array(doorkeeper_scopes - public_scopes - default_scopes)
+    end
+
+    it "does not include email management in shared public API read scopes" do
+      expect(public_scopes).to include(:edit_emails)
+      expect(public_api_read_scopes).to include(:edit_products)
+      expect(public_api_read_scopes).not_to include(:edit_emails)
+      expect(public_api_read_scopes - public_scopes).to be_empty
     end
 
     it "includes public scopes in user-created applications" do
@@ -110,6 +118,15 @@ describe OauthApplication do
         access_token = @oauth_application.get_or_generate_access_token
         expect(access_token.scopes).to eq(Doorkeeper.configuration.public_scopes)
       end.to change(Doorkeeper::AccessToken, :count).by(1)
+    end
+
+    it "generates access tokens and grants using the application scopes" do
+      @oauth_application.update!(scopes: "edit_products view_sales")
+
+      access_token = @oauth_application.get_or_generate_access_token
+
+      expect(access_token.scopes.to_s).to eq("edit_products view_sales")
+      expect(@oauth_application.access_grants.last.scopes.to_s).to eq("edit_products view_sales")
     end
 
     it "generates new access token if existing ones are revoked" do

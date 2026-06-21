@@ -46,7 +46,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
     end
 
     if stripe_connect_revenue_by_product.present?
-      @revenue_by_link = @revenue_by_link.merge!(stripe_connect_revenue_by_product) { |_link_id, payment_revenue, stripe_connect_revenue| payment_revenue + stripe_connect_revenue }
+      @revenue_by_link = if @revenue_by_link
+        @revenue_by_link.merge!(stripe_connect_revenue_by_product) { |_link_id, payment_revenue, stripe_connect_revenue| payment_revenue + stripe_connect_revenue }
+      else
+        stripe_connect_revenue_by_product
+      end
     end
 
     @revenue_by_link = @revenue_by_link.sort_by { |_link_id, revenue_cents| revenue_cents.to_i }.reverse if @revenue_by_link

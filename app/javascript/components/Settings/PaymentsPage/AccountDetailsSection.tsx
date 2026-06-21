@@ -396,7 +396,7 @@ const AccountDetailsSection = ({
   };
 
   const getMaskedValue = (placeholder: string, lastFour: string | null, showLastFour: boolean): string => {
-    const fullyMasked = placeholder.replace(/[a-zA-Z0-9]/g, "\u2022");
+    const fullyMasked = placeholder.replace(/[a-zA-Z0-9]/gu, "\u2022");
     if (!showLastFour || !lastFour) return fullyMasked;
     const maskPrefix = fullyMasked.slice(0, -lastFour.length);
     return maskPrefix + lastFour;

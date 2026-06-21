@@ -278,7 +278,9 @@ export default function Show() {
                 <Radio
                   name="cancellationRebuttal"
                   value={option}
-                  onChange={(evt) => setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))}
+                  onChange={(evt) =>
+                    setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))
+                  }
                 />
                 {message}
               </Label>

@@ -315,7 +315,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       <>
         {parentNode?.childCount === 1 ? null : (
           <MenuItem
-            onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: typia.assert<string>(node.attrs.uid), groupUid: null })}
+            onClick={() =>
+              editor.commands.moveFileEmbedToGroup({ fileUid: typia.assert<string>(node.attrs.uid), groupUid: null })
+            }
           >
             <FolderPlus className="size-5" />
             <span>New folder</span>

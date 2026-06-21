@@ -16,4 +16,8 @@ class Settings::Main::UserPolicy < ApplicationPolicy
   def invalidate_active_sessions?
     update?
   end
+
+  def update_username?
+    update?
+  end
 end

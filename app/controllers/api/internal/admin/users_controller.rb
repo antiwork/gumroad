@@ -760,6 +760,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def serialize_user_info(user)
       compliance_info = user.alive_user_compliance_info
+      stripe_merchant_account = user.merchant_accounts.alive.stripe.first
 
       {
         id: user.external_id,
@@ -790,8 +791,52 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
           total_earnings_formatted: Money.from_cents(user.sales_cents_total).format,
           unpaid_balance_formatted: Money.from_cents(user.unpaid_balance_cents).format,
           comments_count: user.comments.size
-        }
+        },
+        stripe: serialize_stripe_connect(stripe_merchant_account),
+        admin_links: serialize_admin_links(user, stripe_merchant_account)
       }
+    end
+
+    def serialize_stripe_connect(merchant_account)
+      account_id = merchant_account&.charge_processor_merchant_id
+      return { connected: false } if account_id.blank?
+
+      {
+        connected: true,
+        stripe_connect_account_id: account_id,
+        stripe_dashboard_url: "https://dashboard.stripe.com/connect/accounts/#{account_id}",
+        verification: serialize_stripe_verification(account_id)
+      }
+    end
+
+    def serialize_stripe_verification(account_id)
+      stripe_account = Stripe::Account.retrieve(account_id)
+      requirements = stripe_account.requirements
+      {
+        charges_enabled: stripe_account.charges_enabled,
+        payouts_enabled: stripe_account.payouts_enabled,
+        details_submitted: stripe_account.details_submitted,
+        disabled_reason: requirements&.disabled_reason,
+        currently_due_count: Array(requirements&.currently_due).size,
+        past_due_count: Array(requirements&.past_due).size,
+        pending_verification_count: Array(requirements&.pending_verification).size
+      }
+    rescue Stripe::StripeError, *INTERNET_EXCEPTIONS => e
+      { error: e.message }
+    end
+
+    def serialize_admin_links(user, merchant_account)
+      links = {
+        impersonate: admin_impersonate_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol),
+        admin_user: admin_user_url(user, host: UrlService.domain_with_protocol),
+        admin_purchases: admin_search_purchases_url(query: user.email, host: UrlService.domain_with_protocol)
+      }
+
+      if merchant_account&.charge_processor_merchant_id
+        links[:stripe_dashboard] = admin_stripe_dashboard_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol)
+      end
+
+      links
     end
 
     def serialize_sign_in(user)

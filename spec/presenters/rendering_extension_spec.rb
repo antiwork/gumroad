@@ -115,10 +115,12 @@ describe "RenderingExtension" do
                   settings_payments_user: {
                     show: true,
                   },
+                  settings_main_user: {
+                    update_username: false,
+                  },
                   settings_profile: {
                     manage_social_connections: false,
                     update: true,
-                    update_username: false
                   },
                   settings_third_party_analytics_user: {
                     update: true

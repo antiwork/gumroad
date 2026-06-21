@@ -100,7 +100,8 @@
     "typescript-eslint": "^8.0.0",
     "unplugin-auto-import": "^19.0.0",
     "vite": "^6.0.0",
-    "vite-plugin-ruby": "^5.1.0"
+    "vite-plugin-ruby": "^5.1.0",
+    "vitest": "^4.1.8"
   },
   "overrides": {
     "@tiptap/extension-blockquote": "$@tiptap/starter-kit",
@@ -129,6 +130,8 @@
     "build:pages-tailwind": "node scripts/build_pages_tailwind.mjs",
     "build:widget": "WIDGET_TARGET=gumroad npx vite build --config vite.config.widget.ts && WIDGET_TARGET=gumroad-embed npx vite build --config vite.config.widget.ts",
     "lint-fast": "DISABLE_TYPE_CHECKED=1 npx eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "setup": "bundle exec rails js:export && npm run build:pages-tailwind",
     "postinstall": "patch-package && ts-patch install -s"
   },

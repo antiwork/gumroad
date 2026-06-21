@@ -125,6 +125,7 @@ class OfferCode < ApplicationRecord
         id: external_id,
         code:,
         max_purchase_count:,
+        minimum_amount_cents:,
         universal: universal?,
         times_used:
       }
@@ -145,6 +146,7 @@ class OfferCode < ApplicationRecord
       # The `code` is returned as `name` for backwards compatibility of the API
       name: code,
       max_purchase_count:,
+      minimum_amount_cents:,
       universal: universal?,
       times_used:
     }

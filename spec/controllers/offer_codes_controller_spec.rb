@@ -81,5 +81,11 @@ describe OfferCodesController do
                                            },
                                          })
     end
+
+    it "returns an invalid error in response when products param is missing" do
+      get :compute_discount, params: { code: offer_code.code }
+
+      expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
+    end
   end
 end

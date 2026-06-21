@@ -407,7 +407,7 @@ describe WishlistPresenter do
       ].each do |per_row_pattern|
         per_row = queries.grep(per_row_pattern)
         expect(per_row).to be_empty,
-          "Expected no per-row queries matching #{per_row_pattern.inspect}, got #{per_row.size}:\n#{per_row.join("\n")}"
+                           "Expected no per-row queries matching #{per_row_pattern.inspect}, got #{per_row.size}:\n#{per_row.join("\n")}"
       end
     end
   end

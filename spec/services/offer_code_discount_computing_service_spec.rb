@@ -23,6 +23,13 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:invalid_offer)
   end
 
+  it "returns invalid error_code in result when products is nil" do
+    result = OfferCodeDiscountComputingService.new(offer_code.code, nil).process
+
+    expect(result[:products_data]).to eq({})
+    expect(result[:error_code]).to eq(:invalid_offer)
+  end
+
   it "does not return an invalid error_code in result when offer code amount is 0 cents" do
     result = OfferCodeDiscountComputingService.new(zero_cents_discount_code.code, products_data).process
 
