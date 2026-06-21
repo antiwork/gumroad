@@ -5489,7 +5489,9 @@ describe Purchase, :vcr do
           affiliate: {
             amount: "$0.83",
             email: @purchase.affiliate.affiliate_user.form_email,
-          }
+          },
+          formatted_total_price: @purchase.formatted_total_price,
+          purchase_daystamp: @purchase.created_at.in_time_zone(@purchase.seller.timezone).to_fs(:long_formatted_datetime),
         }
       )
       expect(@purchase.json_data_for_mobile(include_sale_details: true)).to eq(json_data)
