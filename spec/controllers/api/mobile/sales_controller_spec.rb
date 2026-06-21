@@ -125,6 +125,115 @@ describe Api::Mobile::SalesController, :vcr do
       put :undo_revoke_access, params: @params.merge(id: @purchase.external_id)
       expect(@purchase.reload.is_access_revoked).to eq(false)
     end
+
+    it "rejects revoke_access for an already-revoked purchase" do
+      @purchase.update!(is_access_revoked: true)
+
+      put :revoke_access, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Not authorized")
+    end
+
+    it "rejects revoke_access for a refunded purchase" do
+      allow_any_instance_of(Purchase).to receive(:refunded?).and_return(true)
+
+      put :revoke_access, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Not authorized")
+      expect(@purchase.reload.is_access_revoked).to eq(false)
+    end
+
+    it "rejects revoke_access for a physical purchase" do
+      physical_product = create(:physical_product, user: @seller)
+      physical_purchase = create(:physical_purchase, link: physical_product, seller: @seller)
+
+      put :revoke_access, params: @params.merge(id: physical_purchase.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Not authorized")
+      expect(physical_purchase.reload.is_access_revoked).to eq(false)
+    end
+
+    it "rejects revoke_access for a subscription purchase" do
+      membership_product = create(:membership_product, user: @seller)
+      subscription = create(:subscription, link: membership_product, seller: @seller)
+      subscription_purchase = create(:purchase, link: membership_product, seller: @seller, subscription:, is_original_subscription_purchase: true)
+
+      put :revoke_access, params: @params.merge(id: subscription_purchase.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Not authorized")
+      expect(subscription_purchase.reload.is_access_revoked).to eq(false)
+    end
+
+    it "rejects undo_revoke_access for a purchase whose access is not revoked" do
+      put :undo_revoke_access, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Not authorized")
+    end
+  end
+
+  describe "cross-seller authorization" do
+    before do
+      @other_seller = create(:user)
+      @other_product = create(:product, user: @other_seller)
+      @other_purchase = create(:purchase, link: @other_product, seller: @other_seller, can_contact: true)
+      create(:product_review, purchase: @other_purchase, link: @other_product, rating: 5)
+    end
+
+    it "returns 404 for another seller's sale on show" do
+      get :show, params: @params.merge(id: @other_purchase.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+    end
+
+    it "returns 404 for another seller's sale on update" do
+      put :update, params: @params.merge(id: @other_purchase.external_id, email: "new@example.com")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+      expect(@other_purchase.reload.email).not_to eq("new@example.com")
+    end
+
+    it "returns 404 for another seller's sale on refund" do
+      patch :refund, params: @params.merge(id: @other_purchase.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "error" => "Not found")
+    end
+
+    it "returns 404 for another seller's sale on revoke_access" do
+      put :revoke_access, params: @params.merge(id: @other_purchase.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+      expect(@other_purchase.reload.is_access_revoked).to eq(false)
+    end
+
+    it "returns 404 for another seller's sale on resend_receipt" do
+      post :resend_receipt, params: @params.merge(id: @other_purchase.external_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+    end
+
+    it "returns 404 for another seller's sale on send_post" do
+      post :send_post, params: @params.merge(id: @other_purchase.external_id, post_id: "anything")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+    end
+
+    it "returns 404 for another seller's sale on update_review_response" do
+      put :update_review_response, params: @params.merge(id: @other_purchase.external_id, message: "Thanks!")
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Could not find purchase")
+    end
   end
 
   describe "PUT review_response" do

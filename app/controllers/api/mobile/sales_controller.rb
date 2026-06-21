@@ -35,7 +35,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     sales_count = search_result.results.total
     pages = (sales_count / SALES_PER_PAGE.to_f).ceil
     purchases_json = search_result.records
-      .includes(:seller, :purchaser, link: :variant_categories_alive)
+      .includes(:seller, :purchaser, link: [:variant_categories_alive, { thumbnail: { file_attachment: :blob } }])
       .in_order_of(:id, search_result.records.ids)
       .as_json(creator_app_api: true)
     render json: {
@@ -72,26 +72,32 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     @purchase.zip_code = params[:zip_code] if params[:zip_code].present?
     @purchase.country = Compliance::Countries.find_by_name(params[:country])&.common_name if params[:country].present?
     @purchase.quantity = params[:quantity] if @purchase.is_multiseat_license? && params[:quantity].to_i > 0
-    @purchase.save
 
-    if params[:email].present? && @purchase.is_bundle_purchase?
-      @purchase.product_purchases.each { _1.update!(email: params[:email]) }
+    giftee_purchase = nil
+    ActiveRecord::Base.transaction do
+      @purchase.save
+
+      if params[:email].present? && @purchase.is_bundle_purchase?
+        @purchase.product_purchases.each { _1.update!(email: params[:email]) }
+      end
+
+      if params[:giftee_email] && @purchase.gift
+        gift = @purchase.gift
+        giftee_purchase = gift.giftee_purchase
+
+        gift.giftee_email = params[:giftee_email]
+        gift.save!
+
+        giftee_purchase.email = params[:giftee_email]
+        giftee_purchase.save!
+      end
     end
 
-    if params[:giftee_email] && @purchase.gift
-      gift = @purchase.gift
-      giftee_purchase = gift.giftee_purchase
-
-      gift.giftee_email = params[:giftee_email]
-      gift.save!
-
-      giftee_purchase.email = params[:giftee_email]
-      giftee_purchase.save!
-
-      giftee_purchase.resend_receipt
-    end
+    giftee_purchase&.resend_receipt
 
     render json: { success: @purchase.errors.empty? }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, message: e.message }, status: :unprocessable_entity
   end
 
   def refund
@@ -111,11 +117,15 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def revoke_access
+    return fetch_error("Not authorized", status: :unauthorized) unless purchase_policy.revoke_access?
+
     @purchase.update!(is_access_revoked: true)
     render json: { success: true }
   end
 
   def undo_revoke_access
+    return fetch_error("Not authorized", status: :unauthorized) unless purchase_policy.undo_revoke_access?
+
     @purchase.update!(is_access_revoked: false)
     render json: { success: true }
   end
@@ -224,6 +234,10 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
 
     def seller_context
       SellerContext.new(user: current_resource_owner, seller: current_resource_owner)
+    end
+
+    def purchase_policy
+      Audience::PurchasePolicy.new(seller_context, @purchase)
     end
 
     def build_charges(purchase)
