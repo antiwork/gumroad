@@ -171,6 +171,8 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def options
+    return fetch_error("Could not find product") if @purchase.link.nil?
+
     render json: { success: true, options: @purchase.link.options }
   end
 

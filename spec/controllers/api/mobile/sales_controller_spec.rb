@@ -321,6 +321,22 @@ describe Api::Mobile::SalesController, :vcr do
       expect(response.parsed_body["success"]).to eq(true)
       expect(response.parsed_body["options"]).to eq(@product.options.as_json)
     end
+
+    context "when the purchase's product has been deleted" do
+      before do
+        @purchase.update_column(:link_id, nil)
+      end
+
+      it "responds with a controlled error instead of crashing" do
+        expect do
+          get :options, params: @params.merge(id: @purchase.external_id)
+        end.not_to raise_error
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Could not find product")
+      end
+    end
   end
 
   describe "GET missed_posts" do
