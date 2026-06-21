@@ -5,7 +5,7 @@ require "spec_helper"
 describe RetryStripeRejectedPayoutSetupForSellerJob do
   let(:bank_prefix) { StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX }
   let(:postal_prefix) { StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX }
-  let(:user) { create(:user) }
+  let(:user) { create(:user, payment_address: nil) }
   let!(:user_compliance_info) { create(:user_compliance_info, user:) }
 
   def add_note(prefix, json: {})
@@ -104,6 +104,40 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       note.reload
       expect(note.json_data["abandoned_at"]).to be_present
       expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::GAVE_UP_NOTE)
+    end
+  end
+
+  describe "when the seller has switched to a non-Stripe payout method" do
+    before { user.update!(payment_address: "seller@example.com") }
+
+    context "with a postal-code failure note and no Stripe account" do
+      let!(:note) { add_note(postal_prefix) }
+
+      it "abandons the note without recreating a Stripe account" do
+        expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+        described_class.new.perform(user.id)
+
+        note.reload
+        expect(note.json_data["abandoned_at"]).to be_present
+        expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_SWITCHED_OFF_STRIPE)
+        expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::SWITCHED_OFF_STRIPE_NOTE)
+      end
+    end
+
+    context "with a bank failure note that already exhausted its retries" do
+      let!(:note) { add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES }) }
+
+      it "abandons the note without emailing the seller that payouts may be blocked" do
+        expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+
+        described_class.new.perform(user.id)
+
+        note.reload
+        expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_SWITCHED_OFF_STRIPE)
+        expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::SWITCHED_OFF_STRIPE_NOTE)
+        expect(user.comments.alive.with_type_payout_note.where(content: described_class::GAVE_UP_NOTE)).to be_empty
+      end
     end
   end
 

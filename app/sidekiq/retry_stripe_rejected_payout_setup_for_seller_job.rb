@@ -7,10 +7,17 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   RESOLVED_NOTE = "Stripe accepted the previously rejected postal code / bank account on automated retry."
   GAVE_UP_NOTE = "Automated retries to fix the rejected postal code / bank account were exhausted. " \
                  "Manual follow-up is needed."
+  SWITCHED_OFF_STRIPE_NOTE = "Automated Stripe payout-setup retry stopped: the seller moved to a non-Stripe payout method."
+  ABANDONED_REASON_SWITCHED_OFF_STRIPE = "payout_method_switched_off_stripe"
 
   def perform(user_id)
     user = User.find_by(id: user_id)
     return if user.nil? || user.suspended? || user.has_stripe_account_connected?
+
+    if user.current_payout_processor == PayoutProcessorType::PAYPAL
+      abandon_stale_notes!(user)
+      return
+    end
 
     note = oldest_outstanding_note(user)
     return if note.nil?
@@ -31,7 +38,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   end
 
   private
-    def oldest_outstanding_note(user)
+    def payout_setup_failure_notes(user)
       user.comments
           .alive
           .with_type_payout_note
@@ -41,8 +48,24 @@ class RetryStripeRejectedPayoutSetupForSellerJob
             "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%",
             "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%"
           )
-          .order(created_at: :asc)
-          .find { |candidate| candidate.json_data["abandoned_at"].blank? }
+    end
+
+    def oldest_outstanding_note(user)
+      payout_setup_failure_notes(user)
+        .order(created_at: :asc)
+        .find { |candidate| candidate.json_data["abandoned_at"].blank? }
+    end
+
+    def abandon_stale_notes!(user)
+      notes = payout_setup_failure_notes(user).select { |note| note.json_data["abandoned_at"].blank? }
+      return if notes.empty?
+
+      notes.each do |note|
+        note.json_data["abandoned_at"] = Time.current.iso8601
+        note.json_data["abandoned_reason"] = ABANDONED_REASON_SWITCHED_OFF_STRIPE
+        note.save!
+      end
+      user.add_payout_note(content: SWITCHED_OFF_STRIPE_NOTE)
     end
 
     def attempt_remediation(user, note)
