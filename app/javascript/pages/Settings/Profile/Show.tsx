@@ -155,9 +155,7 @@ export default function SettingsPage() {
     }
   };
 
-  const isMobileAppWebView = Boolean(
-    (usePage().props as { is_mobile_app_web_view?: boolean }).is_mobile_app_web_view,
-  );
+  const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
 
   useReactNativeMessage((data) => {
     if (data.type === "mobileAppSettingsSave") void save();
