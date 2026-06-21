@@ -9,8 +9,7 @@ module InertiaRendering
       RenderingExtension.custom_context(view_context).merge(
         authenticity_token: form_authenticity_token,
         flash: inertia_flash_props,
-        title: page_title,
-        is_mobile_app_web_view: params[:display] == "mobile_app" || cookies[:is_mobile_app_web_view] == "true"
+        title: page_title
       )
     end
 
