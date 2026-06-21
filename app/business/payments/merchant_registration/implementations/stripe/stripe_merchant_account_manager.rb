@@ -148,6 +148,7 @@ module StripeMerchantAccountManager
     end
 
     clear_stale_postal_code_failure_notes(user)
+    clear_stale_bank_sync_failure_notes(user)
 
     merchant_account
   rescue => e
@@ -156,6 +157,7 @@ module StripeMerchantAccountManager
       ErrorNotifier.notify(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
+    record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
     raise
   end
 
@@ -378,6 +380,17 @@ module StripeMerchantAccountManager
   private_class_method
   def self.postal_code_invalid_error?(error)
     error.is_a?(Stripe::InvalidRequestError) && error.respond_to?(:code) && error.code == "postal_code_invalid"
+  end
+
+  private_class_method
+  def self.bank_account_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    code = error.respond_to?(:code) ? error.code : nil
+    return true if %w[routing_number_invalid account_number_invalid].include?(code)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    param.start_with?("bank_account", "external_account")
   end
 
   private_class_method

@@ -53,6 +53,64 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "bank account rejection during account creation" do
+    let(:zip_code) { "94107" }
+
+    context "when Stripe rejects the bank account (directory gap / invalid number)" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "We couldn't find the bank for that routing number", "bank_account[routing_number]", code: "routing_number_invalid"
+          )
+        )
+      end
+
+      it "records a bank sync failure note and re-raises" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+
+      it "does not record a payout note when notify is false" do
+        expect do
+          described_class.create_account(user, passphrase:, notify: false)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
+    context "when account creation fails for a non-bank reason" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("US tax IDs must have 9 digits", "individual[id_number]", code: "tax_id_invalid")
+        )
+      end
+
+      it "does not record a bank sync failure note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
+    context "when account creation succeeds" do
+      it "clears stale bank sync rejection notes" do
+        stale = user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: routing_number_invalid — We couldn't find the bank for that routing number."
+        )
+
+        described_class.create_account(user, passphrase:)
+
+        expect(stale.reload).not_to be_alive
+      end
+    end
+  end
+
   describe "bank sync rejection notify flag" do
     let(:zip_code) { "94107" }
 

@@ -16,6 +16,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
   end
 
   describe "bank account remediation" do
+    let!(:merchant_account) { create(:merchant_account, user:) }
     let!(:note) { add_note(bank_prefix) }
 
     it "retries the bank sync quietly and resolves on success" do
@@ -46,6 +47,18 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect(note).to be_alive
       expect(note.json_data["retry_count"]).to eq(1)
       expect(note.json_data["last_retried_at"]).to be_present
+    end
+  end
+
+  describe "bank account remediation when the seller has no Stripe account yet" do
+    let!(:note) { add_note(bank_prefix) }
+
+    it "re-attempts account creation so the bank account is resubmitted, not a bank-only update" do
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+      expect(StripeMerchantAccountManager).to receive(:create_account)
+        .with(user, hash_including(notify: false))
+
+      described_class.new.perform(user.id)
     end
   end
 

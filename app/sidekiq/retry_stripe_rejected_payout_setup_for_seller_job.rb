@@ -71,14 +71,16 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     def attempt_remediation(user, note)
       passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
 
-      if bank_note?(note)
-        result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
-        [:synced, :noop_metadata_match].include?(result)
-      elsif user.stripe_account.present?
-        return false if user.alive_user_compliance_info.nil?
+      if user.stripe_account.present?
+        if bank_note?(note)
+          result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
+          [:synced, :noop_metadata_match].include?(result)
+        else
+          return false if user.alive_user_compliance_info.nil?
 
-        StripeMerchantAccountManager.handle_new_user_compliance_info(user.alive_user_compliance_info, notify: false)
-        true
+          StripeMerchantAccountManager.handle_new_user_compliance_info(user.alive_user_compliance_info, notify: false)
+          true
+        end
       else
         return false unless user.native_payouts_supported?
         return false if StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES
