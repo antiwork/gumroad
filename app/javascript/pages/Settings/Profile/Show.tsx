@@ -27,6 +27,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 type ProfileSettingsForm = {
   name: string | null;
@@ -154,6 +155,19 @@ export default function SettingsPage() {
     }
   };
 
+  const isMobileAppWebView = Boolean(
+    (usePage().props as { is_mobile_app_web_view?: boolean }).is_mobile_app_web_view,
+  );
+
+  useReactNativeMessage((data) => {
+    if (data.type === "mobileAppSettingsSave") void save();
+  });
+
+  React.useEffect(() => {
+    if (!isMobileAppWebView) return;
+    window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "settingsCanUpdate", canUpdate: canSave }));
+  }, [isMobileAppWebView, canSave]);
+
   const profileColors = currentSeller
     ? {
         "--accent": hexToRgb(currentSeller.profileHighlightColor),
@@ -180,15 +194,17 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader
-        className="sticky-top"
-        title="Profile"
-        actions={
-          <Button color="accent" onClick={() => void save()} disabled={!canSave}>
-            Update profile
-          </Button>
-        }
-      />
+      {isMobileAppWebView ? null : (
+        <PageHeader
+          className="sticky-top"
+          title="Profile"
+          actions={
+            <Button color="accent" onClick={() => void save()} disabled={!canSave}>
+              Update profile
+            </Button>
+          }
+        />
+      )}
       <WithPreviewSidebar>
         <div>
           <section className="grid gap-8 p-4! md:p-8!">
