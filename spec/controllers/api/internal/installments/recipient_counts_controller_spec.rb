@@ -37,6 +37,25 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
     end
 
+    context "when the seller's audience_count_from_elasticsearch flag is on" do
+      before do
+        recreate_model_index(AudienceMember)
+        Feature.activate_user(:audience_count_from_elasticsearch, seller)
+        AudienceMember.find_each { ElasticsearchIndexerWorker.new.perform("index", { "record_id" => _1.id, "class_name" => "AudienceMember" }) }
+        AudienceMember.__elasticsearch__.refresh_index!
+      end
+
+      it "serves both counts from Elasticsearch" do
+        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
+        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_including(type: "follower"), limit: nil).and_call_original
+
+        get :show, params: { installment_type: "follower" }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+      end
+    end
+
     it "returns counts for seller installment type" do
       get :show, params: { installment_type: "seller" }
       expect(response).to be_successful

@@ -128,9 +128,9 @@ class SignupController < Devise::RegistrationsController
         return
       end
 
-      if params[:user] && params[:user][:buyer_signup].blank?
+      if params[:user] && params[:user][:buyer_signup].blank? && Feature.inactive?(:disable_signup_recaptcha)
         site_key = GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY")
-        if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
+        if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :signup)
           respond_to do |format|
             format.html { redirect_with_signup_error("Sorry, we could not verify the CAPTCHA. Please try again.") }
             format.json { render json: { success: false, error_message: "Sorry, we could not verify the CAPTCHA. Please try again." } }
@@ -147,7 +147,7 @@ class SignupController < Devise::RegistrationsController
       if !user.deleted? && user.try(:valid_password?, params[:user][:password])
         sign_in_or_prepare_for_two_factor_auth(user)
         respond_to do |format|
-          format.html { redirect_to login_path_for(user) }
+          format.html { redirect_to login_path_for(user), allow_other_host: true }
           format.json { render json: { success: true, redirect_location: login_path_for(user) } }
         end
       else

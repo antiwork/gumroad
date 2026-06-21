@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::UsersController < Api::V2::BaseController
-  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger]
+  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger]
 
   def show
     if params[:is_ifttt]

@@ -46,7 +46,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
     end
 
     if stripe_connect_revenue_by_product.present?
-      @revenue_by_link = @revenue_by_link.merge!(stripe_connect_revenue_by_product) { |_link_id, payment_revenue, stripe_connect_revenue| payment_revenue + stripe_connect_revenue }
+      @revenue_by_link = if @revenue_by_link
+        @revenue_by_link.merge!(stripe_connect_revenue_by_product) { |_link_id, payment_revenue, stripe_connect_revenue| payment_revenue + stripe_connect_revenue }
+      else
+        stripe_connect_revenue_by_product
+      end
     end
 
     @revenue_by_link = @revenue_by_link.sort_by { |_link_id, revenue_cents| revenue_cents.to_i }.reverse if @revenue_by_link
@@ -211,9 +215,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   def subscription_giftee_added_card(subscription_id)
     @subscription = Subscription.find(subscription_id)
+    credit_card = @subscription.credit_card
+    return if credit_card.nil?
+
     chargeable = @subscription.purchases.is_gift_receiver_purchase.first
     original_purchase = @subscription.original_purchase
-    credit_card = @subscription.credit_card
     card_visual = "#{credit_card.card_type.upcase} *#{credit_card.visual.delete("*").delete(" ")}"
 
     @receipt_presenter = ReceiptPresenter.new(chargeable, for_email: true)
@@ -403,6 +409,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   private
     def deliver_subscription_email
+      if @subject.nil?
+        Rails.logger.warn("[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=#{action_name}; subscription_id=#{@subscription&.id}")
+        return
+      end
+
       query_params = { token: @subscription.refresh_token }
       query_params[:declined] = true if @declined
       @edit_card_url = manage_subscription_url(@subscription.external_id, query_params)

@@ -20,6 +20,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
@@ -94,7 +95,7 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Make an impression",
     getCompleted: (stats) => !!stats.customized_profile,
-    link: Routes.settings_profile_path(),
+    link: Routes.profile_path(),
     IconComponent: CustomizeProfileIcon,
     description: "Customize your profile.",
   },
@@ -347,6 +348,7 @@ export const DashboardPage = ({
         }
         className="border-b-0 sm:border-b"
       />
+      <PasskeySetupPrompt />
       {stripe_verification_message || show_1099_download_notice ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
           {stripe_verification_message ? (

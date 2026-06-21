@@ -8,7 +8,7 @@ module User::PayoutInfo
       active_bank_account: active_bank_account&.as_json(only: %i[type account_holder_full_name], methods: %i[formatted_account]),
       payment_address:,
       payouts_paused_by_source:,
-      payouts_paused_for_reason: comments.with_type_payouts_paused.last&.content,
+      payouts_paused_for_reason:,
       manual_payout_info:
     }
   end

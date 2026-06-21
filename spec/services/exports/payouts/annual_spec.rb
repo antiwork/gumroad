@@ -88,7 +88,7 @@ describe Exports::Payouts::Annual, :vcr do
       str = value.to_s
       return value if str.empty?
       first = str[0]
-      if first == '+' || first == '-'
+      if first == "+" || first == "-"
         return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
       end
       %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value

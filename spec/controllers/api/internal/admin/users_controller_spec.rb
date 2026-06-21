@@ -420,6 +420,97 @@ describe Api::Internal::Admin::UsersController do
         "last_synced_at" => watched_user.last_synced_at.iso8601
       )
     end
+
+    it "reports an unconnected Stripe account when the user has no alive Stripe merchant account" do
+      user = create(:compliant_user, email: "no-stripe@example.com")
+
+      expect(Stripe::Account).not_to receive(:retrieve)
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["stripe"]).to eq("connected" => false)
+    end
+
+    it "surfaces the Stripe Connect account id, dashboard url, and live verification state" do
+      user = create(:compliant_user, email: "stripe-connected@example.com")
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_123abc")
+
+      allow(Stripe::Account).to receive(:retrieve).with("acct_123abc").and_return(
+        double(:account,
+               charges_enabled: true,
+               payouts_enabled: false,
+               details_submitted: true,
+               requirements: double(:requirements,
+                                    disabled_reason: "requirements.past_due",
+                                    currently_due: %w[individual.id_number],
+                                    past_due: %w[external_account],
+                                    pending_verification: []))
+      )
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["stripe"]).to eq(
+        "connected" => true,
+        "stripe_connect_account_id" => "acct_123abc",
+        "stripe_dashboard_url" => "https://dashboard.stripe.com/connect/accounts/acct_123abc",
+        "verification" => {
+          "charges_enabled" => true,
+          "payouts_enabled" => false,
+          "details_submitted" => true,
+          "disabled_reason" => "requirements.past_due",
+          "currently_due_count" => 1,
+          "past_due_count" => 1,
+          "pending_verification_count" => 0
+        }
+      )
+    end
+
+    it "makes at most one Stripe call and degrades to an error subfield when Stripe raises" do
+      user = create(:compliant_user, email: "stripe-error@example.com")
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_revoked")
+
+      expect(Stripe::Account).to receive(:retrieve).with("acct_revoked").once.and_raise(
+        Stripe::PermissionError.new("access revoked")
+      )
+
+      get :info, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      stripe = response.parsed_body["user"]["stripe"]
+      expect(stripe).to include(
+        "connected" => true,
+        "stripe_connect_account_id" => "acct_revoked",
+        "stripe_dashboard_url" => "https://dashboard.stripe.com/connect/accounts/acct_revoked"
+      )
+      expect(stripe["verification"]).to eq("error" => "access revoked")
+    end
+
+    it "includes admin helper links keyed on the user external id and email" do
+      user = create(:compliant_user, email: "links@example.com")
+
+      get :info, params: { email: user.email }
+
+      links = response.parsed_body["user"]["admin_links"]
+      expect(links["impersonate"]).to include("/admin/helper_actions/impersonate/#{user.external_id}")
+      expect(links["admin_user"]).to include("/admin/users/#{user.id}")
+      expect(links["admin_purchases"]).to include("query=#{CGI.escape(user.email)}")
+      expect(links).not_to have_key("stripe_dashboard")
+    end
+
+    it "adds the View Stripe account link only when an alive Stripe merchant account exists" do
+      user = create(:compliant_user, email: "stripe-link@example.com")
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_link")
+      allow(Stripe::Account).to receive(:retrieve).and_return(
+        double(:account, charges_enabled: true, payouts_enabled: true, details_submitted: true,
+                         requirements: double(:requirements, disabled_reason: nil, currently_due: [], past_due: [], pending_verification: []))
+      )
+
+      get :info, params: { email: user.email }
+
+      expect(response.parsed_body["user"]["admin_links"]["stripe_dashboard"]).to include(
+        "/admin/helper_actions/stripe_dashboard/#{user.external_id}"
+      )
+    end
   end
 
   describe "GET affiliates" do

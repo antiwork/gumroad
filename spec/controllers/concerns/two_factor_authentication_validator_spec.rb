@@ -150,6 +150,14 @@ describe TwoFactorAuthenticationValidator, type: :controller do
           controller.prepare_for_two_factor_authentication(@user)
         end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
       end
+
+      it "records when the authentication token was sent in the session" do
+        freeze_time do
+          controller.prepare_for_two_factor_authentication(@user)
+
+          expect(session[:two_factor_auth_token_sent_at]).to eq(Time.current.to_i)
+        end
+      end
     end
 
     context "when user has TOTP enabled" do
@@ -173,6 +181,12 @@ describe TwoFactorAuthenticationValidator, type: :controller do
             controller.prepare_for_two_factor_authentication(@user)
           end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
         end
+
+        it "does not record a token-sent time" do
+          controller.prepare_for_two_factor_authentication(@user)
+
+          expect(session[:two_factor_auth_token_sent_at]).to be_nil
+        end
       end
 
       context "when authenticator_2fa flag is not active for the user" do
@@ -195,6 +209,32 @@ describe TwoFactorAuthenticationValidator, type: :controller do
         controller.prepare_for_two_factor_authentication(@user)
 
         expect(controller.two_factor_auth_method).to eq("email")
+      end
+    end
+  end
+
+  describe "#resend_authentication_token_cooldown_seconds" do
+    it "returns 0 when no token has been sent" do
+      expect(controller.resend_authentication_token_cooldown_seconds).to eq(0)
+    end
+
+    it "returns the full cooldown immediately after a token is sent" do
+      freeze_time do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        expect(controller.resend_authentication_token_cooldown_seconds).to eq(60)
+      end
+    end
+
+    it "decreases as time passes and reaches 0 after the cooldown elapses" do
+      travel_to(Time.current) do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        travel 25.seconds
+        expect(controller.resend_authentication_token_cooldown_seconds).to eq(35)
+
+        travel 36.seconds
+        expect(controller.resend_authentication_token_cooldown_seconds).to eq(0)
       end
     end
   end
@@ -224,11 +264,12 @@ describe TwoFactorAuthenticationValidator, type: :controller do
       controller.prepare_for_two_factor_authentication(@user)
     end
 
-    it "removes the user_id and method from session" do
+    it "removes the user_id, method, and token-sent time from session" do
       controller.reset_two_factor_auth_login_session
 
       expect(session[:verify_two_factor_auth_for]).to be_nil
       expect(session[:two_factor_auth_method]).to be_nil
+      expect(session[:two_factor_auth_token_sent_at]).to be_nil
     end
   end
 end

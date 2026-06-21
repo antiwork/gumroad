@@ -9,6 +9,13 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
+  SALES_API_PRELOADS = [
+    :preorder,
+    :subscription,
+    :tip,
+    :utm_link,
+    { order: { cart: { sent_abandoned_cart_emails: :installment } } },
+  ].freeze
 
   def index
     begin
@@ -47,7 +54,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       begin
         timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
-          paginated_sales = filtered_sales.for_sales_api.limit(RESULTS_PER_PAGE + 1).offset((@page - 1) * RESULTS_PER_PAGE).to_a
+          paginated_sales = filtered_sales.for_sales_api.preload(*SALES_API_PRELOADS).limit(RESULTS_PER_PAGE + 1).offset((@page - 1) * RESULTS_PER_PAGE).to_a
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
           paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
           if has_next_page
@@ -76,6 +83,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       query.where(seller_id: current_resource_owner.id).where(where_page_data).order(created_at: :desc, id: :desc).limit(RESULTS_PER_PAGE + 1)
     }
     paginated_sales = paginated_sales.for_sales_api_ordered_by_date(subquery_filters)
+    paginated_sales = paginated_sales.preload(*SALES_API_PRELOADS)
     paginated_sales = paginated_sales.limit(RESULTS_PER_PAGE + 1).to_a
     has_next_page = paginated_sales.size > RESULTS_PER_PAGE
     paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)

@@ -25,6 +25,7 @@ describe ProfilePresenter do
   let!(:section2) { create(:seller_profile_posts_section, header: "Section 2", seller:, shown_posts: [post.id]) }
   let!(:section3) { create(:seller_profile_featured_product_section, header: "Section 3", seller:, featured_product_id: featured_product.id) }
   let(:tabs) { [{ name: "Tab 1", sections: [section.id, section2.id] }, { name: "Tab2", sections: [] }] }
+  let(:encrypted_tabs) { tabs.map { |tab| { **tab, sections: tab[:sections].map { ObfuscateIds.encrypt(_1) } } } }
 
   before do
     seller.seller_profile.json_data[:tabs] = tabs
@@ -42,8 +43,28 @@ describe ProfilePresenter do
           twitter_handle: nil,
           subdomain: seller.subdomain,
           is_verified: false,
+          can_edit: true,
         }
       )
+    end
+
+    it "sets can_edit to false when viewing as another seller" do
+      other_seller = create(:user)
+      pundit_user = SellerContext.new(user: logged_in_user, seller: other_seller)
+
+      expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
+    end
+
+    it "sets can_edit to false for profile view-only team members" do
+      support_user = create(:user)
+      create(:team_membership, user: support_user, seller:, role: TeamMembership::ROLE_SUPPORT)
+      pundit_user = SellerContext.new(user: support_user, seller:)
+
+      expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
+    end
+
+    it "sets can_edit to false when logged out" do
+      expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile[:can_edit]).to eq(false)
     end
   end
 
@@ -58,35 +79,68 @@ describe ProfilePresenter do
         {
           **sections_presenter.props(request:, pundit_user:, seller_custom_domain_url: nil),
           bio: "Bio",
-          tabs: tabs.map { | tab| { **tab, sections: tab[:sections].map { ObfuscateIds.encrypt(_1) } } }
+          tabs: encrypted_tabs
         }
       )
     end
 
-    it "includes data for the edit view when logged in as the seller" do
+    it "returns visitor-style section props when logged in as the seller" do
       props = presenter.profile_props(seller_custom_domain_url: nil, request:)
-      expect(props).to match a_hash_including(ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil))
+
+      expect(props[:creator_profile][:can_edit]).to eq(true)
+      expect(props).not_to have_key(:products)
+      expect(props).not_to have_key(:posts)
+      expect(props).not_to have_key(:wishlist_options)
+      expect(props[:sections].first).not_to have_key(:shown_products)
+    end
+
+    it "reflects the logged-in viewer's state rather than a logged-out view" do
+      wishlist = create(:wishlist, user: seller)
+      follower = create(:user)
+      create(:wishlist_follower, wishlist:, follower_user: follower)
+      wishlist_section = create(:seller_profile_wishlists_section, seller:, shown_wishlists: [wishlist.id])
+
+      pundit_user = SellerContext.new(user: follower, seller: follower)
+      props = described_class.new(pundit_user:, seller: seller.reload).profile_props(seller_custom_domain_url: nil, request:)
+
+      wishlist_props = props[:sections].find { _1[:id] == wishlist_section.external_id }[:wishlists].first
+      expect(wishlist_props[:following]).to eq(true)
+    end
+
+    it "keeps the seller's own viewer state while serving visitor-shaped sections" do
+      seller.update!(currency_type: "eur")
+      pundit_user = SellerContext.new(user: seller, seller:)
+      props = described_class.new(pundit_user:, seller: seller.reload).profile_props(seller_custom_domain_url: nil, request:)
+
+      expect(props[:currency_code]).to eq("eur")
+      expect(props).not_to have_key(:products)
+      expect(props[:sections].first).not_to have_key(:shown_products)
     end
   end
 
   describe "#profile_settings_props" do
     it "returns profile settings props object" do
       Link.import(force: true, refresh: true)
-      expect(presenter.profile_settings_props(request:)).to match(
+      props = presenter.profile_settings_props(request:)
+
+      expect(props).to match(
         {
           profile_settings: {
             name: seller.name,
-            username: seller.username,
             bio: seller.bio,
-            background_color: "#ffffff",
-            highlight_color: "#ff90e8",
-            font: "ABC Favorit",
             profile_picture_blob_id: nil,
           },
+          editable_profile: {
+            **ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil),
+            bio: "Bio",
+            tabs: encrypted_tabs,
+          },
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
+          profile_version: a_kind_of(String),
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
         }
       )
+      expect(props[:profile_settings]).not_to have_key(:username)
     end
   end
 end

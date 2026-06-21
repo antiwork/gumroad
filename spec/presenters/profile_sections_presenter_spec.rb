@@ -162,6 +162,15 @@ describe ProfileSectionsPresenter do
       expect(product_names).to include(in_stock_product.name)
     end
 
+    it "keeps the owner's sold-out products visible on their public profile (visitor shape, editing: false)" do
+      result = subject.props(request:, pundit_user: pundit_user_seller, seller_custom_domain_url: nil, editing: false)
+      product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }
+      product_names = product_section[:search_results][:products].map { _1[:name] }
+
+      expect(product_names).to include(sold_out_product.name)
+      expect(product_section).not_to have_key(:shown_products)
+    end
+
     it "does not exclude products with hide_sold_out_variants enabled that still have stock" do
       result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
       product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }

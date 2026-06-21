@@ -388,10 +388,54 @@ describe GdprBuyerErasureService do
           fresh = AudienceMember.new(seller: seller, email: buyer_email, details: { purchases: [{ id: 2 }] })
           fresh.save!(validate: false)
 
+          anonymized_member_ids = AudienceMember.where(email: buyer_email).where.not(id: fresh.id).ids
+          ElasticsearchIndexerWorker.jobs.clear
+
           expect { described_class.new(buyer_email, performed_by: admin).perform! }.not_to raise_error
           expect(AudienceMember.where(seller: seller, email: buyer_email).count).to eq(0)
           expect(AudienceMember.where(id: existing_anonymized.id)).to exist
           expect(AudienceMember.where(id: fresh.id)).not_to exist
+
+          indexer_args = ElasticsearchIndexerWorker.jobs.map { _1["args"] }
+          expect(indexer_args).to include(["delete", { "record_id" => fresh.id, "class_name" => "AudienceMember" }])
+          expect(anonymized_member_ids).to be_present
+          anonymized_member_ids.each do |member_id|
+            reindex_args = indexer_args.find { _1[0] == "index" && _1[1]["record_id"] == member_id }
+            expect(reindex_args).to be_present
+          end
+        end
+      end
+
+      describe "audience members Elasticsearch sync" do
+        it "reindexes anonymized members with the anonymized document passed inline" do
+          anonymized = described_class.new(buyer_email, performed_by: admin).send(:generate_anonymized_email)
+          member_ids = AudienceMember.where(email: buyer_email).ids
+          expect(member_ids).to be_present
+          ElasticsearchIndexerWorker.jobs.clear
+
+          described_class.new(buyer_email, performed_by: admin).perform!
+
+          audience_member_args = ElasticsearchIndexerWorker.jobs.map { _1["args"] }.select { _1[1]["class_name"] == "AudienceMember" }
+          expect(audience_member_args.count { _1[0] == "delete" }).to eq(0)
+          member_ids.each do |member_id|
+            reindex_args = audience_member_args.find { _1[0] == "index" && _1[1]["record_id"] == member_id }
+            expect(reindex_args).to be_present
+            expect(reindex_args[1]["body"]).to include(
+              "email" => anonymized,
+              "customer" => false,
+              "follower" => false,
+              "affiliate" => false,
+              "purchases" => [],
+              "affiliates" => [],
+              "follower_id" => nil,
+            )
+          end
+
+          AudienceMember.where(id: member_ids).each do |member|
+            expect(member.customer).to eq(false)
+            expect(member.min_paid_cents).to be_nil
+            expect(member.max_purchase_created_at).to be_nil
+          end
         end
       end
 

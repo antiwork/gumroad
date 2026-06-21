@@ -5,9 +5,9 @@ describe CustomerPresenter do
 
   describe "#missed_posts" do
     let(:product) { create(:product, user: seller) }
-    let!(:post1) { create(:installment, link: product, published_at: Time.current, name: "Post 1") }
-    let!(:post2) { create(:installment, link: product, published_at: Time.current, name: "Post 2") }
-    let!(:post3) { create(:installment, link: product, published_at: Time.current, name: "Post 3") }
+    let!(:post1) { create(:installment, link: product, published_at: 3.days.ago, name: "Post 1") }
+    let!(:post2) { create(:installment, link: product, published_at: 2.days.ago, name: "Post 2") }
+    let!(:post3) { create(:installment, link: product, published_at: 1.day.ago, name: "Post 3") }
     let!(:post4) { create(:installment, link: product, name: "Post 4") }
     let(:purchase) { create(:purchase, link: product) }
 
@@ -19,19 +19,31 @@ describe CustomerPresenter do
       expect(described_class.new(purchase:).missed_posts).to eq(
         [
           {
-            id: post2.external_id,
-            name: "Post 2",
-            url: post2.full_url,
-            published_at: post2.published_at,
-          },
-          {
             id: post3.external_id,
             name: "Post 3",
             url: post3.full_url,
             published_at: post3.published_at,
           },
+          {
+            id: post2.external_id,
+            name: "Post 2",
+            url: post2.full_url,
+            published_at: post2.published_at,
+          },
         ]
       )
+    end
+
+    context "when posts share the same published_at" do
+      let(:published_at) { 1.day.ago }
+      let!(:post2) { create(:installment, link: product, published_at:, name: "Post 2") }
+      let!(:post3) { create(:installment, link: product, published_at:, name: "Post 3") }
+
+      it "breaks ties deterministically by id ascending" do
+        expect(described_class.new(purchase:).missed_posts.map { _1[:id] }).to eq(
+          [post2.external_id, post3.external_id]
+        )
+      end
     end
   end
 
@@ -58,6 +70,7 @@ describe CustomerPresenter do
     end
 
     it "returns the correct props for each customer" do
+      allow_any_instance_of(License).to receive(:secure_external_id).with(scope: License::MANAGE_SECURE_ID_SCOPE).and_return("secure-license-id")
       allow(purchase1).to receive(:transaction_url_for_seller).and_return("https://google.com")
       allow(purchase1).to receive(:stripe_partially_refunded?).and_return(true)
       allow(purchase1).to receive(:stripe_refunded?).and_return(true)
@@ -171,7 +184,7 @@ describe CustomerPresenter do
             type: "DirectAffiliate",
           },
           license: {
-            id: purchase2.license.external_id,
+            id: "secure-license-id",
             enabled: true,
             key: purchase2.license.serial,
             uses: purchase2.license.uses,

@@ -265,7 +265,7 @@ describe User::Posts, :freeze_time do
         # most ONE links-by-permalink lookup, regardless of post count.
         links_by_permalink = queries.grep(/FROM `links`.*WHERE.*`unique_permalink`/)
         expect(links_by_permalink.size).to be <= 1,
-          "Expected at most 1 Link.find_by(unique_permalink:) lookup, got #{links_by_permalink.size}:\n#{links_by_permalink.join("\n")}"
+                                           "Expected at most 1 Link.find_by(unique_permalink:) lookup, got #{links_by_permalink.size}:\n#{links_by_permalink.join("\n")}"
 
         # Direct probe of the filter cache: call seller_post_passes_filters
         # twice on the same post with the same cache; the second call must
@@ -307,7 +307,7 @@ describe User::Posts, :freeze_time do
         end
         not_bought_hits = cache_hit_queries.grep(/FROM `purchases`.*`link_id`.*`email` = /)
         expect(not_bought_hits).to be_empty,
-          "Second call with shared cache must issue 0 not_bought_products lookups, got #{not_bought_hits.size}:\n#{not_bought_hits.join("\n")}"
+                                   "Second call with shared cache must issue 0 not_bought_products lookups, got #{not_bought_hits.size}:\n#{not_bought_hits.join("\n")}"
       end
     end
   end

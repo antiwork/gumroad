@@ -17,7 +17,9 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
       <Button
         size="sm"
         color="danger"
-        onClick={() => { window.location.href = suspendUrl; }}
+        onClick={() => {
+          window.location.href = suspendUrl;
+        }}
       >
         Suspend for fraud
       </Button>

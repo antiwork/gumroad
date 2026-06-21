@@ -150,8 +150,6 @@ class PurchasesController < ApplicationController
   end
 
   def update_subscription
-    # TODO (helen): Remove after debugging https://gumroad.slack.com/archives/C01DBV0A257/p1662042866645759
-    Rails.logger.info("purchases#update_subscription - id: #{@subscription.external_id} ; params: #{permitted_subscription_params}")
     result =
       Subscription::UpdaterService.new(subscription: @subscription,
                                        gumroad_guid: cookies[:_gumroad_guid],
@@ -251,6 +249,8 @@ class PurchasesController < ApplicationController
   end
 
   def resend_receipt
+    return e404 if receipt_orderable_missing?(@purchase)
+
     @purchase.resend_receipt
     head :no_content
   end
@@ -283,6 +283,8 @@ class PurchasesController < ApplicationController
     if (@purchase.purchaser && @purchase.purchaser == logged_in_user) ||
        (logged_in_user && logged_in_user.is_team_member?) ||
        (params[:email].present? && ActiveSupport::SecurityUtils.secure_compare(@purchase.email.downcase, params[:email].to_s.strip.downcase))
+      return e404 if receipt_orderable_missing?(@purchase)
+
       message = CustomerMailer.receipt(@purchase.id, for_email: false)
       # Generate the same markup used in the email
       Premailer::Rails::Hook.perform(message)
@@ -434,5 +436,16 @@ class PurchasesController < ApplicationController
       payment_method&.card&.wallet&.type == params[:wallet_type]
     rescue Stripe::StripeError
       render_error("Sorry, something went wrong.")
+    end
+
+    # The receipt/resend paths resolve a Chargeable that can promote a charge-backed
+    # purchase to its Order. When that Order has no successful purchase, the orderable
+    # has no buyer email and rendering/sending the receipt raises NoMethodError (see
+    # gumroad-private#483 / Sentry GUMROAD-4D). Treat that as a missing receipt (404)
+    # rather than 500ing. Order#email is nil-safe as of this change.
+    def receipt_orderable_missing?(purchase)
+      Charge::Chargeable.find_by_purchase_or_charge!(purchase:).orderable.email.blank?
+    rescue ActiveRecord::RecordNotFound
+      true
     end
 end

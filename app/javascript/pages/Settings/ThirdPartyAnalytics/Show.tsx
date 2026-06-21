@@ -114,7 +114,11 @@ export default function ThirdPartyAnalyticsPage() {
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
-                  <a href="/help/article/174-third-party-analytics#Google-Analytics-Ib1dB" target="_blank" rel="noreferrer">
+                  <a
+                    href="/help/article/174-third-party-analytics#Google-Analytics-Ib1dB"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Learn more
                   </a>
                 </FieldsetTitle>

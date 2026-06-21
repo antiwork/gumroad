@@ -122,7 +122,11 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDoma
       "a",
       {
         ...HTMLAttributes,
-        href: addSaleInfoQueryParams(typia.assert<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
+        href: addSaleInfoQueryParams(
+          typia.assert<string>(HTMLAttributes.href),
+          this.options.saleInfo,
+          this.options.rootDomain,
+        ),
         target: "_blank",
       },
       0,
@@ -143,7 +147,11 @@ const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: st
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(typia.assert<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
+        href: addSaleInfoQueryParams(
+          typia.assert<string>(HTMLAttributes.href),
+          this.options.saleInfo,
+          this.options.rootDomain,
+        ),
       },
       0,
     ];

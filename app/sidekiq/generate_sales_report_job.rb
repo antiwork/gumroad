@@ -8,7 +8,7 @@ class GenerateSalesReportJob
   DISCOVER_SALES = "discover_sales"
   SALES_TYPES = [ALL_SALES, DISCOVER_SALES]
 
-  def perform(country_code, start_date, end_date, sales_type, send_slack_notification = true, s3_prefix = nil)
+  def perform(country_code, start_date, end_date, sales_type, send_notification = true, s3_prefix = nil)
     country = ISO3166::Country[country_code].tap { |value| raise ArgumentError, "Invalid country code" unless value }
     raise ArgumentError, "Invalid sales type" unless SALES_TYPES.include?(sales_type)
 
@@ -67,9 +67,9 @@ class GenerateSalesReportJob
 
       update_job_status_to_completed(country_code, start_time, end_time, sales_type, s3_signed_url)
 
-      if send_slack_notification
+      if send_notification
         message = "#{country.common_name} sales report (#{start_time.to_date} to #{end_time.to_date}) is ready - #{s3_signed_url}"
-        InternalNotificationWorker.perform_async("payments", slack_sender(country_code), message, "green")
+        InternalNotificationWorker.perform_async("payments", notification_sender(country_code), message, "green")
       end
     ensure
       temp_file.close
@@ -92,7 +92,7 @@ class GenerateSalesReportJob
       headers
     end
 
-    def slack_sender(country_code)
+    def notification_sender(country_code)
       if %w(AU SG).include?(country_code)
         "GST Reporting"
       else

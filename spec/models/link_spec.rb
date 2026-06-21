@@ -420,7 +420,7 @@ describe Link, :vcr do
 
         expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
         expect(product.reload.purchase_disabled_at).not_to be(nil)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "skips the content moderation check for VIP creators" do
@@ -480,7 +480,7 @@ describe Link, :vcr do
 
         product.name = "New bad name"
         expect(product.save).to eq(false)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "re-checks moderation when the description changes" do
@@ -490,7 +490,7 @@ describe Link, :vcr do
 
         product.description = "<p>New bad body</p>"
         expect(product.save).to eq(false)
-        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in description")
+        expect(product.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "does not re-check moderation when unrelated attributes change" do
@@ -700,6 +700,20 @@ describe Link, :vcr do
         other_sections.each do |section|
           expect(section.reload.shown_products).to_not include link.id
         end
+      end
+
+      it "re-reads sections under the profile lock so it can't clobber a concurrent shown_products change" do
+        seller = create(:user)
+        section = create(:seller_profile_products_section, seller:, shown_products: [1, 2])
+        # Prime a stale cached association, then commit a change it doesn't reflect — as another
+        # writer (or the profile editor) would. add_to_profile_sections must re-read under the lock
+        # and preserve that change rather than overwriting it with the stale list.
+        seller.seller_profile_products_sections.load
+        SellerProfileSection.find(section.id).update!(json_data: section.json_data.merge("shown_products" => [1, 2, 3]))
+
+        link = create(:product, user: seller)
+
+        expect(section.reload.shown_products).to contain_exactly(1, 2, 3, link.id)
       end
     end
   end
@@ -4264,6 +4278,18 @@ describe Link, :vcr do
 
           it "returns purchase_info" do
             expect(product.purchase_info_for_product_page(user, nil)).to eq(purchase.purchase_info)
+          end
+
+          it "marks the purchase as paid" do
+            expect(product.purchase_info_for_product_page(user, nil)[:was_paid]).to eq(true)
+          end
+        end
+
+        context "when the user's previous purchase was free" do
+          let!(:purchase) { create(:free_purchase, link: product, purchaser: user) }
+
+          it "marks the purchase as not paid" do
+            expect(product.purchase_info_for_product_page(user, nil)[:was_paid]).to eq(false)
           end
         end
 

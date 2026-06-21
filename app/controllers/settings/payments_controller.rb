@@ -15,10 +15,11 @@ class Settings::PaymentsController < Settings::BaseController
     end
     return unless current_seller.fetch_or_build_user_compliance_info.country.present?
 
-    # Block requests that would *change* a country field to a US outlying area, but allow
-    # unmigrated territory sellers (e.g. country: "Puerto Rico") to submit other settings
-    # changes — their form echoes back the current country value, which must not be
-    # treated as an attempted bypass. See issue gumroad-private#394.
+    # Block requests that would *change* a country field to a territory we model as a US state (PR),
+    # but allow unmigrated PR sellers (country: "Puerto Rico") to submit other settings changes — their
+    # form echoes back the current country value, which must not be treated as an attempted bypass. The
+    # other outlying areas are valid PayPal payout countries and are allowed. See issue
+    # gumroad-private#394.
     current_uci = current_seller.alive_user_compliance_info
     attempted_territory_change = [
       [params.dig(:user, :updated_country_code), current_uci&.legal_entity_country_code],
@@ -27,10 +28,10 @@ class Settings::PaymentsController < Settings::BaseController
     ].any? do |submitted, current|
       submitted.present? &&
         submitted != current &&
-        Compliance::Countries::US_OUTLYING_AREA_ALPHA2.include?(submitted)
+        Compliance::Countries::US_OUTLYING_AREAS_AS_STATES.include?(submitted)
     end
     if attempted_territory_change
-      return redirect_with_error("US outlying areas (Puerto Rico, Guam, US Virgin Islands, etc.) are not valid compliance countries. Select United States and your territory as state.")
+      return redirect_with_error("Puerto Rico is not a valid compliance country. Select United States and Puerto Rico as your state.")
     end
 
     compliance_info = current_seller.fetch_or_build_user_compliance_info
@@ -102,7 +103,7 @@ class Settings::PaymentsController < Settings::BaseController
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
         if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
           country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
-          return redirect_with_error("The postal code you entered is not valid for #{country}.")
+          return redirect_with_error("We couldn't verify the postal code you entered for #{country}. If you're sure it's correct, such as a newly built address, contact support and we'll look into it.")
         end
         if e.is_a?(MerchantRegistrationUserNotReadyError)
           return redirect_with_error("Bank payouts are not supported in your country yet. Please use PayPal instead.")
@@ -121,7 +122,7 @@ class Settings::PaymentsController < Settings::BaseController
   def set_country
     compliance_info = current_seller.fetch_or_build_user_compliance_info
     return head :forbidden if compliance_info.country.present?
-    return head :forbidden if Compliance::Countries::US_OUTLYING_AREA_ALPHA2.include?(params[:country])
+    return head :forbidden if Compliance::Countries::US_OUTLYING_AREAS_AS_STATES.include?(params[:country])
 
     compliance_info.dup_and_save! do |new_compliance_info|
       new_compliance_info.country = ISO3166::Country[params[:country]]&.common_name

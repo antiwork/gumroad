@@ -1,5 +1,6 @@
 billion-dollar-company-chapter-0.pdf
 encrypted_pdf.pdf
+password_protected_pdf.pdf
 ScreenRecording.mov
 magic.mp3
 test.pdf

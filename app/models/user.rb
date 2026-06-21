@@ -127,6 +127,7 @@ class User < ApplicationRecord
   has_many :product_reviews, through: :purchases
   has_one :refund_policy, -> { where(product_id: nil) }, foreign_key: "seller_id", class_name: "SellerRefundPolicy", dependent: :destroy
   has_one :totp_credential, dependent: :destroy
+  has_many :webauthn_credentials, dependent: :destroy
   has_many :utm_links, dependent: :destroy, foreign_key: :seller_id
   has_many :seller_communities, class_name: "Community", foreign_key: :seller_id, dependent: :destroy
   has_many :community_chat_messages, dependent: :destroy
@@ -716,6 +717,18 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
+  # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
+  # they take this lock and re-read the sections inside it to avoid clobbering each other. The
+  # profile editor holds the same row via seller_profile.lock!, so all writers serialize on it.
+  # Looked up directly (not via #seller_profile, which builds a record) so callers like product
+  # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
+  # saved profile has nothing to serialize against, so it just runs the block.
+  def with_profile_sections_lock(&block)
+    profile = SellerProfile.find_by(seller_id: id)
+    profile ? profile.with_lock(&block) : yield
+  end
+
   def time_fields
     attributes.keys.keep_if { |key| key.include?("_at") && send(key) }
   end
@@ -961,7 +974,16 @@ class User < ApplicationRecord
   end
 
   def payouts_paused_for_reason
-    payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_ADMIN ? comments.with_type_payouts_paused.last&.content : nil
+    return nil unless payouts_paused?
+
+    case payouts_paused_by_source
+    when PAYOUT_PAUSE_SOURCE_ADMIN, PAYOUT_PAUSE_SOURCE_STRIPE
+      comments.with_type_payouts_paused.last&.content
+    when PAYOUT_PAUSE_SOURCE_SYSTEM
+      comments.with_type_on_probation
+              .where(author_name: SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS.values)
+              .last&.content
+    end
   end
 
   def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?

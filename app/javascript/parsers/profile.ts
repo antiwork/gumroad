@@ -5,15 +5,12 @@ export type CreatorProfile = {
   twitter_handle: string | null;
   subdomain: string | null;
   is_verified: boolean;
+  can_edit: boolean;
 };
 
 export type Tab = { name: string; sections: string[] };
 export type ProfileSettings = {
-  username: string;
   name: string | null;
   bio: string | null;
-  font: string;
-  background_color: string;
-  highlight_color: string;
   profile_picture_blob_id: string | null;
 };

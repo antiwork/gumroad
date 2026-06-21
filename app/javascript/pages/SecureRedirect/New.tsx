@@ -24,7 +24,9 @@ type SecureRedirectFormData = {
 };
 
 const New = () => {
-  const { message, field_name, encrypted_payload, error_message } = typia.assert<SecureRedirectPageProps>(usePage().props);
+  const { message, field_name, encrypted_payload, error_message } = typia.assert<SecureRedirectPageProps>(
+    usePage().props,
+  );
 
   const form = useForm<SecureRedirectFormData>({
     confirmation_text: "",

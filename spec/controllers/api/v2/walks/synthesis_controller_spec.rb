@@ -249,9 +249,9 @@ describe Api::V2::Walks::SynthesisController do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
 
-      expect {
+      expect do
         post :create, params: { topic: "x", exchanges: exchanges }
-      }.not_to change(WalksFreeTrial, :count)
+      end.not_to change(WalksFreeTrial, :count)
 
       expect(response).to have_http_status(:payment_required)
     end
@@ -280,9 +280,9 @@ describe Api::V2::Walks::SynthesisController do
       stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "{}" }] }.to_json, headers: { "Content-Type" => "application/json" })
 
-      expect {
+      expect do
         post :create, params: { topic: "x", exchanges: exchanges }
-      }.not_to change { trial.reload.synthesis_attempts }
+      end.not_to change { trial.reload.synthesis_attempts }
     end
   end
 end

@@ -5,7 +5,10 @@ module TwoFactorAuthenticationValidator
 
   TWO_FACTOR_AUTH_USER_ID_SESSION_NAME = :verify_two_factor_auth_for
   TWO_FACTOR_AUTH_METHOD_SESSION_NAME = :two_factor_auth_method
-  private_constant :TWO_FACTOR_AUTH_USER_ID_SESSION_NAME, :TWO_FACTOR_AUTH_METHOD_SESSION_NAME
+  TWO_FACTOR_AUTH_TOKEN_SENT_AT_SESSION_NAME = :two_factor_auth_token_sent_at
+  RESEND_AUTHENTICATION_TOKEN_COOLDOWN = 60.seconds
+  private_constant :TWO_FACTOR_AUTH_USER_ID_SESSION_NAME, :TWO_FACTOR_AUTH_METHOD_SESSION_NAME,
+                   :TWO_FACTOR_AUTH_TOKEN_SENT_AT_SESSION_NAME, :RESEND_AUTHENTICATION_TOKEN_COOLDOWN
 
   def skip_two_factor_authentication?(user)
     # Skip 2FA if it's not enabled for the user
@@ -36,7 +39,23 @@ module TwoFactorAuthenticationValidator
       return if params[:next] && params[:next].include?(verify_two_factor_authentication_path(format: :html))
 
       user.send_authentication_token!
+      mark_authentication_token_sent
     end
+  end
+
+  def mark_authentication_token_sent
+    session[TWO_FACTOR_AUTH_TOKEN_SENT_AT_SESSION_NAME] = Time.current.to_i
+  end
+
+  def authentication_token_sent_at
+    session[TWO_FACTOR_AUTH_TOKEN_SENT_AT_SESSION_NAME]
+  end
+
+  def resend_authentication_token_cooldown_seconds
+    sent_at = authentication_token_sent_at
+    return 0 if sent_at.blank?
+
+    [RESEND_AUTHENTICATION_TOKEN_COOLDOWN.to_i - (Time.current.to_i - sent_at), 0].max
   end
 
   def two_factor_auth_method
@@ -56,6 +75,7 @@ module TwoFactorAuthenticationValidator
   def reset_two_factor_auth_login_session
     session.delete(TWO_FACTOR_AUTH_USER_ID_SESSION_NAME)
     session.delete(TWO_FACTOR_AUTH_METHOD_SESSION_NAME)
+    session.delete(TWO_FACTOR_AUTH_TOKEN_SENT_AT_SESSION_NAME)
   end
 
   def set_two_factor_auth_cookie(user)

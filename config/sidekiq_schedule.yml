@@ -81,10 +81,6 @@ send_reminders_for_outstanding_user_compliance_info_requests: # Duration: 5min
   cron: "0 2 * * *" # UTC 02:00
   class: SendRemindersForOutstandingUserComplianceInfoRequestsWorker
   description: Sends reminder emails for outstanding user compliance info requests.
-stripe_transfer_gumroads_available_balances_to_gumroads_bank_account: # Duration: <1sec
-  cron: "0 11 * * *" # UTC 11:00
-  class: StripeTransferGumroadsAvailableBalancesToGumroadsBankAccountWorker
-  description: Transfers the available balances of Gumroad's Stripe account to the Gumroad bank account
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
@@ -310,11 +306,15 @@ send_paypal_topup_notification_daily:
   cron: "0 14 * * 2,3,4,5,6,0" # UTC 14:00 (9am ET) TUE-SUN
   class: SendPaypalTopupNotificationJob
   args: true
-  description: Send a slack notification if PayPal top-up is needed (daily check)
+  description: Send a notification if PayPal top-up is needed (daily check)
 send_paypal_topup_notification_weekly:
   cron: "0 14 * * 1" # UTC 14:00 (9am ET) MON
   class: SendPaypalTopupNotificationJob
-  description: Send a slack notification for the weekly PayPal topup status
+  description: Send a notification for the weekly PayPal topup status
+send_stripe_balance_check_notification:
+  cron: "0 14 * * *" # UTC 14:00 (9am ET) daily, ahead of the next day's UTC 10:00 seller payouts
+  class: SendStripeBalanceCheckNotificationJob
+  description: Notify if Gumroad's Stripe balance is too low to cover upcoming seller payouts
 sync_all_paypal_payouts:
   cron: "0 15 * * 4" # UTC 15:00 Thursday
   class: SyncStuckPayoutsJob
@@ -337,7 +337,7 @@ update_purchasing_power_parity_factors:
 million_dollar_milestone_check:
   cron: "0 0 * * 1" # UTC 00:00 Monday
   class: MillionDollarMilestoneCheckWorker
-  description: Send Slack notifications about creators that cross the million-dollar milestone
+  description: Send notifications about creators that cross the million-dollar milestone
 
 # Monthly
 finances_report:

@@ -51,6 +51,7 @@ RUN cd /tmp \
   libyaml-dev \
   percona-toolkit \
   pdftk \
+  qpdf \
   ruby-dev \
   screen \
   sudo \

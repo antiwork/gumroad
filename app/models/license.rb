@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 class License < ApplicationRecord
+  MANAGE_SECURE_ID_SCOPE = "manage_license"
+
   has_paper_trail only: %i[disabled_at serial]
 
   include FlagShihTzu
   include ExternalId
+  include SecureExternalId
 
   validates_numericality_of :uses, greater_than_or_equal_to: 0
   validates_presence_of :serial
@@ -41,6 +44,10 @@ class License < ApplicationRecord
     save!
   end
 
+  def reset_uses!
+    update!(uses: 0)
+  end
+
   def rotate!
     self.serial = nil
     generate_serial
@@ -65,9 +72,9 @@ class License < ApplicationRecord
       return if purchase_id.blank? || fields.blank?
 
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
-        "record_id" => purchase_id,
-        "class_name" => "Purchase",
-        "fields" => fields
-      })
+                                              "record_id" => purchase_id,
+                                              "class_name" => "Purchase",
+                                              "fields" => fields
+                                            })
     end
 end

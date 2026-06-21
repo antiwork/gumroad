@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::VariantCategoriesController < Api::V2::BaseController
-  before_action(only: [:index, :show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:index, :show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :fetch_product
   before_action :fetch_variant_category, only: [:show, :update, :destroy]

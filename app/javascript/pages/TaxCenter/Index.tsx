@@ -1,6 +1,5 @@
 import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
-import taxesPlaceholder from "$assets/images/placeholders/taxes.png";
 import * as React from "react";
 import typia from "typia";
 
@@ -16,6 +15,8 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+
+import taxesPlaceholder from "$assets/images/placeholders/taxes.png";
 
 type TaxDocument = {
   document: string;

@@ -34,7 +34,7 @@ describe CreateIndiaSalesReportJob do
         allow(s3_object_double).to receive(:upload_file)
         allow(s3_object_double).to receive(:presigned_url).and_return("https://example.com/test-url")
 
-        # Mock Slack notification
+        # Mock notification
         allow(InternalNotificationWorker).to receive(:perform_async)
 
         # Mock database queries to prevent actual data access

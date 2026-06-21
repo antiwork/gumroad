@@ -4,6 +4,15 @@ import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+import { defaults as requestDefaults } from "../utils/request";
+
+// Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
+// sets `requestDefaults.headers` on legacy react-on-rails pages, so without this a `request()`
+// POST after a client-side navigation (e.g. right after login) sends a stale/missing token and
+// fails CSRF verification. `authenticity_token` is a shared Inertia prop, fresh on every visit.
+function syncRequestCsrfToken(token) {
+  if (token) requestDefaults.headers = { ...requestDefaults.headers, "X-CSRF-Token": token };
+}
 
 // Prevent "Failed to execute 'removeChild' on 'Node'" errors caused by
 // browser translation extensions (e.g. Google Translate) relocating DOM nodes.
@@ -61,6 +70,10 @@ router.on("before", (event) => {
   }
 });
 
+router.on("success", (event) => {
+  syncRequestCsrfToken(event.detail.page.props.authenticity_token);
+});
+
 // Handle non-Inertia responses (e.g., redirects to non-Inertia pages after login)
 // This fires AFTER the server responds, so authentication is already complete
 router.on("invalid", (event) => {
@@ -96,8 +109,8 @@ function assignLayout(page) {
   return page;
 }
 
-const pages = import.meta.glob('../pages/**/*.tsx');
-const jsxPages = import.meta.glob('../pages/**/*.jsx');
+const pages = import.meta.glob("../pages/**/*.tsx");
+const jsxPages = import.meta.glob("../pages/**/*.jsx");
 
 async function resolvePageComponent(name) {
   const tsxPath = `../pages/${name}.tsx`;
@@ -124,6 +137,7 @@ createInertiaApp({
     if (!el) return;
 
     const global = props.initialPage.props;
+    syncRequestCsrfToken(global.authenticity_token);
 
     const root = createRoot(el);
     root.render(createElement(AppWrapper, { global }, createElement(App, props)));

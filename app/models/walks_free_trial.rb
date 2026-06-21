@@ -35,9 +35,9 @@ class WalksFreeTrial < ApplicationRecord
       .where(id: id)
       .where("synthesis_attempts < ?", MAX_SYNTHESIS_ATTEMPTS)
       .update_all([
-        "synthesis_attempts = synthesis_attempts + 1, updated_at = ?",
-        Time.current,
-      ])
+                    "synthesis_attempts = synthesis_attempts + 1, updated_at = ?",
+                    Time.current,
+                  ])
     if n == 1
       self.synthesis_attempts += 1
       true

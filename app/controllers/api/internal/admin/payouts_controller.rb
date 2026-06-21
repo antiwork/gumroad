@@ -105,12 +105,14 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       return render json: { success: false, message: "payout_period_end_date must be in the past" }, status: :bad_request
     end
 
+    bypass_minimum_payout = ActiveModel::Type::Boolean.new.cast(params[:bypass_minimum_payout]) == true
+
     record_admin_write(action: "payouts.issue", target: @user) do
       if processor_param == PayoutProcessorType::PAYPAL && ActiveModel::Type::Boolean.new.cast(params[:should_split_the_amount])
         @user.update!(should_paypal_payout_be_split: true)
       end
 
-      payments = Payouts.create_payments_for_balances_up_to_date_for_users(date, processor_param, [@user], from_admin: true)
+      payments = Payouts.create_payments_for_balances_up_to_date_for_users(date, processor_param, [@user], from_admin: true, bypass_minimum_payout:)
       payment = payments.first&.first
 
       if payment.blank? || payment.failed?

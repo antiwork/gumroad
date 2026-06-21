@@ -24,6 +24,21 @@ describe Installment do
     end
   end
 
+  describe "#as_json_for_api" do
+    it "only returns scheduled_at while the post is scheduled with an alive rule" do
+      installment = create(:scheduled_installment, seller: @creator, link: nil, installment_type: Installment::AUDIENCE_TYPE)
+
+      expect(installment.as_json(api_scopes: ["edit_emails"])[:scheduled_at]).to eq(installment.installment_rule.to_be_published_at)
+
+      installment.update!(published_at: Time.current)
+      installment.installment_rule.mark_deleted!
+
+      serialized_installment = installment.reload.as_json(api_scopes: ["edit_emails"])
+      expect(serialized_installment[:state]).to eq("published")
+      expect(serialized_installment[:scheduled_at]).to be_nil
+    end
+  end
+
   describe "#is_downloadable?" do
     it "returns false if post has no files" do
       expect(@installment.is_downloadable?).to eq(false)
@@ -788,7 +803,7 @@ const b = 2;</code></pre>
 
         expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
         expect(@installment.reload.published_at).to be(nil)
-        expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+        expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
       end
 
       it "skips the content moderation check for VIP creators" do
@@ -844,7 +859,7 @@ const b = 2;</code></pre>
 
           @installment.name = "New bad name"
           expect(@installment.save).to eq(false)
-          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+          expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
         end
 
         it "re-checks moderation when the message changes" do
@@ -854,7 +869,7 @@ const b = 2;</code></pre>
 
           @installment.message = "<p>New bad body</p>"
           expect(@installment.save).to eq(false)
-          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in message")
+          expect(@installment.errors.full_messages.to_sentence).to include("looks like it contains something that may violate our content guidelines")
         end
 
         it "does not re-check moderation when unrelated attributes change" do
@@ -962,6 +977,23 @@ const b = 2;</code></pre>
       create_list(:purchase, 2, :from_seller, seller: @post.seller)
       expect(@post.audience_members_count).to eq(2)
       expect(@post.audience_members_count(1)).to eq(1) # supports a limit, for extra performance
+    end
+
+    context "when the audience_count_from_elasticsearch feature is active", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      before do
+        recreate_model_index(AudienceMember)
+        Feature.activate_user(:audience_count_from_elasticsearch, @post.seller)
+      end
+
+      it "counts audience members through Elasticsearch" do
+        expect(AudienceMember).to receive(:filter_count).exactly(3).times.and_call_original
+
+        expect(@post.audience_members_count).to eq(0)
+        create(:audience_member, seller: @post.seller, purchases: [{ "id" => 1 }])
+        create(:audience_member, seller: @post.seller, purchases: [{ "id" => 2 }])
+        expect(@post.audience_members_count).to eq(2)
+        expect(@post.audience_members_count(1)).to eq(1)
+      end
     end
   end
 

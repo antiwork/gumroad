@@ -1,12 +1,11 @@
-import { fileURLToPath } from "node:url";
-import path from "path";
-
 import UnpluginTypia from "@typia/unplugin/vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
+import path from "path";
+import { visualizer } from "rollup-plugin-visualizer";
 import AutoImport from "unplugin-auto-import/vite";
 import { defineConfig } from "vite";
 import RubyPlugin from "vite-plugin-ruby";
-import { visualizer } from "rollup-plugin-visualizer";
 
 const rootPath = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,7 +14,7 @@ function stripCjsExportsPlugin() {
     name: "strip-cjs-exports",
     transform(code: string, id: string) {
       if (id.endsWith("routes.js")) {
-        return code.replace(/^Object\.defineProperty\(exports.*$/m, "").replace(/^exports\.\w+\s*=.*$/gm, "");
+        return code.replace(/^Object\.defineProperty\(exports.*$/mu, "").replace(/^exports\.\w+\s*=.*$/gmu, "");
       }
     },
   };
@@ -67,7 +66,12 @@ export default defineConfig(({ mode }) => ({
     AutoImport({
       imports: [
         { "$app/utils/routes": [["*", "Routes"]] },
-        { jquery: [["default", "$"], ["default", "jQuery"]] },
+        {
+          jquery: [
+            ["default", "$"],
+            ["default", "jQuery"],
+          ],
+        },
       ],
     }),
     stripCjsExportsPlugin(),

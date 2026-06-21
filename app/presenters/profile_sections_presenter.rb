@@ -12,7 +12,7 @@ class ProfileSectionsPresenter
     @query = query
   end
 
-  def props(request:, pundit_user:, seller_custom_domain_url:)
+  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller)
     sections = query.to_a
 
     props = {
@@ -20,10 +20,10 @@ class ProfileSectionsPresenter
       show_ratings_filter: seller.links.alive.any?(&:display_product_reviews?),
       creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
       sections: cached_sections.map do |props|
-        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:)
+        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:)
       end
     }
-    if pundit_user.seller == seller
+    if editing
       props[:products] = seller.products.alive.not_archived.select(:id, :name).map { { id: ObfuscateIds.encrypt(_1.id), name: _1.name } }
       props[:posts] = visible_posts
       props[:wishlist_options] = seller.wishlists.alive.map { { id: _1.external_id, name: _1.name } }
@@ -69,10 +69,13 @@ class ProfileSectionsPresenter
   private
     attr_reader :seller, :query
 
-    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:)
-      is_owner = pundit_user.seller == seller
+    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:)
       params = request.query_parameters
-      if is_owner
+      # `editing` selects the owner/editing payload shape. Product visibility (hiding sold-out
+      # products) instead follows the real viewer, so the seller still sees every product on their
+      # own public profile even though it renders the visitor shape.
+      viewer_is_owner = pundit_user.seller == seller
+      if editing
         cached_props.merge!(
           {
             hide_header: section.hide_header?,
@@ -83,7 +86,7 @@ class ProfileSectionsPresenter
 
       case cached_props[:type]
       when "SellerProfileProductsSection"
-        if is_owner
+        if editing
           cached_props.merge!(
             {
               shown_products: section.shown_products.map { ObfuscateIds.encrypt(_1) },
@@ -98,7 +101,7 @@ class ProfileSectionsPresenter
                          { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } }
                        )
                        .find(cached_props[:search_results][:products])
-        if !is_owner
+        if !viewer_is_owner
           filtered_count = products.count { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
           products = products.reject { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
           cached_props[:search_results][:total] -= filtered_count
@@ -107,13 +110,13 @@ class ProfileSectionsPresenter
           ProductPresenter.card_for_web(product:, request:, recommended_by: params[:recommended_by], target: Product::Layout::PROFILE, show_seller: false, compute_description: false, compute_inventory: false)
         end
       when "SellerProfilePostsSection"
-        if is_owner
+        if editing
           cached_props.merge!({ shown_posts: visible_posts(section:).pluck(:id) })
         else
           cached_props[:posts] = visible_posts(section:)
         end
       when "SellerProfileFeaturedProductSection"
-        unless is_owner
+        unless editing
           cached_props.merge!(
             {
               props: cached_props[:featured_product_id].present? ?

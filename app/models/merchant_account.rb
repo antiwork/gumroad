@@ -16,6 +16,7 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :meta
   attr_json_data_accessor :unclaimed_balance_collection_transfer_id
   attr_json_data_accessor :stripe_disabled_reason
+  attr_json_data_accessor :stripe_payouts_pause_email_sent
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -132,6 +133,30 @@ class MerchantAccount < ApplicationRecord
 
   def stripe_rejected?
     stripe_disabled_reason.to_s.start_with?("rejected.")
+  end
+
+  STRIPE_DISABLED_REASON_DESCRIPTIONS = {
+    "requirements.past_due" => "Stripe requires additional verification information that is now past due.",
+    "requirements.pending_verification" => "Stripe is verifying the information already submitted; no action is needed right now.",
+    "action_required.requested_capabilities" => "Stripe has requested additional information or capabilities for this account.",
+    "listed" => "Stripe is reviewing the account against its restricted and prohibited business lists.",
+    "under_review" => "Stripe is reviewing the account.",
+    "platform_paused" => "Payouts were paused at the platform level.",
+    "rejected.fraud" => "Stripe rejected the account for suspected fraud.",
+    "rejected.listed" => "Stripe rejected the account because it matched a restricted or prohibited list.",
+    "rejected.terms_of_service" => "Stripe rejected the account for a terms of service violation.",
+    "rejected.other" => "Stripe rejected the account.",
+    "other" => "Stripe disabled payouts on the account."
+  }.freeze
+
+  def stripe_disabled_reason_description
+    return if stripe_disabled_reason.blank?
+    STRIPE_DISABLED_REASON_DESCRIPTIONS[stripe_disabled_reason] || "Stripe disabled payouts on the account."
+  end
+
+  def stripe_payouts_paused_comment
+    reason = stripe_disabled_reason.presence || "not specified"
+    ["Payouts automatically paused by Stripe (disabled reason: #{reason}).", stripe_disabled_reason_description].compact.join(" ")
   end
 
   def paypal_account_details

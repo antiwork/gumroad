@@ -30,6 +30,25 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
   end
 
+  describe "redirect_to_signed_in_path before_action" do
+    context "when the next param points to a creator's custom subdomain" do
+      before do
+        sign_in @user
+        controller.reset_two_factor_auth_login_session
+        allow(controller).to receive(:skip_two_factor_authentication?).and_return(true)
+      end
+
+      it "redirects to the custom domain without raising UnsafeRedirectError" do
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
+        custom_domain_url = "https://localsysadmin.test.gumroad.com/l/ggocri"
+
+        get :show, params: { next: custom_domain_url }
+
+        expect(response).to redirect_to(custom_domain_url)
+      end
+    end
+  end
+
   shared_examples_for "validate user_id in params for html request" do |action|
     it "raises ActionController::RoutingError when user_id is invalid" do
       expect do
@@ -116,6 +135,17 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(inertia.props[:token]).to eq(User::DEFAULT_AUTH_TOKEN)
     end
 
+    it "exposes the resend cooldown derived from when the token was sent" do
+      freeze_time do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        get :show
+
+        expect(inertia.props[:token_sent_at]).to eq(Time.current.to_i)
+        expect(inertia.props[:resend_cooldown_seconds]).to eq(60)
+      end
+    end
+
     it "sets the page title" do
       get :show
 
@@ -154,6 +184,24 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
         expect(response).to redirect_to(controller.send(:login_path_for, @user))
       end
 
+      it "clears the token-sent time from the session" do
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to be_nil
+      end
+
+      context "when the next param points to a creator's custom subdomain" do
+        it "redirects to the custom domain without raising UnsafeRedirectError" do
+          stub_const("ROOT_DOMAIN", "test.gumroad.com")
+          custom_domain_url = "https://localsysadmin.test.gumroad.com/l/ggocri"
+
+          post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id, next: custom_domain_url }
+
+          expect(response).to redirect_to(custom_domain_url)
+          expect(controller.user_signed_in?).to eq true
+        end
+      end
+
       it_behaves_like "merge guest cart with user cart" do
         let(:user) { @user }
         let(:call_action) { post :create, params: { token: user.otp_code, user_id: user.encrypted_external_id } }
@@ -167,6 +215,24 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
         expect(flash[:warning]).to eq "Invalid token, please try again."
         expect(response).to redirect_to(two_factor_authentication_path)
+      end
+    end
+
+    context "passkey setup prompt" do
+      before { Feature.activate(:passkeys) }
+
+      it "flags the prompt after completing two-factor authentication" do
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:prompt_passkey_setup]).to eq(@user.id)
+      end
+
+      it "does not flag the prompt when the user already has a passkey" do
+        create(:webauthn_credential, user: @user)
+
+        post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(session[:prompt_passkey_setup]).to be_nil
       end
     end
   end
@@ -246,6 +312,14 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(flash[:notice]).to eq "Resent the authentication token, please check your inbox."
     end
 
+    it "records the token-sent time so the cooldown restarts" do
+      freeze_time do
+        post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to eq(Time.current.to_i)
+      end
+    end
+
     context "when user has TOTP enabled" do
       before do
         Feature.activate_user(:authenticator_2fa, @user)
@@ -301,6 +375,14 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(controller.send(:two_factor_auth_method)).to eq("email")
       expect(response).to redirect_to(two_factor_authentication_path)
       expect(flash[:notice]).to eq "Authentication token sent to #{@user.email}."
+    end
+
+    it "records the token-sent time so the cooldown starts" do
+      freeze_time do
+        post :switch_to_email, params: { user_id: @user.encrypted_external_id }
+
+        expect(session[:two_factor_auth_token_sent_at]).to eq(Time.current.to_i)
+      end
     end
   end
 

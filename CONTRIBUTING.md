@@ -90,6 +90,7 @@ Also lint before committing:
 ```bash
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
+npm run typecheck                   # TS type check
 ```
 
 Do not push code with failing tests. CI is not a substitute for local verification. Fix any issues before committing.
@@ -187,6 +188,10 @@ A great bug report includes:
 ## Help
 
 - Any issue with label `help wanted` is open for contributions - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22)
+
+## When you're corrected, fix the docs
+
+If a maintainer corrects your approach in review — a convention, a workflow, a gotcha that isn't written down — don't just fix the code. Propose an edit to this guide in the same PR (or a fast follow-up) so the correction is captured once and never has to be repeated. The contributing guide should get a little smarter every time someone gets corrected.
 
 ## License
 

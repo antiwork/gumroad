@@ -17,7 +17,7 @@ export const DashboardNavProfilePopover = ({ children, user }: { children: React
     </PopoverTrigger>
     <PopoverContent
       side="top"
-      className="border-0 p-0 shadow-none"
+      className="border-0 px-2 py-1 shadow-none"
       arrowClassName="fill-white"
       collisionPadding={0}
       matchTriggerWidth

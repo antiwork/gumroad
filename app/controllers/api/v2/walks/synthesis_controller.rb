@@ -127,5 +127,4 @@ class Api::V2::Walks::SynthesisController < Api::V2::BaseController
       Rails.logger.warn("Anthropic synthesis returned non-JSON: #{e.message} — raw: #{cleaned.truncate(500)}")
       nil
     end
-
 end

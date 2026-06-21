@@ -71,12 +71,21 @@ module Compliance
       RISK_PHYSICAL_BLOCKED_COUNTRY_CODES.include?(alpha2)
     end
 
-    # Subset of ISO 3166-1 codes that are US outlying areas (territories). These are not separate
-    # countries for Gumroad's compliance purposes — sellers and buyers from these locations enter
-    # the US country path with the territory as the `state`. Filtered out of the seller-side
-    # compliance country dropdown via `for_select_for_seller_compliance` so the catch-22 in
-    # issue #394 cannot recur for new signups.
+    # US outlying areas (territories) by ISO 3166-1 code. These are not sovereign countries, but ISO
+    # assigns them codes and `for_select` lists them. How each is handled for seller compliance depends
+    # on whether Stripe Connect accepts it — see `US_OUTLYING_AREAS_AS_STATES`.
     US_OUTLYING_AREA_ALPHA2 = %w[AS GU MP PR UM VI].freeze
+
+    # The US outlying areas we model as a US state (`country: "US"`, `state: <code>`) rather than as
+    # their own selectable country, because Stripe Connect onboards them under the US. Today that is
+    # only Puerto Rico. These are filtered out of the seller country dropdown and rejected as a
+    # compliance country, so a PR seller picks United States + state PR.
+    #
+    # The remaining outlying areas (Guam, US Virgin Islands, American Samoa, Northern Mariana Islands)
+    # Stripe rejects outright, so they stay selectable as their own country and route to PayPal payouts
+    # (`native_payouts_supported?` is false for them). #394 originally removed all six from the dropdown,
+    # which left those four with no payout path at all — this restores it.
+    US_OUTLYING_AREAS_AS_STATES = %w[PR].freeze
 
     def self.for_select
       ISO3166::Country.all.map do |country|
@@ -85,13 +94,13 @@ module Compliance
       end.sort_by { |pair| pair.last }
     end
 
-    # Same shape as `for_select`, but excludes US outlying areas because they are entered as US
-    # addresses with a territory state code. Used by seller-facing settings pages (compliance,
-    # billing) so sellers cannot pick a territory as their country and end up in the issue #394
-    # catch-22. Buyer-facing flows (checkout, invoice, customer addresses) should continue to use
-    # `for_select` because foreign billing addresses to these territories can be legitimate.
+    # Same shape as `for_select`, but excludes the outlying areas we model as US states (PR), so a
+    # seller cannot pick one as their country and end up in the issue #394 catch-22. The other outlying
+    # areas stay listed because they are valid PayPal payout countries. Buyer-facing flows (checkout,
+    # invoice, customer addresses) continue to use `for_select` because billing addresses to any
+    # territory can be legitimate.
     def self.for_select_for_seller_compliance
-      for_select.reject { |alpha2, _name| US_OUTLYING_AREA_ALPHA2.include?(alpha2) }
+      for_select.reject { |alpha2, _name| US_OUTLYING_AREAS_AS_STATES.include?(alpha2) }
     end
 
     GLOBE_SHOWING_AMERICAS_EMOJI = [127758].pack("U*")
@@ -170,13 +179,8 @@ module Compliance
       end
     end
 
-    # Puerto Rico is exposed in the US state dropdown because Stripe Connect onboards PR sellers under
-    # `country: "US"` with `state: "PR"`. The other US outlying areas (AS, GU, MP, UM, VI) are NOT in
-    # this allowlist because Stripe explicitly rejects them with "Stripe currently does not support US
-    # insular areas and freely associated states" — adding them would just move the catch-22 from signup
-    # to Stripe onboarding.
-    US_OUTLYING_AREAS_AS_STATES = %w[PR].freeze
-
+    # `US_OUTLYING_AREAS_AS_STATES` (PR) is exposed in the US state dropdown because Stripe Connect
+    # onboards those sellers under `country: "US"` with the territory as the `state`.
     def self.subdivisions_for_select(alpha2)
       case alpha2
       when Compliance::Countries::USA.alpha2

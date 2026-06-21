@@ -42,9 +42,11 @@ export type Props = ProductProps & { main_section_index: number } & (SectionsPro
 
 const SectionEditor = ({
   props,
+  controls = true,
   children,
 }: {
   props: Extract<Props, EditSectionsProps>;
+  controls?: boolean;
   children: React.ReactNode;
 }) => {
   const { product } = props;
@@ -119,13 +121,13 @@ const SectionEditor = ({
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         {sections.map((section, i) => (
           <SectionLayout key={section.id} id={section.id}>
-            <AddSectionButton index={i} />
+            {controls ? <AddSectionButton index={i} /> : null}
             {section.id ? (
-              <EditSection section={section} />
+              <EditSection section={section} controls={controls} />
             ) : (
               <div className="mx-auto w-full max-w-6xl">{children}</div>
             )}
-            {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
+            {controls && i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))}
       </ImageUploadSettingsContext.Provider>
@@ -189,7 +191,9 @@ export const Layout = (
         hasHero={!!hasHero}
       />
       {"products" in props ? (
-        <SectionEditor props={props}>{productView}</SectionEditor>
+        <SectionEditor props={props} controls={false}>
+          {productView}
+        </SectionEditor>
       ) : props.sections.length > 0 ? (
         props.sections.map((section, i) => (
           <React.Fragment key={section.id}>

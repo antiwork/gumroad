@@ -518,7 +518,11 @@ const EmailRow = ({
                 <Select
                   value={email.delayed_delivery_time_period}
                   aria-label="Period"
-                  onChange={(e) => onChange({ delayed_delivery_time_period: typia.assert<InstallmentDeliveryTimePeriod>(e.target.value) })}
+                  onChange={(e) =>
+                    onChange({
+                      delayed_delivery_time_period: typia.assert<InstallmentDeliveryTimePeriod>(e.target.value),
+                    })
+                  }
                   onFocus={() => onFocus("delayed_delivery_time_period")}
                 >
                   {INSTALLMENT_DELIVERY_TIME_PERIODS.map((period) => (

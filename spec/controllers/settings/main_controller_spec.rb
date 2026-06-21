@@ -49,6 +49,32 @@ describe Settings::MainController, type: :controller, inertia: true do
       expect(seller.reload.unconfirmed_email).to eq("hello@example.com")
     end
 
+    it "updates the username" do
+      put :update, params: { user: user_params.merge(username: "gum") }
+      expect(response).to redirect_to(settings_main_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Your account has been updated!")
+      expect(seller.reload.username).to eq("gum")
+    end
+
+    it "converts a blank username to nil" do
+      seller.update!(username: "oldusername")
+
+      expect { put :update, params: { user: user_params.merge(username: "") } }.to change {
+        seller.reload.read_attribute(:username)
+      }.from("oldusername").to(nil)
+      expect(response).to redirect_to(settings_main_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Your account has been updated!")
+    end
+
+    it "performs username validations" do
+      put :update, params: { user: user_params.merge(username: "ab") }
+      expect(response).to redirect_to(settings_main_path)
+      expect(response).to have_http_status :found
+      expect(flash[:alert]).to eq("Username is too short (minimum is 3 characters)")
+    end
+
     it "returns error message and notifies Sentry when StandardError is raised" do
       allow_any_instance_of(User).to receive(:save!).and_raise(StandardError)
       expect(ErrorNotifier).to receive(:notify).with(an_instance_of(StandardError))

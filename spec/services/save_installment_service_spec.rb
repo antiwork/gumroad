@@ -164,6 +164,41 @@ describe SaveInstallmentService do
       expect(SendPostBlastEmailsJob.jobs).to be_empty
     end
 
+    context "when publishing fails content moderation" do
+      before do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["adult content", "spam promoting escort services"])
+        )
+      end
+
+      it "returns the moderation error without reporting it to Sentry" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        service = described_class.new(seller:, installment:, params: params.merge(publish: true), preview_email_recipient:)
+        expect do
+          service.process
+        end.to_not change { Installment.count }
+
+        expect(service.error).to include("looks like it contains something that may violate our content guidelines")
+        expect(SendPostBlastEmailsJob.jobs).to be_empty
+      end
+    end
+
+    it "reports unexpected blast setup validation failures to Sentry" do
+      invalid_blast = PostEmailBlast.new.tap { |blast| blast.errors.add(:base, "unexpected failure") }
+      record_invalid = ActiveRecord::RecordInvalid.new(invalid_blast)
+      allow(PostEmailBlast).to receive(:create!).and_raise(record_invalid)
+      expect(ErrorNotifier).to receive(:notify).with(record_invalid)
+
+      service = described_class.new(seller:, installment:, params: params.merge(publish: true), preview_email_recipient:)
+      expect do
+        service.process
+      end.to_not change { Installment.count }
+
+      expect(service.error).to include("unexpected failure")
+      expect(SendPostBlastEmailsJob.jobs).to be_empty
+    end
+
     it "creates and sends a preview email" do
       allow(PostSendgridApi).to receive(:process).and_call_original
 

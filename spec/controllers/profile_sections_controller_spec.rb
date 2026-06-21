@@ -22,7 +22,6 @@ describe ProfileSectionsController do
         post :create, params: {
           type: "SellerProfileProductsSection",
           header: "Hello",
-          hide_header: true,
           show_filters: false,
           shown_products: products.map(&:external_id),
           default_product_sort: "page_layout",
@@ -33,7 +32,7 @@ describe ProfileSectionsController do
       expect(section).to have_attributes(
                                           type: "SellerProfileProductsSection",
                                           header: "Hello",
-                                          hide_header: true,
+                                          hide_header: false,
                                           show_filters: false,
                                           shown_products: products.map(&:id),
                                           default_product_sort: "page_layout",
@@ -50,14 +49,14 @@ describe ProfileSectionsController do
       posts = create_list(:published_installment, 2, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
       expect do
         post :create, params: {
-          type: "SellerProfilePostsSection", header: "Hello", hide_header: true, shown_posts: posts.map(&:external_id)
+          type: "SellerProfilePostsSection", header: "Hello", shown_posts: posts.map(&:external_id)
         }, as: :json
       end.to change { seller.seller_profile_posts_sections.count }.from(0).to(1)
       section = seller.seller_profile_posts_sections.reload.sole
       expect(section).to have_attributes(
                            type: "SellerProfilePostsSection",
                            header: "Hello",
-                           hide_header: true,
+                           hide_header: false,
                            shown_posts: posts.map(&:id),
                            product_id: nil
                          )
@@ -106,7 +105,7 @@ describe ProfileSectionsController do
       params = {
         type: "SellerProfileRichTextSection",
         header: "Hello",
-        hide_header: true,
+        hide_header: false,
         text: { "content" => nil, "anything_can_be_here" => "we don't validate this" }
       }
       expect do
@@ -180,7 +179,7 @@ describe ProfileSectionsController do
       expect(section.reload).to have_attributes({
                                                   header: "B!",
                                                   shown_products: products.map(&:id),
-                                                  hide_header: true
+                                                  hide_header: false
                                                 })
       expect(response).to be_successful
     end

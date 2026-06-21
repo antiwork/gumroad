@@ -12,7 +12,7 @@ describe SendPaypalTopupNotificationJob do
       allow(PaypalPayoutProcessor).to receive(:current_paypal_balance_cents).and_return(125_000_00)
     end
 
-    it "sends a notification to slack with the required topup amount and sets redis key to true" do
+    it "sends a notification with the required topup amount and sets redis key to true" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
 
       notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
@@ -25,7 +25,7 @@ describe SendPaypalTopupNotificationJob do
       expect($redis.get(RedisKey.paypal_topup_needed)).to eq("true")
     end
 
-    it "includes details of payout amount in transit in the slack notification" do
+    it "includes details of payout amount in transit in the notification" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(100_000)
 
       notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\

@@ -41,11 +41,6 @@ function NavbarFooter() {
             </>
           ) : null}
           <NavLinkDropdownItem
-            text="Profile"
-            icon={<Store pack="filled" className="mx-1 size-5" />}
-            href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
-          />
-          <NavLinkDropdownItem
             text="Settings"
             icon={<Cog pack="filled" className="mx-1 size-5" />}
             href={Routes.settings_main_url(routeParams)}

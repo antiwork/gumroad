@@ -154,11 +154,42 @@ class GdprBuyerErasureService
 
     def anonymize_audience_members!
       conflict_seller_ids = AudienceMember.where(email: @anonymized_email).pluck(:seller_id)
-      AudienceMember.where(email: email, seller_id: conflict_seller_ids).delete_all if conflict_seller_ids.any?
-      counts[:audience_members] = AudienceMember.where(email: email).update_all(
+      if conflict_seller_ids.any?
+        conflicting_members = AudienceMember.where(email: email, seller_id: conflict_seller_ids)
+        deleted_member_ids = conflicting_members.ids
+        conflicting_members.delete_all
+        deleted_member_ids.each do |member_id|
+          ElasticsearchIndexerWorker.perform_async("delete", { "record_id" => member_id, "class_name" => "AudienceMember" })
+        end
+      end
+
+      anonymized_attributes = {
         email: @anonymized_email,
         details: nil,
-      )
+        customer: false,
+        follower: false,
+        affiliate: false,
+        min_paid_cents: nil,
+        max_paid_cents: nil,
+        min_created_at: nil,
+        max_created_at: nil,
+        min_purchase_created_at: nil,
+        max_purchase_created_at: nil,
+        follower_created_at: nil,
+        min_affiliate_created_at: nil,
+        max_affiliate_created_at: nil,
+      }
+      members = AudienceMember.where(email: email).to_a
+      counts[:audience_members] = AudienceMember.where(id: members.map(&:id)).update_all(anonymized_attributes)
+      # The indexer worker re-reads rows from a possibly-lagging replica; passing the
+      # document body inline guarantees the pre-erasure PII can never be re-indexed.
+      members.each do |member|
+        member.assign_attributes(anonymized_attributes)
+        ElasticsearchIndexerWorker.perform_async(
+          "index",
+          { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json },
+        )
+      end
     end
 
     def anonymize_followers!

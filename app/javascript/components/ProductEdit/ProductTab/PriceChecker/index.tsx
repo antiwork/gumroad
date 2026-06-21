@@ -57,7 +57,7 @@ const buildPriceMarkers = (product: Product): PriceMarker[] => {
     { id: "base", label: "Base price", valueCents: product.price_cents },
     ...paidVariants.map((variant) => ({
       id: variant.id ?? variant.name ?? `variant-${variant.price_difference_cents ?? 0}`,
-      label: truncateLabel(variant.name?.trim() || "Variant"),
+      label: truncateLabel(variant.name.trim() || "Variant"),
       valueCents: product.price_cents + (variant.price_difference_cents ?? 0),
     })),
   ];
@@ -203,7 +203,7 @@ export const PriceCheckerCard = () => {
         </Alert>
       ) : null}
 
-      {isInsufficient && data?.status === "insufficient_data" ? (
+      {isInsufficient && data.status === "insufficient_data" ? (
         <div className="grid min-h-64 content-between gap-3 rounded-sm border border-dashed border-border bg-background p-4 xl:min-h-80">
           <div className="flex items-start justify-between gap-2">
             <div className="grid min-w-0 flex-1 gap-1 text-sm">
@@ -226,7 +226,7 @@ export const PriceCheckerCard = () => {
             productTypeLabel={productTypeLabel}
           />
         </div>
-      ) : hasOk && data?.status === "ok" ? (
+      ) : hasOk && data.status === "ok" ? (
         <div className="grid min-h-64 grid-rows-[auto_1fr_auto] gap-3 rounded-sm border border-border bg-background p-4 xl:min-h-80">
           {chartHeaderRow}
           <DistributionChart

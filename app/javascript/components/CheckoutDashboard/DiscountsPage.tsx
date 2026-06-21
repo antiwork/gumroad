@@ -869,7 +869,7 @@ const Form = ({
 
   const [existingCustomersOnly, setExistingCustomersOnly] = React.useState(!!offerCode?.existing_customers_only);
   const [ownershipProductIds, setOwnershipProductIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: offerCode?.ownership_products?.map(({ id }) => id) ?? [],
+    value: offerCode?.ownership_products.map(({ id }) => id) ?? [],
   });
   const ownershipProductsFieldRef = React.useRef<SelectInstance<Option, true, GroupBase<Option>>>(null);
   const ownershipProducts = products.filter(({ id }) => ownershipProductIds.value.includes(id));

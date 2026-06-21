@@ -107,6 +107,55 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
       end
     end
 
+    context "when the record is missing" do
+      it "no-ops index and update jobs for a hard-deleted AudienceMember" do
+        member = create(:audience_member)
+        member_id = member.id
+        member.destroy!
+
+        expect(EsClient).not_to receive(:index)
+        expect(EsClient).not_to receive(:update)
+
+        described_class.new.perform(
+          "index",
+          "class_name" => "AudienceMember",
+          "record_id" => member_id
+        )
+        described_class.new.perform(
+          "update",
+          "class_name" => "AudienceMember",
+          "record_id" => member_id,
+          "fields" => ["purchases"]
+        )
+      end
+
+      it "re-raises for an AudienceMember that exists but is invisible to a lagging replica read" do
+        member = create(:audience_member)
+        allow(AudienceMember).to receive(:find).and_raise(ActiveRecord::RecordNotFound)
+
+        expect do
+          described_class.new.perform(
+            "index",
+            "class_name" => "AudienceMember",
+            "record_id" => member.id
+          )
+        end.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "re-raises for models outside the hard-deleted allowlist" do
+        record = @model.create!(name: "Drawing")
+        record.destroy!
+
+        expect do
+          described_class.new.perform(
+            "index",
+            "class_name" => @model.name,
+            "record_id" => record.id
+          )
+        end.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
     context "when updating" do
       before do
         @record = @model.create!(name: "Drawing", country: "France")

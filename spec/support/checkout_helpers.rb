@@ -11,7 +11,8 @@ module CheckoutHelpers
 
     fill_in "Name a fair price", with: pwyw_price if pwyw_price.present?
 
-    if product.purchase_info_for_product_page(logged_in_user, Capybara.current_session.driver.browser.manage.all_cookies.find { |cookie| cookie[:name] == "_gumroad_guid" }&.[](:value)).present?
+    purchase_info = product.purchase_info_for_product_page(logged_in_user, Capybara.current_session.driver.browser.manage.all_cookies.find { |cookie| cookie[:name] == "_gumroad_guid" }&.[](:value))
+    if purchase_info && (purchase_info[:was_paid] || product.is_recurring_billing)
       buy_text = "Purchase again"
     elsif cart
       buy_text = "Add to cart"

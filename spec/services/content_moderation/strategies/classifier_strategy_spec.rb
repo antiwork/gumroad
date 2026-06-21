@@ -145,7 +145,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls:).perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.8)"])
+    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
   end
 
   it "returns flagged with a retry reason and notifies Sentry when every image URL fails and there is no text" do
@@ -205,7 +205,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "violent text", image_urls:).perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.8)"])
+    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
   end
 
   it "does not flag unavailability when text exists and image_urls is empty" do

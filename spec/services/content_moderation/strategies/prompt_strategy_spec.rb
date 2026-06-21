@@ -155,7 +155,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         image_urls: ["https://cdn.example.com/photo.png", "https://cdn.example.com/design.psd", "https://cdn.example.com/logo.svg"]
       ).perform
 
-      adult_call = client.as_null_object
+      client.as_null_object
       expect(client).to have_received(:chat).with(
         parameters: hash_including(
           messages: [

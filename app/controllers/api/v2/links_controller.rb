@@ -23,7 +23,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
-  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]

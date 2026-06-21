@@ -386,6 +386,20 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.sanitized).to include "First payment #{subscription.formatted_end_time_of_subscription}"
       expect(mail.body.sanitized).to include "Payment method VISA *4242"
     end
+
+    context "when the subscription's credit card is missing" do
+      let(:subscription) { create(:subscription, link: product, user: nil, credit_card: nil) }
+
+      it "logs the skip and does not deliver the email" do
+        expect(Rails.logger).to receive(:warn).with(
+          "[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=subscription_giftee_added_card; subscription_id=#{subscription.id}"
+        )
+
+        expect do
+          CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_now
+        end.not_to change(ActionMailer::Base.deliveries, :count)
+      end
+    end
   end
 
   describe "order_shipped" do
@@ -683,6 +697,29 @@ describe CustomerLowPriorityMailer do
         expect(mail.subject).to eq "Your installment plan has been canceled."
         expect(mail.body.encoded).to include "Your installment plan for #{product.name} has been canceled"
         expect(mail.body.encoded).to include "due to the creator deleting the product"
+      end
+    end
+  end
+
+  describe "deposit" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:payment) { create(:payment_completed, user: seller) }
+
+    context "when the payout period has only Stripe Connect revenue" do
+      before do
+        allow_any_instance_of(User).to receive(:paypal_revenue_by_product_for_duration).and_return({})
+        allow_any_instance_of(User).to receive(:stripe_connect_revenue_by_product_for_duration).and_return({ product.id => 1_000 })
+      end
+
+      it "renders the Stripe Connect revenue without raising when there is no Gumroad or PayPal revenue" do
+        expect(payment.revenue_by_link).to be_blank
+
+        mail = CustomerLowPriorityMailer.deposit(payment.id)
+
+        expect(mail.subject).to eq "It's pay day!"
+        expect(mail.body.encoded).to include product.name
+        expect(mail.body.encoded).to include Money.new(1_000, "USD").format(symbol: true)
       end
     end
   end

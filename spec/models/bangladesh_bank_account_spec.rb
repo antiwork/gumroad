@@ -41,19 +41,19 @@ describe BangladeshBankAccount do
 
       bd_bank_account = build(:bangladesh_bank_account, account_number: "000012345678")
       expect(bd_bank_account).to_not be_valid
-      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901).")
 
       bd_bank_account = build(:bangladesh_bank_account, account_number: "0000123456789101112")
       expect(bd_bank_account).to_not be_valid
-      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901).")
 
       bd_bank_account = build(:bangladesh_bank_account, account_number: "BD00123456789101112")
       expect(bd_bank_account).to_not be_valid
-      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901).")
 
       bd_bank_account = build(:bangladesh_bank_account, account_number: "BDABC")
       expect(bd_bank_account).to_not be_valid
-      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(bd_bank_account.errors.full_messages.to_sentence).to eq("Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901).")
     end
   end
 end

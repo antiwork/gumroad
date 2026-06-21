@@ -201,6 +201,6 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     def post_link_account
       logged_in_user.save
-      redirect_to settings_profile_path
+      redirect_to profile_path
     end
 end

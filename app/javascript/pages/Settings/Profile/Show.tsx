@@ -1,81 +1,172 @@
-import { FontFamily, TwitterX } from "@boxicons/react";
-import { Head, router, useForm, usePage } from "@inertiajs/react";
+import { TwitterX } from "@boxicons/react";
+import { router, usePage } from "@inertiajs/react";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import { unlinkTwitter } from "$app/data/profile_settings";
-import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
-import { SettingPage } from "$app/parsers/settings";
-import { classNames } from "$app/utils/classNames";
+import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import { CreatorProfile } from "$app/parsers/profile";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
-import { useDomains } from "$app/components/DomainSettings";
+import { Button, NavigationButton } from "$app/components/Button";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
-import { Profile, Props as ProfileProps } from "$app/components/Profile";
+import { Props as ProfileProps } from "$app/components/Profile";
+import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
+import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
-import { ColorPicker } from "$app/components/ui/ColorPicker";
-import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
 
-type ProfilePageProps = {
-  profile_settings: ProfileSettings;
-  settings_pages: SettingPage[];
-} & ProfileProps;
-
-const FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"];
-const FONT_DESCRIPTIONS: Record<string, string> = {
-  Domine: "Modern and bold serif",
-  Inter: "Simple and modern sans-serif",
-  "ABC Favorit": "Quirky and unique sans-serif",
-  Merriweather: "Sturdy and pleasant serif",
-  "Roboto Mono": "Technical and monospace",
-  "Roboto Slab": "Personable and fun serif",
+type ProfileSettingsForm = {
+  name: string | null;
+  bio: string | null;
+  profile_picture_blob_id: string | null;
 };
 
+type ProfilePageProps = {
+  profile_settings: ProfileSettingsForm;
+  editable_profile: ProfileEditorProps;
+  profile_version: string | null;
+} & ProfileProps;
+
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, settings_pages, ...profileProps } = typia.assert<ProfilePageProps>(
+  const { creator_profile, profile_settings, editable_profile, profile_version } = typia.assert<ProfilePageProps>(
     usePage().props,
   );
-  const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();
+  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
     setCreatorProfile((prevProfile) => ({ ...prevProfile, ...newProfile }));
+  const previewCreatorProfile = React.useMemo(() => ({ ...creatorProfile, can_edit: false }), [creatorProfile]);
 
-  const form = useForm(profile_settings);
+  const [editableProfile, setEditableProfile] = React.useState(editable_profile);
+  const lastSavedProfile = React.useRef<ProfileEditorState>({
+    sections: editable_profile.sections,
+    tabs: editable_profile.tabs,
+  });
+  const [selectedProfilePageIndex, setSelectedProfilePageIndex] = React.useState(0);
+  React.useEffect(() => {
+    const previousBaseline = lastSavedProfile.current;
+    lastSavedProfile.current = { sections: editable_profile.sections, tabs: editable_profile.tabs };
+    setEditableProfile((prevProfile) =>
+      isEqual(prevProfile.sections, previousBaseline.sections) && isEqual(prevProfile.tabs, previousBaseline.tabs)
+        ? editable_profile
+        : prevProfile,
+    );
+  }, [editable_profile]);
+  const handleProfileEditorChange = React.useCallback((updates: ProfileEditorState & { selectedTabIndex: number }) => {
+    setSelectedProfilePageIndex(updates.selectedTabIndex);
+    setEditableProfile((prevProfile) =>
+      isEqual(prevProfile.sections, updates.sections) && isEqual(prevProfile.tabs, updates.tabs)
+        ? prevProfile
+        : { ...prevProfile, ...updates },
+    );
+  }, []);
+  const previewTabIndex = Math.min(selectedProfilePageIndex, Math.max(editableProfile.tabs.length - 1, 0));
+  const selectedPreviewSectionIds = React.useMemo(
+    () => new Set(editableProfile.tabs[previewTabIndex]?.sections ?? []),
+    [editableProfile.tabs, previewTabIndex],
+  );
+  const previewSectionCount = editableProfile.sections.filter((section) =>
+    selectedPreviewSectionIds.has(section.id),
+  ).length;
 
-  const profileSettings = form.data;
-  const updateProfileSettings = (newSettings: Partial<ProfileSettings>) =>
-    form.setData({ ...form.data, ...newSettings });
+  const [profileSettings, setProfileSettings] = React.useState(profile_settings);
+  const lastSavedSettings = React.useRef(profile_settings);
+  React.useEffect(() => {
+    const previousBaseline = lastSavedSettings.current;
+    lastSavedSettings.current = profile_settings;
+    setProfileSettings((prevSettings) => (isEqual(prevSettings, previousBaseline) ? profile_settings : prevSettings));
+  }, [profile_settings]);
+  const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
+    setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
 
   const uid = React.useId();
 
-  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !form.processing;
+  const [isSaving, setIsSaving] = React.useState(false);
+  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
+  const isDirty =
+    !isEqual(profileSettings, lastSavedSettings.current) ||
+    !isEqual(editableProfile.sections, lastSavedProfile.current.sections) ||
+    !isEqual(editableProfile.tabs, lastSavedProfile.current.tabs);
+  const canSave = canUpdate && isDirty;
 
-  const handleSave = () => {
-    form.transform((data) => {
-      const { background_color, highlight_color, font, profile_picture_blob_id, ...user } = data;
-      return {
-        profile_picture_blob_id,
-        user,
-        seller_profile: { background_color, highlight_color, font },
-      };
+  const isDirtyRef = React.useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  React.useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    const removeInertiaListener = router.on("before", (event) => {
+      if (!isDirtyRef.current || event.detail.visit.method !== "get") return;
+      // eslint-disable-next-line no-alert
+      if (!window.confirm("You have unsaved changes that will be lost if you leave this page. Leave anyway?"))
+        event.preventDefault();
     });
-    form.put(Routes.settings_profile_path(), {
-      preserveScroll: true,
-    });
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      removeInertiaListener();
+    };
+  }, []);
+
+  const save = async (): Promise<boolean> => {
+    if (isSaving) return false;
+    setIsSaving(true);
+    const settings = profileSettings;
+    const { sections, tabs } = editableProfile;
+    // Only submit pages/sections when they actually changed. A save that left them untouched
+    // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
+    // prune sections another tab/device added in the meantime. When they did change, profileVersion
+    // lets the server reject the save if the layout changed elsewhere since this editor loaded.
+    const profileChanged =
+      !isEqual(sections, lastSavedProfile.current.sections) || !isEqual(tabs, lastSavedProfile.current.tabs);
+    try {
+      await saveProfileSettings({
+        ...settings,
+        ...(profileChanged ? { tabs, sections, profileVersion: profile_version } : {}),
+      });
+      lastSavedSettings.current = settings;
+      lastSavedProfile.current = { sections, tabs };
+      isDirtyRef.current = false;
+      await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
+      showAlert("Changes saved!", "success");
+      return true;
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const profileColors = currentSeller
+    ? {
+        "--accent": hexToRgb(currentSeller.profileHighlightColor),
+        "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+      }
+    : {};
+
+  const fontUrl =
+    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
+      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
+      : null;
 
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
@@ -87,48 +178,23 @@ export default function SettingsPage() {
     }
   });
 
-  const subdomain = `${profileSettings.username}.${rootDomain}`;
-
   return (
-    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>
-      <Head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {FONT_CHOICES.filter((font) => font !== "ABC Favorit").map((font) => (
-          <link
-            rel="stylesheet"
-            href={`https://fonts.googleapis.com/css2?family=${font}:wght@400;600&display=swap`}
-            key={font}
-          />
-        ))}
-      </Head>
+    <>
+      <PageHeader
+        className="sticky-top"
+        title="Profile"
+        actions={
+          <Button color="accent" onClick={() => void save()} disabled={!canSave}>
+            Update profile
+          </Button>
+        }
+      />
       <WithPreviewSidebar>
-        <form>
+        <div>
           <section className="grid gap-8 p-4! md:p-8!">
             <header>
-              <h2>Profile</h2>
+              <h2>About you</h2>
             </header>
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-username`}>Username</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-username`}
-                type="text"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                disabled={!loggedInUser?.policies.settings_profile.update_username}
-                value={profileSettings.username}
-                onChange={(evt) =>
-                  updateProfileSettings({ username: evt.target.value.replace(/[^a-z0-9]/giu, "").toLowerCase() })
-                }
-              />
-              <FieldsetDescription>
-                View your profile at: <a href={`${scheme}://${subdomain}`}>{subdomain}</a>
-              </FieldsetDescription>
-            </Fieldset>
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-name`}>Name</Label>
@@ -151,17 +217,16 @@ export default function SettingsPage() {
               <Textarea
                 id={`${uid}-bio`}
                 value={profileSettings.bio ?? ""}
+                disabled={!canUpdate}
                 onChange={(e) => updateProfileSettings({ bio: e.target.value })}
               />
             </Fieldset>
             <LogoInput
               logoUrl={creatorProfile.avatar_url}
               onChange={(blob) => {
-                if (blob) {
-                  updateCreatorProfile({
-                    avatar_url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-                  });
-                }
+                updateCreatorProfile({
+                  avatar_url: blob ? Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) : "",
+                });
                 updateProfileSettings({ profile_picture_blob_id: blob?.signedId ?? null });
               }}
               disabled={!canUpdate}
@@ -189,83 +254,49 @@ export default function SettingsPage() {
               </Fieldset>
             ) : null}
           </section>
-          <section className="grid gap-8 border-t border-border p-4 md:p-8">
-            <header className="grid content-start gap-3">
-              <h2>Design</h2>
-            </header>
-            <Fieldset>
-              <FieldsetTitle>Font</FieldsetTitle>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
-                {FONT_CHOICES.map((font) => {
-                  const isSelected = font === profileSettings.font;
-                  return (
-                    <Button
-                      role="radio"
-                      key={font}
-                      aria-checked={isSelected}
-                      onClick={() => updateProfileSettings({ font })}
-                      style={{ fontFamily: font === "ABC Favorit" ? undefined : font }}
-                      disabled={!canUpdate}
-                      className={classNames(
-                        "items-start! justify-start! gap-3! text-left transition-transform!",
-                        "hover:translate-x-0! hover:translate-y-0!",
-                        isSelected && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-                      )}
-                    >
-                      <FontFamily className="size-5" />
-                      <div>
-                        <h4 className="font-bold">{font}</h4>
-                        {FONT_DESCRIPTIONS[font]}
-                      </div>
-                    </Button>
-                  );
-                })}
-              </div>
-            </Fieldset>
-            <div className="flex gap-4">
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}-backgroundColor`}>Background color</Label>
-                </FieldsetTitle>
-                <ColorPicker
-                  id={`${uid}-backgroundColor`}
-                  value={profileSettings.background_color}
-                  onChange={(evt) => updateProfileSettings({ background_color: evt.target.value })}
-                  disabled={!canUpdate}
-                />
-              </Fieldset>
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}-highlightColor`}>Highlight color</Label>
-                </FieldsetTitle>
-                <ColorPicker
-                  id={`${uid}-highlightColor`}
-                  value={profileSettings.highlight_color}
-                  onChange={(evt) => updateProfileSettings({ highlight_color: evt.target.value })}
-                  disabled={!canUpdate}
-                />
-              </Fieldset>
-            </div>
+          <section aria-label="Profile section editor">
+            <ProfileSectionsForm
+              {...editableProfile}
+              creator_profile={creatorProfile}
+              bio={profileSettings.bio}
+              onChange={handleProfileEditorChange}
+              disabled={!canUpdate}
+            />
           </section>
-        </form>
+        </div>
         <PreviewSidebar
-          previewLink={(props) => (
-            <Button asChild>
-              <a {...props} href={Routes.root_url({ host: creatorProfile.subdomain })} target="_blank" rel="noreferrer">
-                View profile
-              </a>
-            </Button>
-          )}
+          previewLink={(props) => {
+            const profileUrl = Routes.root_url({ host: creatorProfile.subdomain });
+            return (
+              <NavigationButton
+                {...props}
+                size="icon"
+                disabled={isSaving}
+                href={profileUrl}
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  // Persist pending edits before previewing, but only when there's something to save -
+                  // settings (name/bio/avatar) are sent on every save with no freshness check, so an
+                  // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
+                  // Open only after a successful save so a failed save doesn't surface a stale preview.
+                  const openProfile = () => window.open(profileUrl, "_blank");
+                  if (canSave)
+                    void save().then((saved) => {
+                      if (saved) openProfile();
+                    });
+                  else openProfile();
+                }}
+              />
+            );
+          }}
         >
           <Preview
-            scaleFactor={0.35}
+            scaleFactor={0.4}
             style={{
               border: "var(--border)",
-              fontFamily: profileSettings.font === "ABC Favorit" ? undefined : profileSettings.font,
-              "--accent": hexToRgb(profileSettings.highlight_color),
-              "--contrast-accent": hexToRgb(getContrastColor(profileSettings.highlight_color)),
-              "--filled": hexToRgb(profileSettings.background_color),
-              "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
+              borderRadius: "var(--border-radius-2)",
+              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+              ...profileColors,
               "--primary": "var(--color)",
               "--body-bg": "rgb(var(--filled))",
               "--contrast-primary": "var(--filled)",
@@ -284,14 +315,27 @@ export default function SettingsPage() {
               color: "rgb(var(--color))",
             }}
           >
-            <Profile
-              creator_profile={creatorProfile}
-              {...(() => ({ profile_settings, settings_pages, ...profileProps }))()}
-              bio={profileSettings.bio}
-            />
+            {fontUrl ? (
+              <>
+                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                <link rel="stylesheet" href={fontUrl} />
+              </>
+            ) : null}
+            <div inert>
+              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+                <EditProfile
+                  {...editableProfile}
+                  creator_profile={previewCreatorProfile}
+                  bio={profileSettings.bio}
+                  controls={false}
+                  selectedTabIndex={previewTabIndex}
+                />
+              </ProfileLayout>
+            </div>
           </Preview>
         </PreviewSidebar>
       </WithPreviewSidebar>
-    </SettingsLayout>
+    </>
   );
 }

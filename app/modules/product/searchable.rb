@@ -156,7 +156,7 @@ module Product::Searchable
   class_methods do
     def search_options(params)
       search_options = Elasticsearch::DSL::Search.search do
-        size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE)
+        size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE).to_i
         from (params[:from].to_i - 1).clamp(0, MAX_RESULT_WINDOW - size)
         _source false
         if params[:track_total_hits]
@@ -342,7 +342,7 @@ module Product::Searchable
           end
 
           # In the event of a tie, sort by newest. Don't sort purchases, since they're already sorted.
-          by :created_at, order: "desc" unless params[:section] && params[:sort] == ProductSortKey::PAGE_LAYOUT
+          by :created_at, order: "desc" unless (params[:section] || params[:ids].present?) && params[:sort] == ProductSortKey::PAGE_LAYOUT
         end
 
         aggregation "tags.keyword" do

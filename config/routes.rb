@@ -19,6 +19,7 @@ Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
+  get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"
 
   use_doorkeeper do
@@ -79,6 +80,12 @@ Rails.application.routes.draw do
           put "disable"
           put "enable"
           post "preview_custom_html"
+        end
+      end
+      resources :emails, only: [:index, :show, :create, :destroy] do
+        member do
+          post :preview
+          post :send, action: :send_email
         end
       end
       post "sales/exports", to: "sales#export"
@@ -485,6 +492,8 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
+      post "login/passkey/options", to: "logins/passkeys#options", as: :login_passkey_options
+      post "login/passkey", to: "logins/passkeys#create", as: :login_passkey
       # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
       get "logout", to: "logins#destroy"
       delete "logout", to: "logins#destroy"
@@ -582,7 +591,12 @@ Rails.application.routes.draw do
         post :confirm
         post :regenerate_recovery_codes
       end
-      resource :profile, only: %i[show update], controller: "profile"
+      resources :passkeys, only: %i[create update destroy], controller: "passkeys" do
+        collection do
+          post :registration_options
+        end
+      end
+      get "profile", as: :profile, to: redirect { |_params, request| "/profile?#{request.query_string}".chomp("?") }
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
       resource :billing, only: %i[show update], controller: "billing"
@@ -618,6 +632,10 @@ Rails.application.routes.draw do
       end
       resource :dismiss_ai_product_generation_promo, only: [:create]
     end
+    resource :profile, only: %i[show update], controller: "settings/profile" do
+      resources :products, only: :show, controller: "settings/profile/products"
+    end
+    resources :profile_sections, only: [:create, :update, :destroy]
 
     namespace :checkout do
       resources :discounts, only: %i[index create update destroy] do
@@ -1126,7 +1144,8 @@ Rails.application.routes.draw do
     get "/secure_url_redirect", to: "secure_redirect#new", as: :secure_url_redirect
     post "/secure_url_redirect", to: "secure_redirect#create"
 
-    # TODO (chris): review and replace usage of routes below with UserCustomDomainConstraint routes
+    # Root-domain profile routes. Subdomain and custom-domain equivalents live in UserCustomDomainConstraint below.
+    get "/:username/edit", to: "users#edit", as: nil
     get "/:username", to: "users#show", as: "user"
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
@@ -1216,6 +1235,7 @@ Rails.application.routes.draw do
     get "/subscribe", to: "users#subscribe", as: :custom_domain_subscribe
     get "/follow", to: redirect("/subscribe")
     get "/coffee", to: "users#coffee", as: :custom_domain_coffee
+    get "/edit", to: "users#edit", as: nil
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :custom_domain_url_redirect_expired_page
@@ -1262,12 +1282,6 @@ Rails.application.routes.draw do
       end
     end
 
-    namespace :settings do
-      resource :profile, only: %i[update], controller: "profile" do
-        resources :products, only: :show, controller: "profile/products"
-      end
-    end
-
     resource :follow, controller: "followers", only: :create do
       member do
         get "/:id/cancel", to: "followers#cancel"
@@ -1288,8 +1302,6 @@ Rails.application.routes.draw do
       resources :products, only: [:create, :destroy, :index], controller: "wishlists/products"
       resource :followers, only: [:create, :destroy], controller: "wishlists/followers"
     end
-
-    resources :profile_sections, only: [:create, :update, :destroy]
 
     put "/product_reviews/set", to: "product_reviews#set", format: :json
     resources :product_reviews, only: [:index, :show]

@@ -32,7 +32,6 @@ class Api::V2::BaseController < ApplicationController
 
     # TODO we should return status code 404 Not Found when object is not found and 422 Unprocessable Entity when it's unable to be modified.
     # There's a (small) chance this will break existing integrations, but should be improved in the next version of the API.
-    # https://gumroad.slack.com/archives/C5Z7LG6Q1/p1602496811465200
     def error_with_object(object_name, object)
       message = if object.present?
         if object.respond_to?(:errors) && object.errors.present?

@@ -7,7 +7,7 @@ describe MillionDollarMilestoneCheckWorker do
     let(:seller) { create(:named_seller) }
     let(:product) { create(:product, user: seller) }
 
-    it "sends Slack notification if million dollar milestone is reached with no compliance info" do
+    it "sends notification if million dollar milestone is reached with no compliance info" do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       allow_any_instance_of(User).to receive(:alive_user_compliance_info).and_return(nil)
       create(:purchase, seller:, link: product, created_at: 15.days.ago)
@@ -21,7 +21,7 @@ describe MillionDollarMilestoneCheckWorker do
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
     end
 
-    it "sends Slack notification if million dollar milestone is reached with compliance info" do
+    it "sends notification if million dollar milestone is reached with compliance info" do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       compliance_info = instance_double(
         "UserComplianceInfo",
@@ -52,7 +52,7 @@ describe MillionDollarMilestoneCheckWorker do
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
     end
 
-    it "does not send Slack notification if million dollar milestone is not reached" do
+    it "does not send notification if million dollar milestone is not reached" do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(999_999)
       create(:purchase, seller:, link: product, created_at: 15.days.ago)
 
@@ -61,7 +61,7 @@ describe MillionDollarMilestoneCheckWorker do
       expect(InternalNotificationWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
     end
 
-    it "does not send Slack notification if million dollar milestone is reached but announcement has already been " \
+    it "does not send notification if million dollar milestone is reached but announcement has already been " \
        "sent" do
       seller.update!(million_dollar_announcement_sent: true)
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
@@ -104,7 +104,7 @@ describe MillionDollarMilestoneCheckWorker do
       allow_any_instance_of(User).to receive(:update).and_return(false)
       create(:purchase, seller:, link: product, created_at: 15.days.ago)
 
-      expect(ErrorNotifier).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: seller.id)
+      expect(ErrorNotifier).to receive(:notify).with("Failed to send notification for million dollar milestone", user_id: seller.id)
 
       described_class.new.perform
     end
@@ -118,7 +118,7 @@ describe MillionDollarMilestoneCheckWorker do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       allow_any_instance_of(User).to receive(:update).and_return(false)
 
-      expect(ErrorNotifier).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: anything).twice
+      expect(ErrorNotifier).to receive(:notify).with("Failed to send notification for million dollar milestone", user_id: anything).twice
 
       described_class.new.perform
     end

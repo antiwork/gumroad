@@ -4,7 +4,7 @@
 # account, into Stripe managed accounts. Transfers should be performed
 # using the functions on this account rather than directly creating
 # Stripe::Transfer objects, since transfers created here are logged to
-# Slack rooms with the information needed to be able to track special
+# chat rooms with the information needed to be able to track special
 # case transfers.
 module StripeTransferInternallyToCreator
   # Public: Creates a Stripe transfer that may or may not be attached to a charge.

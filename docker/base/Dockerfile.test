@@ -33,6 +33,7 @@ RUN sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.li
     locales \
     netcat \
     pdftk \
+    qpdf \
     screen \
     vim \
     xauth \

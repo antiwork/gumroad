@@ -161,27 +161,42 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(flash[:notice]).to eq("Thanks! You're all set.")
     end
 
-    describe "US outlying area rejection (issue #394)" do
+    describe "US outlying area handling (issue #394)" do
       def expect_territory_rejection_error
         expect(session[:inertia_errors][:base]).to include(
-          a_string_matching(/US outlying areas \(Puerto Rico, Guam, US Virgin Islands, etc\.\) are not valid compliance countries/)
+          a_string_matching(/Puerto Rico is not a valid compliance country/)
         )
       end
 
-      %w[AS GU MP PR UM VI].each do |territory|
-        it "rejects updated_country_code=#{territory}" do
-          put :update, params: { user: params.merge(updated_country_code: territory) }
-          expect_territory_rejection_error
-        end
+      it "rejects updated_country_code=PR" do
+        put :update, params: { user: params.merge(updated_country_code: "PR") }
+        expect_territory_rejection_error
+      end
 
-        it "rejects user[country]=#{territory} via the compliance update" do
+      it "rejects user[country]=PR via the compliance update" do
+        put :update, params: { user: params.merge(country: "PR", is_business: true) }
+        expect_territory_rejection_error
+      end
+
+      it "rejects user[business_country]=PR via the compliance update" do
+        put :update, params: { user: params.merge(business_country: "PR", is_business: true) }
+        expect_territory_rejection_error
+      end
+
+      %w[AS GU MP UM VI].each do |territory|
+        it "allows user[country]=#{territory} because it is a valid PayPal payout country" do
           put :update, params: { user: params.merge(country: territory, is_business: true) }
-          expect_territory_rejection_error
+          expect(session[:inertia_errors][:base]).to be_blank if session[:inertia_errors].present?
+          expect(session.dig(:inertia_errors, :base) || []).not_to include(
+            a_string_matching(/not a valid compliance country/)
+          )
         end
 
-        it "rejects user[business_country]=#{territory} via the compliance update" do
+        it "allows user[business_country]=#{territory} via the compliance update" do
           put :update, params: { user: params.merge(business_country: territory, is_business: true) }
-          expect_territory_rejection_error
+          expect(session.dig(:inertia_errors, :base) || []).not_to include(
+            a_string_matching(/not a valid compliance country/)
+          )
         end
       end
 
@@ -1715,12 +1730,25 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
 
       describe "US outlying areas" do
-        %w[AS GU MP PR UM VI].each do |territory|
-          it "rejects #{territory} so the catch-22 in issue #394 cannot recur via direct POST" do
-            expect do
-              post :set_country, params: params.merge(country: territory), as: :json
-            end.not_to change { UserComplianceInfo.count }
-            expect(response).to be_forbidden
+        it "rejects PR so the catch-22 in issue #394 cannot recur via direct POST (PR is a US state)" do
+          expect do
+            post :set_country, params: params.merge(country: "PR"), as: :json
+          end.not_to change { UserComplianceInfo.count }
+          expect(response).to be_forbidden
+        end
+
+        {
+          "GU" => "Guam",
+          "VI" => "Virgin Islands, U.S.",
+          "AS" => "American Samoa",
+          "MP" => "Northern Mariana Islands",
+          "UM" => "United States Minor Outlying Islands",
+        }.each do |code, name|
+          it "allows #{code} because it routes to PayPal payouts" do
+            post :set_country, params: params.merge(country: code), as: :json
+            expect(response).to be_successful
+            user.reload
+            expect(user.fetch_or_build_user_compliance_info.country).to eq(name)
           end
         end
       end

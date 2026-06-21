@@ -519,7 +519,7 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "acquires a row lock on the cart to prevent deadlocks" do
-        cart = create(:cart, user: seller)
+        create(:cart, user: seller)
 
         expect_any_instance_of(Cart).to receive(:lock!).and_call_original
 

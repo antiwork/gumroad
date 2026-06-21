@@ -273,6 +273,51 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "POST /settings/passkeys registration throttles" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "shares one registration-options throttle bucket across formatted route variants" do
+      user = create(:user)
+
+      request_for = lambda do |path|
+        env = Rack::MockRequest.env_for(path, method: "POST", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.80")
+        env["warden"] = double(user:)
+        Rack::Attack::Request.new(env)
+      end
+
+      travel_to(Time.current) do
+        10.times do |i|
+          request = request_for.call(i.even? ? "/settings/passkeys/registration_options" : "/settings/passkeys/registration_options.json")
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/settings/passkeys/registration_options.xml"))).to be(true)
+      end
+    end
+
+    it "shares one credential-create throttle bucket across formatted route variants" do
+      user = create(:user)
+
+      request_for = lambda do |path|
+        env = Rack::MockRequest.env_for(path, method: "POST", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.81")
+        env["warden"] = double(user:)
+        Rack::Attack::Request.new(env)
+      end
+
+      travel_to(Time.current) do
+        10.times do |i|
+          request = request_for.call(i.even? ? "/settings/passkeys" : "/settings/passkeys.json")
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/settings/passkeys.xml"))).to be(true)
+      end
+    end
+  end
+
   describe "PUT /api/v2/products/:id per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

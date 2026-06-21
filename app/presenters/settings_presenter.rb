@@ -9,7 +9,6 @@ class SettingsPresenter
 
   ALL_PAGES = %w(
     main
-    profile
     team
     payments
     billing
@@ -31,7 +30,7 @@ class SettingsPresenter
       case page
       when "main", "payments", "password", "third_party_analytics", "advanced"
         Pundit.policy!(pundit_user, [:settings, page.to_sym, seller]).show?
-      when "profile", "billing"
+      when "billing"
         Pundit.policy!(pundit_user, [:settings, page.to_sym]).show?
       when "team"
         Pundit.policy!(pundit_user, [:settings, :team, seller]).show?
@@ -55,6 +54,7 @@ class SettingsPresenter
       currencies: currency_choices.map { |name, code| { name:, code: } },
       user: {
         email: seller.form_email,
+        username: seller.read_attribute(:username).to_s,
         support_email: seller.support_email,
         locale: seller.locale,
         timezone: seller.timezone,
@@ -127,12 +127,6 @@ class SettingsPresenter
     }
   end
 
-  def profile_props
-    {
-      settings_pages: pages
-    }
-  end
-
   def billing_props
     billing_detail = seller.billing_detail
     {
@@ -182,11 +176,27 @@ class SettingsPresenter
   end
 
   def password_props
+    passkeys_enabled = Feature.active?(:passkeys, seller)
+    passkeys = if passkeys_enabled
+      seller.webauthn_credentials.order(:created_at).map do |credential|
+        {
+          id: credential.external_id,
+          nickname: credential.nickname,
+          created_at: credential.created_at.iso8601,
+          last_used_at: credential.last_used_at&.iso8601,
+        }
+      end
+    else
+      []
+    end
+
     {
       require_old_password: seller.provider.blank?,
       settings_pages: pages,
       show_authenticator_app_settings: Feature.active?(:authenticator_2fa, seller),
       authenticator_app_enabled: seller.totp_enabled?,
+      show_passkeys_settings: passkeys_enabled,
+      passkeys:,
     }
   end
 

@@ -2,7 +2,8 @@
 
 module AffiliateQueryParams
   def fetch_affiliate_id(params)
-    id = (params[:affiliate_id].presence || params[:a].presence).to_i
+    raw_id = params[:affiliate_id].presence || params[:a].presence
+    id = Array.wrap(raw_id).first.to_i
     id.zero? ? nil : id
   end
 end

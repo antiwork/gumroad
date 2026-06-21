@@ -145,7 +145,7 @@ const RefLineLabel: React.FC<RefLineLabelProps> = ({
   xShift = 0,
   padX = PAD_X_TIGHT,
 }) => {
-  if (!viewBox || viewBox.x === undefined || viewBox.y === undefined) return null;
+  if (viewBox?.x === undefined || viewBox.y === undefined) return null;
   const lines = value !== undefined ? [title, value] : [title];
   const width = approxLabelWidth(lines, padX);
   const height = labelHeight(lines.length);
@@ -193,7 +193,7 @@ const PartialDashedLine: React.FC<PartialDashedLineProps> = ({
   labelHeightPx,
   fromBottom = false,
 }) => {
-  if (!viewBox || viewBox.x === undefined || viewBox.y === undefined) return null;
+  if (viewBox?.x === undefined || viewBox.y === undefined) return null;
   const top = viewBox.y - labelHeightPx + yOffset;
   const startY = fromBottom ? top + labelHeightPx : top + labelHeightPx / 2;
   const plotBottom = viewBox.y + (viewBox.height ?? 0);

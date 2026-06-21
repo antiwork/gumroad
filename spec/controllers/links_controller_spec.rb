@@ -3655,6 +3655,111 @@ describe LinksController, :vcr, inertia: true do
             expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
           end
         end
+
+        # Custom landing pages (issue #5406) hand buyer-input state to checkout
+        # purely through the URL keys the ?wanted=true flow already accepts:
+        # variant / option / quantity / price / recurrence. These exercise the
+        # consumer end of that contract end-to-end through LinksController#show,
+        # and pin the fail-open behavior the custom-HTML wrapper relies on: a
+        # page that prefills only *some* of the keys (or none) must still resolve
+        # to a valid checkout, never an error.
+        describe "buyer-input round trip (variant/option/quantity/price/recurrence)" do
+          it "resolves a variant name to its option id in the checkout redirect" do
+            product = create(:product_with_digital_versions_with_price_difference_cents, user: @user)
+            variant = product.alive_variants.find_by(name: "Untitled 2")
+
+            get :show, params: { id: product.to_param, wanted: "true", variant: "Untitled 2" }
+
+            expect(response).to be_redirect
+            query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+            expect(query_params["product"]).to eq(product.unique_permalink)
+            expect(query_params["option"]).to eq(variant.external_id)
+            # base price (100) + this variant's price_difference_cents (200)
+            expect(query_params["price"]).to eq("300")
+          end
+
+          it "passes a quantity prefill straight through to checkout" do
+            product = create(:product, user: @user, quantity_enabled: true, price_cents: 100)
+
+            get :show, params: { id: product.to_param, wanted: "true", quantity: "3" }
+
+            expect(response).to be_redirect
+            query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+            expect(query_params["quantity"]).to eq("3")
+          end
+
+          it "honors a PWYW price prefill at or above the minimum" do
+            product = create(:product, user: @user, customizable_price: true, price_cents: 100)
+
+            get :show, params: { id: product.to_param, wanted: "true", price: "9.99" }
+
+            expect(response).to be_redirect
+            query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+            # LinksController#show converts major units to cents: 9.99 -> 999.
+            # (The redirect echoes price both from the passthrough params and the
+            # resolved cart item, so parse_query may yield an array — assert the
+            # resolved value regardless of arity.)
+            expect(Array(query_params["price"])).to all(eq("999"))
+          end
+
+          it "resolves a recurrence prefill on a membership product" do
+            product = create(:membership_product_with_preset_tiered_pricing, user: @user)
+            variant = product.alive_variants.first
+
+            get :show, params: { id: product.to_param, wanted: "true", option: variant.external_id, recurrence: "monthly" }
+
+            expect(response).to be_redirect
+            query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+            expect(Array(query_params["recurrence"])).to all(eq("monthly"))
+            expect(query_params["option"]).to eq(variant.external_id)
+          end
+
+          it "redirects to a valid checkout when no selection is prefilled (fails open, never errors)" do
+            product = create(:product_with_digital_versions_with_price_difference_cents, user: @user)
+
+            get :show, params: { id: product.to_param, wanted: "true" }
+
+            # No variant/option in the URL — the flow still redirects straight to
+            # checkout (it does not 404, render an error, or demand a selection).
+            # cart_item defaults to the first in-stock option internally; checkout
+            # resolves the rest.
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            expect(redirect_url.path).to eq("/checkout")
+            query_params = Rack::Utils.parse_query(redirect_url.query)
+            expect(query_params["product"]).to eq(product.unique_permalink)
+          end
+
+          it "fills the unspecified keys with defaults when only a partial selection is prefilled" do
+            product = create(:product_with_digital_versions_with_price_difference_cents, user: @user, quantity_enabled: true)
+            variant = product.alive_variants.find_by(name: "Untitled 1")
+
+            # Only the variant is prefilled — quantity/price/recurrence are absent.
+            get :show, params: { id: product.to_param, wanted: "true", variant: "Untitled 1" }
+
+            expect(response).to be_redirect
+            query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+            expect(query_params["option"]).to eq(variant.external_id)
+            # the unspecified quantity key is simply absent — no error, checkout
+            # treats it as the default of 1
+            expect(query_params["quantity"]).to be_nil
+            # price resolves to base (100) + this variant's price_difference_cents (100)
+            expect(Array(query_params["price"])).to all(eq("200"))
+          end
+
+          it "does not resolve an unknown variant name but still redirects to a valid checkout" do
+            product = create(:product_with_digital_versions_with_price_difference_cents, user: @user)
+
+            get :show, params: { id: product.to_param, wanted: "true", variant: "Does Not Exist" }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            expect(redirect_url.path).to eq("/checkout")
+            query_params = Rack::Utils.parse_query(redirect_url.query)
+            expect(query_params["product"]).to eq(product.unique_permalink)
+            expect(query_params["option"]).to be_nil
+          end
+        end
       end
 
       context "with user signed in" do
@@ -4528,6 +4633,27 @@ describe LinksController, :vcr, inertia: true do
         expect(response.parsed_body["products"]).to eq([product_json(product, "profile")])
       end
 
+      it "searches by explicit ids when the section is not persisted yet" do
+        Link.__elasticsearch__.create_index!(force: true)
+        creator = create(:compliant_user, username: "creatordudey", name: "Creator Dudey")
+        product = create(:product, name: "Top quality weasel", user: creator)
+        other_product = create(:product, name: "First product", user: creator)
+        Link.import(force: true, refresh: true)
+
+        @recommended_by = nil
+        @on_profile = true
+
+        get :search, params: {
+          user_id: creator.external_id,
+          section_id: "0b8f3782-3a85-4f93-8e3c-2b1f5d3e8a90",
+          ids: [other_product.external_id, product.external_id].join(","),
+          sort: ProductSortKey::PAGE_LAYOUT,
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["products"]).to eq([product_json(other_product, "profile"), product_json(product, "profile")])
+      end
+
       describe "Setting and ordering" do
         before do
           Link.__elasticsearch__.create_index!(force: true)
@@ -4603,6 +4729,7 @@ describe LinksController, :vcr, inertia: true do
           get :search, params: { user_id: @creator.external_id, section_id: section.id }
           expect(response.parsed_body).to eq({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] })
         end
+
 
         it "searches only for recommendable products" do
           bad_text = "Previously-owned weasel"

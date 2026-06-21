@@ -30,6 +30,7 @@ import {
   resendPing,
   resendPost,
   resendReceipt,
+  resetLicenseUses,
   revokeAccess,
   undoRevokeAccess,
   updateCallUrl,
@@ -551,6 +552,18 @@ const CustomerDetailPage = ({
                   () => {
                     showAlert("Changes saved!", "success");
                     updateCustomer({ license: { ...license, enabled } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  },
+                )
+              }
+              onReset={() =>
+                resetLicenseUses(license.id).then(
+                  () => {
+                    showAlert("License uses reset", "success");
+                    updateCustomer({ license: { ...license, uses: 0 } });
                   },
                   (e: unknown) => {
                     assertResponseError(e);
@@ -1152,7 +1165,14 @@ const EmailSection = ({
                 className="grow"
               />
               <div className="flex w-full gap-2">
-                <Button onClick={() => { setEmail(currentEmail); setIsEditing(false); }} disabled={isLoading} className="flex-1">
+                <Button
+                  onClick={() => {
+                    setEmail(currentEmail);
+                    setIsEditing(false);
+                  }}
+                  disabled={isLoading}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
                 <Button color="primary" onClick={() => void handleSave()} disabled={isLoading} className="flex-1">
@@ -1464,13 +1484,29 @@ const OptionSection = ({
   );
 };
 
-const LicenseSection = ({ license, onSave }: { license: License; onSave: (enabled: boolean) => Promise<void> }) => {
+const LicenseSection = ({
+  license,
+  onSave,
+  onReset,
+}: {
+  license: License;
+  onSave: (enabled: boolean) => Promise<void>;
+  onReset: () => Promise<void>;
+}) => {
   const [isLoading, setIsLoading] = React.useState(false);
+  const [confirmingReset, setConfirmingReset] = React.useState(false);
 
   const handleSave = async (enabled: boolean) => {
     setIsLoading(true);
     await onSave(enabled);
     setIsLoading(false);
+  };
+
+  const handleReset = async () => {
+    setIsLoading(true);
+    await onReset();
+    setIsLoading(false);
+    setConfirmingReset(false);
   };
 
   return (
@@ -1482,13 +1518,41 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
           </header>
         </CardContent>
         <CardContent>
-          <pre className="grow">
+          <pre className="grow break-all whitespace-pre-wrap">
             <code>{license.key}</code>
           </pre>
         </CardContent>
         <CardContent>
           <h5 className="grow font-bold">Uses</h5>
           {license.uses}
+          {license.uses > 0 ? (
+            <Button
+              outline
+              disabled={isLoading}
+              onClick={() => setConfirmingReset(true)}
+              aria-label="Reset uses"
+              title="Reset uses to 0"
+            >
+              Reset
+            </Button>
+          ) : null}
+          <Modal
+            open={confirmingReset}
+            onClose={() => setConfirmingReset(false)}
+            title="Reset license uses?"
+            footer={
+              <>
+                <Button disabled={isLoading} onClick={() => setConfirmingReset(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" disabled={isLoading} onClick={() => void handleReset()}>
+                  Reset
+                </Button>
+              </>
+            }
+          >
+            <p>This sets the usage count for this license back to 0.</p>
+          </Modal>
         </CardContent>
         <CardContent>
           {license.enabled ? (

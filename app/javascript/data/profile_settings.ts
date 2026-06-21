@@ -46,17 +46,35 @@ export type WishlistsSection = Section & {
   shown_wishlists: string[];
 };
 
-export const updateProfileSettings = async (profileSettings: Partial<ProfileSettings> & { tabs?: Tab[] }) => {
-  const { background_color, highlight_color, font, profile_picture_blob_id, tabs, ...user } = profileSettings;
+export type ProfileSection =
+  | ProductsSection
+  | PostsSection
+  | RichTextSection
+  | SubscribeSection
+  | FeaturedProductSection
+  | WishlistsSection;
+
+export const updateProfileSettings = async (
+  profileSettings: Partial<ProfileSettings> & {
+    tabs?: Tab[];
+    sections?: ProfileSection[];
+    profileVersion?: string | null;
+  },
+) => {
+  const { profile_picture_blob_id, tabs, sections, profileVersion, ...user } = profileSettings;
   const response = await request({
     method: "PUT",
-    url: Routes.settings_profile_path(),
+    url: Routes.profile_path(),
     accept: "json",
     data: {
       user,
-      seller_profile: { background_color, highlight_color, font },
       profile_picture_blob_id,
-      tabs,
+      // Omit pages/sections entirely when the caller didn't pass them, so a settings-only save
+      // doesn't replace (and prune) the server's section list. When they are sent, profile_version
+      // lets the server reject the write if the layout changed elsewhere since this editor loaded.
+      ...(tabs !== undefined ? { tabs } : {}),
+      ...(sections !== undefined ? { sections } : {}),
+      ...(profileVersion !== undefined ? { profile_version: profileVersion } : {}),
     },
   });
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
@@ -66,7 +84,7 @@ export const updateProfileSettings = async (profileSettings: Partial<ProfileSett
 export const getProduct = async (id: string) => {
   const response = await request({
     method: "GET",
-    url: Routes.settings_profile_product_path(id),
+    url: Routes.profile_product_path(id),
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();

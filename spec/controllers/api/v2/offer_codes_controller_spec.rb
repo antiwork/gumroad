@@ -118,6 +118,37 @@ describe Api::V2::OfferCodesController do
         expect(@product.offer_codes.alive.first.currency_type).to eq @product.price_currency_type
       end
 
+      it "creates a cents offer code with a minimum_amount_cents threshold" do
+        post @action, params: @params.merge(offer_type: "cents", minimum_amount_cents: 5000)
+
+        expect(@product.reload.offer_codes.alive.count).to eq 1
+        offer_code = @product.offer_codes.alive.first
+        expect(offer_code.amount_cents).to eq @new_offer_code_params[:amount_off]
+        expect(offer_code.minimum_amount_cents).to eq 5000
+      end
+
+      it "creates a percent offer code with a minimum_amount_cents threshold" do
+        post @action, params: @params.merge(offer_type: "percent", minimum_amount_cents: 5000)
+
+        expect(@product.reload.offer_codes.alive.count).to eq 1
+        offer_code = @product.offer_codes.alive.first
+        expect(offer_code.amount_percentage).to eq @new_offer_code_params[:amount_off]
+        expect(offer_code.minimum_amount_cents).to eq 5000
+      end
+
+      it "leaves minimum_amount_cents nil when not provided" do
+        post @action, params: @params.merge(offer_type: "cents")
+
+        expect(@product.reload.offer_codes.alive.first.minimum_amount_cents).to be(nil)
+      end
+
+      it "returns minimum_amount_cents in the response when set" do
+        post @action, params: @params.merge(offer_type: "cents", minimum_amount_cents: 5000)
+
+        result = response.parsed_body.deep_symbolize_keys
+        expect(result[:offer_code][:minimum_amount_cents]).to eq(5000)
+      end
+
       it "creates a percent offer code by ignoring amount_cents and using amount_off" do
         post @action, params: @params.merge(offer_type: "percent", amount_cents: 50)
 
@@ -240,6 +271,13 @@ describe Api::V2::OfferCodesController do
         put @action, params: @params
         expect(@product.reload.offer_codes.alive.count).to eq(1)
         expect(@product.offer_codes.alive.first.max_purchase_count).to eq(@new_offer_code_params[:max_purchase_count])
+      end
+
+      it "updates offer code minimum_amount_cents" do
+        put @action, params: @params.merge(minimum_amount_cents: 5000)
+
+        expect(@product.reload.offer_codes.alive.count).to eq(1)
+        expect(@product.offer_codes.alive.first.minimum_amount_cents).to eq(5000)
       end
 
       it "returns the right response" do

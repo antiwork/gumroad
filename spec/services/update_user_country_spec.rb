@@ -87,9 +87,9 @@ describe UpdateUserCountry do
         old_compliance_info = @user.alive_user_compliance_info
         expect(old_compliance_info.country).to eq("Japan")
 
-        expect {
+        expect do
           UpdateUserCountry.new(new_country_code: "GB", user: @user).process
-        }.not_to raise_error
+        end.not_to raise_error
 
         expect(old_compliance_info.reload.deleted?).to eq(true)
       end

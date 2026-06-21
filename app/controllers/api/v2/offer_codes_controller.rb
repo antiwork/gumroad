@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::OfferCodesController < Api::V2::BaseController
-  before_action(only: [:index, :show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:index, :show]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :check_offer_code_params, only: [:create]
   before_action :fetch_product
@@ -17,12 +17,14 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
       OfferCode.new(code: params[:name],
                     universal: params[:universal] == "true",
                     amount_percentage: params[:amount_off].to_i,
-                    max_purchase_count: params[:max_purchase_count])
+                    max_purchase_count: params[:max_purchase_count],
+                    minimum_amount_cents: params[:minimum_amount_cents].presence)
     else
       OfferCode.new(code: params[:name],
                     universal: params[:universal] == "true",
                     amount_cents: params[:amount_cents].presence || params[:amount_off].presence,
                     max_purchase_count: params[:max_purchase_count],
+                    minimum_amount_cents: params[:minimum_amount_cents].presence,
                     currency_type: @product.price_currency_type)
     end
 
@@ -59,7 +61,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
 
   private
     def permitted_params
-      params.permit(:max_purchase_count)
+      params.permit(:max_purchase_count, :minimum_amount_cents)
     end
 
     def check_offer_code_params

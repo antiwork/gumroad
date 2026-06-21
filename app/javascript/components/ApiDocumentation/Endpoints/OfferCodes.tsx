@@ -111,6 +111,10 @@ export const CreateOfferCode = () => (
       <ApiParameter name="amount_off" />
       <ApiParameter name="offer_type" description='(optional, "cents" or "percent") Default: "cents"' />
       <ApiParameter name="max_purchase_count" description="(optional)" />
+      <ApiParameter
+        name="minimum_amount_cents"
+        description="(optional) Minimum order total in cents required for the offer code to apply"
+      />
       <ApiParameter name="universal" description="(optional, true or false) Default: false" />
     </ApiParameters>
     <OfferCodeResponseFields />
@@ -135,6 +139,7 @@ export const CreateOfferCode = () => (
     "name": "1OFF",
     "amount_cents": 100,
     "max_purchase_count": null,
+    "minimum_amount_cents": null,
     "times_used": 1
   }
 }`}
@@ -151,6 +156,10 @@ export const UpdateOfferCode = () => (
     <ApiParameters>
       <ApiParameter name="offer_code" />
       <ApiParameter name="max_purchase_count" />
+      <ApiParameter
+        name="minimum_amount_cents"
+        description="(optional) Minimum order total in cents required for the offer code to apply"
+      />
     </ApiParameters>
     <OfferCodeResponseFields />
     <CodeSnippet caption="cURL example">

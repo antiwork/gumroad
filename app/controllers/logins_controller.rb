@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class LoginsController < Devise::SessionsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect
+  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect, WebauthnCeremonyVerification
 
   include PageMeta::Base
 
@@ -22,13 +22,16 @@ class LoginsController < Devise::SessionsController
 
     set_meta_tag(title: "Log In")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Logins/New", props: auth_presenter.login_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
+    render inertia: "Logins/New", props: auth_presenter.login_props.merge(
+      is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?,
+      passkey_login_options: Feature.active?(:passkeys) ? build_webauthn_authentication_options : nil,
+    )
   end
 
   def create
     unless Feature.active?(:disable_login_recaptcha)
       site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
-      if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
+      if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :login)
         return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
       end
     end
@@ -48,6 +51,10 @@ class LoginsController < Devise::SessionsController
     @user.remember_me = true # Always "remember" user sessions
 
     sign_in_or_prepare_for_two_factor_auth(@user)
+
+    if user_signed_in? && @user.passkeys_enabled?
+      Rails.logger.info("passkey.password_fallback user_id=#{@user.id}")
+    end
 
     if @user.respond_to?(:pwned?) && @user.pwned?
       flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."
