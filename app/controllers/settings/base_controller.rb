@@ -31,7 +31,9 @@ class Settings::BaseController < Sellers::BaseController
     # a cookie so subsequent Inertia navigations and form submits (which drop the
     # query param) keep rendering chrome-free.
     def persist_mobile_app_web_view
-      cookies[:is_mobile_app_web_view] = { value: "true", httponly: true } if params[:display] == "mobile_app"
+      return unless params[:display] == "mobile_app" && current_api_user.present?
+
+      cookies[:is_mobile_app_web_view] = { value: "true", httponly: true }
     end
 
     def authenticate_mobile_app_web_view!
