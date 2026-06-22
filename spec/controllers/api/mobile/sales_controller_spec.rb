@@ -339,6 +339,36 @@ describe Api::Mobile::SalesController, :vcr do
     end
   end
 
+  describe "PUT variant" do
+    context "when the purchase's product has been deleted" do
+      before do
+        @purchase.update_column(:link_id, nil)
+      end
+
+      it "responds with a controlled error instead of crashing" do
+        expect do
+          put :variant, params: @params.merge(id: @purchase.external_id, variant_id: "anything")
+        end.not_to raise_error
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Could not find product")
+      end
+    end
+
+    context "with an unknown variant_id" do
+      it "responds with a controlled 404 instead of crashing" do
+        expect do
+          put :variant, params: @params.merge(id: @purchase.external_id, variant_id: "nonexistent")
+        end.not_to raise_error
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Variant not found")
+      end
+    end
+  end
+
   describe "GET missed_posts" do
     it "returns missed posts for the purchase" do
       get :missed_posts, params: @params.merge(id: @purchase.external_id)

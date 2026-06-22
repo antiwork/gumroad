@@ -70,7 +70,10 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     @purchase.city = params[:city] if params[:city].present?
     @purchase.state = params[:state] if params[:state].present?
     @purchase.zip_code = params[:zip_code] if params[:zip_code].present?
-    @purchase.country = Compliance::Countries.find_by_name(params[:country])&.common_name if params[:country].present?
+    if params[:country].present?
+      country_name = Compliance::Countries.find_by_name(params[:country])&.common_name
+      @purchase.country = country_name if country_name.present?
+    end
     @purchase.quantity = params[:quantity] if @purchase.is_multiseat_license? && params[:quantity].to_i > 0
 
     if params[:giftee_email].present?
@@ -177,6 +180,8 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def variant
+    return fetch_error("Could not find product") if @purchase.link.nil?
+
     success = Purchase::VariantUpdaterService.new(
       purchase: @purchase,
       variant_id: params[:variant_id],
@@ -187,6 +192,8 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     else
       render json: { success: false, message: "Variant not found" }, status: :not_found
     end
+  rescue ActiveRecord::RecordNotFound
+    render json: { success: false, message: "Variant not found" }, status: :not_found
   end
 
   def send_post
