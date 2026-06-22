@@ -24,7 +24,7 @@ class Settings::BaseController < Sellers::BaseController
 
   private
     def persist_mobile_app_web_view
-      return unless params[:display] == "mobile_app" && current_api_user.present?
+      return unless params[:display] == "mobile_app" && user_signed_in?
 
       session[:mobile_app_web_view] = true
     end

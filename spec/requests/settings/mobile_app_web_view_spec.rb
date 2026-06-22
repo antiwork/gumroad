@@ -125,6 +125,19 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
     end
   end
 
+  context "reloading with display=mobile_app while already signed in" do
+    it "persists the flag even though the token check is skipped" do
+      sign_in user
+
+      get settings_payments_path, params: { display: "mobile_app" }, headers: { "X-Inertia" => "true" }
+      expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
+
+      get settings_payments_path, headers: { "X-Inertia" => "true" }
+      expect(response).to be_successful
+      expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
+    end
+  end
+
   context "flag storage" do
     it "keeps the flag in the session and never sets a standalone is_mobile_app_web_view cookie" do
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }, headers: { "X-Inertia" => "true" }
