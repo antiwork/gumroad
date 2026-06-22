@@ -240,18 +240,19 @@ const CheckoutIndexPage = () => {
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const isMobile = !useIsAboveBreakpoint("sm");
-  const cartProductIds = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
+  const cartProductIdsKey = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
+  const cartProductIds = React.useMemo(() => cartProductIdsKey.split(",").filter(Boolean), [cartProductIdsKey]);
   React.useEffect(() => {
-    if (state.status.type !== "input" || !cartProductIds.length) return;
+    if (state.status.type !== "input" || cartProductIds.length === 0) return;
     router.reload({
       data: {
-        cart_product_ids: cartForm.data.cart.items.map(({ product }) => product.id),
+        cart_product_ids: cartProductIds,
         limit: isMobile ? 2 : 6,
       },
       preserveUrl: true,
       only: ["recommended_products"],
     });
-  }, [state.status.type, isMobile, cartForm.data.cart.items]);
+  }, [state.status.type, isMobile, cartProductIds]);
 
   const completedOfferIds = React.useRef(new Set()).current;
   const [offers, setOffers] = React.useState<
