@@ -54,12 +54,13 @@ push_image() {
   done
 }
 
-# Compiled frontend output produced by the staging precompile (no sprockets):
-# vite build + manifest, widget bundles, and the pages Tailwind stylesheet.
+# Compiled frontend output produced by `assets:precompile` (no sprockets):
+# the vite build + manifest, widget bundles, and the pages Tailwind stylesheet.
 ASSET_OUTPUT_PATHS="public/vite public/js public/pages-tailwind.css"
 
-get_app_name() {
-  echo "$1" | tr -d '\n' | tr -c '[:alnum:]' '-' | tr '[:upper:]' '[:lower:]' | sed "s/^deploy-//" | cut -c1-32 | sed 's/[^[:alnum:]]$//'
+# Sanitized branch name, safe to use as part of an image tag.
+branch_slug() {
+  echo "$BUILDKITE_BRANCH" | tr -c '[:alnum:]' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-100 | sed 's/-*$//'
 }
 
 # Most recent commit touching anything that affects the compiled assets. Stable
@@ -71,11 +72,11 @@ asset_content_tag() {
     scripts/build_pages_tailwind.mjs tsconfig.json 2>/dev/null
 }
 
-# Store the freshly compiled assets as a slim cache image for next time.
-save_staging_asset_cache() {
-  local cache_image=$1 tmp cid path ok=1
+# Store the freshly compiled assets for <target> env as a slim cache image.
+save_asset_cache() {
+  local target=$1 cache_image=$2 tmp cid path ok=1
   tmp=$(mktemp -d) || return 1
-  cid=$(docker create "$WEB_REPO:staging-$WEB_TAG") || { rm -rf "$tmp"; return 1; }
+  cid=$(docker create "$WEB_REPO:$target-$WEB_TAG") || { rm -rf "$tmp"; return 1; }
   mkdir -p "$tmp/cache/public"
   for path in $ASSET_OUTPUT_PATHS; do
     docker cp "$cid:/app/$path" "$tmp/cache/$path" 2>/dev/null || true
@@ -90,17 +91,16 @@ save_staging_asset_cache() {
 }
 
 # Overlay cached compiled assets onto the current code image and commit it as the
-# staging image, skipping the (~7 min) vite build. CUSTOM_DOMAIN is baked into the
-# bundle, so the cache is keyed per branch and reuse here is for the same branch.
-overlay_staging_assets() {
-  local cache_image=$1 tmp ccid wcid ok=1
+# <target> image, skipping the (~7 min) vite build.
+overlay_assets() {
+  local target=$1 cache_image=$2 tmp ccid wcid ok=1
   docker pull "$cache_image" >/dev/null 2>&1 || return 1
   tmp=$(mktemp -d) || return 1
   ccid=$(docker create "$cache_image") || { rm -rf "$tmp"; return 1; }
   if docker cp "$ccid:/cache/public" "$tmp/public" 2>/dev/null; then
     wcid=$(docker create "$WEB_REPO:web-$WEB_TAG") || wcid=""
     if [[ -n "$wcid" ]] && docker cp "$tmp/public/." "$wcid:/app/public/" 2>/dev/null \
-      && docker commit "$wcid" "$WEB_REPO:staging-$WEB_TAG" >/dev/null 2>&1; then
+      && docker commit "$wcid" "$WEB_REPO:$target-$WEB_TAG" >/dev/null 2>&1; then
       ok=0
     fi
     [[ -n "$wcid" ]] && docker rm "$wcid" >/dev/null 2>&1 || true
@@ -110,63 +110,60 @@ overlay_staging_assets() {
   return $ok
 }
 
+# Reuse cached compiled assets when the frontend is unchanged, otherwise compile.
+# Keyed per branch because the bundle can bake in branch-specific values
+# (e.g. CUSTOM_DOMAIN on preview apps); each env keeps its own cache.
+compile_assets_for_env() {
+  local target=$1 master_key=$2
+  local asset_key cache_image compiled_from_cache=false
+  local master_key_var="RAILS_$(printf '%s' "$target" | tr '[:lower:]' '[:upper:]')_MASTER_KEY"
+  asset_key=$(asset_content_tag || true)
+  cache_image="$WEB_REPO:${target}-assets-${asset_key}-$(branch_slug)"
+
+  if [[ -n "$asset_key" ]] && docker manifest inspect "$cache_image" > /dev/null 2>&1; then
+    logger "Asset cache hit ($cache_image); overlaying onto web-$WEB_TAG and skipping the vite build"
+    if overlay_assets "$target" "$cache_image"; then
+      compiled_from_cache=true
+    else
+      logger "Asset overlay failed; falling back to a full compile"
+    fi
+  else
+    logger "Asset cache miss ($cache_image)"
+  fi
+
+  if [[ "$compiled_from_cache" != true ]]; then
+    logger "Building $target assets"
+    docker rm "$target-assets" || :
+    env \
+      COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}_${target}" \
+      NEW_WEB_TAG="$WEB_TAG" \
+      NEW_WEB_REPO="$WEB_REPO" \
+      BUILDKITE_BRANCH="$BUILDKITE_BRANCH" \
+      GUM_AWS_ACCESS_KEY_ID="$GUM_AWS_ACCESS_KEY_ID" \
+      GUM_AWS_SECRET_ACCESS_KEY="$GUM_AWS_SECRET_ACCESS_KEY" \
+      "$master_key_var=$master_key" \
+      PUSH_ASSETS=true \
+      make "build_$target"
+
+    if [[ -n "$asset_key" ]]; then
+      save_asset_cache "$target" "$cache_image" \
+        && logger "Saved asset cache ($cache_image)" \
+        || logger "Saving asset cache failed; continuing"
+    fi
+  fi
+
+  push_image "$target" || exit 1
+}
+
 logger "Restore web image if not already loaded"
 if [[ ! $(docker images -q --filter "reference=$WEB_REPO:web-$WEB_TAG") ]]; then
   pull_web_image || exit 1
 fi
 
 if [[ $BUILDKITE_PARALLEL_JOB = 0 && $BUILDKITE_BRANCH != "main" ]]; then
-  app_name=$(get_app_name "$BUILDKITE_BRANCH")
-  asset_key=$(asset_content_tag || true)
-  asset_cache_image="$WEB_REPO:staging-assets-${asset_key}-${app_name}"
-  compiled_from_cache=false
-
-  if [[ -n "$asset_key" ]] && docker manifest inspect "$asset_cache_image" > /dev/null 2>&1; then
-    logger "Asset cache hit ($asset_cache_image); overlaying onto web-$WEB_TAG and skipping the vite build"
-    if overlay_staging_assets "$asset_cache_image"; then
-      compiled_from_cache=true
-    else
-      logger "Asset overlay failed; falling back to a full compile"
-    fi
-  else
-    logger "Asset cache miss ($asset_cache_image)"
-  fi
-
-  if [[ "$compiled_from_cache" != true ]]; then
-    logger "Building staging assets"
-    docker rm staging-assets || :
-    COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_staging \
-      NEW_WEB_TAG=$WEB_TAG \
-      NEW_WEB_REPO=$WEB_REPO \
-      BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
-      GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
-      GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
-      RAILS_STAGING_MASTER_KEY="$RAILS_STAGING_MASTER_KEY" \
-      PUSH_ASSETS=true \
-      make build_staging
-
-    if [[ -n "$asset_key" ]]; then
-      save_staging_asset_cache "$asset_cache_image" \
-        && logger "Saved asset cache ($asset_cache_image)" \
-        || logger "Saving asset cache failed; continuing"
-    fi
-  fi
-
-  push_image staging || exit 1
+  compile_assets_for_env staging "$RAILS_STAGING_MASTER_KEY"
 fi
 
 if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
-  logger "Building production assets"
-  docker rm production-assets || :
-  COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
-    NEW_WEB_TAG=$WEB_TAG \
-    NEW_WEB_REPO=$WEB_REPO \
-    BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
-    GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
-    GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
-    RAILS_PRODUCTION_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
-    PUSH_ASSETS=true \
-    make build_production
-
-  push_image production || exit 1
+  compile_assets_for_env production "$RAILS_PRODUCTION_MASTER_KEY"
 fi
