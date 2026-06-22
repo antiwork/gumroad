@@ -63,6 +63,7 @@ Rails.application.routes.draw do
       end
 
       get "/user", to: "users#show"
+      match "/user", to: "users#update", via: [:put, :patch]
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do

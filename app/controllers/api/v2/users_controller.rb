@@ -2,6 +2,7 @@
 
 class Api::V2::UsersController < Api::V2::BaseController
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger]
+  before_action(only: [:update]) { doorkeeper_authorize! :edit_profile }
 
   def show
     if params[:is_ifttt]
@@ -11,6 +12,16 @@ class Api::V2::UsersController < Api::V2::BaseController
     end
 
     success_with_object(:user, current_resource_owner)
+  end
+
+  def update
+    user = current_resource_owner
+
+    if user.update(permitted_update_params)
+      success_with_object(:user, user)
+    else
+      error_with_object(:user, user)
+    end
   end
 
   def ifttt_status
@@ -38,4 +49,9 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     success_with_object(:data, sales)
   end
+
+  private
+    def permitted_update_params
+      params.permit(:name, :bio)
+    end
 end
