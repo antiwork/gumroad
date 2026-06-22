@@ -287,5 +287,16 @@ describe StripeMerchantAccountManager do
 
       expect(note.reload).not_to be_alive
     end
+
+    it "clears the postal-code note when a business seller's corrected address is submitted and accepted on a non-forced update" do
+      note = user.add_payout_note(
+        content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+      )
+      create(:user_compliance_info_business, user:, zip_code: "10001")
+
+      described_class.update_account(user, passphrase:)
+
+      expect(note.reload).not_to be_alive
+    end
   end
 end

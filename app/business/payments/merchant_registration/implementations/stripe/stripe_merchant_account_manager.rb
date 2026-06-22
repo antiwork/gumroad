@@ -258,11 +258,12 @@ module StripeMerchantAccountManager
 
     Stripe::Account.update(stripe_account.id, diff_attributes)
 
+    person_address_submitted = false
     if user_compliance_info.is_business?
-      update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
     end
 
-    if force_address_resync || (user_compliance_info.is_individual? && address_submitted?(diff_attributes, entity_key))
+    if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
       clear_stale_postal_code_failure_notes(user)
     end
   rescue Stripe::InvalidRequestError => e
@@ -306,6 +307,7 @@ module StripeMerchantAccountManager
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
   end
 
   private_class_method
