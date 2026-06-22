@@ -123,6 +123,14 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.payouts_may_be_blocked(User.last&.id)
   end
 
+  def payout_setup_retry_exhausted_bank
+    ContactingCreatorMailer.payout_setup_retry_exhausted(User.last&.id, "bank")
+  end
+
+  def payout_setup_retry_exhausted_postal
+    ContactingCreatorMailer.payout_setup_retry_exhausted(User.last&.id, "postal")
+  end
+
   def more_kyc_needed
     ContactingCreatorMailer.more_kyc_needed(User.last&.id, %i[individual_tax_id birthday])
   end

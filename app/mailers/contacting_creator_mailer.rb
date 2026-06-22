@@ -340,6 +340,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "We need more information from you."
   end
 
+  def payout_setup_retry_exhausted(user_id, marker_type)
+    @seller = User.find(user_id)
+    return do_not_send unless @seller.account_active?
+    @marker_type = marker_type.to_s
+    @subject = @marker_type == "bank" ? "We still couldn't verify your bank account." : "We still couldn't verify your postal code."
+  end
+
   def more_kyc_needed(user_id, fields_needed = [])
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?

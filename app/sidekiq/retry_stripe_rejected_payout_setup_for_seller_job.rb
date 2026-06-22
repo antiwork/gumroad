@@ -118,6 +118,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       note.json_data["abandoned_at"] = Time.current.iso8601
       note.save!
       user.add_payout_note(content: GAVE_UP_NOTE)
-      ContactingCreatorMailer.payouts_may_be_blocked(user.id).deliver_later(queue: "critical")
+      marker_type = bank_note?(note) ? "bank" : "postal"
+      ContactingCreatorMailer.payout_setup_retry_exhausted(user.id, marker_type).deliver_later(queue: "critical")
     end
 end

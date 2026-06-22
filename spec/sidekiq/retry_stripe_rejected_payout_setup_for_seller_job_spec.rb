@@ -105,18 +105,25 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
   end
 
   describe "giving up after exhausting retries" do
-    let!(:note) { add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES }) }
-
-    it "abandons the note and notifies the seller without attempting another sync" do
+    it "abandons the note and emails the bank-tailored notice without attempting another sync" do
+      note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
       expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
 
       expect do
         described_class.new.perform(user.id)
-      end.to have_enqueued_mail(ContactingCreatorMailer, :payouts_may_be_blocked).with(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).with(user.id, "bank")
 
       note.reload
       expect(note.json_data["abandoned_at"]).to be_present
       expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::GAVE_UP_NOTE)
+    end
+
+    it "emails the postal-tailored notice when the exhausted marker is a postal-code rejection" do
+      add_note(postal_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).with(user.id, "postal")
     end
   end
 
