@@ -260,10 +260,6 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
       fetch_error("Could not find purchase") if @purchase.nil?
     end
 
-    # Blob keys are only surfaced to the mobile app via CustomerPresenter#file_details,
-    # which exposes commission files and file-type purchase custom field files attached to
-    # the seller's own sales. Authorize the blob against exactly those records so a seller
-    # cannot resolve arbitrary blobs belonging to other sellers.
     def seller_owns_blob?(blob)
       seller_sales = current_resource_owner.sales.select(:id)
 
