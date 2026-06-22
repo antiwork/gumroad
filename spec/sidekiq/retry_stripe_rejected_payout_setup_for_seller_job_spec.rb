@@ -161,6 +161,22 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
   end
 
+  describe "when the seller has connected their own Stripe account" do
+    before { allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true) }
+    let!(:note) { add_note(bank_prefix) }
+
+    it "abandons the note instead of re-enqueueing a no-op every sweep" do
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+      expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_CONNECTED_STRIPE)
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::CONNECTED_STRIPE_NOTE)
+    end
+  end
+
   describe "postal code remediation through the real Stripe update (regression for false resolve)" do
     include_context "with Stripe API stubs"
 

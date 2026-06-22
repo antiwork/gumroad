@@ -9,13 +9,20 @@ class RetryStripeRejectedPayoutSetupForSellerJob
                  "Manual follow-up is needed."
   SWITCHED_OFF_STRIPE_NOTE = "Automated Stripe payout-setup retry stopped: the seller moved to a non-Stripe payout method."
   ABANDONED_REASON_SWITCHED_OFF_STRIPE = "payout_method_switched_off_stripe"
+  CONNECTED_STRIPE_NOTE = "Automated Stripe payout-setup retry stopped: the seller connected their own Stripe account."
+  ABANDONED_REASON_CONNECTED_STRIPE = "payout_method_switched_to_connected_stripe"
 
   def perform(user_id)
     user = User.find_by(id: user_id)
-    return if user.nil? || user.suspended? || user.has_stripe_account_connected?
+    return if user.nil? || user.suspended?
+
+    if user.has_stripe_account_connected?
+      abandon_stale_notes!(user, reason: ABANDONED_REASON_CONNECTED_STRIPE, note_content: CONNECTED_STRIPE_NOTE)
+      return
+    end
 
     if user.current_payout_processor == PayoutProcessorType::PAYPAL
-      abandon_stale_notes!(user)
+      abandon_stale_notes!(user, reason: ABANDONED_REASON_SWITCHED_OFF_STRIPE, note_content: SWITCHED_OFF_STRIPE_NOTE)
       return
     end
 
@@ -56,16 +63,16 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         .find { |candidate| candidate.json_data["abandoned_at"].blank? }
     end
 
-    def abandon_stale_notes!(user)
+    def abandon_stale_notes!(user, reason:, note_content:)
       notes = payout_setup_failure_notes(user).select { |note| note.json_data["abandoned_at"].blank? }
       return if notes.empty?
 
       notes.each do |note|
         note.json_data["abandoned_at"] = Time.current.iso8601
-        note.json_data["abandoned_reason"] = ABANDONED_REASON_SWITCHED_OFF_STRIPE
+        note.json_data["abandoned_reason"] = reason
         note.save!
       end
-      user.add_payout_note(content: SWITCHED_OFF_STRIPE_NOTE)
+      user.add_payout_note(content: note_content)
     end
 
     def attempt_remediation(user, note)
