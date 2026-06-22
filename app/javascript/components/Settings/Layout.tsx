@@ -37,10 +37,11 @@ export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Prop
     if (data.type === "mobileAppSettingsSave") onSave?.();
   });
 
+  const canSave = Boolean(onSave && canUpdate);
   React.useEffect(() => {
     if (!isMobileAppWebView) return;
-    postToMobileApp({ type: "settingsCanUpdate", canUpdate: Boolean(onSave && canUpdate) });
-  }, [isMobileAppWebView, onSave, canUpdate]);
+    postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
+  }, [isMobileAppWebView, canSave]);
 
   if (isMobileAppWebView) return <div>{children}</div>;
 
