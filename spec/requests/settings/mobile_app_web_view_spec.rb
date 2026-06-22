@@ -61,7 +61,6 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
       expect(response).to have_http_status(:redirect)
       expect(response.location).to include(login_path)
 
-      # The session was not established: a follow-up request without params still bounces to login.
       get settings_payments_path
       expect(response.location).to include(login_path)
     end
@@ -85,8 +84,6 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
       expect(response).to be_successful
       expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
 
-      # Simulate an Inertia re-render after a save: same session, but the WebView's
-      # ?display=mobile_app query param is no longer present.
       get settings_payments_path, headers: { "X-Inertia" => "true" }
       expect(response).to be_successful
       expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
@@ -100,7 +97,6 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }
       expect(response).not_to be_successful
 
-      # The rejected token must not have established a web session.
       get settings_payments_path
       expect(response.location).to include(login_path)
     end
@@ -113,7 +109,6 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }
       expect(response).to have_http_status(:forbidden)
 
-      # The wrong-scope token must not have established a web session.
       get settings_payments_path
       expect(response.location).to include(login_path)
     end
@@ -131,8 +126,6 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
   end
 
   context "flag storage" do
-    # The flag lives in the session (not a standalone persistent cookie) so it is
-    # cleared by logout's session reset and can't leak into a later web-only session.
     it "keeps the flag in the session and never sets a standalone is_mobile_app_web_view cookie" do
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }, headers: { "X-Inertia" => "true" }
 
