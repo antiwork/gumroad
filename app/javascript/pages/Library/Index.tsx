@@ -333,7 +333,9 @@ export default function LibraryPage() {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   useRunOnce(() => {
-    const purchaseIds = [...url.searchParams.getAll("purchase_id[]"), ...url.searchParams.getAll("purchase_id")];
+    const purchaseIds = [
+      ...new Set([...url.searchParams.getAll("purchase_id[]"), ...url.searchParams.getAll("purchase_id")]),
+    ];
     if (purchaseIds.length === 0) return;
 
     url.searchParams.delete("purchase_id[]");

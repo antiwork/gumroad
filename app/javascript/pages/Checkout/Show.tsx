@@ -513,6 +513,7 @@ const CheckoutIndexPage = () => {
           redirectTo = "content-page";
         else if (
           !!user &&
+          user.confirmed &&
           results.every(({ result }) => result.success && result.content_url != null && !result.test_purchase_notice)
         )
           redirectTo = "library-page";
