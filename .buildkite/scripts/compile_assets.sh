@@ -63,13 +63,24 @@ branch_slug() {
   echo "$BUILDKITE_BRANCH" | tr -c '[:alnum:]' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-100 | sed 's/-*$//'
 }
 
-# Most recent commit touching anything that affects the compiled assets. Stable
-# across commits that leave the frontend untouched, so the cache can be reused.
+# Most recent commit touching anything the compiled assets are derived from.
+# This must cover every build input: the JS/TS sources; the Ruby sources that
+# js:export turns into the (gitignored) routes.js and json_schemas; the views
+# Tailwind scans; bundled images/vendor JS/currencies; and all build config.
+# Env-derived values (RAILS_ENV, CUSTOM_DOMAIN, NODE_ENV, ...) are intentionally
+# not hashed here — they are partitioned by the per-target, per-branch cache
+# image tag instead. Keep this list in sync when build inputs change.
 asset_content_tag() {
   git rev-list --abbrev-commit --abbrev=12 -1 HEAD -- \
-    app/javascript package.json package-lock.json \
+    app/javascript app/views public/images \
+    vendor/assets/javascripts config/currencies.json \
+    config/routes.rb config/routes/admin.rb config/domain.rb \
+    config/initializers/js-routes.rb lib/json_schemas \
+    lib/tasks/js_export.rake lib/tasks/vite_widget.rake lib/tasks/pages_tailwind.rake \
+    scripts/build_pages_tailwind.mjs \
     vite.config.ts vite.config.widget.ts config/vite.json \
-    scripts/build_pages_tailwind.mjs tsconfig.json 2>/dev/null
+    postcss.config.js tsconfig.json \
+    package.json package-lock.json Gemfile.lock patches 2>/dev/null
 }
 
 # Store the freshly compiled assets for <target> env as a slim cache image.
