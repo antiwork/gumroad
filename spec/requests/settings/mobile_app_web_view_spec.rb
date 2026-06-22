@@ -94,22 +94,28 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
   end
 
   context "with a revoked access_token" do
-    it "does not sign the user in via the WebView path" do
+    it "does not sign the user in and leaks no session on a follow-up request" do
       access_token.update!(revoked_at: 1.hour.ago)
 
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }
-
       expect(response).not_to be_successful
+
+      # The rejected token must not have established a web session.
+      get settings_payments_path
+      expect(response.location).to include(login_path)
     end
   end
 
   context "with an access_token that lacks the mobile_api scope" do
     let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "creator_api") }
 
-    it "is forbidden by doorkeeper and does not sign the user in" do
+    it "is forbidden by doorkeeper and leaks no session on a follow-up request" do
       get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }
-
       expect(response).to have_http_status(:forbidden)
+
+      # The wrong-scope token must not have established a web session.
+      get settings_payments_path
+      expect(response.location).to include(login_path)
     end
   end
 

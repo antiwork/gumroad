@@ -47,6 +47,12 @@ class Settings::BaseController < Sellers::BaseController
       return unless ActiveSupport::SecurityUtils.secure_compare(params[:mobile_token].to_s, Api::Mobile::BaseController::MOBILE_TOKEN)
 
       doorkeeper_authorize! :mobile_api
+      # `doorkeeper_authorize!` renders 401/403 and halts on a revoked, expired, or
+      # wrong-scope token, but `current_api_user` only checks token presence (not
+      # validity/scope). Without this guard `sign_in` would still establish a web
+      # session from a token doorkeeper just rejected.
+      return if performed?
+
       sign_in current_api_user if current_api_user.present?
     end
 end
