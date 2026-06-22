@@ -513,6 +513,7 @@ const CheckoutIndexPage = () => {
           redirectTo = "content-page";
         else if (
           !!user &&
+          user.confirmed &&
           results.every(({ result }) => result.success && result.content_url != null && !result.test_purchase_notice)
         )
           redirectTo = "library-page";
@@ -520,7 +521,7 @@ const CheckoutIndexPage = () => {
 
       for (const { result, item } of results) {
         if (!result.success) continue;
-        if (redirectTo !== "content-page") {
+        if (!redirectTo) {
           trackProductEvent(item.product.creator.id, {
             action: "purchased",
             seller_id: result.seller_id,
@@ -532,7 +533,9 @@ const CheckoutIndexPage = () => {
             valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
             quantity: result.quantity,
             tax: result.non_formatted_seller_tax_amount,
-            buyer_currency_display: item.product.buyer_currency_display,
+            ...(item.product.buyer_currency_display
+              ? { buyer_currency_display: item.product.buyer_currency_display }
+              : {}),
           });
         }
         if (result.has_third_party_analytics && !redirectTo)
@@ -561,7 +564,7 @@ const CheckoutIndexPage = () => {
       } else if (redirectTo === "library-page") {
         const purchases = results.flatMap(({ result }) => (result.success ? result.id : []));
         const libraryUrl = new URL(Routes.library_url());
-        for (const purchase of purchases) libraryUrl.searchParams.append("purchase_id", purchase);
+        for (const purchase of purchases) libraryUrl.searchParams.append("purchase_id[]", purchase);
         window.location.href = libraryUrl.toString();
       }
 

@@ -11,6 +11,9 @@ class LibraryController < Sellers::BaseController
   RESEND_CONFIRMATION_EMAIL_TIME_LIMIT = 24.hours
   private_constant :RESEND_CONFIRMATION_EMAIL_TIME_LIMIT
 
+  MAX_TRACKED_PURCHASE_ANALYTICS = 50
+  private_constant :MAX_TRACKED_PURCHASE_ANALYTICS
+
   def index
     authorize Purchase
 
@@ -21,6 +24,7 @@ class LibraryController < Sellers::BaseController
       results: purchase_results,
       creators: creator_counts,
       bundles:,
+      purchase_analytics: purchase_analytics_props,
       reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
       following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
     }
@@ -51,6 +55,19 @@ class LibraryController < Sellers::BaseController
   end
 
   private
+    def purchase_analytics_props
+      raw_ids = params[:purchase_id]
+      external_ids = (raw_ids.is_a?(Array) ? raw_ids : Array(raw_ids))
+        .select { |id| id.is_a?(String) }
+        .first(MAX_TRACKED_PURCHASE_ANALYTICS)
+      return {} if external_ids.empty?
+
+      logged_in_user.purchases.by_external_ids(external_ids).each_with_object({}) do |purchase, props|
+        analytics = PurchaseSellerAnalyticsPresenter.new(purchase).props
+        props[purchase.external_id] = analytics if analytics
+      end
+    end
+
     def set_purchase
       @purchase = logged_in_user.purchases.find_by_external_id!(params[:id])
     end
