@@ -4633,6 +4633,27 @@ describe LinksController, :vcr, inertia: true do
         expect(response.parsed_body["products"]).to eq([product_json(product, "profile")])
       end
 
+      it "searches by explicit ids when the section is not persisted yet" do
+        Link.__elasticsearch__.create_index!(force: true)
+        creator = create(:compliant_user, username: "creatordudey", name: "Creator Dudey")
+        product = create(:product, name: "Top quality weasel", user: creator)
+        other_product = create(:product, name: "First product", user: creator)
+        Link.import(force: true, refresh: true)
+
+        @recommended_by = nil
+        @on_profile = true
+
+        get :search, params: {
+          user_id: creator.external_id,
+          section_id: "0b8f3782-3a85-4f93-8e3c-2b1f5d3e8a90",
+          ids: [other_product.external_id, product.external_id].join(","),
+          sort: ProductSortKey::PAGE_LAYOUT,
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["products"]).to eq([product_json(other_product, "profile"), product_json(product, "profile")])
+      end
+
       describe "Setting and ordering" do
         before do
           Link.__elasticsearch__.create_index!(force: true)
@@ -4708,6 +4729,7 @@ describe LinksController, :vcr, inertia: true do
           get :search, params: { user_id: @creator.external_id, section_id: section.id }
           expect(response.parsed_body).to eq({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] })
         end
+
 
         it "searches only for recommendable products" do
           bad_text = "Previously-owned weasel"

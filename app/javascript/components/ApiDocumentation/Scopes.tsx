@@ -16,6 +16,10 @@ const SCOPES = [
     description: "read/write access to the user's products and their variants, offer codes, custom fields, and files.",
   },
   {
+    name: "edit_emails",
+    description: "read/write access to the user's audience emails.",
+  },
+  {
     name: "view_sales",
     description:
       "read access to the user's products' sales information, including sales counts. This scope is also required in order to subscribe to the user's sales.",

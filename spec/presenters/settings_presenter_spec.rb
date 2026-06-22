@@ -15,7 +15,7 @@ describe SettingsPresenter do
     context "with owner as logged in user" do
       it "returns correct pages" do
         expect(presenter.pages).to eq(
-          %w(main profile team payments billing password third_party_analytics advanced)
+          %w(main team payments billing password third_party_analytics advanced)
         )
       end
 
@@ -39,7 +39,7 @@ describe SettingsPresenter do
 
       it "returns correct pages" do
         expect(presenter.pages).to eq(
-          %w(main profile team payments third_party_analytics advanced)
+          %w(main team payments third_party_analytics advanced)
         )
       end
     end
@@ -54,7 +54,7 @@ describe SettingsPresenter do
 
         it "returns correct pages" do
           expect(presenter.pages).to eq(
-            %w(profile team)
+            %w(team)
           )
         end
       end
@@ -75,6 +75,7 @@ describe SettingsPresenter do
         currencies: CURRENCY_CHOICES.map { |k, v| { name: v[:display_format], code: k } },
         user: {
           email: seller.form_email,
+          username: "seller",
           support_email: seller.support_email,
           locale: seller.locale,
           timezone: seller.timezone,
@@ -159,6 +160,16 @@ describe SettingsPresenter do
 
       it "returns `user.has_unconfirmed_email` as true" do
         expect(presenter.main_props[:user][:has_unconfirmed_email]).to be(true)
+      end
+    end
+
+    context "when user does not have a persisted username" do
+      before do
+        seller.update_column(:username, nil)
+      end
+
+      it "returns an empty username" do
+        expect(presenter.main_props[:user][:username]).to eq("")
       end
     end
 
@@ -272,22 +283,22 @@ describe SettingsPresenter do
     let!(:third_party_analytic) { create(:third_party_analytic, user: seller) }
 
     it "returns the correct props" do
-      expect(presenter.third_party_analytics_props).to eq({
-                                                            disable_third_party_analytics: false,
-                                                            google_analytics_id: "",
-                                                            facebook_pixel_id: "",
-                                                            tiktok_pixel_id: "",
-                                                            skip_free_sale_analytics: false,
-                                                            facebook_meta_tag: "",
-                                                            enable_verify_domain_third_party_services: false,
-                                                            snippets: [{
-                                                              id: third_party_analytic.external_id,
-                                                              name: third_party_analytic.name,
-                                                              location: third_party_analytic.location,
-                                                              code: third_party_analytic.analytics_code,
-                                                              product: third_party_analytic.link.unique_permalink,
-                                                            }]
-                                                          })
+      expect(presenter.third_party_analytics_props).to eq(
+        disable_third_party_analytics: false,
+        google_analytics_id: "",
+        facebook_pixel_id: "",
+        tiktok_pixel_id: "",
+        skip_free_sale_analytics: false,
+        facebook_meta_tag: "",
+        enable_verify_domain_third_party_services: false,
+        snippets: [{
+          id: third_party_analytic.external_id,
+          name: third_party_analytic.name,
+          location: third_party_analytic.location,
+          code: third_party_analytic.analytics_code,
+          product: third_party_analytic.link.unique_permalink,
+        }]
+      )
     end
 
     context "when attributes are set" do
@@ -326,7 +337,7 @@ describe SettingsPresenter do
   end
 
   describe "#password_props" do
-    let(:settings_pages) { %w(main profile team payments billing password third_party_analytics advanced) }
+    let(:settings_pages) { %w(main team payments billing password third_party_analytics advanced) }
 
     context "when seller is registered using a social provider" do
       before do
@@ -383,7 +394,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
                                                               })
       end
     end
@@ -406,7 +417,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
                                                               })
       end
     end
@@ -442,7 +453,7 @@ describe SettingsPresenter do
                                                                 scopes: oauth_application1.scopes,
                                                                 id: oauth_application1.external_id,
                                                               }],
-                                                              settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
+                                                              settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
                                                             })
     end
   end

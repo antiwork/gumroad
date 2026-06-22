@@ -73,14 +73,16 @@ class SaveInstallmentService
     end
 
     def update_profile_posts_sections!
-      seller.seller_profile_posts_sections.each do |section|
-        shown_posts = Set.new(section.shown_posts)
-        if section.external_id.in?(installment_params[:shown_in_profile_sections])
-          shown_posts.add(installment.id)
-        else
-          shown_posts.delete(installment.id)
+      seller.with_profile_sections_lock do
+        seller.seller_profile_posts_sections.reload.each do |section|
+          shown_posts = Set.new(section.shown_posts)
+          if section.external_id.in?(installment_params[:shown_in_profile_sections])
+            shown_posts.add(installment.id)
+          else
+            shown_posts.delete(installment.id)
+          end
+          section.update!(shown_posts: shown_posts.to_a)
         end
-        section.update!(shown_posts: shown_posts.to_a)
       end
     end
 

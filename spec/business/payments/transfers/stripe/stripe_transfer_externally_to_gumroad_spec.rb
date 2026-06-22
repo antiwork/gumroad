@@ -130,4 +130,27 @@ describe StripeTransferExternallyToGumroad, :vcr do
       end
     end
   end
+
+  describe "reachable_balances" do
+    before do
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(
+          available: [{ currency: "usd", amount: 200_00 }, { currency: "cad", amount: 100_00 }],
+          pending: [{ currency: "usd", amount: 50_00 }, { currency: "cad", amount: -30_00 }]
+        )
+      )
+    end
+
+    it "sums the available and settling (pending) balance per currency" do
+      expect(described_class.reachable_balances["usd"]).to eq(250_00)
+    end
+
+    it "clamps negative pending at zero so refunds and disputes don't understate the balance" do
+      expect(described_class.reachable_balances["cad"]).to eq(100_00)
+    end
+
+    it "treats a currency with no balance as zero" do
+      expect(described_class.reachable_balances["gbp"]).to eq(0)
+    end
+  end
 end

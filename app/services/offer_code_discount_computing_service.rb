@@ -13,7 +13,7 @@ class OfferCodeDiscountComputingService
 
   def initialize(code, products, buyer: nil)
     @code = code
-    @products = products
+    @products = products || {}
     @buyer = buyer
   end
 

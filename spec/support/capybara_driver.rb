@@ -2,11 +2,20 @@
 
 webdriver_client = Selenium::WebDriver::Remote::Http::Default.new(open_timeout: 120, read_timeout: 120)
 
+def test_host_resolver_args
+  return [] if BUILDING_ON_CI
+
+  [
+    "--host-resolver-rules=MAP *.test.gumroad.com 127.0.0.1,MAP test.gumroad.com 127.0.0.1",
+  ]
+end
+
 Capybara.register_driver :chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
   options.add_emulation(device_metrics: { width: 1440, height: 900, touch: false })
   options.add_preference("intl.accept_languages", "en-US")
   options.logging_prefs = { driver: "DEBUG" }
+  test_host_resolver_args.each { |arg| options.args << arg }
 
   Capybara::Selenium::Driver.new(app,
                                  browser: :chrome,
@@ -19,6 +28,7 @@ Capybara.register_driver :tablet_chrome do |app|
   options.add_emulation(device_metrics: { width: 800, height: 1024, touch: true })
   options.add_preference("intl.accept_languages", "en-US")
   options.logging_prefs = { driver: "DEBUG" }
+  test_host_resolver_args.each { |arg| options.args << arg }
 
   Capybara::Selenium::Driver.new(app,
                                  browser: :chrome,
@@ -31,6 +41,7 @@ Capybara.register_driver :mobile_chrome do |app|
   options.add_emulation(device_name: "iPhone 8")
   options.add_preference("intl.accept_languages", "en-US")
   options.logging_prefs = { driver: "DEBUG" }
+  test_host_resolver_args.each { |arg| options.args << arg }
 
   Capybara::Selenium::Driver.new(app,
                                  browser: :chrome,
@@ -49,6 +60,7 @@ def docker_browser_args
     "--user-data-dir=/tmp/chrome",
     # Workaround https://bugs.chromium.org/p/chromedriver/issues/detail?id=2650&q=load&sort=-id&colspec=ID%20Status%20Pri%20Owner%20Summary
     "--disable-site-isolation-trials",
+    *test_host_resolver_args,
   ]
   args << "--disable-gpu" if Gem.win_platform?
 

@@ -95,7 +95,7 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Make an impression",
     getCompleted: (stats) => !!stats.customized_profile,
-    link: Routes.settings_profile_path(),
+    link: Routes.profile_path(),
     IconComponent: CustomizeProfileIcon,
     description: "Customize your profile.",
   },

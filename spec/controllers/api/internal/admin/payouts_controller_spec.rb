@@ -461,7 +461,7 @@ describe Api::Internal::Admin::PayoutsController do
       date = 1.day.ago.to_date
 
       expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).with(
-        date, PayoutProcessorType::STRIPE, [user], from_admin: true
+        date, PayoutProcessorType::STRIPE, [user], from_admin: true, bypass_minimum_payout: false
       ).and_return([[payment]])
 
       post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s }
@@ -472,6 +472,20 @@ describe Api::Internal::Admin::PayoutsController do
         "user_id" => user.external_id,
         "payout" => hash_including("external_id" => payment.external_id, "state" => "completed")
       )
+    end
+
+    it "forwards bypass_minimum_payout to release a balance below the payout minimum" do
+      payment = create(:payment_completed, user:)
+      date = 1.day.ago.to_date
+
+      expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).with(
+        date, PayoutProcessorType::STRIPE, [user], from_admin: true, bypass_minimum_payout: true
+      ).and_return([[payment]])
+
+      post :issue, params: { user_id: user.external_id, payout_processor: "stripe", payout_period_end_date: date.to_s, bypass_minimum_payout: "true" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
     end
 
     it "sets should_paypal_payout_be_split when paypal split is requested" do

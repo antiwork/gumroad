@@ -13,8 +13,18 @@ type Props = {
   children: React.ReactNode;
   group?: string | undefined;
   tag?: ReactSortableProps<string>["tag"];
+  // Defaults to the `ReorderingHandle` marker. Override it when nesting sortables (e.g. pages whose
+  // rows contain a nested sections list) so each level only grabs its own handle.
+  handle?: string;
 };
-export const SortableList = ({ currentOrder, onReorder, children, group, tag = "div" }: Props) => {
+export const SortableList = ({
+  currentOrder,
+  onReorder,
+  children,
+  group,
+  tag = "div",
+  handle = "[aria-grabbed]",
+}: Props) => {
   const [isBeingDragged, setIsBeingDragged] = React.useState<boolean>(false);
 
   return (
@@ -26,9 +36,10 @@ export const SortableList = ({ currentOrder, onReorder, children, group, tag = "
           const itemIds = items.map((i) => i.id);
           onReorder(itemIds);
         }}
-        handle="[aria-grabbed]"
+        handle={handle}
         tag={tag}
         scrollSensitivity={150}
+        swapThreshold={0.8}
         setData={(dataTransfer: DataTransfer, draggedElement: HTMLElement) => {
           const drawers = draggedElement.querySelectorAll<HTMLElement>(".drawer");
           for (const drawer of drawers) drawer.classList.add("hidden");

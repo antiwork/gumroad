@@ -717,6 +717,18 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
+  # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
+  # they take this lock and re-read the sections inside it to avoid clobbering each other. The
+  # profile editor holds the same row via seller_profile.lock!, so all writers serialize on it.
+  # Looked up directly (not via #seller_profile, which builds a record) so callers like product
+  # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
+  # saved profile has nothing to serialize against, so it just runs the block.
+  def with_profile_sections_lock(&block)
+    profile = SellerProfile.find_by(seller_id: id)
+    profile ? profile.with_lock(&block) : yield
+  end
+
   def time_fields
     attributes.keys.keep_if { |key| key.include?("_at") && send(key) }
   end

@@ -2762,6 +2762,7 @@ describe Purchase, :vcr do
       allow(url_redirect).to receive(:redirect_or_s3_location).and_return(url)
 
       expect(Purchase.purchase_info(url_redirect, link, purchase)).to eq(should_show_receipt: true,
+                                                                         was_paid: true,
                                                                          show_view_content_button_on_product_page: true,
                                                                          is_recurring_billing: false,
                                                                          is_physical: false,
@@ -4911,6 +4912,24 @@ describe Purchase, :vcr do
         purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1800)
         offer_code.mark_deleted!
         expect(purchase_with_valid_offer_code.original_offer_code(include_deleted: true).amount_percentage).to eq 50
+      end
+    end
+
+    context "when the offer code was deleted but a discount is cached" do
+      it "still applies the cached discount to the purchase price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(250)
+      end
+
+      it "clamps the price to zero when a cached fixed discount exceeds the price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 600, offer_code_is_percent: false, pre_discount_minimum_price_cents: 500)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(0)
       end
     end
 

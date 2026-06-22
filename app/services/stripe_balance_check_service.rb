@@ -6,24 +6,20 @@
 # account transfers) draw from the same balance, so the balance can be
 # starved before a payout cycle runs. This service powers a proactive alert
 # so the balance can be topped up before any seller payout fails.
-#
-# The minimum balance kept on top of the estimated upcoming payouts is
-# configured at runtime via Redis (RedisKey.stripe_minimum_balance_cents).
 class StripeBalanceCheckService
   def initialize
     @upcoming_payouts_cents = calculate_upcoming_payouts_cents
-    @minimum_balance_cents = $redis.get(RedisKey.stripe_minimum_balance_cents).to_i
-    @current_balance_cents = StripeTransferExternallyToGumroad.available_balances["usd"].to_i
+    # Count settling (pending) funds alongside the available balance. Pending
+    # sales settle within a couple of business days -- well inside the weekly
+    # payout window -- so they fund the upcoming payouts. Using available-only
+    # over-reports the needed top-up and fires false alarms.
+    @current_balance_cents = StripeTransferExternallyToGumroad.reachable_balances["usd"].to_i
   end
 
-  attr_reader :upcoming_payouts_cents, :minimum_balance_cents, :current_balance_cents
-
-  def required_balance_cents
-    upcoming_payouts_cents + minimum_balance_cents
-  end
+  attr_reader :upcoming_payouts_cents, :current_balance_cents
 
   def topup_amount_cents
-    @topup_amount_cents ||= required_balance_cents - current_balance_cents
+    @topup_amount_cents ||= upcoming_payouts_cents - current_balance_cents
   end
 
   def topup_needed?

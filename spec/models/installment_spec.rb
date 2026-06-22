@@ -24,6 +24,21 @@ describe Installment do
     end
   end
 
+  describe "#as_json_for_api" do
+    it "only returns scheduled_at while the post is scheduled with an alive rule" do
+      installment = create(:scheduled_installment, seller: @creator, link: nil, installment_type: Installment::AUDIENCE_TYPE)
+
+      expect(installment.as_json(api_scopes: ["edit_emails"])[:scheduled_at]).to eq(installment.installment_rule.to_be_published_at)
+
+      installment.update!(published_at: Time.current)
+      installment.installment_rule.mark_deleted!
+
+      serialized_installment = installment.reload.as_json(api_scopes: ["edit_emails"])
+      expect(serialized_installment[:state]).to eq("published")
+      expect(serialized_installment[:scheduled_at]).to be_nil
+    end
+  end
+
   describe "#is_downloadable?" do
     it "returns false if post has no files" do
       expect(@installment.is_downloadable?).to eq(false)

@@ -50,6 +50,6 @@ class BangladeshBankAccount < BankAccount
 
     def validate_account_number
       return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
-      errors.add :base, "The account number is invalid."
+      errors.add :base, "Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901)."
     end
 end

@@ -666,6 +666,40 @@ export const USER_FIELDS: FieldDefinition[] = [
   { name: "profile_picture_url", type: "string", description: "URL of the user's profile picture" },
 ];
 
+export const INSTALLMENT_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "string", description: "Unique identifier for the email" },
+  { name: "subject", type: "string | null", description: "Subject line" },
+  { name: "message", type: "string | null", description: "HTML body" },
+  {
+    name: "audience_type",
+    type: "string",
+    description: 'Audience type, one of "audience", "seller", "follower", or "product"',
+  },
+  {
+    name: "product_id",
+    type: "string | null",
+    description: "Product ID for product-targeted emails, null otherwise",
+  },
+  { name: "state", type: "string", description: 'Current state, one of "draft", "scheduled", or "published"' },
+  { name: "published_at", type: "string | null", description: "Timestamp when the email was published" },
+  { name: "scheduled_at", type: "string | null", description: "Timestamp when the email is scheduled to publish" },
+  { name: "send_emails", type: "boolean", description: "Whether this post sends emails to its audience" },
+  { name: "shown_on_profile", type: "boolean", description: "Whether this post is shown on the seller profile" },
+  {
+    name: "audience_count",
+    type: "number | null",
+    description: "Estimated audience size when available, null when not computed",
+  },
+  {
+    name: "recipients_count",
+    type: "number | null",
+    description: "Delivered recipient count when available, null before publishing",
+  },
+  { name: "url", type: "string | null", description: "Public post URL when published, null otherwise" },
+  { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the email was created" },
+  { name: "updated_at", type: "string", description: "ISO 8601 timestamp of when the email was last updated" },
+];
+
 export const OFFER_CODE_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string", description: "Unique identifier for the offer code" },
   { name: "name", type: "string", description: "Coupon code used at checkout" },

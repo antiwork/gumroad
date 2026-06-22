@@ -47,7 +47,7 @@ DENYLIST = %w[ a about account activate add admin administrator api app apps
                home hosting hostmaster idea ideas index info invitations
                invite is it json job jobs lists login logout logs mail map
                maps mine mis news oauth oauth_clients offers openid order
-               orders organizations plans popular pricing privacy prohibited projects put post
+               orders organizations plans popular pricing privacy profile prohibited projects put post
                read recruitment register remove replies root rss saas sales save
                search security sessions settings shop signup sitemap ssl
                ssladmin ssladministrator sslwebmaster status stories stream

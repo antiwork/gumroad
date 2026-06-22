@@ -31,15 +31,15 @@ describe "User favicons", type: :system, js: true do
 
   private
     def upload_profile_photo
-      visit settings_profile_path
-      within_fieldset "Logo" do
+      visit profile_path
+      within_fieldset "Avatar" do
         click_on "Remove"
         attach_file("Upload", file_fixture("test.png"), visible: false)
       end
       within_section("Preview", section_element: :aside) do
         expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
       end
-      click_on "Update settings"
+      click_on "Update profile"
       expect(page).to have_alert(text: "Changes saved!")
       expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
     end

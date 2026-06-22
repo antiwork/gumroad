@@ -172,6 +172,7 @@ export type Purchase = {
   created_at: string;
   review: FormReview | null;
   should_show_receipt: boolean;
+  was_paid: boolean;
   is_gift_receiver_purchase: boolean;
   content_url: string | null;
   show_view_content_button_on_product_page: boolean;
