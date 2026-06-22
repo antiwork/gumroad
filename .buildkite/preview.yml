@@ -1,6 +1,6 @@
 steps:
   - label: ":docker: Build Base Image"
-    key: build-base-image
+    key: preview-build-base-image
     command: ".buildkite/scripts/build_base.sh"
     timeout_in_minutes: 60
     plugins:
@@ -9,9 +9,9 @@ steps:
           password-env: DOCKERHUB_PASSWORD
 
   - label: ":docker: Build Web Image"
-    key: build-web-image
+    key: preview-build-web-image
     command: ".buildkite/scripts/build_web.sh"
-    depends_on: build-base-image
+    depends_on: preview-build-base-image
     timeout_in_minutes: 25
     plugins:
       - docker-login#v3.0.0:
@@ -19,8 +19,8 @@ steps:
           password-env: DOCKERHUB_PASSWORD
 
   - label: ":gear: Compile Assets"
-    key: compile-assets
-    depends_on: build-web-image
+    key: preview-compile-assets
+    depends_on: preview-build-web-image
     command: ".buildkite/scripts/compile_assets.sh"
     artifact_paths: "log/**/*"
     parallelism: 2
@@ -36,7 +36,7 @@ steps:
 
   - label: ":rocket: Deploy Preview App"
     key: build-and-deploy-preview
-    depends_on: compile-assets
+    depends_on: preview-compile-assets
     command: ".buildkite/scripts/deploy_branch.sh"
     timeout_in_minutes: 45
     plugins:
