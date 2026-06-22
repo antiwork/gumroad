@@ -92,6 +92,17 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         expect(analytics.values.first[:purchase_event][:purchase_external_id]).to eq(purchase.external_id)
       end
 
+      it "includes analytics when a single purchase_id is given (bundle redirect)" do
+        seller = create(:user, facebook_pixel_id: "1234567890")
+        purchase = create(:free_purchase, purchaser: user, link: create(:product, user: seller))
+
+        get :index, params: { purchase_id: purchase.external_id }
+
+        analytics = inertia.props[:purchase_analytics]
+        expect(analytics.keys.map(&:to_s)).to include(purchase.external_id)
+        expect(analytics.values.first[:analytics][:facebook_pixel_id]).to eq("1234567890")
+      end
+
       it "excludes purchases whose seller has no third-party analytics configured" do
         purchase = create(:free_purchase, purchaser: user, link: create(:product))
 

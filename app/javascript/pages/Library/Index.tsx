@@ -333,28 +333,27 @@ export default function LibraryPage() {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   useRunOnce(() => {
-    const purchaseIds = url.searchParams.getAll("purchase_id[]");
+    const purchaseIds = [...url.searchParams.getAll("purchase_id[]"), ...url.searchParams.getAll("purchase_id")];
     if (purchaseIds.length === 0) return;
 
     url.searchParams.delete("purchase_id[]");
+    url.searchParams.delete("purchase_id");
     router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
     const email = results.find(({ purchase }) => purchase.id === purchaseIds[0])?.purchase.email;
     if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
 
     for (const purchaseId of purchaseIds) {
-      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
-      if (!product) continue;
+      const analytics = purchase_analytics[purchaseId];
+      if (analytics) trackSellerPurchaseEvent(analytics);
 
-      if (product.has_third_party_analytics)
+      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
+      if (product?.has_third_party_analytics)
         addThirdPartyAnalytics({
           permalink: product.permalink,
           location: "receipt",
           purchaseId,
         });
-
-      const analytics = purchase_analytics[purchaseId];
-      if (analytics) trackSellerPurchaseEvent(analytics);
     }
   });
 

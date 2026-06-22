@@ -62,12 +62,9 @@ class LibraryController < Sellers::BaseController
         .first(MAX_TRACKED_PURCHASE_ANALYTICS)
       return {} if external_ids.empty?
 
-      external_ids.each_with_object({}) do |external_id, props|
-        purchase = logged_in_user.purchases.find_by_external_id(external_id)
-        next unless purchase
-
+      logged_in_user.purchases.by_external_ids(external_ids).each_with_object({}) do |purchase, props|
         analytics = PurchaseSellerAnalyticsPresenter.new(purchase).props
-        props[external_id] = analytics if analytics
+        props[purchase.external_id] = analytics if analytics
       end
     end
 
