@@ -192,6 +192,7 @@ describe UpdateUserComplianceInfo do
 
       it "rejects a bare 8-digit DNI submitted without the verification digit" do
         user = create_peru_individual_user(individual_tax_id: "12345678-9")
+        original = user.alive_user_compliance_info
 
         params = ActionController::Parameters.new(
           is_business: false,
@@ -200,10 +201,14 @@ describe UpdateUserComplianceInfo do
 
         expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
 
-        result = described_class.new(compliance_params: params, user:).process
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
 
         expect(result[:success]).to be false
         expect(result[:error_message]).to eq("Your Peru DNI must include the verification digit (for example, 12345678-9).")
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
       end
 
       it "rejects a DNI longer than 9 digits" do
