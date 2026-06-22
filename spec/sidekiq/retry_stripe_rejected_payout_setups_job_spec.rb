@@ -42,7 +42,7 @@ describe RetryStripeRejectedPayoutSetupsJob do
 
   it "skips notes whose backoff window has not elapsed" do
     user = create(:user)
-    failure_note(user, bank_prefix, json: { retry_count: 1, last_retried_at: Time.current.iso8601 })
+    failure_note(user, bank_prefix, json: { retry_count: 1, last_retried_at: (described_class::RETRY_INTERVAL_DAYS - 1).days.ago.iso8601 })
 
     described_class.new.perform
 
@@ -51,7 +51,7 @@ describe RetryStripeRejectedPayoutSetupsJob do
 
   it "enqueues notes whose backoff window has elapsed" do
     user = create(:user)
-    failure_note(user, bank_prefix, json: { retry_count: 1, last_retried_at: 3.days.ago.iso8601 })
+    failure_note(user, bank_prefix, json: { retry_count: 1, last_retried_at: (described_class::RETRY_INTERVAL_DAYS + 1).days.ago.iso8601 })
 
     described_class.new.perform
 

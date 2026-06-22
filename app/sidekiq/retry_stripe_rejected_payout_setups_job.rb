@@ -4,8 +4,9 @@ class RetryStripeRejectedPayoutSetupsJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed
 
-  MAX_RETRIES = 6
-  RETRY_BACKOFF_DAYS = [1, 1, 2, 3, 4, 4].freeze
+  RETRY_WINDOW_WEEKS = 8
+  MAX_RETRIES = RETRY_WINDOW_WEEKS
+  RETRY_INTERVAL_DAYS = 3
 
   BATCH_SIZE = 1_000
 
@@ -29,8 +30,7 @@ class RetryStripeRejectedPayoutSetupsJob
     last_retried_at = note.json_data["last_retried_at"]
     return true if last_retried_at.blank?
 
-    backoff = RETRY_BACKOFF_DAYS.fetch(retry_count(note), RETRY_BACKOFF_DAYS.last)
-    Time.iso8601(last_retried_at) + backoff.days <= Time.current
+    Time.iso8601(last_retried_at) + RETRY_INTERVAL_DAYS.days <= Time.current
   rescue ArgumentError
     true
   end

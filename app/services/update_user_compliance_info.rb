@@ -100,7 +100,8 @@ class UpdateUserComplianceInfo
       rescue Stripe::InvalidRequestError => e
         if e.code == "postal_code_invalid"
           country = new_compliance_info.legal_entity_country
-          return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. If you're sure it's correct, such as a newly built address, contact support and we'll look into it." }
+          weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+          return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it." }
         end
         return { success: false, error_message: e.message.split("Please contact us").first.strip }
       end

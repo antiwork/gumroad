@@ -1,5 +1,5 @@
-<%= header_section("We were unable to verify your bank account.") %>
+<%= header_section("We couldn't verify your bank account yet.") %>
 <div>
-  <p>Hi there. You just added a new bank account for payouts to Gumroad. Unfortunately, we were unable to verify your bank account due to an invalid account number, invalid transit number, or because previous attempts to deliver payouts to this account have failed.</p>
-  <p>Please go to <%= link_to "your payout settings", settings_payments_url %> and try again. Thanks!</p>
+  <p>Hi there. You recently added a bank account for Gumroad payouts, and we weren't able to verify it yet. This can happen if the account or routing details have a typo — or simply because a newly opened account, or a recently added bank or branch, isn't in our payment partner's records yet.</p>
+  <p>First, double-check your details in <%= link_to "your payout settings", settings_payments_url %>. If you're confident everything is correct, you don't need to do anything: new accounts and banks usually appear within a few days to a few weeks, and we'll automatically re-check yours once a week for up to <%= RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS %> weeks. We'll only email you again if we still can't verify it.</p>
 </div>

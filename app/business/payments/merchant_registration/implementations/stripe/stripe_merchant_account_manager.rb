@@ -361,11 +361,11 @@ module StripeMerchantAccountManager
     clear_stale_bank_sync_failure_notes(user)
     :synced
   rescue Stripe::InvalidRequestError => e
-    record_bank_sync_failure_note(user, e) if notify
     if e.code == "incorrect_account_holder_name"
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
+    record_bank_sync_failure_note(user, e) if notify
     if e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
       ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
       return :invalid_bank_account
@@ -415,6 +415,7 @@ module StripeMerchantAccountManager
     return false unless error.is_a?(Stripe::InvalidRequestError)
 
     code = error.respond_to?(:code) ? error.code : nil
+    return false if code == "incorrect_account_holder_name"
     return true if %w[routing_number_invalid account_number_invalid].include?(code)
 
     param = error.respond_to?(:param) ? error.param.to_s : ""

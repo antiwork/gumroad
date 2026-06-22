@@ -144,7 +144,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
   def invalid_bank_account(user_id)
     @seller = User.find(user_id)
-    @subject = "We were unable to verify your bank account."
+    @subject = "We couldn't verify your bank account yet."
   end
 
   def invalid_account_holder_name(user_id)

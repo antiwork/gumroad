@@ -145,6 +145,32 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "account holder name rejection stays out of the retry loop" do
+    let(:zip_code) { "94107" }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new("Account holder name is invalid", "account_holder_name", code: "incorrect_account_holder_name")
+      )
+    end
+
+    it "emails the seller but records no retryable failure note, since a name mismatch never self-heals" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_account_holder_name).with(user.id)
+
+      expect(result).to eq(:invalid_account_holder_name)
+      expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+    end
+  end
+
   describe "forcing an address resync on an automated retry" do
     let(:zip_code) { "94107" }
     let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }
