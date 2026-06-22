@@ -78,7 +78,12 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         else
           return false if user.alive_user_compliance_info.nil?
 
-          StripeMerchantAccountManager.handle_new_user_compliance_info(user.alive_user_compliance_info, notify: false)
+          # force_address_resync re-sends the address even when the compliance info is otherwise
+          # unchanged, so Stripe actually re-validates the rejected postal code. Without it the postal
+          # code is diffed out, the update quietly succeeds, and the note is cleared without a re-check.
+          StripeMerchantAccountManager.handle_new_user_compliance_info(
+            user.alive_user_compliance_info, notify: false, force_address_resync: true
+          )
           true
         end
       else

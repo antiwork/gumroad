@@ -145,6 +145,54 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "forcing an address resync on an automated retry" do
+    let(:zip_code) { "94107" }
+    let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+    end
+
+    def captured_address_postal_codes
+      account_params = []
+      person_params = []
+      allow(Stripe::Account).to receive(:update) do |account_id, params|
+        account_params << params
+        Stripe::Account.construct_from(
+          id: account_id, object: "account", metadata: params[:metadata] || {},
+          external_accounts: { object: "list", data: [] }, requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_account_id, person_id, params|
+        person_params << params
+        Stripe::StripeObject.construct_from(id: person_id, object: "person")
+      end
+      yield
+      account_postals = account_params.filter_map { |p| p.is_a?(Hash) ? (p.dig(:company, :address, :postal_code) || p.dig(:individual, :address, :postal_code)) : nil }
+      person_postals = person_params.filter_map { |p| p.is_a?(Hash) ? p.dig(:address, :postal_code) : nil }
+      [account_postals, person_postals]
+    end
+
+    it "diffs out the unchanged postal code without the flag" do
+      account_postals, person_postals = captured_address_postal_codes do
+        described_class.update_account(user, passphrase:)
+      end
+
+      expect(account_postals).to be_empty
+      expect(person_postals).to be_empty
+    end
+
+    it "re-sends the company and representative postal codes when force_address_resync is set" do
+      account_postals, person_postals = captured_address_postal_codes do
+        described_class.update_account(user, passphrase:, force_address_resync: true)
+      end
+
+      expect(account_postals).to be_present
+      expect(person_postals).to be_present
+    end
+  end
+
   describe "postal code note clearing on account update for a business account" do
     let(:zip_code) { "94107" }
     let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }

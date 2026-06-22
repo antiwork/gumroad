@@ -67,9 +67,9 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       let!(:merchant_account) { create(:merchant_account, user:) }
       let!(:note) { add_note(postal_prefix) }
 
-      it "re-syncs the compliance info quietly" do
+      it "re-syncs the compliance info quietly and forces the address to be re-validated" do
         expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
-          .with(user.alive_user_compliance_info, notify: false)
+          .with(user.alive_user_compliance_info, hash_including(notify: false, force_address_resync: true))
 
         described_class.new.perform(user.id)
       end
@@ -151,6 +151,44 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
         expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::SWITCHED_OFF_STRIPE_NOTE)
         expect(user.comments.alive.with_type_payout_note.where(content: described_class::GAVE_UP_NOTE)).to be_empty
       end
+    end
+  end
+
+  describe "postal code remediation through the real Stripe update (regression for false resolve)" do
+    include_context "with Stripe API stubs"
+
+    let(:passphrase) { "1234" }
+    let(:business_user) { create(:user, payment_address: nil) }
+    let!(:tos_agreement) { create(:tos_agreement, user: business_user) }
+    let!(:bank_account) { create(:ach_account, user: business_user) }
+    let!(:business_compliance_info) { create(:user_compliance_info_business, user: business_user, zip_code: "94107") }
+
+    before do
+      StripeMerchantAccountManager.create_account(business_user, passphrase:)
+      business_user.reload
+      business_user.add_payout_note(
+        content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — bad"
+      )
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get).with("STRONGBOX_GENERAL_PASSWORD").and_return(passphrase)
+      allow(Stripe::Account).to receive(:update_person) do |_account_id, person_id, params|
+        if params.is_a?(Hash) && params.dig(:address, :postal_code).present?
+          raise Stripe::InvalidRequestError.new(
+            "The postal code you entered is not valid.", "person[address][postal_code]", code: "postal_code_invalid"
+          )
+        end
+        Stripe::StripeObject.construct_from(id: person_id, object: "person")
+      end
+    end
+
+    it "does not resolve when the forced postal resync is still rejected by Stripe" do
+      described_class.new.perform(business_user.id)
+
+      note = business_user.comments.alive.with_type_payout_note
+        .where("content LIKE ?", "#{postal_prefix}%").last
+      expect(note).to be_present
+      expect(note.json_data["retry_count"]).to eq(1)
+      expect(business_user.comments.alive.with_type_payout_note.where(content: described_class::RESOLVED_NOTE)).to be_empty
     end
   end
 
