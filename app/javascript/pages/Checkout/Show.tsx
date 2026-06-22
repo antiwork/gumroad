@@ -241,18 +241,17 @@ const CheckoutIndexPage = () => {
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const isMobile = !useIsAboveBreakpoint("sm");
   const cartProductIdsKey = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
-  const cartProductIds = React.useMemo(() => cartProductIdsKey.split(",").filter(Boolean), [cartProductIdsKey]);
   React.useEffect(() => {
-    if (state.status.type !== "input" || cartProductIds.length === 0) return;
+    if (state.status.type !== "input" || cartProductIdsKey === "") return;
     router.reload({
       data: {
-        cart_product_ids: cartProductIds,
+        cart_product_ids: cartProductIdsKey.split(","),
         limit: isMobile ? 2 : 6,
       },
       preserveUrl: true,
       only: ["recommended_products"],
     });
-  }, [state.status.type, isMobile, cartProductIds]);
+  }, [state.status.type, isMobile, cartProductIdsKey]);
 
   const completedOfferIds = React.useRef(new Set()).current;
   const [offers, setOffers] = React.useState<
