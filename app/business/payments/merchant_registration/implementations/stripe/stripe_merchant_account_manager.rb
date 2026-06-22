@@ -424,6 +424,7 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.bank_account_invalid_error?(error)
+    return true if error.is_a?(Stripe::CardError)
     return false unless error.is_a?(Stripe::InvalidRequestError)
 
     code = error.respond_to?(:code) ? error.code : nil

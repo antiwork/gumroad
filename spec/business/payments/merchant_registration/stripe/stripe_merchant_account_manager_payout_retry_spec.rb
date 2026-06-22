@@ -82,6 +82,22 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    context "when Stripe rejects the external account with a card error" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::CardError.new("Your card does not support this type of purchase.", "external_account", code: "card_decline_rate_limit_exceeded")
+        )
+      end
+
+      it "records a bank sync failure note and re-raises" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::CardError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+    end
+
     context "when account creation fails for a non-bank reason" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(
