@@ -19,6 +19,7 @@ class UpdateUserComplianceInfo
 
   MAX_ENCRYPTED_FIELD_LENGTH = 200
   MASKED_TAX_ID_PATTERN = /[\u2022*]/
+  PERU_DNI_DIGIT_COUNT = 9
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -93,6 +94,14 @@ class UpdateUserComplianceInfo
       if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
           submitted_tax_id_for(:business_tax_id).present? && new_compliance_info.business_tax_id.length != 9
         return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
+      end
+
+      submitted_individual_tax_id = submitted_tax_id_for(:individual_tax_id)
+      if !new_compliance_info.is_business &&
+          new_compliance_info.legal_entity_country_code == Compliance::Countries::PER.alpha2 &&
+          submitted_individual_tax_id.present? &&
+          submitted_individual_tax_id.gsub(/\D/, "").length != PERU_DNI_DIGIT_COUNT
+        return { success: false, error_message: "Your Peru DNI must include the verification digit (for example, 12345678-9)." }
       end
 
       begin
