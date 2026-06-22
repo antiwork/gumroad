@@ -13,7 +13,7 @@ class Settings::BaseController < Sellers::BaseController
   inertia_share do
     {
       settings_pages: -> { settings_presenter.pages },
-      is_mobile_app_web_view: params[:display] == "mobile_app" || cookies[:is_mobile_app_web_view] == "true"
+      is_mobile_app_web_view: params[:display] == "mobile_app" || session[:mobile_app_web_view] == true
     }
   end
 
@@ -28,16 +28,22 @@ class Settings::BaseController < Sellers::BaseController
 
   private
     # `?display=mobile_app` only arrives on the initial WebView load. Persist it in
-    # a cookie so subsequent Inertia navigations and form submits (which drop the
-    # query param) keep rendering chrome-free.
+    # the session so subsequent Inertia navigations and form submits (which drop the
+    # query param) keep rendering chrome-free. Storing it in the session rather than a
+    # cookie means it is cleared on logout and never leaks into a later web-only session.
     def persist_mobile_app_web_view
       return unless params[:display] == "mobile_app" && current_api_user.present?
 
-      cookies[:is_mobile_app_web_view] = { value: "true", httponly: true }
+      session[:mobile_app_web_view] = true
     end
 
+    # Establish a web session from the OAuth token on the initial WebView load. If a
+    # session already exists (a return visit or an Inertia reload), skip the token
+    # check entirely so a stale or revoked token still present in the WebView URL
+    # can't 401 the request before the existing session is used.
     def authenticate_mobile_app_web_view!
       return if params[:access_token].blank?
+      return if user_signed_in?
       return unless ActiveSupport::SecurityUtils.secure_compare(params[:mobile_token].to_s, Api::Mobile::BaseController::MOBILE_TOKEN)
 
       doorkeeper_authorize! :mobile_api
