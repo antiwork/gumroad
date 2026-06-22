@@ -4,10 +4,8 @@ import * as React from "react";
 import typia from "typia";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
-import { AnalyticsData, BuyerCurrencyDisplay } from "$app/parsers/product";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
-import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import FileUtils from "$app/utils/file";
 import {
   generatePageIcon,
@@ -15,7 +13,7 @@ import {
   PAGE_ICON_LABELS,
   type PageIconType,
 } from "$app/utils/rich_content_page";
-import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
+import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -103,20 +101,7 @@ export type ContentProps = {
   community_chat_url: string | null;
 };
 
-export type SellerAnalyticsProps = {
-  seller_id: string;
-  analytics: AnalyticsData;
-  purchase_event: {
-    permalink: string;
-    purchase_external_id: string;
-    product_name: string;
-    value: number;
-    currency: string;
-    quantity: number;
-    tax: string;
-    buyer_currency_display?: BuyerCurrencyDisplay;
-  };
-};
+export type { SellerAnalyticsProps };
 
 export const WithContent = ({
   content,
@@ -166,23 +151,7 @@ export const WithContent = ({
           purchaseId: props.purchase.id,
         });
 
-      if (seller_analytics) {
-        const { seller_id, analytics, purchase_event } = seller_analytics;
-        startTrackingForSeller(seller_id, analytics);
-        trackProductEvent(seller_id, {
-          action: "purchased",
-          seller_id,
-          permalink: purchase_event.permalink,
-          purchase_external_id: purchase_event.purchase_external_id,
-          product_name: purchase_event.product_name,
-          value: purchase_event.value,
-          valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(purchase_event.currency)),
-          currency: purchase_event.currency.toUpperCase(),
-          quantity: purchase_event.quantity,
-          tax: purchase_event.tax,
-          buyer_currency_display: purchase_event.buyer_currency_display,
-        });
-      }
+      if (seller_analytics) trackSellerPurchaseEvent(seller_analytics);
     }
   });
   const isDesktop = useIsAboveBreakpoint("lg");

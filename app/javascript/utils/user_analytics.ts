@@ -1,7 +1,10 @@
+import typia from "typia";
+
 import * as FacebookPixel from "$app/data/facebook_pixel";
 import * as GoogleAnalytics from "$app/data/google_analytics";
 import * as TikTokPixel from "$app/data/tiktok_pixel";
 import { AnalyticsData, BuyerCurrencyDisplay } from "$app/parsers/product";
+import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 
 export type GumroadEvents = keyof typeof ProductEventsTitles;
 
@@ -81,6 +84,40 @@ export function trackProductEvent(id: string | undefined, data: ProductAnalytics
   GoogleAnalytics.trackProductEvent(config, data);
   if (data.action !== "begin_checkout") FacebookPixel.trackProductEvent(config, data);
   if (data.action !== "begin_checkout") TikTokPixel.trackProductEvent(config, data);
+}
+
+export type SellerPurchaseEvent = {
+  permalink: string;
+  purchase_external_id: string;
+  product_name: string;
+  value: number;
+  currency: string;
+  quantity: number;
+  tax: string;
+  buyer_currency_display?: BuyerCurrencyDisplay;
+};
+
+export type SellerAnalyticsProps = {
+  seller_id: string;
+  analytics: AnalyticsData;
+  purchase_event: SellerPurchaseEvent;
+};
+
+export function trackSellerPurchaseEvent({ seller_id, analytics, purchase_event }: SellerAnalyticsProps) {
+  startTrackingForSeller(seller_id, analytics);
+  trackProductEvent(seller_id, {
+    action: "purchased",
+    seller_id,
+    permalink: purchase_event.permalink,
+    purchase_external_id: purchase_event.purchase_external_id,
+    product_name: purchase_event.product_name,
+    value: purchase_event.value,
+    valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(purchase_event.currency)),
+    currency: purchase_event.currency.toUpperCase(),
+    quantity: purchase_event.quantity,
+    tax: purchase_event.tax,
+    ...(purchase_event.buyer_currency_display ? { buyer_currency_display: purchase_event.buyer_currency_display } : {}),
+  });
 }
 
 export function trackBuyerCurrencyDisplayView(id: string | undefined, data: BuyerCurrencyDisplay | undefined) {
