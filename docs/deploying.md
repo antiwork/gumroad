@@ -190,6 +190,6 @@ Add the `preview` label to a pull request to deploy its branch to a preview app.
 
 Adding the label triggers a Buildkite build that deploys the branch. Each subsequent push to a labeled branch redeploys automatically.
 
-The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready. The URL is `https://<name>.apps.staging.gumroad.org`, where `<name>` is the branch name lowercased and truncated to 32 characters (a leading `deploy-` is stripped). For example, branch `fix-checkout` deploys to `https://fix-checkout.apps.staging.gumroad.org`.
+The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
 
 Deployments are removed automatically when the associated branch is deleted in the repository.
