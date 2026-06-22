@@ -1,0 +1,37 @@
+name: Preview app
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  deploy:
+    if: github.event.label.name == 'preview'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger preview app build on Buildkite
+        env:
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          BUILDKITE_ORG: ${{ vars.BUILDKITE_ORG }}
+          BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$BUILDKITE_API_TOKEN" ] || [ -z "$BUILDKITE_ORG" ] || [ -z "$BUILDKITE_PIPELINE" ]; then
+            echo "Buildkite credentials are not configured; skipping. A push to the branch will still deploy the preview app."
+            exit 0
+          fi
+
+          curl -fsSL -X POST \
+            "https://api.buildkite.com/v2/organizations/${BUILDKITE_ORG}/pipelines/${BUILDKITE_PIPELINE}/builds" \
+            -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @- <<JSON
+          {
+            "commit": "${HEAD_SHA}",
+            "branch": "${HEAD_REF}",
+            "message": "Preview app for #${PR_NUMBER}",
+            "ignore_pipeline_branch_filters": true
+          }
+          JSON
