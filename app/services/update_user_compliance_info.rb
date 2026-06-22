@@ -256,11 +256,18 @@ class UpdateUserComplianceInfo
     def peru_individual_dni_error(old_compliance_info)
       submitted = submitted_tax_id_for(:individual_tax_id)
       return if submitted.blank?
-      submitting_as_business = compliance_params[:is_business].nil? ? old_compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
-      return if submitting_as_business
-      return unless old_compliance_info.country_code == Compliance::Countries::PER.alpha2
+      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::PER.alpha2
       return if submitted.gsub(/\D/, "").length == PERU_DNI_DIGIT_COUNT
       "Your Peru DNI must include the verification digit (for example, 12345678-9)."
+    end
+
+    def effective_legal_entity_country_code(old_compliance_info)
+      submitting_as_business = compliance_params[:is_business].nil? ? old_compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
+      if submitting_as_business
+        compliance_params[:business_country].presence || old_compliance_info.business_country_code
+      else
+        old_compliance_info.country_code
+      end
     end
 
     def encrypted_compliance_info_params_present?

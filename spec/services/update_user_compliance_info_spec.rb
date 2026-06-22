@@ -258,6 +258,55 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
       end
+
+      it "rejects a representative's bare 8-digit DNI for a Peru business" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Peru",
+            business_country: "Peru",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "12345678-9",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "12349316",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Your Peru DNI must include the verification digit (for example, 12345678-9).")
+      end
+
+      it "accepts a representative's 9-digit DNI for a Peru business" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Peru",
+            business_country: "Peru",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "00000000-0",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "12345678-9",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
     end
 
     context "with a non-US business" do

@@ -650,9 +650,11 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
     }
+    const peruDniRequired = form.data.user.is_business
+      ? form.data.user.business_country === "PE"
+      : form.data.user.country === "PE";
     if (
-      form.data.user.country === "PE" &&
-      !form.data.user.is_business &&
+      peruDniRequired &&
       form.data.user.individual_tax_id &&
       form.data.user.individual_tax_id.replace(/\D/gu, "").length !== PERU_DNI_DIGIT_COUNT
     ) {
