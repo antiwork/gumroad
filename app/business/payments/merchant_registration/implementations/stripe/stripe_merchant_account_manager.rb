@@ -247,11 +247,13 @@ module StripeMerchantAccountManager
     capabilities = capabilities.map(&:to_sym) | stripe_account.capabilities.keys
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
+    entity_key = user_compliance_info.is_business? ? :company : :individual
+
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
     # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
     # previously rejected postal code is actually re-checked instead of being silently treated as resolved.
     if force_address_resync
-      force_address_into_diff!(diff_attributes, current_attributes, user_compliance_info.is_business? ? :company : :individual)
+      force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
     Stripe::Account.update(stripe_account.id, diff_attributes)
@@ -260,7 +262,9 @@ module StripeMerchantAccountManager
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
     end
 
-    clear_stale_postal_code_failure_notes(user)
+    if force_address_resync || (user_compliance_info.is_individual? && address_submitted?(diff_attributes, entity_key))
+      clear_stale_postal_code_failure_notes(user)
+    end
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
@@ -315,6 +319,14 @@ module StripeMerchantAccountManager
       target[address_key] = address if address.present?
     end
     diff_attributes
+  end
+
+  private_class_method
+  def self.address_submitted?(diff_attributes, entity_key)
+    entity = diff_attributes[entity_key]
+    return false unless entity.is_a?(Hash)
+
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| entity[address_key].present? }
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
