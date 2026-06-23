@@ -170,16 +170,17 @@ class PaypalPayoutProcessor
     errors = errors_for_parsed_paypal_response(parsed_paypal_response)
     Rails.logger.info("Paypal Payouts: Payout errors for user IDs #{user_ids}: #{errors.inspect}") if errors.present?
 
+    error_code = parsed_paypal_response["L_ERRORCODE0"]
+    unless Payment.paypal_recipient_level_failure?(error_code)
+      payments.each(&:mark_failed!)
+      return
+    end
+
     if payments.size > 1
       payments.each_slice((payments.size / 2.0).ceil) { |chunk| perform_payments(chunk) }
     else
-      payments.first.mark_failed!(failure_reason_for_paypal_response(parsed_paypal_response))
+      payments.first.mark_failed!("PAYPAL #{error_code}")
     end
-  end
-
-  def self.failure_reason_for_paypal_response(parsed_paypal_response)
-    error_code = parsed_paypal_response["L_ERRORCODE0"]
-    error_code.present? ? "PAYPAL #{error_code}" : "PAYPAL payout rejected"
   end
 
   # Public: Sends the money in `split_payment_by_cents(payment.user)` increments.

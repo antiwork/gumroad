@@ -1087,6 +1087,7 @@ describe PaypalPayoutProcessor do
       expect(good_payment_1.reload.state).to eq("processing")
       expect(good_payment_2.reload.state).to eq("processing")
       expect(unpayable_payment.reload.state).to eq("failed")
+      expect(unpayable_payment.failure_reason).to eq("PAYPAL 3148")
     end
 
     it "records the PayPal error code as the failure reason so the payout is not retried into the same rejection" do
@@ -1101,6 +1102,18 @@ describe PaypalPayoutProcessor do
 
       expect(good_payment_1.reload.state).to eq("processing")
       expect(good_payment_2.reload.state).to eq("processing")
+    end
+
+    it "marks the batch failed without a reason on a systemic failure so the weekly retry still picks it up" do
+      WebMock.stub_request(:post, PAYPAL_ENDPOINT)
+             .to_return(body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Failure&L_ERRORCODE0=10001&L_SHORTMESSAGE0=Internal+Error&L_LONGMESSAGE0=Internal+Error")
+
+      described_class.perform_payments([good_payment_1, good_payment_2])
+
+      expect(good_payment_1.reload.state).to eq("failed")
+      expect(good_payment_2.reload.state).to eq("failed")
+      expect(good_payment_1.failure_reason).to be_nil
+      expect(good_payment_2.failure_reason).to be_nil
     end
   end
 end

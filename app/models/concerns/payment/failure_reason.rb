@@ -151,6 +151,16 @@ module Payment::FailureReason
   }
   private_constant :STRIPE_FAILURE_SOLUTIONS
 
+  PAYPAL_RECIPIENT_LEVEL_FAILURE_CODES = %w[
+    1001 3004 3015 3047 3148 3501 3535 3558 8330 9302 11711 14159 14550 14765 14766 14767
+  ].freeze
+
+  class_methods do
+    def paypal_recipient_level_failure?(paypal_error_code)
+      PAYPAL_RECIPIENT_LEVEL_FAILURE_CODES.include?(paypal_error_code.to_s)
+    end
+  end
+
   private
     def add_payment_failure_reason_comment
       return unless failure_reason.present?
