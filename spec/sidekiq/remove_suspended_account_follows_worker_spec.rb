@@ -48,6 +48,19 @@ describe RemoveSuspendedAccountFollowsWorker do
       expect(foreign_follow.reload.deleted_at).to be_nil
     end
 
+    it "removes email-only follows under the confirmed email even with a pending email change" do
+      @follower_user.update!(unconfirmed_email: "pending-change@example.com")
+      under_confirmed = create(:active_follower, user: @creator, follower_user_id: nil, email: @follower_user.email)
+      under_pending = create(:active_follower, user: @other_creator, follower_user_id: nil, email: "pending-change@example.com")
+
+      @follower_user.suspend_for_fraud!(author_name: "test")
+
+      described_class.new.perform(@follower_user.id)
+
+      expect(under_confirmed.reload.deleted_at).to be_present
+      expect(under_pending.reload.deleted_at).to be_present
+    end
+
     it "does nothing when the user is not suspended" do
       follow = create(:active_follower, user: @creator, follower_user_id: @follower_user.id, email: @follower_user.email)
 
