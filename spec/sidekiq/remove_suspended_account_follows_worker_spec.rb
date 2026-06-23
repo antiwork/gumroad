@@ -23,6 +23,18 @@ describe RemoveSuspendedAccountFollowsWorker do
       end
     end
 
+    it "also removes email-only follows (follower_user_id nil) matching the account email" do
+      email_only = create(:active_follower, user: @creator, follower_user_id: nil, email: @follower_user.email)
+
+      @follower_user.suspend_for_fraud!(author_name: "test")
+
+      described_class.new.perform(@follower_user.id)
+
+      email_only.reload
+      expect(email_only.deleted_at).to be_present
+      expect(email_only.confirmed_at).to be_nil
+    end
+
     it "does nothing when the user is not suspended" do
       follow = create(:active_follower, user: @creator, follower_user_id: @follower_user.id, email: @follower_user.email)
 
