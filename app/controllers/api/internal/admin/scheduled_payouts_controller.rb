@@ -71,7 +71,7 @@ class Api::Internal::Admin::ScheduledPayoutsController < Api::Internal::Admin::B
   def index
     scope = ScheduledPayout.includes(:user, :created_by).order(id: :desc)
 
-    if params[:user_id].present? || params[:external_id].present? || params[:email].present?
+    if params[:user_id].present? || params[:external_id].present? || params[:email].present? || params[:username].present?
       user = find_internal_admin_user_for_read_or_render
       return unless user
       scope = scope.for_user(user)

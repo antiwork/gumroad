@@ -5,7 +5,7 @@ require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::PayoutsController do
   let(:user) { create(:compliant_user) }
-  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
+  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email or username." }
 
   shared_examples "requires user_id for payout mutation" do |action, extra_params: {}|
     it "returns 400 when only email is provided" do
@@ -168,11 +168,11 @@ describe Api::Internal::Admin::PayoutsController do
       expect(response.parsed_body["recent_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
     end
 
-    it "returns a bad request when email and user_id are missing" do
+    it "returns a bad request when email, user_id, and username are missing" do
       get :index
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
