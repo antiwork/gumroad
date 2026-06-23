@@ -184,6 +184,7 @@ class UrlRedirectsController < ApplicationController
         destination: params[:destination].presence || (@url_redirect.rich_content_json.present? ? "download_page" : nil),
         display: params[:display],
         email: params[:email],
+        is_gift: @url_redirect.purchase&.is_gift_receiver_purchase? || false,
       },
     )
     props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)

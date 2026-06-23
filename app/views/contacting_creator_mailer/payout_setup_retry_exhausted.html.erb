@@ -1,0 +1,13 @@
+<% if @marker_type == "bank" %>
+  <%= header_section("We still couldn't verify your bank account.") %>
+  <div>
+    <p>Hi there. Over the past several weeks we've been automatically re-checking the bank account you added for Gumroad payouts, but our payment partner still hasn't been able to verify it.</p>
+    <p>Please double-check your account and routing details in <%= link_to "your payout settings", settings_payments_url %>. If everything looks correct, contact support and we'll look into it so your payouts aren't held up.</p>
+  </div>
+<% else %>
+  <%= header_section("We still couldn't verify your postal code.") %>
+  <div>
+    <p>Hi there. Over the past several weeks we've been automatically re-checking the postal code on your Gumroad payout details, but our payment partner still hasn't been able to verify it.</p>
+    <p>Please double-check the postal code in <%= link_to "your payout settings", settings_payments_url %>. If you're sure it's correct, contact support and we'll look into it so your payouts aren't held up.</p>
+  </div>
+<% end %>

@@ -12,6 +12,7 @@ type ConfirmationInfo = {
   destination: string | null;
   display: string | null;
   email: string | null;
+  is_gift: boolean;
 };
 
 type PageProps = LayoutProps & {
@@ -75,8 +76,16 @@ const EmailConfirmation = ({
 
   return (
     <Placeholder>
-      <h2>You've viewed this product a few times already</h2>
-      <p>Once you enter the email address used to purchase this product, you'll be able to access it again.</p>
+      <h2>
+        {confirmation_info.is_gift
+          ? "Confirm your email to access this gift"
+          : "You've viewed this product a few times already"}
+      </h2>
+      <p>
+        {confirmation_info.is_gift
+          ? "Enter the email address this gift was sent to, and you'll be able to access it."
+          : "Once you enter the email address used to purchase this product, you'll be able to access it again."}
+      </p>
       <form
         action={Routes.confirm_redirect_path()}
         method="post"

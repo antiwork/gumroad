@@ -1,12 +1,6 @@
 steps:
-  - label: ":mag: Preview gate"
-    key: preview-gate
-    branches: "!main !comp-assets-*"
-    command: ".buildkite/scripts/preview_gate.sh"
-
   - label: ":docker: Build Base Image"
-    key: build-base-image
-    branches: "main comp-assets-*"
+    key: preview-build-base-image
     command: ".buildkite/scripts/build_base.sh"
     timeout_in_minutes: 60
     plugins:
@@ -15,10 +9,9 @@ steps:
           password-env: DOCKERHUB_PASSWORD
 
   - label: ":docker: Build Web Image"
-    key: build-web-image
-    branches: "main comp-assets-*"
+    key: preview-build-web-image
     command: ".buildkite/scripts/build_web.sh"
-    depends_on: build-base-image
+    depends_on: preview-build-base-image
     timeout_in_minutes: 25
     plugins:
       - docker-login#v3.0.0:
@@ -26,9 +19,8 @@ steps:
           password-env: DOCKERHUB_PASSWORD
 
   - label: ":gear: Compile Assets"
-    key: compile-assets
-    branches: "main comp-assets-*"
-    depends_on: build-web-image
+    key: preview-compile-assets
+    depends_on: preview-build-web-image
     command: ".buildkite/scripts/compile_assets.sh"
     artifact_paths: "log/**/*"
     parallelism: 2
@@ -42,20 +34,11 @@ steps:
           username: gumroad
           password-env: QUAY_PASSWORD
 
-  - block: "Approval required for production deployment"
-    key: require-approval
-    branches: "main"
-    prompt: "Are you sure you want to proceed with the deployment?"
-    blocked_state: running
-
-  - label: ":rocket: Deploy to Production"
-    key: production-deployment
-    depends_on:
-      - compile-assets
-      - require-approval
-    branches: "main"
-    command: ".buildkite/scripts/deploy_production.sh"
-    timeout_in_minutes: 120
+  - label: ":rocket: Deploy Preview App"
+    key: build-and-deploy-preview
+    depends_on: preview-compile-assets
+    command: ".buildkite/scripts/deploy_branch.sh"
+    timeout_in_minutes: 45
     plugins:
       - docker-login#v3.0.0:
           username: "gumroadteam"

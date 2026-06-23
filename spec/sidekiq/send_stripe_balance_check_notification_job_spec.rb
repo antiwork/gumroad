@@ -11,7 +11,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
     context "when the balance is insufficient" do
       before do
-        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 200_000_00 })
+        allow(StripeTransferExternallyToGumroad).to receive(:reachable_balances).and_return({ "usd" => 200_000_00 })
       end
 
       it "sends a notification with the required top-up and sets the redis key to true" do
@@ -28,7 +28,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
     context "when the balance is sufficient" do
       before do
-        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 1_000_000_00 })
+        allow(StripeTransferExternallyToGumroad).to receive(:reachable_balances).and_return({ "usd" => 1_000_000_00 })
       end
 
       it "does not notify and sets the redis key to false" do
@@ -49,7 +49,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
     context "when the disable_stripe_balance_check_notification flag is active" do
       before do
-        allow(StripeTransferExternallyToGumroad).to receive(:available_balances).and_return({ "usd" => 200_000_00 })
+        allow(StripeTransferExternallyToGumroad).to receive(:reachable_balances).and_return({ "usd" => 200_000_00 })
         Feature.activate(:disable_stripe_balance_check_notification)
       end
 

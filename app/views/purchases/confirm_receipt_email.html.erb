@@ -1,7 +1,11 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <h2>Confirm your email address</h2>
-    <p>Please enter the email address used to purchase this product to view your receipt.</p>
+    <% if @purchase.is_gift_receiver_purchase? %>
+      <p>Please enter the email address this gift was sent to in order to view your receipt.</p>
+    <% else %>
+      <p>Please enter the email address used to purchase this product to view your receipt.</p>
+    <% end %>
   </header>
   <%= form_tag(receipt_purchase_path(@purchase.external_id), method: "get", class: "flex flex-col gap-4 p-4") do %>
     <%= label_tag :email, "Email address:", class: "form-label" %>
