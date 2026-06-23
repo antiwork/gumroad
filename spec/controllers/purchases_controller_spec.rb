@@ -1579,6 +1579,17 @@ describe PurchasesController, :vcr do
         expect(assigns(:purchase)).to eq(purchase)
         expect(controller.send(:page_title)).to eq("Confirm Email")
         expect(assigns(:hide_layouts)).to be(true)
+        expect(response.body).to include("the email address used to purchase this product")
+      end
+
+      context "when the purchase is a gift receiver purchase" do
+        let(:purchase) { create(:purchase, is_gift_receiver_purchase: true) }
+
+        it "asks for the email the gift was sent to" do
+          get :confirm_receipt_email, params: { id: purchase.external_id }
+          expect(response.body).to include("the email address this gift was sent to")
+          expect(response.body).not_to include("the email address used to purchase this product")
+        end
       end
     end
 

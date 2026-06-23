@@ -132,7 +132,7 @@ class CustomerPresenter
       paypal_refund_expired: purchase.paypal_refund_expired?,
       refunded: purchase.stripe_refunded?,
       partially_refunded: purchase.stripe_partially_refunded?,
-      chargedback: purchase.chargedback? && !purchase.chargeback_reversed?,
+      chargedback: purchase.chargedback? && !purchase.chargeback_reversed? && !purchase.stripe_refunded?,
       has_options: variant.present? || purchase.link.alive_variants.any?,
       option: variant.present? ?
         (variant.is_a?(Sku) ? variant.to_option_for_product : variant.to_option) :
@@ -168,7 +168,7 @@ class CustomerPresenter
       currency_type: purchase.displayed_price_currency_type.to_s,
       transaction_url_for_seller: purchase.transaction_url_for_seller,
       is_upgrade_purchase: purchase.is_upgrade_purchase?,
-      chargedback: purchase.chargedback? && !purchase.chargeback_reversed?,
+      chargedback: purchase.chargedback? && !purchase.chargeback_reversed? && !purchase.stripe_refunded?,
       paypal_refund_expired: purchase.paypal_refund_expired?,
     }
   end

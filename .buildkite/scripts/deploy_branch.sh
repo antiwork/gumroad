@@ -65,6 +65,17 @@ install_nomad
 source .buildkite/scripts/copy_secrets.sh
 copy_secrets
 
+# Surface the preview app on the PR via GitHub's Deployments API ("View deployment").
+# Sourced here because deploy_branch_common.sh is provided by copy_secrets above.
+source nomad/staging/deploy_branch/deploy_branch_common.sh
+source .buildkite/scripts/github_deployment.sh
+
+APP_NAME=$(get_app_name "$BUILDKITE_BRANCH")
+PREVIEW_URL="https://${APP_NAME}.apps.staging.gumroad.org"
+DEPLOYMENT_ID=$(create_github_deployment "$BUILDKITE_COMMIT" "preview/${APP_NAME}" || true)
+set_github_deployment_status "$DEPLOYMENT_ID" "in_progress" || true
+trap 'set_github_deployment_status "$DEPLOYMENT_ID" "failure" || true' ERR
+
 BRANCH=${BUILDKITE_BRANCH}
 DEPLOY_TAG="staging-${WEB_TAG}"
 
@@ -81,3 +92,6 @@ cd nomad/staging/deploy_branch
 BRANCH=$BRANCH \
   DEPLOY_TAG=$DEPLOY_TAG \
   ./deploy.sh
+
+set_github_deployment_status "$DEPLOYMENT_ID" "success" "$PREVIEW_URL" || true
+logger "Preview app available at ${PREVIEW_URL}"

@@ -1543,12 +1543,24 @@ describe UrlRedirectsController, inertia: true do
                                                         destination: nil,
                                                         display: nil,
                                                         email: nil,
+                                                        is_gift: false,
                                                       })
     end
 
     it "assigns the url_redirect correctly" do
       get :confirm_page, params: { id: @url_redirect.token }
       expect(assigns(:url_redirect)).to eq @url_redirect
+    end
+
+    context "when the url redirect belongs to a gift receiver purchase" do
+      before do
+        @url_redirect.purchase.update!(is_gift_receiver_purchase: true)
+      end
+
+      it "marks the confirmation info as a gift" do
+        get :confirm_page, params: { id: @url_redirect.token }
+        expect(inertia.props[:confirmation_info][:is_gift]).to eq(true)
+      end
     end
 
     context "when params[:destination] is set" do

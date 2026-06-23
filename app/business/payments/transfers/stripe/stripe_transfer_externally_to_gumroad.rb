@@ -23,6 +23,26 @@ module StripeTransferExternallyToGumroad
     available_balances
   end
 
+  # Public: Returns a hash of currencies to the balance in cents that can fund
+  # upcoming payouts: the available balance plus settling (pending) funds.
+  # Pending sales settle within a couple of business days, well inside the
+  # weekly payout window, so they will be available before the payout runs.
+  # Pending is clamped at zero per currency because refunds, disputes, and
+  # reversals can push it negative, and subtracting that would understate the
+  # funds that `available` alone already covers. Mirrors the "reachable" balance
+  # StripePayoutProcessor uses to check a connected account can cover a payout.
+  def self.reachable_balances
+    balance = Stripe::Balance.retrieve
+    reachable_balances = Hash.new(0)
+    balance.available.each do |balance_for_currency|
+      reachable_balances[balance_for_currency["currency"]] += balance_for_currency["amount"]
+    end
+    balance.pending.each do |balance_for_currency|
+      reachable_balances[balance_for_currency["currency"]] += [balance_for_currency["amount"], 0].max
+    end
+    reachable_balances
+  end
+
   # Public: Transfers the amount from the Stripe master account to
   # the default bank account for the given currency.
   def self.transfer(currency, amount_cents)

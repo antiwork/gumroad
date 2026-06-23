@@ -19,6 +19,7 @@ class UpdateUserComplianceInfo
 
   MAX_ENCRYPTED_FIELD_LENGTH = 200
   MASKED_TAX_ID_PATTERN = /[\u2022*]/
+  PERU_DNI_DIGIT_COUNT = 9
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -80,6 +81,9 @@ class UpdateUserComplianceInfo
         return { success: true }
       end
 
+      peru_dni_error = peru_individual_dni_error(old_compliance_info)
+      return { success: false, error_message: peru_dni_error } if peru_dni_error
+
       saved, new_compliance_info = if encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)
       else
@@ -100,7 +104,8 @@ class UpdateUserComplianceInfo
       rescue Stripe::InvalidRequestError => e
         if e.code == "postal_code_invalid"
           country = new_compliance_info.legal_entity_country
-          return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. If you're sure it's correct, such as a newly built address, contact support and we'll look into it." }
+          weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+          return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it." }
         end
         return { success: false, error_message: e.message.split("Please contact us").first.strip }
       end
@@ -247,6 +252,23 @@ class UpdateUserComplianceInfo
       return nil if value.blank?
       return value.gsub(/\D/, "") if country_code == "US"
       value.gsub(/[\s-]+/, "")
+    end
+
+    def peru_individual_dni_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id)
+      return if submitted.blank?
+      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::PER.alpha2
+      return if submitted.gsub(/\D/, "").length == PERU_DNI_DIGIT_COUNT
+      "Your Peru DNI must include the verification digit (for example, 12345678-9)."
+    end
+
+    def effective_legal_entity_country_code(old_compliance_info)
+      submitting_as_business = compliance_params[:is_business].nil? ? old_compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
+      if submitting_as_business
+        compliance_params[:business_country].presence || old_compliance_info.business_country_code
+      else
+        old_compliance_info.country_code
+      end
     end
 
     def encrypted_compliance_info_params_present?

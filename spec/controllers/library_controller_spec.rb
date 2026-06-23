@@ -74,6 +74,53 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "purchase_analytics prop" do
+      it "is empty when no purchase_id params are present" do
+        get :index
+        expect(inertia.props[:purchase_analytics]).to eq({})
+      end
+
+      it "includes analytics for the buyer's purchases whose seller has a pixel" do
+        seller = create(:user, facebook_pixel_id: "1234567890")
+        purchase = create(:free_purchase, purchaser: user, link: create(:product, user: seller))
+
+        get :index, params: { purchase_id: [purchase.external_id] }
+
+        analytics = inertia.props[:purchase_analytics]
+        expect(analytics.keys.map(&:to_s)).to include(purchase.external_id)
+        expect(analytics.values.first[:analytics][:facebook_pixel_id]).to eq("1234567890")
+        expect(analytics.values.first[:purchase_event][:purchase_external_id]).to eq(purchase.external_id)
+      end
+
+      it "includes analytics when a single purchase_id is given (bundle redirect)" do
+        seller = create(:user, facebook_pixel_id: "1234567890")
+        purchase = create(:free_purchase, purchaser: user, link: create(:product, user: seller))
+
+        get :index, params: { purchase_id: purchase.external_id }
+
+        analytics = inertia.props[:purchase_analytics]
+        expect(analytics.keys.map(&:to_s)).to include(purchase.external_id)
+        expect(analytics.values.first[:analytics][:facebook_pixel_id]).to eq("1234567890")
+      end
+
+      it "excludes purchases whose seller has no third-party analytics configured" do
+        purchase = create(:free_purchase, purchaser: user, link: create(:product))
+
+        get :index, params: { purchase_id: [purchase.external_id] }
+
+        expect(inertia.props[:purchase_analytics]).to eq({})
+      end
+
+      it "does not expose analytics for purchases that don't belong to the buyer" do
+        seller = create(:user, facebook_pixel_id: "1234567890")
+        other_purchase = create(:free_purchase, link: create(:product, user: seller))
+
+        get :index, params: { purchase_id: [other_purchase.external_id] }
+
+        expect(inertia.props[:purchase_analytics]).to eq({})
+      end
+    end
+
     context "when an unconfirmed user attempts to access the library" do
       shared_examples "sends confirmation instructions" do
         it "disallows access and sends confirmation instructions" do
