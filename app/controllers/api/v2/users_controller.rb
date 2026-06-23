@@ -17,6 +17,8 @@ class Api::V2::UsersController < Api::V2::BaseController
   def update
     user = current_resource_owner
 
+    return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
+
     if user.update(permitted_update_params)
       success_with_object(:user, user)
     else

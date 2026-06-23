@@ -106,6 +106,16 @@ describe Api::V2::UsersController do
         expect(@user.bio).to eq("I make great things.")
       end
 
+      it "rejects the update when the seller's email is unconfirmed" do
+        @user.update_columns(confirmed_at: nil)
+
+        put @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("confirm your email address")
+        expect(@user.reload.name).to_not eq("Jane Seller")
+      end
+
       it "updates only the provided attribute" do
         @user.update!(name: "Original", bio: "Original bio")
 
