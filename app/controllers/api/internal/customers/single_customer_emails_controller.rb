@@ -51,7 +51,8 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
             send_emails: true,
             shown_on_profile: false,
             allow_comments: false,
-            single_recipient_email: true
+            single_recipient_email: true,
+            single_recipient_purchase_id: purchase.id
           )
           installment.save!
           SaveFilesService.perform(installment, files_params(permitted_params))

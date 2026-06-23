@@ -58,6 +58,7 @@ class Installment < ApplicationRecord
   }.freeze
 
   attr_json_data_accessor :workflow_trigger
+  attr_json_data_accessor :single_recipient_purchase_id
 
   belongs_to :link, optional: true
   belongs_to :base_variant, optional: true
@@ -849,8 +850,8 @@ class Installment < ApplicationRecord
     return false if purchase.nil?
     # A one-off email is a seller-type post with no audience filters, which would
     # otherwise be viewable by any of the seller's customers. Restrict it to the
-    # single purchase it was actually delivered to.
-    return false if single_recipient_email? && !EmailInfo.exists?(installment_id: id, purchase_id: purchase.id)
+    # single purchase it was created for (a durable marker, not delivery telemetry).
+    return false if single_recipient_email? && single_recipient_purchase_id.to_i != purchase.id
 
     is_purchase_relevant = if product_type?
       purchase.link_id == link_id

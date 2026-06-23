@@ -54,9 +54,9 @@ class PostsController < ApplicationController
 
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
 
-    # A single-recipient email is private to the one customer it was delivered to;
+    # A single-recipient email is private to the one customer it was created for;
     # never let the generic resend path send it to any other purchase.
-    e404 if @post.single_recipient_email? && !EmailInfo.exists?(installment_id: @post.id, purchase_id: purchase.id)
+    e404 if @post.single_recipient_email? && @post.single_recipient_purchase_id.to_i != purchase.id
 
     # Limit the number of emails sent per post to avoid abuse.
     Rails.cache.fetch("post_email:#{@post.id}:#{purchase.id}", expires_in: 8.hours) do
