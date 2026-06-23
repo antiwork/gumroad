@@ -123,6 +123,15 @@ describe Api::V2::UsersController do
                                            "user" => @user.reload.as_json(api_scopes: ["edit_profile"]))
       end
 
+      it "serializes the full user (not the sparse public view) for the edit_profile scope" do
+        put @action, params: @params
+
+        user = response.parsed_body["user"]
+        expect(user["email"]).to be_present
+        expect(user["display_name"]).to be_present
+        expect(user).to have_key("currency_type")
+      end
+
       it "returns a validation error when the name is invalid" do
         put @action, params: @params.merge(name: "Jane: Seller")
 
