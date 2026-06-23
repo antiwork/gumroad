@@ -9300,6 +9300,36 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe "account flagged as unusable by Stripe" do
+        before do
+          error_message = "This bank account can't be used. Contact support at https://support.stripe.com/contact if you think this is an error."
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account", code: "bank_account_unusable"))
+        end
+
+        it "emails the creator and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          expect(result).to eq(:invalid_bank_account)
+        end
+      end
+
+      describe "account rejected because previous payouts failed" do
+        before do
+          error_message = "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account"))
+        end
+
+        it "emails the creator and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          expect(result).to eq(:invalid_bank_account)
+        end
+      end
+
       describe "account holder name rejected by Stripe" do
         before do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Account holder name is invalid", "account_holder_name", code: "incorrect_account_holder_name"))

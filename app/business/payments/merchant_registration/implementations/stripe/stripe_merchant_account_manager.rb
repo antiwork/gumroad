@@ -380,7 +380,7 @@ module StripeMerchantAccountManager
       return :invalid_account_holder_name
     end
     record_bank_sync_failure_note(user, e) if notify
-    if e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
+    if e.code == "bank_account_unusable" || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"]
       ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
       return :invalid_bank_account
     end
