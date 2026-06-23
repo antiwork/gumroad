@@ -61,7 +61,7 @@ describe Api::Internal::Admin::UsersController do
       get :info
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -69,6 +69,34 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "looks up the user by username" do
+      user = create(:compliant_user, email: "byusername@example.com", username: "byusername")
+
+      get :info, params: { username: "byusername" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+      expect(response.parsed_body["user"]["username"]).to eq("byusername")
+    end
+
+    it "returns not found when the username does not match any user" do
+      get :info, params: { username: "nobody-has-this-username" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "prefers email over username when both are provided" do
+      by_email = create(:compliant_user, email: "preferred@example.com", username: "otherusername")
+      create(:compliant_user, email: "ignored@example.com", username: "wantedusername")
+
+      get :info, params: { email: "preferred@example.com", username: "wantedusername" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(by_email.external_id)
     end
 
     it "returns a comprehensive info payload for a compliant seller" do
@@ -544,7 +572,7 @@ describe Api::Internal::Admin::UsersController do
       get :affiliates, params: { direction: "granted" }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -847,7 +875,7 @@ describe Api::Internal::Admin::UsersController do
       get :comments
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -1065,7 +1093,7 @@ describe Api::Internal::Admin::UsersController do
       get :compliance_info
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -1316,7 +1344,7 @@ describe Api::Internal::Admin::UsersController do
       get :radar_stats
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -1482,7 +1510,7 @@ describe Api::Internal::Admin::UsersController do
       get :purchases
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -1846,7 +1874,7 @@ describe Api::Internal::Admin::UsersController do
       get :related
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -2035,7 +2063,7 @@ describe Api::Internal::Admin::UsersController do
       get :suspension
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do
@@ -2122,7 +2150,7 @@ describe Api::Internal::Admin::UsersController do
       get :unpaid_balance
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "does not write an admin audit log" do
@@ -2278,7 +2306,7 @@ describe Api::Internal::Admin::UsersController do
       get :credits
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq({ success: false, message: "email or user_id is required" }.as_json)
+      expect(response.parsed_body).to eq({ success: false, message: "email, user_id, or username is required" }.as_json)
     end
 
     it "returns not found when the user does not exist" do

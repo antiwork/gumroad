@@ -13,7 +13,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.resend_all_receipts
   ].freeze
   ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes, :merchant_account].freeze
-  USER_LOOKUP_BAD_REQUEST_MESSAGE = "email or user_id is required"
+  USER_LOOKUP_BAD_REQUEST_MESSAGE = "email, user_id, or username is required"
   USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
     "Use /internal/admin/users/info to look up the user_id by email."
   private_constant :USER_LOOKUP_BAD_REQUEST_MESSAGE, :USER_ID_REQUIRED_MESSAGE
@@ -71,7 +71,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     end
 
     def find_internal_admin_user_for_read_or_render(include_deleted: false)
-      unless params[:email].present? || internal_admin_user_id_param.present?
+      unless params[:email].present? || internal_admin_user_id_param.present? || params[:username].present?
         render json: { success: false, message: USER_LOOKUP_BAD_REQUEST_MESSAGE }, status: :bad_request
         return
       end
@@ -207,8 +207,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       scope = include_deleted ? User : User.alive
       if internal_admin_user_id_param.present?
         scope.find_by(external_id: internal_admin_user_id_param)
-      else
+      elsif params[:email].present?
         scope.by_email(params[:email]).first
+      else
+        scope.find_by(username: params[:username])
       end
     end
 
