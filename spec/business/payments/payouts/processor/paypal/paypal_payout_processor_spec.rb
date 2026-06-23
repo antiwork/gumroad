@@ -504,7 +504,7 @@ describe PaypalPayoutProcessor do
 
       expect(@u1.unpaid_balance_cents).to eq 99
       expect(p2.state).to eq "failed"
-      expect(p2.failure_reason).to be_nil
+      expect(p2.failure_reason).to eq(Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
     end
 
     it "behaves idempotently" do
@@ -1063,6 +1063,31 @@ describe PaypalPayoutProcessor do
       expect do
         described_class.search_payment_on_paypal(amount_cents:, payment_address:, start_date:, end_date:)
       end.to raise_error(RuntimeError, error_message)
+    end
+  end
+
+  describe "IPN item-level failure without a reason code" do
+    let(:user) { create(:singaporean_user_with_compliance_info, payment_address: "seller@example.com") }
+    let(:payment) { create(:payment, user:, payment_address: user.payment_address, amount_cents: 5_000) }
+
+    it "records a generic diagnostic reason so the failure is not silently retried" do
+      described_class.handle_paypal_event_for_non_split_payment(payment.id.to_s,
+                                                                "masspay_txn_id" => "",
+                                                                "status" => "Failed",
+                                                                "unique_id" => payment.id)
+
+      expect(payment.reload.state).to eq("failed")
+      expect(payment.failure_reason).to eq(Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
+    end
+
+    it "still records the PayPal reason code when one is provided" do
+      described_class.handle_paypal_event_for_non_split_payment(payment.id.to_s,
+                                                                "masspay_txn_id" => "",
+                                                                "status" => "Failed",
+                                                                "reason_code" => "3148",
+                                                                "unique_id" => payment.id)
+
+      expect(payment.reload.failure_reason).to eq("PAYPAL 3148")
     end
   end
 end

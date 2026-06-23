@@ -1,5 +1,4 @@
 import { router, useForm, usePage } from "@inertiajs/react";
-import { reverse } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
@@ -25,11 +24,11 @@ import {
   CrossSell,
   findCartItem,
   getDiscountedPrice,
-  newCartState,
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
+import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
   computeTip,
   computeTipForPrice,
@@ -56,22 +55,6 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-const GUMROAD_PARAMS = [
-  "product",
-  "option",
-  "recurrence",
-  "quantity",
-  "price",
-  "recommended_by",
-  "affiliate_id",
-  "referrer",
-  "rent",
-  "recommender_model_name",
-  "call_start_time",
-  "pay_in_installments",
-  "force_new_subscription",
-];
 
 type CheckoutIndexPageProps = {
   cart: CartState | null;
@@ -111,37 +94,6 @@ const buildCustomFieldValues = (
     return { id: field.id, value: field.type === "text" ? (values[key] ?? "") : values[key] === "true" };
   });
 
-const addProduct = ({
-  cart,
-  product,
-  url,
-  referrer,
-}: {
-  cart: CartState;
-  product: ProductToAdd;
-  url: URL;
-  referrer: string | null;
-}) => {
-  const existing = findCartItem(cart, product.product.permalink, product.option_id);
-
-  const urlParameters: Record<string, string> = {};
-  for (const [key, value] of url.searchParams.entries()) if (!GUMROAD_PARAMS.includes(key)) urlParameters[key] = value;
-
-  const option = product.product.options.find(({ id }) => id === product.option_id);
-  const newItem = {
-    ...product,
-    quantity: Math.min(
-      product.quantity || 1,
-      (option ? option.quantity_left : product.product.quantity_remaining) ?? Infinity,
-    ),
-    url_parameters: urlParameters,
-    referrer: referrer || "direct",
-    recommender_model_name: url.searchParams.get("recommender_model_name"),
-  };
-  if (existing) Object.assign(existing, newItem);
-  else cart.items.unshift(newItem);
-};
-
 const CheckoutIndexPage = () => {
   const {
     checkout: {
@@ -168,53 +120,38 @@ const CheckoutIndexPage = () => {
 
   const user = useLoggedInUser();
   const email = user?.email ?? props.cart?.email ?? "";
-  const cartForm = useForm<{ cart: CartState }>(() => {
-    const initialCart = clear_cart ? newCartState() : (props.cart ?? newCartState());
-    const url = new URL(window.location.href);
-    const urlReferrer = url.searchParams.get("referrer");
-    const referrer = urlReferrer && decodeURIComponent(urlReferrer);
-    const returnUrl = referrer || document.referrer;
-    if (returnUrl) initialCart.returnUrl = returnUrl;
 
-    const newAddProducts = add_products.filter(
-      (product) => !findCartItem(initialCart, product.product.permalink, product.option_id),
-    );
-    if (initialCart.items.length + newAddProducts.length > max_allowed_cart_products) {
+  // Build the initial cart exactly once.
+  //
+  // IMPORTANT: this block must stay free of side effects (no analytics calls, no
+  // showAlert). Inertia's `useForm` re-invokes a *function* initializer on every
+  // render rather than once on mount, so any side effect placed in a function
+  // initializer fires on every render. On the checkout-arrival flow (add_products
+  // present) that re-fired `begin_checkout`/pixel tracking on each render, which
+  // combined with re-render churn to crash mobile Safari ("a problem repeatedly
+  // occurred"). See gumroad-private#658. We therefore compute the cart + the
+  // one-time tracking intentions in a ref (runs once) and pass a plain value to
+  // useForm; the side effects are flushed from a single `useRunOnce` below.
+  const initialCheckoutRef = React.useRef<InitialCheckout | null>(null);
+  initialCheckoutRef.current ??= computeInitialCheckout({
+    cart: props.cart ?? null,
+    clearCart: clear_cart,
+    addProducts: add_products,
+    maxAllowedCartProducts: max_allowed_cart_products,
+    url: new URL(window.location.href),
+    documentReferrer: document.referrer,
+  });
+  const initialCheckout = initialCheckoutRef.current;
+  const cartForm = useForm<{ cart: CartState }>({ cart: initialCheckout.cart });
+
+  // Flush the initial cart's side effects exactly once, off the render path.
+  useRunOnce(() => {
+    if (initialCheckout.overLimit) {
       showAlert(`You cannot add more than ${max_allowed_cart_products} products to the cart.`, "error");
-      initialCart.items = initialCart.items.slice(0, max_allowed_cart_products);
-      return { cart: initialCart };
+      return;
     }
-
-    if (add_products.length) {
-      for (const product of reverse(add_products)) {
-        addProduct({ cart: initialCart, product, url, referrer });
-      }
-
-      const creatorCarts = new Map<string, CartItem[]>();
-      for (const item of initialCart.items) {
-        startTrackingForSeller(item.product.creator.id, item.product.analytics);
-
-        creatorCarts.set(item.product.creator.id, [...(creatorCarts.get(item.product.creator.id) ?? []), item]);
-      }
-
-      for (const [creatorId, creatorCart] of creatorCarts) {
-        const products = creatorCart.map((item) => ({
-          permalink: item.product.permalink,
-          name: item.product.name,
-          quantity: item.quantity,
-          price: convertToUSD(item, getDiscountedPrice(initialCart, item).price) / 100.0,
-        }));
-        trackProductEvent(creatorId, {
-          action: "begin_checkout",
-          seller_id: creatorId,
-          price: products.reduce((sum, { price, quantity }) => sum + price * quantity, 0),
-          products,
-        });
-      }
-
-      initialCart.rejectPppDiscount = false;
-    }
-    return { cart: initialCart };
+    for (const seller of initialCheckout.sellersToTrack) startTrackingForSeller(seller.id, seller.analytics);
+    for (const event of initialCheckout.beginCheckoutEvents) trackProductEvent(event.seller_id, event);
   });
   const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({

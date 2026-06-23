@@ -878,6 +878,12 @@ describe Payment do
       payment
     end
 
+    def failed_paypal_payout(payment_address: "seller@example.com")
+      payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, payment_address:, state: "processing")
+      payment.mark_failed!
+      payment
+    end
+
     it "pauses payouts and flags the account once the consecutive failure limit is reached" do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
       expect(user.reload.payouts_paused?).to be(false)
@@ -927,9 +933,29 @@ describe Payment do
       expect(user.reload.payouts_paused?).to be(false)
     end
 
-    it "ignores payouts without a bank account, such as PayPal" do
+    it "pauses PayPal payouts after repeated failures to the same PayPal account" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_paypal_payout }
+      expect(user.reload.payouts_paused?).to be(false)
+
+      failed_paypal_payout
+
+      expect(user.reload.payouts_paused_internally).to be(true)
+      expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      comment = user.comments.with_type_on_probation.last
+      expect(comment.content).to include("#{Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS} consecutive failed payouts to the same PayPal account")
+    end
+
+    it "scopes the count to a single PayPal address so a new address starts fresh" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_paypal_payout(payment_address: "old@example.com") }
+
+      failed_paypal_payout(payment_address: "new@example.com")
+
+      expect(user.reload.payouts_paused?).to be(false)
+    end
+
+    it "ignores PayPal payouts that have no payment address on record" do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS + 1).times do
-        payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, state: "processing")
+        payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, payment_address: nil, state: "processing")
         payment.mark_failed!
       end
 

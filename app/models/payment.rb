@@ -271,19 +271,27 @@ class Payment < ApplicationRecord
     end
 
     def pause_payouts_after_repeated_failures
-      return if bank_account_id.blank?
       return if user.nil? || user.payouts_paused?
 
-      payouts_for_bank_account = user.payments.where(bank_account_id:)
-      last_completed_at = payouts_for_bank_account.completed.maximum(:created_at)
-      failed_payouts = payouts_for_bank_account.where(state: [FAILED, RETURNED])
+      if bank_account_id.present?
+        destination = "bank account"
+        payouts_to_destination = user.payments.where(bank_account_id:)
+      elsif processor == PayoutProcessorType::PAYPAL && payment_address.present?
+        destination = "PayPal account"
+        payouts_to_destination = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address:)
+      else
+        return
+      end
+
+      last_completed_at = payouts_to_destination.completed.maximum(:created_at)
+      failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS
 
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       user.comments.create!(
-        content: "Payouts paused automatically after #{failed_count} consecutive failed payouts to the same bank account. Verify the seller's payout details before resuming.",
+        content: "Payouts paused automatically after #{failed_count} consecutive failed payouts to the same #{destination}. Verify the seller's payout details before resuming.",
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
         author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
       )

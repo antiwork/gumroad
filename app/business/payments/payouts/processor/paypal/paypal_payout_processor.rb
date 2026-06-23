@@ -297,7 +297,7 @@ class PaypalPayoutProcessor
         UpdatePayoutStatusWorker.perform_in(5.minutes, payment.id)
       elsif payment.state != new_payment_state
         if new_payment_state == "failed"
-          failure_reason = "PAYPAL #{paypal_event["reason_code"]}" if paypal_event["reason_code"].present?
+          failure_reason = paypal_event["reason_code"].present? ? "PAYPAL #{paypal_event["reason_code"]}" : Payment::FailureReason::PAYPAL_PAYOUT_FAILED
           payment.mark_failed!(failure_reason)
         else
           payment.mark!(new_payment_state)

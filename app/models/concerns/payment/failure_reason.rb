@@ -8,8 +8,10 @@ module Payment::FailureReason
   INSUFFICIENT_FUNDS = "insufficient_funds"
   BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
   CURRENCY_MISMATCH = "currency_mismatch"
+  PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   PAYPAL_MASS_PAY = {
+    PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",
     "PAYPAL 1000" => "Unknown error",
     "PAYPAL 1001" => "Receiver's account is invalid",
     "PAYPAL 1002" => "Sender has insufficient funds",

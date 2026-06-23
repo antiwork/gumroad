@@ -22,6 +22,9 @@ export const Sheet = ({
         onPointerDownOutside={(e) => {
           if (!modal) e.preventDefault();
         }}
+        onFocusOutside={(e) => {
+          if (!modal) e.preventDefault();
+        }}
       >
         {children}
       </Dialog.Content>
