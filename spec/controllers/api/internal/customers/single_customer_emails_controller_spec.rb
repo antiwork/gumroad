@@ -168,6 +168,52 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(lock_keys).to include("post_email:#{Installment.last.id}:#{purchase.id}:lock")
     end
 
+    it "reserves delivery before the provider call without holding the Redis lock while sending" do
+      delivery_cache_values = []
+      delivery_lock_values = []
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        delivery_cache_key = "post_email:#{post.id}:#{purchase.id}"
+        delivery_cache_values << Rails.cache.read(delivery_cache_key)
+        delivery_lock_values << $redis.get("#{delivery_cache_key}:lock")
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      delivery_cache_key = "post_email:#{Installment.last.id}:#{purchase.id}"
+      expect(delivery_cache_values).to eq([described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE])
+      expect(delivery_lock_values).to eq([nil])
+      expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_SENT_CACHE_VALUE)
+      expect(PostEmailApi).to have_received(:process).once
+    end
+
+    it "does not send again while delivery for the cached installment is already in progress" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      installment = Installment.last
+      delivery_cache_key = "post_email:#{installment.id}:#{purchase.id}"
+      Rails.cache.write(
+        delivery_cache_key,
+        described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE,
+        expires_in: described_class::DELIVERY_CACHE_TTL
+      )
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "This email is already being sent. Please wait a few seconds before trying again.")
+      expect(PostEmailApi).to have_received(:process).once
+    end
+
     it "returns a JSON 422 when the message is empty after scrubbing" do
       expect(PostEmailApi).to_not receive(:process)
 

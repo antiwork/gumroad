@@ -109,7 +109,7 @@ describe InstallmentPresenter do
 
     it "resolves the single-customer recipient from a purchase id" do
       product = create(:product, user: seller)
-      purchase = create(:purchase, seller:, link: product, email: "buyer@example.com")
+      purchase = create(:free_purchase, seller:, link: product, email: "buyer@example.com", can_contact: true)
 
       props = described_class.new(seller:).new_page_props(single_customer_purchase_id: purchase.external_id)
 

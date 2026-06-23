@@ -6,6 +6,9 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
   REDIS_LOCK_TTL = 30.seconds
   REDIS_LOCK_WAIT_TIMEOUT = 10.seconds
   REDIS_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+  DELIVERY_CACHE_TTL = 8.hours
+  DELIVERY_IN_PROGRESS_CACHE_VALUE = "in_progress"
+  DELIVERY_SENT_CACHE_VALUE = "sent"
   REDIS_LOCK_RELEASE_SCRIPT = <<~LUA.squish
     if redis.call("get", KEYS[1]) == ARGV[1] then
       return redis.call("del", KEYS[1])
@@ -89,26 +92,44 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     # purchase) idempotency key, mirroring PostsController#send_for_purchase.
     # PostEmailApi.process hits an external provider (Resend/SendGrid), so it must
     # not run inside the creation transaction: a post-send rollback would orphan an
-    # already-delivered email. Keying delivery on the installment means a send
-    # failure retries only the send, never a second installment, while a delivery
-    # that already succeeded is never repeated.
+    # already-delivered email. Reserve the delivery cache key before the provider
+    # call and release the short Redis lock before sending; otherwise a provider
+    # call longer than the lock TTL could allow a retry to acquire the lock and
+    # send the same email again.
     def deliver_to_purchase(installment, purchase)
       cache_key = "post_email:#{installment.id}:#{purchase.id}"
+      return if delivery_already_sent_or_reserved!(cache_key) == :sent
+
+      begin
+        CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
+        PostEmailApi.process(
+          post: installment,
+          recipients: [
+            {
+              email: purchase.email,
+              purchase:,
+              url_redirect: installment.delivery_url_redirect_for(purchase),
+              subscription: purchase.subscription,
+            }.compact_blank
+          ]
+        )
+        Rails.cache.write(cache_key, DELIVERY_SENT_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
+      rescue
+        Rails.cache.delete(cache_key)
+        raise
+      end
+    end
+
+    def delivery_already_sent_or_reserved!(cache_key)
       with_redis_lock("#{cache_key}:lock") do
-        Rails.cache.fetch(cache_key, expires_in: 8.hours) do
-          CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
-          PostEmailApi.process(
-            post: installment,
-            recipients: [
-              {
-                email: purchase.email,
-                purchase:,
-                url_redirect: installment.delivery_url_redirect_for(purchase),
-                subscription: purchase.subscription,
-              }.compact_blank
-            ]
-          )
-          true
+        case Rails.cache.read(cache_key)
+        when DELIVERY_SENT_CACHE_VALUE, true
+          :sent
+        when DELIVERY_IN_PROGRESS_CACHE_VALUE
+          raise Installment::InstallmentInvalid, "This email is already being sent. Please wait a few seconds before trying again."
+        else
+          Rails.cache.write(cache_key, DELIVERY_IN_PROGRESS_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
+          :reserved
         end
       end
     end
