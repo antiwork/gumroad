@@ -572,6 +572,15 @@ class Installment < ApplicationRecord
     UrlRedirect.where(purchase_id: purchase.id, installment_id: id).first if purchase
   end
 
+  # The content link to deliver this post to a purchase: an (installment, purchase)
+  # redirect when the post carries its own files, otherwise the purchase's existing
+  # product download.
+  def delivery_url_redirect_for(purchase)
+    return purchase.url_redirect unless has_files?
+
+    purchase_url_redirect(purchase) || generate_url_redirect_for_purchase(purchase)
+  end
+
   def imported_customer_url_redirect(imported_customer)
     UrlRedirect.where(imported_customer_id: imported_customer.id, installment_id: id).last
   end

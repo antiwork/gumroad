@@ -117,6 +117,19 @@ describe PostsController, type: :controller, inertia: true do
 
         expect(response).to have_http_status(:no_content)
       end
+
+      it "resends a single-recipient email's attachments through an installment-scoped link" do
+        @post.update!(single_recipient_email: true, single_recipient_purchase_id: @purchase.id)
+        create(:product_file, installment: @post, url: "#{S3_BASE_URL}attachments/12345/abcd12345/original/manual.pdf", link: nil)
+        captured = nil
+        allow(PostSendgridApi).to receive(:process) { |post:, recipients:| captured = recipients.first[:url_redirect] }
+
+        get :send_for_purchase, params: { id: @post.external_id, purchase_id: @purchase.external_id }
+
+        expect(captured).to be_present
+        expect(captured.installment_id).to eq(@post.id)
+        expect(captured.purchase_id).to eq(@purchase.id)
+      end
     end
   end
 
