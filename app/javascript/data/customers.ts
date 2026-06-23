@@ -57,6 +57,8 @@ export type Customer = {
   id: string;
   email: string;
   giftee_email: string | null;
+  is_gift_sender_purchase: boolean;
+  is_gift_receiver_purchase: boolean;
   is_existing_user: boolean;
   can_contact: boolean;
   name: string;

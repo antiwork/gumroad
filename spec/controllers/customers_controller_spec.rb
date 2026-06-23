@@ -92,6 +92,30 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(inertia.props[:can_email]).to eq(false)
     end
 
+    it "exposes gift sender and receiver flags" do
+      gift_sender_purchase = create(:free_purchase, :gift_sender, seller:, link: product, email: "gifter@example.com")
+      gift_receiver_purchase = create(:free_purchase, :gift_receiver, seller:, link: product, email: "giftee@example.com")
+      create(
+        :gift,
+        gifter_purchase: gift_sender_purchase,
+        giftee_purchase: gift_receiver_purchase,
+        gifter_email: gift_sender_purchase.email,
+        giftee_email: gift_receiver_purchase.email,
+        link: product
+      )
+
+      get :show, params: { purchase_id: gift_receiver_purchase.external_id }
+
+      expect(response).to be_successful
+      expect(inertia.props[:customer]).to include(
+        id: gift_receiver_purchase.external_id,
+        email: gift_receiver_purchase.email,
+        giftee_email: gift_receiver_purchase.reload.giftee_email,
+        is_gift_sender_purchase: false,
+        is_gift_receiver_purchase: true
+      )
+    end
+
     context "when the signed-in user lacks email-creation permission" do
       let(:support_user) { create(:user) }
 

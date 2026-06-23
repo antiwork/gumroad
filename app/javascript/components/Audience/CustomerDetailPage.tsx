@@ -179,7 +179,8 @@ const CustomerDetailPage = ({
   const [charges, setCharges] = React.useState<Charge[]>(initialCharges);
 
   const isCoffee = customer.product.native_type === "coffee";
-  const canEmailCustomer = canEmail && isValidEmail(customer.email) && customer.can_contact && !customer.giftee_email;
+  const canEmailCustomer =
+    canEmail && isValidEmail(customer.email) && customer.can_contact && !customer.is_gift_sender_purchase;
 
   const formatDateWithoutTime = (date: Date) =>
     date.toLocaleDateString(userAgentInfo.locale, {

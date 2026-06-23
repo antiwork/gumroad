@@ -354,7 +354,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response.parsed_body).to eq("success" => false, "message" => "Customer cannot be emailed.")
     end
 
-    it "returns a JSON 422 for a gift sale even via a direct POST" do
+    it "returns a JSON 422 for a gift sender sale even via a direct POST" do
       # Keep the seller's customers-audience non-empty via a separate normal sale,
       # so the request reaches the gift guard rather than the audience check.
       create(:purchase, seller:, link: product, email: "normal@example.com", can_contact: true)
@@ -369,6 +369,49 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.media_type).to eq("application/json")
       expect(response.parsed_body).to eq("success" => false, "message" => "Customer cannot be emailed.")
+    end
+
+    it "allows emailing a gift receiver sale" do
+      gift_sender_purchase = create(:free_purchase, :gift_sender, seller:, link: product, email: "gifter@example.com", can_contact: true)
+      gift_receiver_purchase = create(:free_purchase, :gift_receiver, seller:, link: product, email: "giftee@example.com", can_contact: true)
+      create(
+        :gift,
+        gifter_purchase: gift_sender_purchase,
+        giftee_purchase: gift_receiver_purchase,
+        gifter_email: gift_sender_purchase.email,
+        giftee_email: gift_receiver_purchase.email,
+        link: product
+      )
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        expect(recipients).to eq([{ email: gift_receiver_purchase.email, purchase: gift_receiver_purchase }])
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase: gift_receiver_purchase)
+      end
+
+      expect do
+        post :create, params: request_params.merge(purchase_id: gift_receiver_purchase.external_id), as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(PostEmailApi).to have_received(:process).once
+    end
+
+    it "does not apply the blast audience limit to a single-recipient email" do
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+      allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
     end
 
     it "delivers the email after the installment and blast are committed" do

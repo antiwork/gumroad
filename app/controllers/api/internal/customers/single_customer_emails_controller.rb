@@ -27,7 +27,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     authorize Installment, :create?
 
     return render_error("Customer not found.", :not_found) unless seller_can_email_customers?
-    return render_error("Customer cannot be emailed.", :unprocessable_entity) unless purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && purchase.giftee_email.blank?
+    return render_error("Customer cannot be emailed.", :unprocessable_entity) unless customer_can_receive_email?(purchase)
     return render_error("You are not eligible to send emails.", :unauthorized) unless current_seller.eligible_to_send_emails?
     return render_error("Please set a title.", :unprocessable_entity) if permitted_params[:name].blank?
 
@@ -184,6 +184,10 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
 
     def seller_can_email_customers?
       UserPresenter.new(user: current_seller).audience_types.include?(:customers)
+    end
+
+    def customer_can_receive_email?(purchase)
+      purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && !purchase.is_gift_sender_purchase?
     end
 
     def render_error(message, status)

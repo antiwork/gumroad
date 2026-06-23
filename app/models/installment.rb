@@ -1043,6 +1043,7 @@ class Installment < ApplicationRecord
       return unless send_emails
       return if deleted_at.present?
       return if abandoned_cart_type?
+      return if single_recipient_email?
 
       if audience_members_count(SENDING_LIMIT + 1) > SENDING_LIMIT && user.sales_cents_total < MINIMUM_SALES_CENTS_VALUE
         errors.add(:base, "<a href='/help/article/269-balance-page' target='_blank' rel='noreferrer'>Sorry, you cannot send out more than #{SENDING_LIMIT} emails until you have $#{MINIMUM_SALES_CENTS_VALUE / 100} in total earnings.</a>".html_safe)
