@@ -79,7 +79,7 @@ class SaveUpsellService
       variants = upsell.product.variants_or_skus
       new_upsell_variants = upsell_params[:upsell_variants] || []
 
-      upsell.upsell_variants.each do |upsell_variant|
+      upsell.upsell_variants.alive.each do |upsell_variant|
         new_offered_variant = new_upsell_variants.find { |new_upsell_variant| new_upsell_variant[:selected_variant_id] == upsell_variant.selected_variant.external_id }
         if new_offered_variant.present?
           upsell_variant.offered_variant = variants.find_by_external_id!(new_offered_variant[:offered_variant_id])
@@ -90,7 +90,7 @@ class SaveUpsellService
 
       new_upsell_variants.each do |new_upsell_variant|
         selected_variant = BaseVariant.find_by_external_id!(new_upsell_variant[:selected_variant_id])
-        if upsell.upsell_variants.find_by(selected_variant:).blank?
+        if upsell.upsell_variants.alive.find_by(selected_variant:).blank?
           upsell.upsell_variants.build(selected_variant:, offered_variant: BaseVariant.find_by_external_id!(new_upsell_variant[:offered_variant_id]))
         end
       end

@@ -104,5 +104,21 @@ describe SaveUpsellService do
       expect(upsell.reload.name).to eq("Renamed")
       expect(upsell.text).to eq("Take advantage of this excellent offer!")
     end
+
+    it "re-activates a variant mapping that was previously removed" do
+      versioned = create(:upsell, seller:, product:, name: "Versioned", cross_sell: false)
+      first = product.alive_variants.first
+      second = product.alive_variants.second
+      create(:upsell_variant, upsell: versioned, selected_variant: first, offered_variant: second)
+
+      described_class.new(seller:, params: params(product_id: product.external_id, upsell_variants: [{ selected_variant_id: second.external_id, offered_variant_id: first.external_id }]), upsell: versioned).perform
+      expect(versioned.save).to be(true)
+      expect(versioned.reload.upsell_variants.alive.map(&:selected_variant)).to eq([second])
+
+      described_class.new(seller:, params: params(product_id: product.external_id, upsell_variants: [{ selected_variant_id: first.external_id, offered_variant_id: second.external_id }]), upsell: versioned).perform
+      expect(versioned.save).to be(true)
+      expect(versioned.reload.upsell_variants.alive.map(&:selected_variant)).to eq([first])
+      expect(versioned.upsell_variants.alive.first.offered_variant).to eq(second)
+    end
   end
 end
