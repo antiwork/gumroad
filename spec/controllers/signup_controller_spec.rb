@@ -142,6 +142,18 @@ describe SignupController, type: :controller, inertia: true do
           expect(controller.user_signed_in?).to eq false
         end
       end
+
+      context "when the next param points to a creator's custom subdomain" do
+        it "redirects to the custom domain without raising UnsafeRedirectError" do
+          stub_const("ROOT_DOMAIN", "test.gumroad.com")
+          custom_domain_url = "https://localsysadmin.test.gumroad.com/l/ggocri"
+
+          post "create", params: { user: { email: @user.email, password: "password" }, next: custom_domain_url }
+
+          expect(response).to redirect_to(custom_domain_url)
+          expect(controller.user_signed_in?).to eq true
+        end
+      end
     end
 
     it "creates a user" do

@@ -193,9 +193,11 @@ class UpdatePayoutMethod
 
     MAX_ENCRYPTED_FIELD_LENGTH = 200
 
+    ACCOUNT_NUMBER_SEPARATOR_CHARACTERS = /[[:space:]\p{Cf}-]/
+
     def process_full_bank_account_replacement
-      account_number = params[:bank_account][:account_number].delete("-").strip
-      account_number_confirmation = params[:bank_account][:account_number_confirmation].to_s.delete("-").strip
+      account_number = normalize_account_number(params[:bank_account][:account_number])
+      account_number_confirmation = normalize_account_number(params[:bank_account][:account_number_confirmation])
       return { error: :account_number_does_not_match } if account_number != account_number_confirmation
       return { error: :bank_account_error, data: "Account number is too long" } if account_number.length > MAX_ENCRYPTED_FIELD_LENGTH
 
@@ -282,6 +284,10 @@ class UpdatePayoutMethod
       bank_account_type = params[:bank_account][:type]
       permitted_params = BANK_ACCOUNT_TYPES[bank_account_type][:permitted_params]
       params[:bank_account].permit(*permitted_params)
+    end
+
+    def normalize_account_number(value)
+      value.to_s.gsub(ACCOUNT_NUMBER_SEPARATOR_CHARACTERS, "")
     end
 
     def paypal_payouts_supported?

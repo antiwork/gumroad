@@ -1932,6 +1932,36 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "#payout_setup_retry_exhausted" do
+    let(:seller) { create(:user) }
+
+    it "uses bank-specific wording for a bank marker" do
+      mail = ContactingCreatorMailer.payout_setup_retry_exhausted(seller.id, "bank")
+
+      expect(mail.to).to eq([seller.email])
+      expect(mail.subject).to eq("We still couldn't verify your bank account.")
+      expect(mail.body.encoded).to include("the bank account you added for Gumroad payouts")
+      expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+    end
+
+    it "uses postal-specific wording for a postal marker" do
+      mail = ContactingCreatorMailer.payout_setup_retry_exhausted(seller.id, "postal")
+
+      expect(mail.to).to eq([seller.email])
+      expect(mail.subject).to eq("We still couldn't verify your postal code.")
+      expect(mail.body.encoded).to include("the postal code on your Gumroad payout details")
+      expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+    end
+
+    it "does not send to a suspended seller" do
+      seller.update!(user_risk_state: "suspended_for_fraud")
+
+      mail = ContactingCreatorMailer.payout_setup_retry_exhausted(seller.id, "bank")
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+  end
+
   describe "#suspended_due_to_stripe_risk" do
     let(:seller) { create(:named_seller) }
 

@@ -15,6 +15,9 @@ module StripeMerchantAccountManager
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
 
+  BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
+  POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
+
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
@@ -53,7 +56,7 @@ module StripeMerchantAccountManager
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
   DEFAULT_RELATIONSHIP_TITLE = "CEO"
 
-  def self.create_account(user, passphrase:, from_admin: false)
+  def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
     user_compliance_info = nil
     bank_account = nil
@@ -144,12 +147,17 @@ module StripeMerchantAccountManager
       ErrorNotifier.notify(e)
     end
 
+    clear_stale_postal_code_failure_notes(user)
+    clear_stale_bank_sync_failure_notes(user)
+
     merchant_account
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
       ErrorNotifier.notify(e)
     end
+    record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
+    record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
     raise
   end
 
@@ -163,7 +171,11 @@ module StripeMerchantAccountManager
     result.deleted
   end
 
-  def self.update_account(user, passphrase:)
+  # Address sub-hash keys whose values carry a postal code Stripe validates.
+  ADDRESS_SUBHASH_KEYS = %i[address address_kanji address_kana].freeze
+  private_constant :ADDRESS_SUBHASH_KEYS
+
+  def self.update_account(user, passphrase:, notify: true, force_address_resync: false)
     validate_for_update(user)
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
@@ -235,14 +247,31 @@ module StripeMerchantAccountManager
     capabilities = capabilities.map(&:to_sym) | stripe_account.capabilities.keys
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
+    entity_key = user_compliance_info.is_business? ? :company : :individual
+
+    # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
+    # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
+    # previously rejected postal code is actually re-checked instead of being silently treated as resolved.
+    if force_address_resync
+      force_address_into_diff!(diff_attributes, current_attributes, entity_key)
+    end
+
     Stripe::Account.update(stripe_account.id, diff_attributes)
 
+    person_address_submitted = false
     if user_compliance_info.is_business?
-      update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
     end
+
+    if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
+      clear_stale_postal_code_failure_notes(user)
+    end
+  rescue Stripe::InvalidRequestError => e
+    record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
+    raise
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false)
     stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
@@ -273,7 +302,33 @@ module StripeMerchantAccountManager
       diff_attributes[:dob] = current_attributes[:dob]
     end
 
+    # See update_account: force the representative's address back into the diff so an automated retry
+    # actually re-validates a previously rejected representative postal code.
+    force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
+
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  private_class_method
+  def self.force_address_into_diff!(diff_attributes, current_attributes, key)
+    source = current_attributes[key]
+    return diff_attributes unless source.is_a?(Hash)
+
+    target = key == :person ? diff_attributes : (diff_attributes[key] ||= {})
+    ADDRESS_SUBHASH_KEYS.each do |address_key|
+      address = source[address_key]
+      target[address_key] = address if address.present?
+    end
+    diff_attributes
+  end
+
+  private_class_method
+  def self.address_submitted?(diff_attributes, entity_key)
+    entity = diff_attributes[entity_key]
+    return false unless entity.is_a?(Hash)
+
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| entity[address_key].present? }
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
@@ -298,7 +353,7 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.update_bank_account(user, passphrase:)
+  def self.update_bank_account(user, passphrase:, notify: true)
     validate_for_update(user)
 
     bank_account = user.active_bank_account
@@ -320,21 +375,21 @@ module StripeMerchantAccountManager
     clear_stale_bank_sync_failure_notes(user)
     :synced
   rescue Stripe::InvalidRequestError => e
-    record_bank_sync_failure_note(user, e)
     if e.code == "incorrect_account_holder_name"
-      ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical")
+      ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
+    record_bank_sync_failure_note(user, e) if notify
     if e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
-      ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical")
+      ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
       return :invalid_bank_account
     end
 
     ErrorNotifier.notify(e)
     :stripe_invalid_request
   rescue Stripe::CardError => e
-    record_bank_sync_failure_note(user, e)
-    ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical")
+    record_bank_sync_failure_note(user, e) if notify
+    ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
     :card_not_supported
   rescue Stripe::StripeError => e
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
@@ -345,7 +400,7 @@ module StripeMerchantAccountManager
   private_class_method
   def self.record_bank_sync_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
-    user.add_payout_note(content: "Stripe bank sync failed: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+    user.add_payout_note(content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
   rescue => e
     Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
@@ -357,10 +412,50 @@ module StripeMerchantAccountManager
         .with_type_payout_note
         .alive
         .where(author_id: GUMROAD_ADMIN_ID)
-        .where("content LIKE ?", "Stripe bank sync failed%")
+        .where("content LIKE ?", "#{BANK_SYNC_FAILURE_NOTE_PREFIX}%")
         .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale bank sync failure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.postal_code_invalid_error?(error)
+    error.is_a?(Stripe::InvalidRequestError) && error.respond_to?(:code) && error.code == "postal_code_invalid"
+  end
+
+  private_class_method
+  def self.bank_account_invalid_error?(error)
+    return true if error.is_a?(Stripe::CardError)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    code = error.respond_to?(:code) ? error.code : nil
+    return false if code == "incorrect_account_holder_name"
+    return true if %w[routing_number_invalid account_number_invalid].include?(code)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    param.start_with?("bank_account", "external_account")
+  end
+
+  private_class_method
+  def self.record_postal_code_failure_note(user, error)
+    code = error.respond_to?(:code) ? error.code : nil
+    user.add_payout_note(content: "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+  rescue => e
+    Rails.logger.error "Failed to record postal-code payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.clear_stale_postal_code_failure_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}%")
+        .update_all(deleted_at: Time.current)
+  rescue => e
+    Rails.logger.error "Failed to clear stale postal-code failure notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 
@@ -1000,11 +1095,11 @@ module StripeMerchantAccountManager
     Compliance::Countries.japan_prefecture_kana(kanji)
   end
 
-  def self.handle_new_user_compliance_info(user_compliance_info)
+  def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false)
     return if user_compliance_info.user.has_stripe_account_connected?
     return unless user_has_stripe_connect_merchant_account?(user_compliance_info.user)
 
-    update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), notify:, force_address_resync:)
   end
 
   def self.handle_new_bank_account(bank_account)

@@ -332,6 +332,7 @@ class User < ApplicationRecord
 
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :suspend_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :remove_follows_for_suspended_account!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :send_suspension_email
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],

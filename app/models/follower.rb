@@ -19,7 +19,7 @@ class Follower < ApplicationRecord
   validates :email, email_format: { message: "invalid." }, if: :email_changed?
 
   validate :not_confirmed_and_deleted
-  validate :follower_user_id_exists
+  validate :follower_user_id_exists, unless: :being_marked_as_deleted?
   validate :double_follow_validation, on: :create
 
   scope :confirmed, -> { where.not(confirmed_at: nil) }

@@ -240,6 +240,22 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.component).to eq("Checkout/Show")
         expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([])
       end
+
+      it "treats hash-form cart_product_ids as empty instead of raising" do
+        expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(
+          purchaser:,
+          cart_product_ids: [],
+          recommender_model_name:,
+          limit: 5,
+          recommendation_type: nil,
+        ).and_return([])
+
+        get :show, params: { cart_product_ids: { "0" => "somevalue", "1" => "anothervalue" }, on_discover_page: "false", limit: "5" }, session: { recommender_model_name: }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Checkout/Show")
+        expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([])
+      end
     end
   end
 

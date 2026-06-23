@@ -81,6 +81,11 @@ send_reminders_for_outstanding_user_compliance_info_requests: # Duration: 5min
   cron: "0 2 * * *" # UTC 02:00
   class: SendRemindersForOutstandingUserComplianceInfoRequestsWorker
   description: Sends reminder emails for outstanding user compliance info requests.
+retry_stripe_rejected_payout_setups:
+  cron: "0 7 * * 1" # UTC 07:00 every Monday, before the 08:00 daily payouts job
+  class: RetryStripeRejectedPayoutSetupsJob
+  queue: low
+  description: Weekly re-attempt of Stripe payout setup for sellers with rejected postal codes / bank accounts
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker

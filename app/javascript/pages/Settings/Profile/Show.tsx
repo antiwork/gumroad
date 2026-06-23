@@ -21,12 +21,14 @@ import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { postToMobileApp } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 type ProfileSettingsForm = {
   name: string | null;
@@ -154,6 +156,17 @@ export default function SettingsPage() {
     }
   };
 
+  const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
+
+  useReactNativeMessage((data) => {
+    if (data.type === "mobileAppSettingsSave") void save();
+  });
+
+  React.useEffect(() => {
+    if (!isMobileAppWebView) return;
+    postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
+  }, [isMobileAppWebView, canSave]);
+
   const profileColors = currentSeller
     ? {
         "--accent": hexToRgb(currentSeller.profileHighlightColor),
@@ -180,15 +193,17 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader
-        className="sticky-top"
-        title="Profile"
-        actions={
-          <Button color="accent" onClick={() => void save()} disabled={!canSave}>
-            Update profile
-          </Button>
-        }
-      />
+      {isMobileAppWebView ? null : (
+        <PageHeader
+          className="sticky-top"
+          title="Profile"
+          actions={
+            <Button color="accent" onClick={() => void save()} disabled={!canSave}>
+              Update profile
+            </Button>
+          }
+        />
+      )}
       <WithPreviewSidebar>
         <div>
           <section className="grid gap-8 p-4! md:p-8!">

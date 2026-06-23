@@ -26,10 +26,11 @@ type PageProps = {
       offset: number;
     };
   };
+  is_mobile_app_web_view?: boolean;
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+  const { flash, logged_in_user, current_seller, is_mobile_app_web_view } = usePage<PageProps>().props;
   useFlashMessage(flash);
 
   return (
@@ -38,7 +39,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <MetaTags />
         <Alert initial={null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
-          {logged_in_user ? <Nav title="Dashboard" /> : null}
+          {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
             {children}
           </main>

@@ -6,7 +6,7 @@ require "shared_examples/authorized_admin_api_method"
 describe Api::Internal::Admin::ScheduledPayoutsController do
   let(:admin_user) { create(:admin_user, name: "Risk admin") }
   let(:user) { create(:compliant_user) }
-  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
+  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email or username." }
 
   before do
     stub_const("GUMROAD_ADMIN_ID", admin_user.id)
@@ -275,6 +275,16 @@ describe Api::Internal::Admin::ScheduledPayoutsController do
       create(:scheduled_payout, user: create(:user))
 
       get :index, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([mine.external_id])
+    end
+
+    it "filters by username when provided" do
+      mine = create(:scheduled_payout, user:)
+      create(:scheduled_payout, user: create(:user))
+
+      get :index, params: { username: user.username }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["scheduled_payouts"].map { _1["external_id"] }).to eq([mine.external_id])

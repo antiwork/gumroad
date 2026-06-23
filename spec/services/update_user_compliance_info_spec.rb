@@ -175,6 +175,140 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Peru individual" do
+      def create_peru_individual_user(individual_tax_id:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info,
+            user: u,
+            country: "Peru",
+            state: nil,
+            city: "Lima",
+            zip_code: "15074",
+            individual_tax_id:,
+          )
+        end
+      end
+
+      it "rejects a bare 8-digit DNI submitted without the verification digit" do
+        user = create_peru_individual_user(individual_tax_id: "12345678-9")
+        original = user.alive_user_compliance_info
+
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "12349316",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Your Peru DNI must include the verification digit (for example, 12345678-9).")
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
+      it "rejects a DNI longer than 9 digits" do
+        user = create_peru_individual_user(individual_tax_id: "12345678-9")
+
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "1234567890",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Your Peru DNI must include the verification digit (for example, 12345678-9).")
+      end
+
+      it "accepts the DNI with its verification digit and a dash" do
+        user = create_peru_individual_user(individual_tax_id: "00000000-0")
+
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "12345678-9",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("12345678-9")
+      end
+
+      it "accepts the DNI with its verification digit and no dash" do
+        user = create_peru_individual_user(individual_tax_id: "00000000-0")
+
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "123456789",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
+
+      it "rejects a representative's bare 8-digit DNI for a Peru business" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Peru",
+            business_country: "Peru",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "12345678-9",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "12349316",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Your Peru DNI must include the verification digit (for example, 12345678-9).")
+      end
+
+      it "accepts a representative's 9-digit DNI for a Peru business" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Peru",
+            business_country: "Peru",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "00000000-0",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "12345678-9",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
+    end
+
     context "with a non-US business" do
       def create_ie_business_user(business_tax_id:)
         create(:user).tap do |u|

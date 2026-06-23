@@ -88,6 +88,10 @@ module User::Risk
     BlockSuspendedAccountIpWorker.perform_in(5.seconds, id)
   end
 
+  def remove_follows_for_suspended_account!
+    RemoveSuspendedAccountFollowsWorker.perform_in(5.seconds, id)
+  end
+
   def enable_sellers_other_accounts(transition)
     return if transition.args.first&.dig(:skip_transition_callback) == __method__
 

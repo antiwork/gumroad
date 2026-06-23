@@ -240,18 +240,18 @@ const CheckoutIndexPage = () => {
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const isMobile = !useIsAboveBreakpoint("sm");
-  const cartProductIds = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
+  const cartProductIdsKey = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
   React.useEffect(() => {
-    if (state.status.type !== "input" || !cartProductIds.length) return;
+    if (state.status.type !== "input" || cartProductIdsKey === "") return;
     router.reload({
       data: {
-        cart_product_ids: cartForm.data.cart.items.map(({ product }) => product.id),
+        cart_product_ids: cartProductIdsKey.split(","),
         limit: isMobile ? 2 : 6,
       },
       preserveUrl: true,
       only: ["recommended_products"],
     });
-  }, [state.status.type, isMobile, cartForm.data.cart.items]);
+  }, [state.status.type, isMobile, cartProductIdsKey]);
 
   const completedOfferIds = React.useRef(new Set()).current;
   const [offers, setOffers] = React.useState<
@@ -513,6 +513,7 @@ const CheckoutIndexPage = () => {
           redirectTo = "content-page";
         else if (
           !!user &&
+          user.confirmed &&
           results.every(({ result }) => result.success && result.content_url != null && !result.test_purchase_notice)
         )
           redirectTo = "library-page";
@@ -520,7 +521,7 @@ const CheckoutIndexPage = () => {
 
       for (const { result, item } of results) {
         if (!result.success) continue;
-        if (redirectTo !== "content-page") {
+        if (!redirectTo) {
           trackProductEvent(item.product.creator.id, {
             action: "purchased",
             seller_id: result.seller_id,
@@ -532,7 +533,9 @@ const CheckoutIndexPage = () => {
             valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
             quantity: result.quantity,
             tax: result.non_formatted_seller_tax_amount,
-            buyer_currency_display: item.product.buyer_currency_display,
+            ...(item.product.buyer_currency_display
+              ? { buyer_currency_display: item.product.buyer_currency_display }
+              : {}),
           });
         }
         if (result.has_third_party_analytics && !redirectTo)
@@ -561,7 +564,7 @@ const CheckoutIndexPage = () => {
       } else if (redirectTo === "library-page") {
         const purchases = results.flatMap(({ result }) => (result.success ? result.id : []));
         const libraryUrl = new URL(Routes.library_url());
-        for (const purchase of purchases) libraryUrl.searchParams.append("purchase_id", purchase);
+        for (const purchase of purchases) libraryUrl.searchParams.append("purchase_id[]", purchase);
         window.location.href = libraryUrl.toString();
       }
 

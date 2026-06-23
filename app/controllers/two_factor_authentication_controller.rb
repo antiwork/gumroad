@@ -71,7 +71,7 @@ class TwoFactorAuthenticationController < ApplicationController
       if valid_two_factor_token?(@user, token)
         sign_in_with_two_factor_authentication(@user)
 
-        redirect_to login_path_for(@user), notice: "Successfully logged in!", status: :see_other
+        redirect_to login_path_for(@user), notice: "Successfully logged in!", status: :see_other, allow_other_host: true
       else
         redirect_to two_factor_authentication_path, warning: "Invalid token, please try again.", status: :see_other
       end
@@ -100,7 +100,7 @@ class TwoFactorAuthenticationController < ApplicationController
     end
 
     def redirect_to_signed_in_path
-      redirect_to login_path_for(logged_in_user), status: :see_other
+      redirect_to login_path_for(logged_in_user), status: :see_other, allow_other_host: true
     end
 
     def fetch_user

@@ -7,6 +7,7 @@ import { useRefToLatest } from "./useRefToLatest";
 
 export type ReactNativeMessage =
   | { type: "mobileAppPageChange"; payload: { pageIndex: number } }
+  | { type: "mobileAppSettingsSave" }
   | {
       type: "mobileAppAudioPlayerInfo";
       payload: { fileId: string; isPlaying: boolean; latestMediaLocation?: string };

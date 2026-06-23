@@ -2302,6 +2302,9 @@ class Purchase < ApplicationRecord
       end
 
       json_data[:ppp] = ppp_info if ppp_info.present?
+
+      json_data[:formatted_total_price] = formatted_total_price
+      json_data[:purchase_daystamp] = created_at.in_time_zone(seller&.timezone).to_fs(:long_formatted_datetime)
     end
 
     json_data
