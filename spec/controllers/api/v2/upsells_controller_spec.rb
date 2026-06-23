@@ -328,6 +328,30 @@ describe Api::V2::UpsellsController do
         expect(upsell.variant).to be_nil
       end
 
+      it "drops version mappings tied to the old product when the product changes" do
+        upsell = create(:upsell, seller: @user, product: @product, name: "Versioned", cross_sell: false)
+        create(:upsell_variant, upsell:, selected_variant: @product.alive_variants.first, offered_variant: @product.alive_variants.second)
+
+        put @action, params: { id: upsell.external_id, product_id: @other_product.external_id, access_token: @token.token }, as: :json
+        upsell.reload
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(upsell.product).to eq(@other_product)
+        expect(upsell.upsell_variants.alive).to be_empty
+      end
+
+      it "drops version mappings when a version upsell is converted to a cross-sell" do
+        upsell = create(:upsell, seller: @user, product: @product, name: "Versioned", cross_sell: false)
+        create(:upsell_variant, upsell:, selected_variant: @product.alive_variants.first, offered_variant: @product.alive_variants.second)
+
+        put @action, params: { id: upsell.external_id, cross_sell: true, product_ids: [@other_product.external_id], access_token: @token.token }, as: :json
+        upsell.reload
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(upsell.cross_sell).to eq(true)
+        expect(upsell.upsell_variants.alive).to be_empty
+      end
+
       it "returns the updated upsell as the response" do
         put @action, params: @params.merge(name: "Renamed"), as: :json
 

@@ -70,13 +70,30 @@ class Api::V2::UpsellsController < Api::V2::BaseController
     end
 
     def backfill_absent_associations
-      params[:product_id] = @upsell.product.external_id unless params.key?(:product_id)
-      params[:variant_id] = @upsell.variant&.external_id unless params.key?(:variant_id)
-      params[:product_ids] = @upsell.selected_products.map(&:external_id) unless params.key?(:product_ids)
+      product_changing = params[:product_id].present? && params[:product_id] != @upsell.product.external_id
+      resulting_cross_sell = params.key?(:cross_sell) ? ActiveModel::Type::Boolean.new.cast(params[:cross_sell]) : @upsell.cross_sell
 
+      params[:product_id] = @upsell.product.external_id unless params.key?(:product_id)
+
+      # The offered version belongs to the offered product, so only preserve it for a
+      # cross-sell whose product is unchanged; otherwise it no longer applies.
+      unless params.key?(:variant_id)
+        params[:variant_id] = resulting_cross_sell && !product_changing ? @upsell.variant&.external_id : nil
+      end
+
+      # Selected products are the cross-sell's audience and don't apply to a version upsell.
+      unless params.key?(:product_ids)
+        params[:product_ids] = resulting_cross_sell ? @upsell.selected_products.map(&:external_id) : []
+      end
+
+      # Version upgrades belong to the offered product and only apply to a version upsell.
       unless params.key?(:upsell_variants)
-        params[:upsell_variants] = @upsell.upsell_variants.alive.map do |upsell_variant|
-          { selected_variant_id: upsell_variant.selected_variant.external_id, offered_variant_id: upsell_variant.offered_variant.external_id }
+        params[:upsell_variants] = if resulting_cross_sell || product_changing
+          []
+        else
+          @upsell.upsell_variants.alive.map do |upsell_variant|
+            { selected_variant_id: upsell_variant.selected_variant.external_id, offered_variant_id: upsell_variant.offered_variant.external_id }
+          end
         end
       end
 
