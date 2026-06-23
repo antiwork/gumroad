@@ -35,6 +35,19 @@ describe RemoveSuspendedAccountFollowsWorker do
       expect(email_only.confirmed_at).to be_nil
     end
 
+    it "does NOT delete a follow linked to a different account that shares a stale email" do
+      # Another account's row carries the same email (e.g. after an email change) but is
+      # explicitly linked to its own follower_user_id — it must not be collateral.
+      other_account = create(:user)
+      foreign_follow = create(:active_follower, user: @creator, follower_user_id: other_account.id, email: @follower_user.email)
+
+      @follower_user.suspend_for_fraud!(author_name: "test")
+
+      described_class.new.perform(@follower_user.id)
+
+      expect(foreign_follow.reload.deleted_at).to be_nil
+    end
+
     it "does nothing when the user is not suspended" do
       follow = create(:active_follower, user: @creator, follower_user_id: @follower_user.id, email: @follower_user.email)
 

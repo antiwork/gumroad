@@ -8,6 +8,8 @@
 # follows created before the account existed / never backfilled — by email only
 # (`follower_user_id` is nil but `followers.email == user.form_email`). The app's own
 # `User#following` resolves outbound follows by email, so both paths must be covered.
+# The email match is scoped to `follower_user_id IS NULL` so a row explicitly linked
+# to a DIFFERENT account that happens to share a stale email is never collateral.
 #
 # `Follower#mark_deleted!` soft-deletes the row AND clears `confirmed_at`, which drops
 # the follower from the creator's email audience. Idempotent: rows already deleted are
@@ -21,7 +23,7 @@ class RemoveSuspendedAccountFollowsWorker
     return unless user.suspended?
 
     Follower.alive
-            .where("follower_user_id = :id OR email = :email", id: user_id, email: user.form_email)
+            .where("follower_user_id = :id OR (follower_user_id IS NULL AND email = :email)", id: user_id, email: user.form_email)
             .find_each(&:mark_deleted!)
   end
 end
