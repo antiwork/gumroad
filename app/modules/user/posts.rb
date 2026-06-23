@@ -33,7 +33,7 @@ module User::Posts
         seller_sales = sales
         seller_post_filter_cache = {}
 
-        seller_type_installments = installments.where("installment_type = ?", Installment::SELLER_TYPE).to_a
+        seller_type_installments = installments.where("installment_type = ?", Installment::SELLER_TYPE).not_single_recipient_email.to_a
         all_not_bought_permalinks = seller_type_installments
           .flat_map { |post| Array.wrap(post.not_bought_products) }
           .uniq

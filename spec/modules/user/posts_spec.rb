@@ -166,6 +166,16 @@ describe User::Posts, :freeze_time do
                                                  @membership_post_not_on_profile)
       end
 
+      it "excludes single-recipient emails from a buyer's visible seller posts" do
+        one_off = create(:installment, installment_type: "seller", seller: @creator, name: "private one-off email", published_at: Time.current, shown_on_profile: false, single_recipient_email: true)
+
+        pundit_user = SellerContext.new(user: @dude, seller: @dude)
+        visible_posts = @creator.visible_posts_for(pundit_user:, shown_on_profile: false)
+
+        expect(visible_posts).to include(@seller_post_not_on_profile)
+        expect(visible_posts).to_not include(one_off)
+      end
+
       it "returns audience posts and follower posts when logged_in_user is a follower" do
         pundit_user = SellerContext.new(user: @follower, seller: @follower)
         visible_posts = @creator.visible_posts_for(pundit_user:, shown_on_profile: false)
