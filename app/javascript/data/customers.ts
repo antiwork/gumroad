@@ -235,13 +235,26 @@ export const resendReceipt = (purchaseId: string) =>
     if (!response.ok) throw new ResponseError();
   });
 
+type ErrorResponse = { message?: string; error?: string; error_message?: string };
+
+const getErrorMessage = async (response: Response) => {
+  try {
+    const { message, error, error_message } = typia.assert<ErrorResponse>(await response.json());
+    return [message, error, error_message].find(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    );
+  } catch {}
+
+  return undefined;
+};
+
 export const resendPost = async (purchaseId: string, postId: string) => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.send_for_purchase_path(postId, purchaseId),
   });
-  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
+  if (!response.ok) throw new ResponseError(await getErrorMessage(response));
 };
 
 type SingleCustomerEmailFile = {
@@ -262,7 +275,7 @@ export const sendSingleCustomerEmail = async (
     url: Routes.internal_single_customer_email_path(purchaseId),
     data,
   });
-  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
+  if (!response.ok) throw new ResponseError(await getErrorMessage(response));
 };
 
 export const updatePurchase = (
