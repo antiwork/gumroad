@@ -431,7 +431,9 @@ const AccountDetailsSection = ({
           <Fieldset>
             <FieldsetTitle>
               <Label>Account type</Label>
-              <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
+              <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
+                What type of account should I choose?
+              </a>
             </FieldsetTitle>
           </Fieldset>
           <Tabs variant="buttons" className="grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
@@ -747,7 +749,9 @@ const AccountDetailsSection = ({
                 <Label htmlFor={`${uid}-${businessTaxIdConfig.idSuffix}`}>{businessTaxIdConfig.label}</Label>
                 {complianceInfo.business_country === "US" ? (
                   <div className="small">
-                    <a href="/help/article/260-your-payout-settings-page">I'm not sure what my Tax ID is.</a>
+                    <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
+                      I'm not sure what my Tax ID is.
+                    </a>
                   </div>
                 ) : null}
               </FieldsetTitle>
@@ -1146,7 +1150,9 @@ const AccountDetailsSection = ({
       <Fieldset>
         <FieldsetTitle>
           <Label>Date of Birth</Label>
-          <a href="/help/article/260-your-payout-settings-page">Why does Gumroad need this information?</a>
+          <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
+            Why does Gumroad need this information?
+          </a>
         </FieldsetTitle>
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <Fieldset state={errorFieldNames.has("dob_month") ? "danger" : undefined}>

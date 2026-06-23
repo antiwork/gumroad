@@ -186,6 +186,10 @@ $ nomad run sidekiq_worker.nomad
 
 ## Deploying to a preview app
 
-You can deploy a preview app from any branch except `main` and `comp-assets-*`. Pushing the branch starts a Buildkite build that waits at the "Approval required for preview app deployment" block; unblock it in Buildkite to provision and deploy the preview app. Nothing is built or provisioned until you approve, and there is no automated approval.
+Add the `preview` label to a pull request to deploy its branch to a preview app. This works for any branch except `main` and `comp-assets-*`.
 
-Deployments will be deleted automatically when the associated branches are deleted in the repository.
+Adding the label triggers a Buildkite build that deploys the branch. Each subsequent push to a labeled branch redeploys automatically.
+
+The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
+
+Deployments are removed automatically when the associated branch is deleted in the repository.

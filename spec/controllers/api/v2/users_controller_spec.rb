@@ -77,6 +77,87 @@ describe Api::V2::UsersController do
     end
   end
 
+  describe "PUT 'update'" do
+    before do
+      @action = :update
+      @params = { name: "Jane Seller", bio: "I make great things." }
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+
+    it "rejects a token without the edit_profile scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_profile")
+      put @action, params: @params.merge(access_token: token.token)
+      expect(response.status).to eq(403)
+      expect(response.body.strip).to be_empty
+    end
+
+    describe "when logged in with edit_profile scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_profile")
+        @params.merge!(access_token: @token.token)
+      end
+
+      it "updates the seller name and bio" do
+        put @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.reload.name).to eq("Jane Seller")
+        expect(@user.bio).to eq("I make great things.")
+      end
+
+      it "rejects the update when the seller's email is unconfirmed" do
+        @user.update_columns(confirmed_at: nil)
+
+        put @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("confirm your email address")
+        expect(@user.reload.name).to_not eq("Jane Seller")
+      end
+
+      it "updates only the provided attribute" do
+        @user.update!(name: "Original", bio: "Original bio")
+
+        put @action, params: { access_token: @token.token, bio: "Updated bio" }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.reload.name).to eq("Original")
+        expect(@user.bio).to eq("Updated bio")
+      end
+
+      it "returns the updated user in the response" do
+        put @action, params: @params
+
+        expect(response.parsed_body).to eq("success" => true,
+                                           "user" => @user.reload.as_json(api_scopes: ["edit_profile"]))
+      end
+
+      it "does not expose email to a write-only edit_profile token" do
+        put @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["user"]).to_not have_key("email")
+      end
+
+      it "returns a validation error when the name is invalid" do
+        put @action, params: @params.merge(name: "Jane: Seller")
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("colons")
+        expect(@user.reload.name).to_not eq("Jane: Seller")
+      end
+
+      it "marks the user as a CLI user when requested from the CLI" do
+        request.user_agent = "gumroad-cli/1.0"
+
+        put @action, params: @params
+
+        expect(@user.reload.has_used_cli?).to be(true)
+      end
+    end
+  end
+
   describe "GET 'ifttt_sale_trigger'" do
     before do
       @action = :ifttt_sale_trigger

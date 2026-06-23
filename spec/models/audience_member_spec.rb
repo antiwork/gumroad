@@ -207,6 +207,35 @@ RSpec.describe AudienceMember, :freeze_time do
       expect(filtered(bought_from: "Mexico")).to eq([])
     end
 
+    it "filters by active customers, matching combined filters within a single purchase" do
+      member1 = create_member(purchases: [{ "product_id" => 1 }])
+      create_member(purchases: [{ "product_id" => 1, "subscription_cancelled" => true }])
+      member3 = create_member(purchases: [
+                                { "product_id" => 1, "subscription_cancelled" => true },
+                                { "product_id" => 2 }
+                              ])
+
+      expect(filtered(active_customers_only: true)).to eq([member1, member3])
+      expect(filtered(active_customers_only: true, bought_product_ids: [1])).to eq([member1])
+      expect(filtered(active_customers_only: true, bought_product_ids: [2])).to eq([member3])
+    end
+
+    it "filters by minimum license uses, matching combined filters within a single purchase" do
+      create_member(purchases: [{ "product_id" => 1, "license_uses" => 0 }])
+      member2 = create_member(purchases: [{ "product_id" => 1, "license_uses" => 3 }])
+      member3 = create_member(purchases: [
+                                { "product_id" => 1, "license_uses" => 1 },
+                                { "product_id" => 2, "license_uses" => 5 }
+                              ])
+      create_member(purchases: [{ "product_id" => 1 }])
+
+      expect(filtered(minimum_license_uses: 1)).to eq([member2, member3])
+      expect(filtered(minimum_license_uses: 3)).to eq([member2, member3])
+      expect(filtered(minimum_license_uses: 5)).to eq([member3])
+      expect(filtered(minimum_license_uses: 5, bought_product_ids: [1])).to eq([])
+      expect(filtered(minimum_license_uses: 5, bought_product_ids: [2])).to eq([member3])
+    end
+
     it "filters by affiliate products" do
       member1 = create_member(affiliates: [{ "product_id" => 1 }])
       member2 = create_member(affiliates: [{ "product_id" => 2 }])

@@ -11,6 +11,7 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { writeQueryParams } from "$app/utils/url";
+import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
 import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -182,6 +183,7 @@ type Props = {
   results: Result[];
   creators: { id: string; name: string }[];
   bundles: { id: string; label: string }[];
+  purchase_analytics: Record<string, SellerAnalyticsProps>;
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
 };
@@ -253,9 +255,8 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
 });
 
 export default function LibraryPage() {
-  const { results, creators, bundles, reviews_page_enabled, following_wishlists_enabled } = typia.assert<Props>(
-    usePage().props,
-  );
+  const { results, creators, bundles, purchase_analytics, reviews_page_enabled, following_wishlists_enabled } =
+    typia.assert<Props>(usePage().props);
 
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
@@ -332,9 +333,12 @@ export default function LibraryPage() {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   useRunOnce(() => {
-    const purchaseIds = url.searchParams.getAll("purchase_id");
+    const purchaseIds = [
+      ...new Set([...url.searchParams.getAll("purchase_id[]"), ...url.searchParams.getAll("purchase_id")]),
+    ];
     if (purchaseIds.length === 0) return;
 
+    url.searchParams.delete("purchase_id[]");
     url.searchParams.delete("purchase_id");
     router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
@@ -342,10 +346,11 @@ export default function LibraryPage() {
     if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
 
     for (const purchaseId of purchaseIds) {
-      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
-      if (!product) continue;
+      const analytics = purchase_analytics[purchaseId];
+      if (analytics) trackSellerPurchaseEvent(analytics);
 
-      if (product.has_third_party_analytics)
+      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
+      if (product?.has_third_party_analytics)
         addThirdPartyAnalytics({
           permalink: product.permalink,
           location: "receipt",

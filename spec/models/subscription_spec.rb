@@ -3562,6 +3562,45 @@ describe Subscription, :vcr do
           expect(subscription.current_subscription_price_cents).to eq(300)
         end
       end
+
+      context "when a legacy installment plan without a price snapshot has its offer code deleted" do
+        let!(:offer_code) { create(:offer_code, products: [product], amount_cents: 100) }
+        let!(:purchase) { create(:installment_plan_purchase, subscription:, link: product, offer_code:) }
+
+        before do
+          # Legacy installment subscriptions predate installment plan snapshots. Without a
+          # snapshot, the per-installment price is recomputed from the offer code each charge,
+          # so a deleted offer code must still be honored via the cached discount.
+          PaymentOption.where(subscription_id: subscription.id).each { |po| po.installment_plan_snapshot&.destroy }
+        end
+
+        it "keeps charging subsequent installments at the cached discounted price" do
+          expect(Subscription.find(subscription.id).current_subscription_price_cents).to eq(300)
+
+          offer_code.mark_deleted!
+
+          expect(Purchase.find(purchase.id).minimum_paid_price_cents).to eq(300)
+          fresh_subscription = Subscription.find(subscription.id)
+          expect(fresh_subscription.current_subscription_price_cents).to eq(300)
+          expect(fresh_subscription.build_purchase.perceived_price_cents).to eq(300)
+        end
+      end
+
+      context "when a snapshot exists and the product price later drops below a cached discount" do
+        let!(:offer_code) { create(:offer_code, products: [product], amount_cents: 200) }
+        let!(:purchase) { create(:installment_plan_purchase, subscription:, link: product, offer_code:) }
+
+        it "keeps charging the snapshot installment price instead of clamping to zero" do
+          agreed_price = Subscription.find(subscription.id).current_subscription_price_cents
+          expect(agreed_price).to be > 0
+
+          # Live recompute would now go negative (price 100 < 200 discount), but the snapshot is authoritative.
+          product.default_price.update!(price_cents: 100)
+          offer_code.mark_deleted!
+
+          expect(Subscription.find(subscription.id).current_subscription_price_cents).to eq(agreed_price)
+        end
+      end
     end
   end
 

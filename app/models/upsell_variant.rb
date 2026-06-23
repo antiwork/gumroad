@@ -13,6 +13,8 @@ class UpsellVariant < ApplicationRecord
 
   private
     def variants_belong_to_upsell_product
+      return if selected_variant.nil? || offered_variant.nil?
+
       if selected_variant.link != upsell.product || offered_variant.link != upsell.product
         errors.add(:base, "The selected variant and the offered variant must belong to the upsell's offered product.")
       end

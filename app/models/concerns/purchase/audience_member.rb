@@ -33,6 +33,8 @@ module Purchase::AudienceMember
       product_id: link_id,
       variant_ids: variant_attributes.ids,
       price_cents:,
+      subscription_cancelled: subscription&.cancelled_at.present?,
+      license_uses: license&.uses,
     }.compact_blank
   end
 
@@ -40,8 +42,8 @@ module Purchase::AudienceMember
     return unless should_be_audience_member?
 
     member = AudienceMember.find_or_initialize_by(email:, seller:)
-    return if member.details["purchases"]&.any? { _1["id"] == id }
     member.details["purchases"] ||= []
+    member.details["purchases"].delete_if { _1["id"] == id }
     member.details["purchases"] << audience_member_details
     member.save!
   end

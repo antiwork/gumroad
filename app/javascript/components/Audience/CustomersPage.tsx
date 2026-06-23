@@ -197,7 +197,9 @@ const CustomersPage = ({
     maximumAmount != null ||
     createdAfter != null ||
     createdBefore != null ||
-    country != null;
+    country != null ||
+    activeCustomersOnly ||
+    minimumLicenseUses != null;
 
   const emailFilterParams = React.useMemo(() => {
     const boughtPermalinks = includedItems.flatMap((item) => {
@@ -219,8 +221,21 @@ const CustomersPage = ({
       created_after: createdAfter ? lightFormat(createdAfter, "yyyy-MM-dd") : undefined,
       created_before: createdBefore ? lightFormat(createdBefore, "yyyy-MM-dd") : undefined,
       from_country: country || undefined,
+      active_customers_only: activeCustomersOnly ? "true" : undefined,
+      minimum_license_uses: minimumLicenseUses != null ? String(minimumLicenseUses) : undefined,
     };
-  }, [includedItems, excludedItems, products, minimumAmount, maximumAmount, createdAfter, createdBefore, country]);
+  }, [
+    includedItems,
+    excludedItems,
+    products,
+    minimumAmount,
+    maximumAmount,
+    createdAfter,
+    createdBefore,
+    country,
+    activeCustomersOnly,
+    minimumLicenseUses,
+  ]);
 
   if (!currentSeller) return null;
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });

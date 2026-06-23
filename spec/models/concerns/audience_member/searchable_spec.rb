@@ -7,7 +7,18 @@ describe AudienceMember::Searchable, :freeze_time do
     it "includes all mapped fields" do
       member = create(
         :audience_member,
-        purchases: [{ id: 1, product_id: 2, variant_ids: [3, 4], price_cents: 500, created_at: 3.days.ago.iso8601, country: "United States" }],
+        purchases: [
+          {
+            id: 1,
+            product_id: 2,
+            variant_ids: [3, 4],
+            price_cents: 500,
+            created_at: 3.days.ago.iso8601,
+            country: "United States",
+            subscription_cancelled: true,
+            license_uses: 4,
+          }
+        ],
         follower: { id: 5, created_at: 7.days.ago.iso8601 },
         affiliates: [{ id: 6, product_id: 7, created_at: 1.day.ago.iso8601 }],
       ).reload
@@ -28,7 +39,18 @@ describe AudienceMember::Searchable, :freeze_time do
         "follower_created_at" => 7.days.ago.as_json,
         "min_affiliate_created_at" => 1.day.ago.as_json,
         "max_affiliate_created_at" => 1.day.ago.as_json,
-        "purchases" => [{ "id" => 1, "product_id" => 2, "variant_ids" => [3, 4], "price_cents" => 500, "created_at" => 3.days.ago.iso8601, "country" => "United States" }],
+        "purchases" => [
+          {
+            "id" => 1,
+            "product_id" => 2,
+            "variant_ids" => [3, 4],
+            "price_cents" => 500,
+            "created_at" => 3.days.ago.iso8601,
+            "country" => "United States",
+            "subscription_cancelled" => true,
+            "license_uses" => 4,
+          }
+        ],
         "affiliates" => [{ "id" => 6, "product_id" => 7, "created_at" => 1.day.ago.iso8601 }],
       )
     end
@@ -284,6 +306,37 @@ describe AudienceMember::Searchable, :freeze_time do
       expect_filter_count(2, bought_from: "Canada")
       expect_filter_count(1, bought_from: "Canada", bought_product_ids: [1, 3])
       expect_filter_count(0, bought_from: "Mexico")
+    end
+
+    it "counts by active customers, matching combined filters within a single purchase" do
+      create_member(purchases: [{ "product_id" => 1 }])
+      create_member(purchases: [{ "product_id" => 1, "subscription_cancelled" => true }])
+      create_member(purchases: [
+                      { "product_id" => 1, "subscription_cancelled" => true },
+                      { "product_id" => 2 }
+                    ])
+      create_member(follower: {})
+
+      expect_filter_count(2, active_customers_only: true)
+      expect_filter_count(1, active_customers_only: true, bought_product_ids: [1])
+      expect_filter_count(1, active_customers_only: true, bought_product_ids: [2])
+    end
+
+    it "counts by minimum license uses, matching combined filters within a single purchase" do
+      create_member(purchases: [{ "product_id" => 1, "license_uses" => 0 }])
+      create_member(purchases: [{ "product_id" => 1, "license_uses" => 3 }])
+      create_member(purchases: [
+                      { "product_id" => 1, "license_uses" => 1 },
+                      { "product_id" => 2, "license_uses" => 5 }
+                    ])
+      create_member(purchases: [{ "product_id" => 1 }])
+      create_member(follower: {})
+
+      expect_filter_count(2, minimum_license_uses: 1)
+      expect_filter_count(2, minimum_license_uses: 3)
+      expect_filter_count(1, minimum_license_uses: 5)
+      expect_filter_count(0, minimum_license_uses: 5, bought_product_ids: [1])
+      expect_filter_count(1, minimum_license_uses: 5, bought_product_ids: [2])
     end
 
     it "matches countries exactly, not case-insensitively" do

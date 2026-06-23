@@ -144,6 +144,57 @@ describe WithFiltering do
       end
     end
 
+    context "when active customers only filter is set" do
+      before do
+        @product = create(:membership_product)
+        @active_purchase = create(:membership_purchase, link: @product)
+        @cancelled_purchase = create(:membership_purchase, link: @product)
+        @cancelled_purchase.subscription.update!(cancelled_at: 1.day.ago)
+        @post = create(:seller_installment, seller: @product.user, json_data: { active_customers_only: true })
+      end
+
+      it "returns true for purchases from active customers" do
+        expect(@post.purchase_passes_filters(@active_purchase)).to eq(true)
+      end
+
+      it "returns false for purchases from cancelled customers" do
+        expect(@post.purchase_passes_filters(@cancelled_purchase)).to eq(false)
+      end
+
+      it "returns true for active and cancelled purchases when the active customers only filter is not set" do
+        post = create(:seller_installment, seller: @product.user)
+
+        expect(post.purchase_passes_filters(@active_purchase)).to eq(true)
+        expect(post.purchase_passes_filters(@cancelled_purchase)).to eq(true)
+      end
+    end
+
+    context "when minimum license uses filter is set" do
+      before do
+        @product = create(:product)
+        @qualified_purchase = create(:purchase, :with_license, link: @product)
+        @qualified_purchase.license.update!(uses: 3)
+        @underused_purchase = create(:purchase, :with_license, link: @product)
+        @underused_purchase.license.update!(uses: 2)
+        @post = create(:seller_installment, seller: @product.user, json_data: { minimum_license_uses: 3 })
+      end
+
+      it "returns true for purchases with license uses at the threshold" do
+        expect(@post.purchase_passes_filters(@qualified_purchase)).to eq(true)
+      end
+
+      it "returns false for purchases with license uses below the threshold" do
+        expect(@post.purchase_passes_filters(@underused_purchase)).to eq(false)
+      end
+
+      it "returns true for purchases above and below the threshold when the minimum license uses filter is not set" do
+        post = create(:seller_installment, seller: @product.user)
+
+        expect(post.purchase_passes_filters(@qualified_purchase)).to eq(true)
+        expect(post.purchase_passes_filters(@underused_purchase)).to eq(true)
+      end
+    end
+
     describe "bought products and variants filters" do
       before do
         @product = create(:product)

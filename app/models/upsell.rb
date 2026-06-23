@@ -107,7 +107,7 @@ class Upsell < ApplicationRecord
     end
 
     def has_one_upsell_variant_per_selected_variant
-      if upsell_variants.group(:selected_variant_id).count.values.any? { |count| count > 1 }
+      if upsell_variants.alive.group(:selected_variant_id).count.values.any? { |count| count > 1 }
         errors.add(:base, "The upsell cannot have more than one upsell variant per selected variant.")
       end
     end

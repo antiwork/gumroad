@@ -14,10 +14,17 @@ module Subdomain
 
         return User.alive.find_by(external_id: subdomain) if /^[0-9]+$/.match?(subdomain)
 
-        # Convert hyphens to underscores before looking up with usernames.
-        # Related conversation: https://git.io/JJgBN
-        User.alive.find_by(username: subdomain.tr("-", "_"))
+        find_seller_by_username(subdomain)
       end
+    end
+
+    def find_seller_by_username(username, scope: User.alive)
+      username = username.to_s
+      return if username.blank?
+
+      # Convert hyphens to underscores before looking up with usernames.
+      # Related conversation: https://git.io/JJgBN
+      scope.find_by(username: username.tr("-", "_"))
     end
 
     def from_username(username)

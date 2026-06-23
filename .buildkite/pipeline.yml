@@ -1,13 +1,12 @@
 steps:
-  - block: "Approval required for preview app deployment"
-    key: require-preview-approval
+  - label: ":mag: Preview gate"
+    key: preview-gate
     branches: "!main !comp-assets-*"
-    prompt: "Provision and deploy a preview app for this branch?"
-    blocked_state: running
+    command: ".buildkite/scripts/preview_gate.sh"
 
   - label: ":docker: Build Base Image"
     key: build-base-image
-    depends_on: require-preview-approval
+    branches: "main comp-assets-*"
     command: ".buildkite/scripts/build_base.sh"
     timeout_in_minutes: 60
     plugins:
@@ -17,6 +16,7 @@ steps:
 
   - label: ":docker: Build Web Image"
     key: build-web-image
+    branches: "main comp-assets-*"
     command: ".buildkite/scripts/build_web.sh"
     depends_on: build-base-image
     timeout_in_minutes: 25
@@ -27,6 +27,7 @@ steps:
 
   - label: ":gear: Compile Assets"
     key: compile-assets
+    branches: "main comp-assets-*"
     depends_on: build-web-image
     command: ".buildkite/scripts/compile_assets.sh"
     artifact_paths: "log/**/*"
@@ -40,17 +41,6 @@ steps:
           server: quay.io
           username: gumroad
           password-env: QUAY_PASSWORD
-
-  - label: ":rocket: Deploy Preview App"
-    key: build-and-deploy-preview
-    depends_on: compile-assets
-    branches: "!main !comp-assets-*"
-    command: ".buildkite/scripts/deploy_branch.sh"
-    timeout_in_minutes: 45
-    plugins:
-      - docker-login#v3.0.0:
-          username: "gumroadteam"
-          password-env: DOCKERHUB_PASSWORD
 
   - block: "Approval required for production deployment"
     key: require-approval

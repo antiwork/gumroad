@@ -212,6 +212,18 @@ describe CustomerPresenter do
       )
     end
 
+    context "when the purchase is both charged back and fully refunded" do
+      let(:refunded_chargeback_purchase) do
+        create(:purchase, link: create(:product, user: seller), seller:, chargeback_date: Time.current, stripe_refunded: true)
+      end
+
+      it "reports it as refunded, not charged back" do
+        props = described_class.new(purchase: refunded_chargeback_purchase).customer(pundit_user:)
+        expect(props[:refunded]).to be(true)
+        expect(props[:chargedback]).to be(false)
+      end
+    end
+
     context "purchase has a call" do
       let(:call) { create(:call) }
 

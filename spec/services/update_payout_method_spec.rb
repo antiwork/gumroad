@@ -192,6 +192,37 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "when the IBAN is pasted with invisible separator characters" do
+      let(:user) { create(:named_user) }
+
+      before { allow(Rails.env).to receive(:production?).and_return(true) }
+
+      it "strips non-breaking and zero-width characters so a valid IBAN is accepted and stored clean" do
+        clean_iban = "BH29BMAG1299123456BH00"
+        non_breaking_space = [0x00A0].pack("U")
+        zero_width_space = [0x200B].pack("U")
+        pasted_iban = "BH29#{non_breaking_space}BMAG#{zero_width_space}1299123456BH00"
+
+        params = ActionController::Parameters.new(
+          bank_account: {
+            type: BahrainBankAccount.name,
+            account_holder_full_name: "Named User",
+            bank_code: "AAAABHBMXYZ",
+            account_number: pasted_iban,
+            account_number_confirmation: pasted_iban,
+          }
+        )
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        bank_account = user.reload.active_bank_account
+        expect(bank_account).to be_a(BahrainBankAccount)
+        expect(bank_account.send(:account_number_decrypted)).to eq(clean_iban)
+        expect(bank_account.account_number_last_four).to eq("BH00")
+      end
+    end
+
     describe "switching to card payouts" do
       let(:user) { create(:named_user) }
       let!(:existing_bank_account) { create(:ach_account, user:) }

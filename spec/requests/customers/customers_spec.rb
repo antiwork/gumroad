@@ -1154,7 +1154,8 @@ describe "Sales page", type: :system, js: true do
         visit customer_sale_path(purchase2.external_id)
 
         within_section "Charges", section_element: :section do
-          expect(page).to have_text("Chargedback")
+          expect(page).to have_text("Refunded")
+          expect(page).to_not have_text("Chargedback")
           expect(page).to have_link("Transaction", href: "https://www.google.com", target: "_blank")
           expect(page).to_not have_button("Refund Options")
         end

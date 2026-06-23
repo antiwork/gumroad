@@ -212,6 +212,8 @@ class Api::V2::EmailsController < Api::V2::BaseController
         created_after: installment.created_after,
         created_before: installment.created_before,
         bought_from: installment.bought_from,
+        active_customers_only: installment.active_customers_only,
+        minimum_license_uses: installment.minimum_license_uses,
         shown_on_profile: installment.shown_on_profile?,
         send_emails: true,
         allow_comments: installment.allow_comments?,

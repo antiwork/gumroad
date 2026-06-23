@@ -44,15 +44,7 @@ class Checkout::UpsellsController < Sellers::BaseController
   def create
     authorize [:checkout, Upsell]
 
-    @upsell = current_seller.upsells.build
-
-    assign_upsell_attributes
-
-    set_variant
-
-    create_upsell_variants
-
-    set_offer_code
+    @upsell = SaveUpsellService.new(seller: current_seller, params:).perform
 
     if @upsell.save
       pagination, upsells = fetch_upsells
@@ -66,13 +58,7 @@ class Checkout::UpsellsController < Sellers::BaseController
     @upsell = current_seller.upsells.includes(:product, :offer_code, upsell_variants: [:selected_variant]).find_by_external_id!(params[:id])
     authorize [:checkout, @upsell]
 
-    assign_upsell_attributes
-
-    update_upsell_variants
-
-    set_variant
-
-    set_offer_code
+    SaveUpsellService.new(seller: current_seller, params:, upsell: @upsell).perform
 
     if @upsell.save
       pagination, upsells = fetch_upsells
@@ -129,69 +115,6 @@ class Checkout::UpsellsController < Sellers::BaseController
   end
 
   private
-    def upsell_params
-      params.permit(:name, :text, :description, :cross_sell, :product_id, :variant_id, :universal, :replace_selected_products, :paused, offer_code: [:amount_cents, :amount_percentage], product_ids: [], upsell_variants: [:selected_variant_id, :offered_variant_id])
-    end
-
-    def assign_upsell_attributes
-      @upsell.assign_attributes(product: current_seller.products.find_by_external_id!(upsell_params[:product_id]), selected_products: current_seller.products.by_external_ids(upsell_params[:product_ids]), **upsell_params.except(:product_id, :variant_id, :product_ids, :offer_code, :upsell_variants))
-    end
-
-    def set_variant
-      if params[:variant_id].present?
-        @upsell.variant = BaseVariant.find_by_external_id!(upsell_params[:variant_id])
-      else
-        @upsell.variant = nil
-      end
-    end
-
-    def set_offer_code
-      if upsell_params[:offer_code].blank?
-        @upsell.offer_code&.mark_deleted!
-        @upsell.offer_code = nil
-      else
-        offer_code = upsell_params[:offer_code]
-        offer_code[:amount_cents] ||= nil
-        offer_code[:amount_percentage] ||= nil
-        if @upsell.offer_code.present?
-          @upsell.offer_code.assign_attributes(products: [@upsell.product], **offer_code)
-        else
-          @upsell.build_offer_code(user: current_seller, products: [@upsell.product], **offer_code)
-        end
-      end
-    end
-
-    def create_upsell_variants
-      if upsell_params[:upsell_variants].present?
-        variants = @upsell.product.variants_or_skus
-
-        upsell_params[:upsell_variants].each do |upsell_variant|
-          @upsell.upsell_variants.build(selected_variant: variants.find_by_external_id(upsell_variant[:selected_variant_id]), offered_variant: variants.find_by_external_id(upsell_variant[:offered_variant_id]))
-        end
-      end
-    end
-
-    def update_upsell_variants
-      variants = @upsell.product.variants_or_skus
-      new_upsell_variants = upsell_params[:upsell_variants] || []
-
-      @upsell.upsell_variants.each do |upsell_variant|
-        new_offered_variant = new_upsell_variants.find { |new_upsell_variant| new_upsell_variant[:selected_variant_id] == upsell_variant.selected_variant.external_id }
-        if new_offered_variant.present?
-          upsell_variant.offered_variant = variants.find_by_external_id!(new_offered_variant[:offered_variant_id])
-        else
-          upsell_variant.mark_deleted!
-        end
-      end
-
-      new_upsell_variants.each do |new_upsell_variant|
-        selected_variant = BaseVariant.find_by_external_id!(new_upsell_variant[:selected_variant_id])
-        if @upsell.upsell_variants.find_by(selected_variant:).blank?
-          @upsell.upsell_variants.build(selected_variant:, offered_variant: BaseVariant.find_by_external_id!(new_upsell_variant[:offered_variant_id]))
-        end
-      end
-    end
-
     def paged_params
       params.permit(:page, sort: [:key, :direction])
     end

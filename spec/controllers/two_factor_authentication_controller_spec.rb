@@ -30,6 +30,25 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
   end
 
+  describe "redirect_to_signed_in_path before_action" do
+    context "when the next param points to a creator's custom subdomain" do
+      before do
+        sign_in @user
+        controller.reset_two_factor_auth_login_session
+        allow(controller).to receive(:skip_two_factor_authentication?).and_return(true)
+      end
+
+      it "redirects to the custom domain without raising UnsafeRedirectError" do
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
+        custom_domain_url = "https://localsysadmin.test.gumroad.com/l/ggocri"
+
+        get :show, params: { next: custom_domain_url }
+
+        expect(response).to redirect_to(custom_domain_url)
+      end
+    end
+  end
+
   shared_examples_for "validate user_id in params for html request" do |action|
     it "raises ActionController::RoutingError when user_id is invalid" do
       expect do
@@ -169,6 +188,18 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
         post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
 
         expect(session[:two_factor_auth_token_sent_at]).to be_nil
+      end
+
+      context "when the next param points to a creator's custom subdomain" do
+        it "redirects to the custom domain without raising UnsafeRedirectError" do
+          stub_const("ROOT_DOMAIN", "test.gumroad.com")
+          custom_domain_url = "https://localsysadmin.test.gumroad.com/l/ggocri"
+
+          post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id, next: custom_domain_url }
+
+          expect(response).to redirect_to(custom_domain_url)
+          expect(controller.user_signed_in?).to eq true
+        end
       end
 
       it_behaves_like "merge guest cart with user cart" do

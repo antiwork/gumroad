@@ -63,6 +63,7 @@ Rails.application.routes.draw do
       end
 
       get "/user", to: "users#show"
+      match "/user", to: "users#update", via: [:put, :patch]
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
@@ -82,6 +83,7 @@ Rails.application.routes.draw do
           post "preview_custom_html"
         end
       end
+      resources :upsells, only: [:index, :show, :create, :update, :destroy]
       resources :emails, only: [:index, :show, :create, :destroy] do
         member do
           post :preview
@@ -266,11 +268,41 @@ Rails.application.routes.draw do
         get "/url_redirects/download/:token/:product_file_id", to: "url_redirects#download", as: :download_product_file
         get "/subscriptions/subscription_attributes/:id", to: "subscriptions#subscription_attributes", as: :subscription_attributes
         get "/preorders/preorder_attributes/:id", to: "preorders#preorder_attributes", as: :preorder_attributes
-        resources :sales, only: [:show] do
+        resources :sales, only: [:index, :show, :update] do
+          collection do
+            get :blob_url
+          end
           member do
             patch :refund
+            post :resend_receipt
+            post :change_can_contact
+            put :revoke_access
+            put :undo_revoke_access
+            post :mark_as_shipped
+            post :resend_ping
+            get :missed_posts
+            get :product_purchases
+            get :options
+            put :variant
+            post :send_post
+            put :review_response, to: "sales#update_review_response"
+            delete :review_response, to: "sales#destroy_review_response"
           end
         end
+        resources :licenses, only: [:update]
+        resources :calls, only: [:update]
+        resources :commissions, only: [] do
+          member do
+            post :complete
+          end
+        end
+        resources :review_videos, only: [] do
+          member do
+            post :approve
+            post :reject
+          end
+        end
+        post "/subscriptions/:id/cancel", to: "subscriptions#cancel"
         resources :analytics, only: [] do
           collection do
             get :data_by_date

@@ -4915,6 +4915,24 @@ describe Purchase, :vcr do
       end
     end
 
+    context "when the offer code was deleted but a discount is cached" do
+      it "still applies the cached discount to the purchase price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1000)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(250)
+      end
+
+      it "clamps the price to zero when a cached fixed discount exceeds the price" do
+        purchase_with_valid_offer_code.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 600, offer_code_is_percent: false, pre_discount_minimum_price_cents: 500)
+        offer_code.mark_deleted!
+        purchase_with_valid_offer_code.reload
+
+        expect(purchase_with_valid_offer_code.minimum_paid_price_cents).to eq(0)
+      end
+    end
+
     it "returns offer_code if the offer_code is not deleted" do
       expect(purchase_with_valid_offer_code.original_offer_code).to eq offer_code
     end
@@ -5234,6 +5252,25 @@ describe Purchase, :vcr do
       end
     end
 
+    describe "#audience_member_details" do
+      it "includes subscription cancellation and license use details" do
+        purchase = create(:membership_purchase, :with_license)
+        purchase.subscription.update!(cancelled_at: 1.day.from_now)
+        purchase.license.update!(uses: 4)
+
+        expect(purchase.reload.audience_member_details).to include(
+          subscription_cancelled: true,
+          license_uses: 4,
+        )
+      end
+
+      it "omits subscription cancellation and license use details when absent" do
+        purchase = create(:purchase)
+
+        expect(purchase.audience_member_details).not_to include(:subscription_cancelled, :license_uses)
+      end
+    end
+
     it "adds member when successful" do
       purchase = create(:purchase_in_progress)
 
@@ -5471,7 +5508,9 @@ describe Purchase, :vcr do
           affiliate: {
             amount: "$0.83",
             email: @purchase.affiliate.affiliate_user.form_email,
-          }
+          },
+          formatted_total_price: @purchase.formatted_total_price,
+          purchase_daystamp: @purchase.created_at.in_time_zone(@purchase.seller.timezone).to_fs(:long_formatted_datetime),
         }
       )
       expect(@purchase.json_data_for_mobile(include_sale_details: true)).to eq(json_data)

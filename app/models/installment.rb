@@ -882,6 +882,13 @@ class Installment < ApplicationRecord
     params[:not_bought_variant_ids] = not_bought_variants&.map { ObfuscateIds.decrypt(_1) }
     params[:paid_more_than_cents] = paid_more_than_cents.presence
     params[:paid_less_than_cents] = paid_less_than_cents.presence
+    if seller_or_product_or_variant_type? && ActiveModel::Type::Boolean.new.cast(active_customers_only)
+      params[:active_customers_only] = true
+    end
+    if seller_or_product_or_variant_type? && minimum_license_uses.present?
+      license_uses = minimum_license_uses.to_i
+      params[:minimum_license_uses] = license_uses if license_uses.positive?
+    end
     if (date = safe_parse_filter_date(created_after))
       params[:created_after] = date.in_time_zone(seller.timezone).iso8601
     end

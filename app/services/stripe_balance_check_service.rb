@@ -9,7 +9,11 @@
 class StripeBalanceCheckService
   def initialize
     @upcoming_payouts_cents = calculate_upcoming_payouts_cents
-    @current_balance_cents = StripeTransferExternallyToGumroad.available_balances["usd"].to_i
+    # Count settling (pending) funds alongside the available balance. Pending
+    # sales settle within a couple of business days -- well inside the weekly
+    # payout window -- so they fund the upcoming payouts. Using available-only
+    # over-reports the needed top-up and fires false alarms.
+    @current_balance_cents = StripeTransferExternallyToGumroad.reachable_balances["usd"].to_i
   end
 
   attr_reader :upcoming_payouts_cents, :current_balance_cents

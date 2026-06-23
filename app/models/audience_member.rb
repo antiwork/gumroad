@@ -11,6 +11,7 @@ class AudienceMember < ApplicationRecord
     paid_more_than_cents paid_less_than_cents
     created_after created_before
     bought_from
+    active_customers_only minimum_license_uses
     affiliate_product_ids
   ].freeze
 
@@ -23,7 +24,11 @@ class AudienceMember < ApplicationRecord
   before_save :assign_derived_columns
 
   def self.normalize_filter_params(params)
-    params = params.slice(*FILTER_PARAM_KEYS).compact_blank
+    params = params.slice(*FILTER_PARAM_KEYS)
+    if params.key?(:active_customers_only)
+      params[:active_customers_only] = ActiveModel::Type::Boolean.new.cast(params[:active_customers_only])
+    end
+    params = params.compact_blank
     if params[:type] && !params[:type].in?(VALID_FILTER_TYPES)
       raise ArgumentError, "Invalid type: #{params[:type]}. Must be one of: #{VALID_FILTER_TYPES.join(', ')}"
     end
@@ -105,11 +110,21 @@ class AudienceMember < ApplicationRecord
       affiliates_sql = affiliates_relation.to_sql
     end
 
+    purchase_detail_filter_present = params.values_at(
+      :paid_more_than_cents,
+      :paid_less_than_cents,
+      :created_after,
+      :created_before,
+      :bought_from,
+      :active_customers_only,
+      :minimum_license_uses,
+    ).any?
     filter_purchases_when = (
       (params[:bought_product_ids] || params[:bought_variant_ids] || params[:affiliate_product_ids]) \
-      && (params[:paid_more_than_cents] || params[:paid_less_than_cents] || params[:created_after] || params[:created_before] || params[:bought_from]))
+      && purchase_detail_filter_present)
     filter_purchases_when ||= (params[:paid_more_than_cents] && params[:paid_less_than_cents])
     filter_purchases_when ||= (params[:created_after] && params[:created_before])
+    filter_purchases_when ||= params[:active_customers_only] || params[:minimum_license_uses]
     if filter_purchases_when || with_ids
       json_filter = where(seller_id:)
       json_table = <<~SQL.squish
@@ -124,7 +139,9 @@ class AudienceMember < ApplicationRecord
             NESTED PATH '$.variant_ids[*]' COLUMNS (purchase_variant_id INT PATH '$'),
             purchase_price_cents INT PATH '$.price_cents',
             purchase_created_at DATETIME PATH '$.created_at',
-            purchase_country CHAR(100) PATH '$.country'
+            purchase_country CHAR(100) PATH '$.country',
+            purchase_subscription_cancelled INT PATH '$.subscription_cancelled',
+            purchase_license_uses INT PATH '$.license_uses'
           ),
           NESTED PATH '$.affiliates[*]' COLUMNS (
             affiliate_id INT PATH '$.id',
@@ -136,6 +153,16 @@ class AudienceMember < ApplicationRecord
       json_filter = json_filter.joins("INNER JOIN #{json_table} AS jt")
       json_filter = json_filter.where("jt.purchase_price_cents > ?", params[:paid_more_than_cents]) if params[:paid_more_than_cents]
       json_filter = json_filter.where("jt.purchase_price_cents < ?", params[:paid_less_than_cents]) if params[:paid_less_than_cents]
+      if params[:active_customers_only]
+        # Scope to actual purchase rows: a follower/affiliate-only JSON_TABLE row has a
+        # NULL purchase_subscription_cancelled, and COALESCE(NULL,0)=0 would otherwise let
+        # non-customers leak in. This mirrors the ES nested("purchases") path, which can
+        # only ever match purchase docs.
+        json_filter = json_filter.where("jt.purchase_id IS NOT NULL AND COALESCE(jt.purchase_subscription_cancelled, 0) = 0")
+      end
+      if params[:minimum_license_uses]
+        json_filter = json_filter.where("jt.purchase_license_uses >= ?", params[:minimum_license_uses].to_i)
+      end
       timestamp_columns = if params[:type] == "customer"
         %w[purchase_created_at]
       elsif params[:type] == "follower"

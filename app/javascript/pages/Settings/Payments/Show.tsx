@@ -49,6 +49,8 @@ const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FF
 const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
+
+const PERU_DNI_DIGIT_COUNT = 9;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
 type PaymentsPageProps = {
@@ -647,6 +649,19 @@ export default function PaymentsPage() {
       !form.data.user.individual_tax_id
     ) {
       markFieldInvalid("individual_tax_id");
+    }
+    const peruDniRequired = form.data.user.is_business
+      ? form.data.user.business_country === "PE"
+      : form.data.user.country === "PE";
+    if (
+      peruDniRequired &&
+      form.data.user.individual_tax_id &&
+      form.data.user.individual_tax_id.replace(/\D/gu, "").length !== PERU_DNI_DIGIT_COUNT
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({
+        message: "Your DNI must include the verification digit (for example, 12345678-9).",
+      });
     }
     if (form.data.user.is_business) {
       if (!form.data.user.business_type) {
