@@ -1,5 +1,3 @@
-import { reverse } from "lodash-es";
-
 import { type AnalyticsData } from "$app/parsers/product";
 import { type BeginCheckoutEvent } from "$app/utils/user_analytics";
 
@@ -118,7 +116,7 @@ export const computeInitialCheckout = ({
   const beginCheckoutEvents: BeginCheckoutEvent[] = [];
 
   if (addProducts.length) {
-    for (const product of reverse(addProducts)) {
+    for (const product of [...addProducts].reverse()) {
       addProduct({ cart: initialCart, product, url, referrer });
     }
 

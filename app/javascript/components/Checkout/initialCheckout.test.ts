@@ -65,16 +65,25 @@ describe("computeInitialCheckout", () => {
     expect(result.beginCheckoutEvents.map((e) => e.action)).toEqual(["begin_checkout", "begin_checkout"]);
   });
 
-  it("is pure: repeated invocations produce identical event counts (the render-loop regression)", () => {
-    const products = [makeProductToAdd({ permalink: "a", creatorId: "seller-1" })];
+  it("is pure: repeated invocations on a shared multi-product array produce identical results (the render-loop regression + no input mutation)", () => {
+    // Multi-element + a stable reference: if the function mutated the caller's
+    // array (e.g. an in-place reverse), successive calls would diverge. A
+    // single-element array would hide that, since reversing one item is a no-op.
+    const products = [
+      makeProductToAdd({ permalink: "a", creatorId: "seller-1" }),
+      makeProductToAdd({ permalink: "b", creatorId: "seller-2" }),
+    ];
+    const orderBefore = products.map((p) => p.product.permalink);
 
     // Simulate the multiple renders that the old function-initializer triggered.
-    const counts = Array.from(
-      { length: 10 },
-      () => computeInitialCheckout(makeArgs(products)).beginCheckoutEvents.length,
+    const cartOrders = Array.from({ length: 10 }, () =>
+      computeInitialCheckout(makeArgs(products)).cart.items.map((i) => i.product.permalink),
     );
 
-    expect(counts).toEqual(Array.from({ length: 10 }, () => 1));
+    // Every render must yield the same cart order...
+    for (const order of cartOrders) expect(order).toEqual(cartOrders[0]);
+    // ...and the caller's input array must never be mutated.
+    expect(products.map((p) => p.product.permalink)).toEqual(orderBefore);
   });
 
   it("collects sellers to track, deduped per begin_checkout but one tracking entry per cart item", () => {
