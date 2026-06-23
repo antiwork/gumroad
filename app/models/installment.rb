@@ -132,10 +132,10 @@ class Installment < ApplicationRecord
   }
 
   scope :missed_for_purchase, -> (purchase) {
-    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.filter_map do |post|
+    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.not_single_recipient_email.filter_map do |post|
       post.id if post.purchase_passes_filters(purchase)
     end
-    seller_installment_ids = purchase.seller.installments.alive.published.filter_map do |post|
+    seller_installment_ids = purchase.seller.installments.alive.published.not_single_recipient_email.filter_map do |post|
       post.id if post.purchase_passes_filters(purchase)
     end
 
@@ -156,7 +156,6 @@ class Installment < ApplicationRecord
     SQL
 
     send_emails.
-      not_single_recipient_email.
       where(id: product_installment_ids + seller_installment_ids).
       where(where_sent_sql)
   }

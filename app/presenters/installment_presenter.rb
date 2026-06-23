@@ -80,11 +80,15 @@ class InstallmentPresenter
     attrs.except(:paid_more_than, :paid_less_than)
   end
 
-  def new_page_props(copy_from: nil)
+  def new_page_props(copy_from: nil, single_customer_purchase_id: nil)
     reference_installment = seller.installments.not_workflow_installment.alive.find_by_external_id(copy_from) if copy_from.present?
     installment_props = self.class.new(seller:, installment: reference_installment).props.except(:external_id) if reference_installment.present?
 
-    { context: installment_form_context_props, installment: installment_props }
+    {
+      context: installment_form_context_props,
+      installment: installment_props,
+      single_customer_recipient: single_customer_recipient_props(single_customer_purchase_id),
+    }
   end
 
   def edit_page_props
@@ -92,6 +96,17 @@ class InstallmentPresenter
   end
 
   private
+    # Resolve the single-customer recipient server-side from the purchase id so the
+    # composer never has to carry the customer's email in the page URL.
+    def single_customer_recipient_props(purchase_id)
+      return if purchase_id.blank?
+
+      purchase = seller.sales.find_by_external_id(purchase_id)
+      return if purchase.nil?
+
+      { purchase_id: purchase.external_id, email: purchase.email }
+    end
+
     def recipient_description
       if installment.seller_type?
         "Your customers"

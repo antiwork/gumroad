@@ -103,8 +103,21 @@ describe InstallmentPresenter do
     it "returns necessary props with `installment` attribute when `copy_from` is present" do
       reference_installment = create(:product_installment, seller:, link: product1)
       props = described_class.new(seller:).new_page_props(copy_from: reference_installment.external_id)
-      expect(props.keys).to match_array(%i(context installment))
+      expect(props.keys).to match_array(%i(context installment single_customer_recipient))
       expect(props[:installment]).to eq(described_class.new(seller:, installment: reference_installment).props.except(:external_id))
+    end
+
+    it "resolves the single-customer recipient from a purchase id" do
+      product = create(:product, user: seller)
+      purchase = create(:purchase, seller:, link: product, email: "buyer@example.com")
+
+      props = described_class.new(seller:).new_page_props(single_customer_purchase_id: purchase.external_id)
+
+      expect(props[:single_customer_recipient]).to eq(purchase_id: purchase.external_id, email: "buyer@example.com")
+    end
+
+    it "omits the single-customer recipient when no purchase id is given" do
+      expect(described_class.new(seller:).new_page_props[:single_customer_recipient]).to be_nil
     end
   end
 

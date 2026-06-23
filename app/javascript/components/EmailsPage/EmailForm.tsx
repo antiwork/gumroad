@@ -188,6 +188,7 @@ const DEFAULT_SECONDS_LEFT_TO_PUBLISH = 5;
 type EmailFormProps = {
   context: InstallmentFormContext;
   installment: Installment | null;
+  singleCustomerRecipient?: { purchase_id: string; email: string } | null;
 };
 
 const isJSONContent = (value: unknown): value is JSONContent =>
@@ -215,7 +216,7 @@ const TAB_TO_PATH: Record<EmailTab, string> = {
   subscribers: Routes.followers_path(),
 };
 
-export const EmailForm = ({ context, installment }: EmailFormProps) => {
+export const EmailForm = ({ context, installment, singleCustomerRecipient = null }: EmailFormProps) => {
   const uid = React.useId();
   const currentSeller = assertDefined(useCurrentSeller());
   const hasAudience = context.audience_types.length > 0;
@@ -395,9 +396,8 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
 
     if (template === "single_customer") {
       const singlePurchaseId = searchParams.get("purchase_id");
-      const singleEmail = searchParams.get("email");
       if (singlePurchaseId && canSendToCustomers) {
-        setSingleRecipient({ purchaseId: singlePurchaseId, email: singleEmail ?? "" });
+        setSingleRecipient({ purchaseId: singlePurchaseId, email: singleCustomerRecipient?.email ?? "" });
         setAudienceType("customers");
         setChannel({ profile: false, email: true });
       }

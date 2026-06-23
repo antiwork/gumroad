@@ -97,6 +97,26 @@ describe PostsController, type: :controller, inertia: true do
         expect(response).to be_successful
         expect(response).to have_http_status(:no_content)
       end
+
+      it "does not resend a single-recipient email to a purchase that never received it" do
+        @post.update!(single_recipient_email: true)
+        other_purchase = create(:purchase, seller:, link: @post.link, created_at: Time.current)
+        expect(PostSendgridApi).to_not receive(:process)
+
+        expect do
+          get :send_for_purchase, params: { id: @post.external_id, purchase_id: other_purchase.external_id }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "resends a single-recipient email to its original recipient" do
+        @post.update!(single_recipient_email: true)
+        @purchase.create_url_redirect!
+        expect(PostSendgridApi).to receive(:process)
+
+        get :send_for_purchase, params: { id: @post.external_id, purchase_id: @purchase.external_id }
+
+        expect(response).to have_http_status(:no_content)
+      end
     end
   end
 

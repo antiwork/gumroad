@@ -242,7 +242,6 @@ const CustomerDetailPage = ({
               href={Routes.new_email_path({
                 template: "single_customer",
                 purchase_id: customer.id,
-                email: customer.email,
               })}
             >
               <Envelope aria-hidden="true" className="size-5" />

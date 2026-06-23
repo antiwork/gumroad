@@ -80,7 +80,7 @@ class EmailsController < Sellers::BaseController
     end
 
     presenter = InstallmentPresenter.new(seller: current_seller, from_tab:)
-    render inertia: "Emails/New", props: presenter.new_page_props(copy_from: params[:copy_from])
+    render inertia: "Emails/New", props: presenter.new_page_props(copy_from: params[:copy_from], single_customer_purchase_id: params[:purchase_id])
   end
 
   def edit
