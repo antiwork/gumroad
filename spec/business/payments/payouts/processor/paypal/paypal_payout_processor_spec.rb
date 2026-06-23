@@ -1065,4 +1065,42 @@ describe PaypalPayoutProcessor do
       end.to raise_error(RuntimeError, error_message)
     end
   end
+
+  describe ".perform_payments" do
+    let(:good_payment_1) { create(:payment, payment_address: "good1@example.com", amount_cents: 5_000) }
+    let(:unpayable_payment) { create(:payment, payment_address: "rejected@example.com", amount_cents: 6_000) }
+    let(:good_payment_2) { create(:payment, payment_address: "good2@example.com", amount_cents: 7_000) }
+
+    before do
+      WebMock.stub_request(:post, PAYPAL_ENDPOINT).to_return do |request|
+        if request.body.include?("rejected")
+          { body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Failure&L_ERRORCODE0=3148&L_SHORTMESSAGE0=non%2dreceivable&L_LONGMESSAGE0=Receiver%20is%20in%20a%20non%2dreceivable%20country" }
+        else
+          { body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Success&VERSION=90%2e0&BUILD=4072860" }
+        end
+      end
+    end
+
+    it "fails only the unpayable recipient and leaves the rest of the batch processing" do
+      described_class.perform_payments([good_payment_1, unpayable_payment, good_payment_2])
+
+      expect(good_payment_1.reload.state).to eq("processing")
+      expect(good_payment_2.reload.state).to eq("processing")
+      expect(unpayable_payment.reload.state).to eq("failed")
+    end
+
+    it "records the PayPal error code as the failure reason so the payout is not retried into the same rejection" do
+      described_class.perform_payments([unpayable_payment])
+
+      expect(unpayable_payment.reload.state).to eq("failed")
+      expect(unpayable_payment.failure_reason).to eq("PAYPAL 3148")
+    end
+
+    it "leaves every payment processing when the whole batch is accepted" do
+      described_class.perform_payments([good_payment_1, good_payment_2])
+
+      expect(good_payment_1.reload.state).to eq("processing")
+      expect(good_payment_2.reload.state).to eq("processing")
+    end
+  end
 end
