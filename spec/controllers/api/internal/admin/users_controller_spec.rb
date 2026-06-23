@@ -5,7 +5,7 @@ require "shared_examples/authorized_admin_api_method"
 
 describe Api::Internal::Admin::UsersController do
   let(:admin_user) { create(:admin_user) }
-  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email." }
+  let(:user_id_required_message) { "user_id is required for mutating admin actions. Use /internal/admin/users/info to look up the user_id by email or username." }
 
   shared_examples "supports user lookup by user_id" do |action, method: :post, build_user: -> { create(:user) }, extra_params: {}, success_status: :ok|
     describe "user_id lookup" do
@@ -80,6 +80,34 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["success"]).to be(true)
       expect(response.parsed_body["user_id"]).to eq(user.external_id)
       expect(response.parsed_body["user"]["username"]).to eq("byusername")
+    end
+
+    it "resolves a hyphenated storefront handle to an underscored username" do
+      user = create(:compliant_user, email: "legacyhandle@example.com")
+      user.update_columns(username: "legacy_handle")
+
+      get :info, params: { username: "legacy-handle" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+      expect(response.parsed_body["user"]["username"]).to eq("legacy_handle")
+    end
+
+    it "falls back to the external id when a seller has no persisted username" do
+      user = create(:compliant_user)
+      user.update_columns(username: nil)
+
+      get :info, params: { username: user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user_id"]).to eq(user.external_id)
+    end
+
+    it "returns not found rather than erroring when the username param is malformed" do
+      get :info, params: { username: ["seller"] }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
 
     it "returns not found when the username does not match any user" do

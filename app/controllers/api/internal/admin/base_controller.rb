@@ -15,7 +15,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes, :merchant_account].freeze
   USER_LOOKUP_BAD_REQUEST_MESSAGE = "email, user_id, or username is required"
   USER_ID_REQUIRED_MESSAGE = "user_id is required for mutating admin actions. " \
-    "Use /internal/admin/users/info to look up the user_id by email."
+    "Use /internal/admin/users/info to look up the user_id by email or username."
   private_constant :USER_LOOKUP_BAD_REQUEST_MESSAGE, :USER_ID_REQUIRED_MESSAGE
 
   skip_before_action :verify_authenticity_token
@@ -210,7 +210,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       elsif params[:email].present?
         scope.by_email(params[:email]).first
       else
-        scope.find_by(username: params[:username])
+        Subdomain.find_seller_by_username(params[:username], scope:) ||
+          scope.find_by(external_id: params[:username].to_s)
       end
     end
 
