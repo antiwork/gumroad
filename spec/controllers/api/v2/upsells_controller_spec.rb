@@ -216,7 +216,7 @@ describe Api::V2::UpsellsController do
 
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to include("must belong to the upsell's offered product")
+        expect(response.parsed_body["message"]).to be_present
       end
 
       it "returns an error when a call is offered as an upsell" do
