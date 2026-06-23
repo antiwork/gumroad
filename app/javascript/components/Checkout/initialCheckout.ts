@@ -1,7 +1,6 @@
 import { reverse } from "lodash-es";
 
 import { type AnalyticsData } from "$app/parsers/product";
-
 import { type BeginCheckoutEvent } from "$app/utils/user_analytics";
 
 import {

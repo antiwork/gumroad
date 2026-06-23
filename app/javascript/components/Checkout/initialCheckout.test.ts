@@ -62,7 +62,7 @@ describe("computeInitialCheckout", () => {
     expect(result.beginCheckoutEvents).toHaveLength(2);
     const sellerIds = result.beginCheckoutEvents.map((e) => e.seller_id).sort();
     expect(sellerIds).toEqual(["seller-1", "seller-2"]);
-    expect(result.beginCheckoutEvents.every((e) => e.action === "begin_checkout")).toBe(true);
+    expect(result.beginCheckoutEvents.map((e) => e.action)).toEqual(["begin_checkout", "begin_checkout"]);
   });
 
   it("is pure: repeated invocations produce identical event counts (the render-loop regression)", () => {
