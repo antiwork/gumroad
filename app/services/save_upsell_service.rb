@@ -67,10 +67,8 @@ class SaveUpsellService
 
     def create_upsell_variants
       if upsell_params[:upsell_variants].present?
-        variants = upsell.product.variants_or_skus
-
         upsell_params[:upsell_variants].each do |upsell_variant|
-          upsell.upsell_variants.build(selected_variant: variants.find_by_external_id(upsell_variant[:selected_variant_id]), offered_variant: variants.find_by_external_id(upsell_variant[:offered_variant_id]))
+          upsell.upsell_variants.build(selected_variant: BaseVariant.find_by_external_id!(upsell_variant[:selected_variant_id]), offered_variant: BaseVariant.find_by_external_id!(upsell_variant[:offered_variant_id]))
         end
       end
     end

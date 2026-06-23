@@ -207,6 +207,18 @@ describe Api::V2::UpsellsController do
         expect(response.parsed_body["message"]).to eq("The offered variant must belong to the offered product.")
       end
 
+      it "returns a validation error, not a server error, when an upsell variant belongs to another product" do
+        foreign_variant = create(:product_with_digital_versions).alive_variants.first
+
+        expect do
+          post @action, params: @params.merge(upsell_variants: [{ selected_variant_id: foreign_variant.external_id, offered_variant_id: foreign_variant.external_id }]), as: :json
+        end.not_to change { @user.upsells.count }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("must belong to the upsell's offered product")
+      end
+
       it "returns an error when a call is offered as an upsell" do
         call = create(:call_product, user: @user)
         expect do
