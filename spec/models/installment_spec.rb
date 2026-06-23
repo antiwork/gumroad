@@ -460,11 +460,13 @@ const b = 2;</code></pre>
       standard_variant_purchase.variant_attributes << standard_variant
       premium_variant_purchase = create(:purchase, link: product, purchaser: buyer)
       premium_variant_purchase.variant_attributes << premium_variant
+      single_recipient_post = create(:seller_installment, seller: creator, single_recipient_email: true, single_recipient_purchase_id: product_purchase.id)
 
       expect(product_post.eligible_purchase_for_user(buyer)).to eq(product_purchase)
       expect(standard_variant_post.eligible_purchase_for_user(buyer)).to eq(standard_variant_purchase)
       expect(premium_variant_post.eligible_purchase_for_user(buyer)).to eq(premium_variant_purchase)
       expect(seller_post.eligible_purchase_for_user(buyer)).to eq(other_product_purchase)
+      expect(single_recipient_post.eligible_purchase_for_user(buyer)).to eq(product_purchase)
       expect(audience_post.eligible_purchase_for_user(buyer)).to be(nil)
       expect(follower_post.eligible_purchase_for_user(buyer)).to be(nil)
       expect(follower_post.eligible_purchase_for_user(nil)).to be(nil)
@@ -1084,6 +1086,7 @@ const b = 2;</code></pre>
       seller_post = create(:seller_post, seller: product.user, bought_products: [product.unique_permalink, create(:product).unique_permalink], published_at: 6.days.ago)
       _seller_post2 = create(:seller_post, :published, seller: product2.user, bought_products: [product2.unique_permalink], bought_variants: [create(:variant).external_id])
       seller_post_for_customers_of_all_products = create(:seller_post, seller: product.user, published_at: 3.hours.ago)
+      _single_recipient_post = create(:seller_post, seller: product.user, published_at: 1.hour.ago, single_recipient_email: true, single_recipient_purchase_id: create(:free_purchase, seller: product.user, link: product).id)
       product_post = create(:product_post, link: product, bought_products: [product.unique_permalink], published_at: 3.days.ago)
       _unpublished_product_post = create(:product_post, link: product, bought_products: [product.unique_permalink])
       _audience_post = create(:audience_post, :published, seller: product.user, bought_products: [product.unique_permalink])

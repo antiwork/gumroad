@@ -843,6 +843,8 @@ class Installment < ApplicationRecord
     return nil if user.blank? || !needs_purchase_to_access_content?
 
     purchases = user.purchases.successful_or_preorder_authorization_successful_and_not_refunded_or_chargedback
+    return purchases.find_by(id: single_recipient_purchase_id) if single_recipient_email?
+
     purchases = if installment_type == PRODUCT_TYPE
       purchases.where(link_id:)
     elsif installment_type == VARIANT_TYPE
@@ -934,7 +936,7 @@ class Installment < ApplicationRecord
     product_permalink = product.unique_permalink
     product_variant_external_ids = product.alive_variants.map(&:external_id)
 
-    posts = self.includes(:installment_rule, :seller).alive.published.where(seller_id: product.user_id).filter do |post|
+    posts = self.includes(:installment_rule, :seller).alive.published.not_single_recipient_email.where(seller_id: product.user_id).filter do |post|
       post.seller_or_product_or_variant_type? && (
         (post.bought_products.present? && post.bought_products.include?(product_permalink)) ||
         (post.bought_variants.present? && post.bought_variants.any? { product_variant_external_ids.include?(_1) }) ||
