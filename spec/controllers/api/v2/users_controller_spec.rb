@@ -133,13 +133,11 @@ describe Api::V2::UsersController do
                                            "user" => @user.reload.as_json(api_scopes: ["edit_profile"]))
       end
 
-      it "serializes the full user (not the sparse public view) for the edit_profile scope" do
+      it "does not expose email to a write-only edit_profile token" do
         put @action, params: @params
 
-        user = response.parsed_body["user"]
-        expect(user["email"]).to be_present
-        expect(user["display_name"]).to be_present
-        expect(user).to have_key("currency_type")
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["user"]).to_not have_key("email")
       end
 
       it "returns a validation error when the name is invalid" do
