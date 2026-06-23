@@ -127,6 +127,23 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
     end
 
+    it "keeps the discount inspector open after copying a product's discounted link" do
+      visit checkout_discounts_path
+      find(:table_row, { "Discount" => "Discount 1" }).click
+
+      within_modal "Discount 1" do
+        within_section "Products" do
+          find(:button, "Copy link with discount", match: :first).click
+        end
+      end
+
+      expect(page).to have_selector(:modal)
+      within_modal "Discount 1" do
+        expect(page).to have_section("Details")
+        expect(page).to have_button("Copy link with discount", count: 5)
+      end
+    end
+
     context "when the creator has no discounts" do
       it "displays a placeholder message" do
         login_as create(:user)
