@@ -40,7 +40,7 @@ class CustomersController < Sellers::BaseController
              customer: customer_data,
              countries: Compliance::Countries.for_select.map(&:last),
              can_ping: current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
-             can_email: user_presenter.audience_types.include?(:customers),
+             can_email: user_presenter.audience_types.include?(:customers) && policy(Installment).create?,
              show_refund_fee_notice: current_seller.show_refund_fee_notice?,
              emails: build_customer_emails(purchase),
              missed_posts: InertiaRails.defer { presenter.missed_posts },

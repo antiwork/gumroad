@@ -26,7 +26,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
   describe "POST create" do
     it_behaves_like "authorize called for action", :post, :create do
       let(:record) { Installment }
-      let(:policy_method) { :send_for_purchase? }
+      let(:policy_method) { :create? }
       let(:request_format) { :json }
     end
 
@@ -158,6 +158,26 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response.media_type).to eq("application/json")
       expect(response).to_not be_redirect
       expect(response.parsed_body).to eq("success" => false, "message" => "Please include a message as part of the update.")
+    end
+
+    it "resolves inline upsell cards so the published message can render" do
+      upsell_product = create(:product, user: seller)
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      message = %(<p>Check this out.</p><upsell-card productid="#{upsell_product.external_id}"></upsell-card>)
+
+      expect do
+        post :create, params: request_params.merge(message:), as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(Upsell, :count).by(1)
+
+      expect(response).to be_successful
+      installment = Installment.last
+      upsell_id = Nokogiri::HTML.fragment(installment.message).at_css("upsell-card")["id"]
+      expect(upsell_id).to be_present
+      expect(seller.upsells.find_by_external_id!(upsell_id)).to eq(Upsell.last)
     end
 
     it "returns a JSON 404 when the purchase does not belong to the seller" do

@@ -10,7 +10,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     permitted_params = single_customer_email_params
     purchase = current_seller.sales.find_by_external_id!(permitted_params[:purchase_id])
 
-    authorize Installment, :send_for_purchase?
+    authorize Installment, :create?
 
     return render_error("Customer not found.", :not_found) unless seller_can_email_customers?
     return render_error("Customer cannot be emailed.", :unprocessable_entity) unless purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && purchase.giftee_email.blank?
@@ -22,7 +22,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
 
     render json: { success: true }
   rescue ActiveRecord::RecordNotFound
-    authorize Installment, :send_for_purchase?
+    authorize Installment, :create?
     render_error("Customer not found.", :not_found)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.first || e.message, :unprocessable_entity)
@@ -43,9 +43,10 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     def find_or_create_installment(purchase, permitted_params)
       installment_id = Rails.cache.fetch(single_customer_email_idempotency_key(purchase, permitted_params), expires_in: 8.hours) do
         ActiveRecord::Base.transaction do
+          message = SaveContentUpsellsService.new(seller: current_seller, content: permitted_params[:message], old_content: nil).from_html
           installment = current_seller.installments.build(
             name: permitted_params[:name],
-            message: permitted_params[:message],
+            message:,
             installment_type: Installment::SELLER_TYPE,
             send_emails: true,
             shown_on_profile: false,

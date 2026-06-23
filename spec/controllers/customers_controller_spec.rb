@@ -91,6 +91,23 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.props[:can_email]).to eq(false)
     end
+
+    context "when the signed-in user lacks email-creation permission" do
+      let(:support_user) { create(:user) }
+
+      before do
+        create(:team_membership, user: support_user, seller:, role: TeamMembership::ROLE_SUPPORT)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in support_user
+      end
+
+      it "does not let support users email customers even when an audience exists" do
+        get :show, params: { purchase_id: purchase.external_id }
+
+        expect(response).to be_successful
+        expect(inertia.props[:can_email]).to eq(false)
+      end
+    end
   end
 
   describe "GET paged" do
