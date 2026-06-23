@@ -25,6 +25,7 @@ class Api::V2::UpsellsController < Api::V2::BaseController
   end
 
   def update
+    backfill_absent_associations
     SaveUpsellService.new(seller: current_resource_owner, params:, upsell: @upsell).perform
     if @upsell.save
       success_with_upsell(@upsell)
@@ -66,5 +67,22 @@ class Api::V2::UpsellsController < Api::V2::BaseController
 
     def error_with_missing_reference
       render_response(false, message: "The product, variant, or offer referenced by an external ID could not be found.")
+    end
+
+    def backfill_absent_associations
+      params[:product_id] = @upsell.product.external_id unless params.key?(:product_id)
+      params[:variant_id] = @upsell.variant&.external_id unless params.key?(:variant_id)
+      params[:product_ids] = @upsell.selected_products.map(&:external_id) unless params.key?(:product_ids)
+
+      unless params.key?(:upsell_variants)
+        params[:upsell_variants] = @upsell.upsell_variants.alive.map do |upsell_variant|
+          { selected_variant_id: upsell_variant.selected_variant.external_id, offered_variant_id: upsell_variant.offered_variant.external_id }
+        end
+      end
+
+      unless params.key?(:offer_code)
+        offer_code = @upsell.offer_code
+        params[:offer_code] = offer_code.present? ? { amount_cents: offer_code.amount_cents, amount_percentage: offer_code.amount_percentage } : nil
+      end
     end
 end

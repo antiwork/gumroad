@@ -277,6 +277,45 @@ describe Api::V2::UpsellsController do
           .and change { @upsell.offer_code.amount_percentage }.from(nil).to(10)
       end
 
+      it "preserves associations omitted from a partial update" do
+        upsell = create(:upsell, seller: @user, product: @product, name: "Full", cross_sell: true,
+                                 variant: @product.alive_variants.first,
+                                 offer_code: create(:offer_code, products: [@product], user: @user, amount_cents: 300))
+        upsell.selected_products = [@other_product]
+
+        put @action, params: { id: upsell.external_id, name: "Renamed", access_token: @token.token }, as: :json
+        upsell.reload
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(upsell.name).to eq("Renamed")
+        expect(upsell.product).to eq(@product)
+        expect(upsell.variant).to eq(@product.alive_variants.first)
+        expect(upsell.selected_products).to eq([@other_product])
+        expect(upsell.offer_code&.amount_cents).to eq(300)
+      end
+
+      it "preserves upsell variants omitted from a partial update" do
+        upsell = create(:upsell, seller: @user, product: @product, name: "Versioned", cross_sell: false)
+        create(:upsell_variant, upsell:, selected_variant: @product.alive_variants.first, offered_variant: @product.alive_variants.second)
+
+        put @action, params: { id: upsell.external_id, paused: true, access_token: @token.token }, as: :json
+        upsell.reload
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(upsell.paused).to eq(true)
+        expect(upsell.upsell_variants.alive.count).to eq(1)
+      end
+
+      it "clears an association when an explicit empty value is sent" do
+        upsell = create(:upsell, seller: @user, product: @product, name: "Has variant", cross_sell: true, variant: @product.alive_variants.first)
+
+        put @action, params: { id: upsell.external_id, product_id: @product.external_id, variant_id: "", access_token: @token.token }, as: :json
+        upsell.reload
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(upsell.variant).to be_nil
+      end
+
       it "returns the updated upsell as the response" do
         put @action, params: @params.merge(name: "Renamed"), as: :json
 
