@@ -80,6 +80,9 @@ SecureHeaders::Configuration.default do |config|
       FILE_DOWNLOAD_DISTRIBUTION_URL,
       HLS_DISTRIBUTION_URL,
 
+      # jw player
+      "entitlements.jwplayer.com",
+
       # paypal
       "*.braintreegateway.com",
       "www.paypalobjects.com",
