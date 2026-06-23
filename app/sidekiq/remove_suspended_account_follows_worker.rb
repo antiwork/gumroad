@@ -4,14 +4,6 @@
 # on other creators. A suspended account should not stay subscribed to creators'
 # follower email lists — otherwise it keeps receiving (and replying to) email blasts.
 #
-# A follow can be linked to the account two ways: by `follower_user_id`, or — for
-# follows created before the account existed / never backfilled — by email only
-# (`follower_user_id` is nil but `followers.email` matches the account's confirmed
-# email). The email-only match is scoped to `follower_user_id IS NULL` so a row
-# explicitly linked to a DIFFERENT account that shares a stale email is never
-# collateral, and uses ONLY the verified confirmed `email` (never `unconfirmed_email`,
-# which an account can point at an address it hasn't proven it owns).
-#
 # `Follower#mark_deleted!` soft-deletes the row AND clears `confirmed_at`, which drops
 # the follower from the creator's email audience. Idempotent: rows already deleted are
 # skipped, so retries and re-suspensions are safe.
@@ -20,14 +12,20 @@ class RemoveSuspendedAccountFollowsWorker
   sidekiq_options retry: 5, queue: :low
 
   def perform(user_id)
-    user = User.find(user_id)
-    return unless user.suspended?
+    user = User.find_by(id: user_id)
+    return unless user&.suspended?
 
-    # Only the VERIFIED confirmed email is used for the email-only fallback. We must not
-    # key destructive cleanup off `unconfirmed_email` — a suspended account could set a
-    # pending email to a victim's address and unsubscribe that victim's email-only follows.
-    Follower.alive
-            .where("follower_user_id = :id OR (follower_user_id IS NULL AND email = :email)", id: user_id, email: user.email)
-            .find_each(&:mark_deleted!)
+    # Follows linked directly to the account.
+    Follower.alive.where(follower_user_id: user_id).find_each(&:mark_deleted!)
+
+    # Email-only follows (created before the account existed / never backfilled): matched by
+    # email and scoped to `follower_user_id IS NULL`, so a row linked to a DIFFERENT account
+    # that shares a stale email is never collateral. Keyed ONLY off the verified confirmed
+    # email — never `unconfirmed_email`, which a suspended account could point at a victim's
+    # address to unsubscribe that victim's follows. Skipped when the account has no email, so
+    # a nil email never matches (and soft-deletes) every null-email follower row.
+    return if user.email.blank?
+
+    Follower.alive.where(follower_user_id: nil, email: user.email).find_each(&:mark_deleted!)
   end
 end

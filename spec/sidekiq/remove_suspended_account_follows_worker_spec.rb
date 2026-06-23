@@ -63,6 +63,21 @@ describe RemoveSuspendedAccountFollowsWorker do
       expect(under_pending.reload.deleted_at).to be_nil
     end
 
+    it "does NOT match null-email follows when the suspended account has no email" do
+      # Accounts can have a nil email (presence is conditional). The email-only branch must skip
+      # entirely in that case — otherwise `email = nil` would match (and delete) every null-email
+      # follower row, none of which is known to belong to the suspended account.
+      null_email_follow = create(:active_follower, user: @creator, follower_user_id: nil, email: "stray@example.com")
+      null_email_follow.update_column(:email, nil)
+
+      @follower_user.suspend_for_fraud!(author_name: "test")
+      @follower_user.update_column(:email, nil)
+
+      described_class.new.perform(@follower_user.id)
+
+      expect(null_email_follow.reload.deleted_at).to be_nil
+    end
+
     it "does nothing when the user is not suspended" do
       follow = create(:active_follower, user: @creator, follower_user_id: @follower_user.id, email: @follower_user.email)
 
