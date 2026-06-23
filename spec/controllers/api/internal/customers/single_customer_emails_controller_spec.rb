@@ -18,6 +18,9 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
   include_context "with user signed in as admin for seller"
 
   before do
+    if MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).blank?
+      create(:merchant_account, user: nil)
+    end
     Rails.cache.clear
     create(:payment_completed, user: seller)
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
@@ -146,6 +149,25 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(PostEmailApi).to have_received(:process).twice
     end
 
+    it "uses Redis locks for both installment creation and delivery idempotency" do
+      lock_keys = []
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+      allow($redis).to receive(:set).and_wrap_original do |original_method, *args, **kwargs|
+        lock_keys << args.first if args.first.to_s.end_with?(":lock")
+        original_method.call(*args, **kwargs)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      expect(lock_keys).to include(
+        a_string_starting_with("single_customer_email:#{seller.id}:#{purchase.id}:")
+      )
+      expect(lock_keys).to include("post_email:#{Installment.last.id}:#{purchase.id}:lock")
+    end
+
     it "returns a JSON 422 when the message is empty after scrubbing" do
       expect(PostEmailApi).to_not receive(:process)
 
@@ -158,6 +180,23 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response.media_type).to eq("application/json")
       expect(response).to_not be_redirect
       expect(response.parsed_body).to eq("success" => false, "message" => "Please include a message as part of the update.")
+    end
+
+    it "accepts image-only messages that survive installment message scrubbing" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      image_only_message = '<p><img src="https://example.com/image.png"></p>'
+
+      expect do
+        post :create, params: request_params.merge(message: image_only_message), as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(Installment.last.message).to include("<img")
     end
 
     it "resolves inline upsell cards so the published message can render" do

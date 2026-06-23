@@ -31,7 +31,11 @@ import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
-import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
+import {
+  ImageUploadSettingsContext,
+  RichTextEditor,
+  serializeEditorContentToHTML,
+} from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -300,6 +304,8 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   );
 
   const [messageEditor, setMessageEditor] = React.useState<Editor | null>(null);
+  const getCurrentMessage = () =>
+    messageEditor ? serializeEditorContentToHTML(messageEditor) : form.data.installment.message;
   React.useEffect(() => {
     if (form.data.installment.message !== "" && messageEditor?.isEmpty) {
       queueMicrotask(() => {
@@ -755,9 +761,9 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   });
 
   const [isSendingSingleRecipient, setIsSendingSingleRecipient] = React.useState(false);
-  const validateSingleRecipientEmail = () => {
+  const validateSingleRecipientEmail = (message: string) => {
     const invalidFieldNames = new Set<InvalidFieldName>();
-    const hasMessage = hasMessageContent(form.data.installment.message);
+    const hasMessage = hasMessageContent(message);
 
     if (form.data.installment.name.trim() === "") {
       invalidFieldNames.add("title");
@@ -775,13 +781,15 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     if (!singleRecipient) return;
 
     await Promise.resolve();
-    if (!validateSingleRecipientEmail()) return;
+    const message = getCurrentMessage();
+    if (!validateSingleRecipientEmail(message)) return;
+    form.setData("installment.message", message);
 
     setIsSendingSingleRecipient(true);
     try {
       await sendSingleCustomerEmail(singleRecipient.purchaseId, {
         name: form.data.installment.name,
-        message: form.data.installment.message,
+        message,
         files: files.map((file, position) => ({
           external_id: file.id,
           position,

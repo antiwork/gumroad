@@ -3,6 +3,17 @@
 require "digest"
 
 class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::BaseController
+  REDIS_LOCK_TTL = 30.seconds
+  REDIS_LOCK_WAIT_TIMEOUT = 10.seconds
+  REDIS_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+  REDIS_LOCK_RELEASE_SCRIPT = <<~LUA.squish
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    else
+      return 0
+    end
+  LUA
+
   before_action :authenticate_user!
   after_action :verify_authorized
 
@@ -41,30 +52,33 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     # separate from delivery: keying them together would let a failed send re-run
     # creation and leave duplicate published installments behind.
     def find_or_create_installment(purchase, permitted_params)
-      installment_id = Rails.cache.fetch(single_customer_email_idempotency_key(purchase, permitted_params), expires_in: 8.hours) do
-        ActiveRecord::Base.transaction do
-          message = SaveContentUpsellsService.new(seller: current_seller, content: permitted_params[:message], old_content: nil).from_html
-          installment = current_seller.installments.build(
-            name: permitted_params[:name],
-            message:,
-            installment_type: Installment::SELLER_TYPE,
-            send_emails: true,
-            shown_on_profile: false,
-            allow_comments: false,
-            single_recipient_email: true,
-            single_recipient_purchase_id: purchase.id
-          )
-          installment.save!
-          SaveFilesService.perform(installment, files_params(permitted_params))
-          installment.publish!
-          blast_timestamp = Time.current
-          PostEmailBlast.create!(
-            post: installment,
-            requested_at: blast_timestamp,
-            started_at: blast_timestamp,
-            completed_at: blast_timestamp
-          )
-          installment.id
+      idempotency_key = single_customer_email_idempotency_key(purchase, permitted_params)
+      installment_id = with_redis_lock("#{idempotency_key}:lock") do
+        Rails.cache.fetch(idempotency_key, expires_in: 8.hours) do
+          ActiveRecord::Base.transaction do
+            message = SaveContentUpsellsService.new(seller: current_seller, content: permitted_params[:message], old_content: nil).from_html
+            installment = current_seller.installments.build(
+              name: permitted_params[:name],
+              message:,
+              installment_type: Installment::SELLER_TYPE,
+              send_emails: true,
+              shown_on_profile: false,
+              allow_comments: false,
+              single_recipient_email: true,
+              single_recipient_purchase_id: purchase.id
+            )
+            installment.save!
+            SaveFilesService.perform(installment, files_params(permitted_params))
+            installment.publish!
+            blast_timestamp = Time.current
+            PostEmailBlast.create!(
+              post: installment,
+              requested_at: blast_timestamp,
+              started_at: blast_timestamp,
+              completed_at: blast_timestamp
+            )
+            installment.id
+          end
         end
       end
 
@@ -79,21 +93,43 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     # failure retries only the send, never a second installment, while a delivery
     # that already succeeded is never repeated.
     def deliver_to_purchase(installment, purchase)
-      Rails.cache.fetch("post_email:#{installment.id}:#{purchase.id}", expires_in: 8.hours) do
-        CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
-        PostEmailApi.process(
-          post: installment,
-          recipients: [
-            {
-              email: purchase.email,
-              purchase:,
-              url_redirect: installment.delivery_url_redirect_for(purchase),
-              subscription: purchase.subscription,
-            }.compact_blank
-          ]
-        )
-        true
+      cache_key = "post_email:#{installment.id}:#{purchase.id}"
+      with_redis_lock("#{cache_key}:lock") do
+        Rails.cache.fetch(cache_key, expires_in: 8.hours) do
+          CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
+          PostEmailApi.process(
+            post: installment,
+            recipients: [
+              {
+                email: purchase.email,
+                purchase:,
+                url_redirect: installment.delivery_url_redirect_for(purchase),
+                subscription: purchase.subscription,
+              }.compact_blank
+            ]
+          )
+          true
+        end
       end
+    end
+
+    def with_redis_lock(lock_key)
+      token = SecureRandom.uuid
+      lock_acquired = false
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REDIS_LOCK_WAIT_TIMEOUT
+
+      until $redis.set(lock_key, token, ex: REDIS_LOCK_TTL.to_i, nx: true)
+        if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+          raise Installment::InstallmentInvalid, "Please wait a few seconds and try sending again."
+        end
+
+        sleep REDIS_LOCK_RETRY_INTERVAL_SECONDS
+      end
+
+      lock_acquired = true
+      yield
+    ensure
+      $redis.eval(REDIS_LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [token]) if lock_acquired
     end
 
     def files_params(permitted_params)
