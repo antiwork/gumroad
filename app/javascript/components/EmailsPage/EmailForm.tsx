@@ -1065,7 +1065,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   style={{
                     display: "grid",
                     gap: "var(--spacer-4)",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                   }}
                   className="grow"
                 >
