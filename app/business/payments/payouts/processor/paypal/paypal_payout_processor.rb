@@ -165,22 +165,10 @@ class PaypalPayoutProcessor
     correlation_id = parsed_paypal_response["CORRELATIONID"]
 
     payments.each { |payment| payment.update(correlation_id:) }
-    return if transaction_succeeded
+    payments.each(&:mark_failed!) unless transaction_succeeded
 
-    errors = errors_for_parsed_paypal_response(parsed_paypal_response)
+    errors = errors_for_parsed_paypal_response(parsed_paypal_response) if ack_status != "Success"
     Rails.logger.info("Paypal Payouts: Payout errors for user IDs #{user_ids}: #{errors.inspect}") if errors.present?
-
-    error_code = parsed_paypal_response["L_ERRORCODE0"]
-    unless Payment.paypal_recipient_level_failure?(error_code)
-      payments.each(&:mark_failed!)
-      return
-    end
-
-    if payments.size > 1
-      payments.each_slice((payments.size / 2.0).ceil) { |chunk| perform_payments(chunk) }
-    else
-      payments.first.mark_failed!("PAYPAL #{error_code}")
-    end
   end
 
   # Public: Sends the money in `split_payment_by_cents(payment.user)` increments.
@@ -309,7 +297,7 @@ class PaypalPayoutProcessor
         UpdatePayoutStatusWorker.perform_in(5.minutes, payment.id)
       elsif payment.state != new_payment_state
         if new_payment_state == "failed"
-          failure_reason = "PAYPAL #{paypal_event["reason_code"]}" if paypal_event["reason_code"].present?
+          failure_reason = paypal_event["reason_code"].present? ? "PAYPAL #{paypal_event["reason_code"]}" : Payment::FailureReason::PAYPAL_PAYOUT_FAILED
           payment.mark_failed!(failure_reason)
         else
           payment.mark!(new_payment_state)

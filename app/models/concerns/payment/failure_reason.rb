@@ -8,8 +8,10 @@ module Payment::FailureReason
   INSUFFICIENT_FUNDS = "insufficient_funds"
   BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
   CURRENCY_MISMATCH = "currency_mismatch"
+  PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   PAYPAL_MASS_PAY = {
+    PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",
     "PAYPAL 1000" => "Unknown error",
     "PAYPAL 1001" => "Receiver's account is invalid",
     "PAYPAL 1002" => "Sender has insufficient funds",
@@ -150,16 +152,6 @@ module Payment::FailureReason
     },
   }
   private_constant :STRIPE_FAILURE_SOLUTIONS
-
-  PAYPAL_RECIPIENT_LEVEL_FAILURE_CODES = %w[
-    1001 3004 3015 3047 3148 3501 3535 3558 8330 9302 11711 14159 14550 14765 14766 14767
-  ].freeze
-
-  class_methods do
-    def paypal_recipient_level_failure?(paypal_error_code)
-      PAYPAL_RECIPIENT_LEVEL_FAILURE_CODES.include?(paypal_error_code.to_s)
-    end
-  end
 
   private
     def add_payment_failure_reason_comment

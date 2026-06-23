@@ -504,7 +504,7 @@ describe PaypalPayoutProcessor do
 
       expect(@u1.unpaid_balance_cents).to eq 99
       expect(p2.state).to eq "failed"
-      expect(p2.failure_reason).to be_nil
+      expect(p2.failure_reason).to eq(Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
     end
 
     it "behaves idempotently" do
@@ -1066,54 +1066,28 @@ describe PaypalPayoutProcessor do
     end
   end
 
-  describe ".perform_payments" do
-    let(:good_payment_1) { create(:payment, payment_address: "good1@example.com", amount_cents: 5_000) }
-    let(:unpayable_payment) { create(:payment, payment_address: "rejected@example.com", amount_cents: 6_000) }
-    let(:good_payment_2) { create(:payment, payment_address: "good2@example.com", amount_cents: 7_000) }
+  describe "IPN item-level failure without a reason code" do
+    let(:user) { create(:singaporean_user_with_compliance_info, payment_address: "seller@example.com") }
+    let(:payment) { create(:payment, user:, payment_address: user.payment_address, amount_cents: 5_000) }
 
-    before do
-      WebMock.stub_request(:post, PAYPAL_ENDPOINT).to_return do |request|
-        if request.body.include?("rejected")
-          { body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Failure&L_ERRORCODE0=3148&L_SHORTMESSAGE0=non%2dreceivable&L_LONGMESSAGE0=Receiver%20is%20in%20a%20non%2dreceivable%20country" }
-        else
-          { body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Success&VERSION=90%2e0&BUILD=4072860" }
-        end
-      end
+    it "records a generic diagnostic reason so the failure is not silently retried" do
+      described_class.handle_paypal_event_for_non_split_payment(payment.id.to_s,
+                                                                "masspay_txn_id" => "",
+                                                                "status" => "Failed",
+                                                                "unique_id" => payment.id)
+
+      expect(payment.reload.state).to eq("failed")
+      expect(payment.failure_reason).to eq(Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
     end
 
-    it "fails only the unpayable recipient and leaves the rest of the batch processing" do
-      described_class.perform_payments([good_payment_1, unpayable_payment, good_payment_2])
+    it "still records the PayPal reason code when one is provided" do
+      described_class.handle_paypal_event_for_non_split_payment(payment.id.to_s,
+                                                                "masspay_txn_id" => "",
+                                                                "status" => "Failed",
+                                                                "reason_code" => "3148",
+                                                                "unique_id" => payment.id)
 
-      expect(good_payment_1.reload.state).to eq("processing")
-      expect(good_payment_2.reload.state).to eq("processing")
-      expect(unpayable_payment.reload.state).to eq("failed")
-      expect(unpayable_payment.failure_reason).to eq("PAYPAL 3148")
-    end
-
-    it "records the PayPal error code as the failure reason so the payout is not retried into the same rejection" do
-      described_class.perform_payments([unpayable_payment])
-
-      expect(unpayable_payment.reload.state).to eq("failed")
-      expect(unpayable_payment.failure_reason).to eq("PAYPAL 3148")
-    end
-
-    it "leaves every payment processing when the whole batch is accepted" do
-      described_class.perform_payments([good_payment_1, good_payment_2])
-
-      expect(good_payment_1.reload.state).to eq("processing")
-      expect(good_payment_2.reload.state).to eq("processing")
-    end
-
-    it "marks the batch failed without a reason on a systemic failure so the weekly retry still picks it up" do
-      WebMock.stub_request(:post, PAYPAL_ENDPOINT)
-             .to_return(body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Failure&L_ERRORCODE0=10001&L_SHORTMESSAGE0=Internal+Error&L_LONGMESSAGE0=Internal+Error")
-
-      described_class.perform_payments([good_payment_1, good_payment_2])
-
-      expect(good_payment_1.reload.state).to eq("failed")
-      expect(good_payment_2.reload.state).to eq("failed")
-      expect(good_payment_1.failure_reason).to be_nil
-      expect(good_payment_2.failure_reason).to be_nil
+      expect(payment.reload.failure_reason).to eq("PAYPAL 3148")
     end
   end
 end
