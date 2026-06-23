@@ -35,6 +35,7 @@ type Scope =
   | "edit_sales"
   | "unfurl"
   | "view_profile"
+  | "edit_profile"
   | "view_public"
   | "view_sales"
   | "view_payouts"
@@ -53,6 +54,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   edit_sales: "Refund your sales and resend purchase receipts to customers.",
   unfurl: "Fetch public information of any product to preview it in Notion.",
   view_profile: "See your profile data.",
+  edit_profile: "Edit your profile name and bio.",
   view_public: "See your public information (name, bio).",
   view_sales: "See your sales data.",
   view_payouts: "See your payouts data.",

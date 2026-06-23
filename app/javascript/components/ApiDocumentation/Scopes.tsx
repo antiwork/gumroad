@@ -12,6 +12,10 @@ const SCOPES = [
     description: "read-only access to the user's public information and products.",
   },
   {
+    name: "edit_profile",
+    description: "write access to the user's profile name and bio.",
+  },
+  {
     name: "edit_products",
     description: "read/write access to the user's products and their variants, offer codes, custom fields, and files.",
   },
