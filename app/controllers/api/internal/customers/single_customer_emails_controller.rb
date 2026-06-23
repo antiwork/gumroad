@@ -16,49 +16,9 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     return render_error("Customer cannot be emailed.", :unprocessable_entity) unless purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && purchase.giftee_email.blank?
     return render_error("You are not eligible to send emails.", :unauthorized) unless current_seller.eligible_to_send_emails?
     return render_error("Please set a title.", :unprocessable_entity) if permitted_params[:name].blank?
-    return render_error("Please include a message as part of the update.", :unprocessable_entity) if permitted_params[:message].blank?
 
-    Rails.cache.fetch(single_customer_email_idempotency_key(purchase, permitted_params), expires_in: 8.hours) do
-      installment = ActiveRecord::Base.transaction do
-        record = current_seller.installments.build(
-          name: permitted_params[:name],
-          message: permitted_params[:message],
-          installment_type: Installment::SELLER_TYPE,
-          send_emails: true,
-          shown_on_profile: false,
-          allow_comments: false
-        )
-        record.save!
-        SaveFilesService.perform(record, files_params(permitted_params))
-        record.publish!
-        blast_timestamp = Time.current
-        PostEmailBlast.create!(
-          post: record,
-          requested_at: blast_timestamp,
-          started_at: blast_timestamp,
-          completed_at: blast_timestamp
-        )
-        record
-      end
-
-      # Deliver AFTER the transaction commits. PostEmailApi.process hits an
-      # external provider (Resend/SendGrid), so it must not run inside the DB
-      # transaction: a post-send rollback would orphan an already-delivered
-      # email, and a retry could double-send.
-      CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
-      PostEmailApi.process(
-        post: installment,
-        recipients: [
-          {
-            email: purchase.email,
-            purchase:,
-            url_redirect: purchase.url_redirect,
-            subscription: purchase.subscription,
-          }.compact_blank
-        ]
-      )
-      true
-    end
+    installment = find_or_create_installment(purchase, permitted_params)
+    deliver_to_purchase(installment, purchase)
 
     render json: { success: true }
   rescue ActiveRecord::RecordNotFound
@@ -73,6 +33,64 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
   private
     def single_customer_email_params
       params.permit(:purchase_id, :name, :message, files: [:external_id, :position, :url, :stream_only, subtitle_files: [:url, :language]])
+    end
+
+    # Build the email exactly once per identical request. The key is the request's
+    # content digest, not the new installment's id, so a retry reuses the existing
+    # installment instead of creating a second one. Creation is deliberately kept
+    # separate from delivery: keying them together would let a failed send re-run
+    # creation and leave duplicate published installments behind.
+    def find_or_create_installment(purchase, permitted_params)
+      installment_id = Rails.cache.fetch(single_customer_email_idempotency_key(purchase, permitted_params), expires_in: 8.hours) do
+        ActiveRecord::Base.transaction do
+          installment = current_seller.installments.build(
+            name: permitted_params[:name],
+            message: permitted_params[:message],
+            installment_type: Installment::SELLER_TYPE,
+            send_emails: true,
+            shown_on_profile: false,
+            allow_comments: false
+          )
+          installment.save!
+          SaveFilesService.perform(installment, files_params(permitted_params))
+          installment.publish!
+          blast_timestamp = Time.current
+          PostEmailBlast.create!(
+            post: installment,
+            requested_at: blast_timestamp,
+            started_at: blast_timestamp,
+            completed_at: blast_timestamp
+          )
+          installment.id
+        end
+      end
+
+      current_seller.installments.find(installment_id)
+    end
+
+    # Deliver after the installment is committed and behind its own per-(installment,
+    # purchase) idempotency key, mirroring PostsController#send_for_purchase.
+    # PostEmailApi.process hits an external provider (Resend/SendGrid), so it must
+    # not run inside the creation transaction: a post-send rollback would orphan an
+    # already-delivered email. Keying delivery on the installment means a send
+    # failure retries only the send, never a second installment, while a delivery
+    # that already succeeded is never repeated.
+    def deliver_to_purchase(installment, purchase)
+      Rails.cache.fetch("post_email:#{installment.id}:#{purchase.id}", expires_in: 8.hours) do
+        CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
+        PostEmailApi.process(
+          post: installment,
+          recipients: [
+            {
+              email: purchase.email,
+              purchase:,
+              url_redirect: purchase.url_redirect,
+              subscription: purchase.subscription,
+            }.compact_blank
+          ]
+        )
+        true
+      end
     end
 
     def files_params(permitted_params)

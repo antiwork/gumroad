@@ -120,6 +120,46 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(Installment.last).to_not eq(first_installment)
     end
 
+    it "does not create a second installment when delivery fails, and re-delivers on retry" do
+      attempts = 0
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        attempts += 1
+        raise "provider unavailable" if attempts == 1
+
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      expect do
+        expect { post :create, params: request_params, as: :json }.to raise_error("provider unavailable")
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+      first_installment = Installment.last
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(Installment.last).to eq(first_installment)
+      expect(PostEmailApi).to have_received(:process).twice
+    end
+
+    it "returns a JSON 422 when the message is empty after scrubbing" do
+      expect(PostEmailApi).to_not receive(:process)
+
+      expect do
+        post :create, params: request_params.merge(message: "<p><br></p>"), as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.media_type).to eq("application/json")
+      expect(response).to_not be_redirect
+      expect(response.parsed_body).to eq("success" => false, "message" => "Please include a message as part of the update.")
+    end
+
     it "returns a JSON 404 when the purchase does not belong to the seller" do
       other_purchase = create(:purchase, email: "other@example.com")
       expect(PostEmailApi).to_not receive(:process)
