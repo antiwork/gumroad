@@ -180,6 +180,43 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(seller.upsells.find_by_external_id!(upsell_id)).to eq(Upsell.last)
     end
 
+    it "keeps the one-off email out of seller-post targeting for other customers" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      installment = Installment.last
+      expect(installment.single_recipient_email?).to eq(true)
+
+      other_purchase = create(:purchase, seller:, link: product, email: "another@example.com", can_contact: true)
+      expect(Installment.emailable_posts_for_purchase(purchase: other_purchase)).to_not include(installment)
+      expect(Installment.missed_for_purchase(other_purchase)).to_not include(installment)
+    end
+
+    it "delivers attachments through an installment-scoped download link" do
+      received_url_redirect = nil
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        received_url_redirect = recipients.first[:url_redirect]
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      params = request_params.merge(
+        files: [{ external_id: SecureRandom.uuid, url: "#{S3_BASE_URL}attachments/12345/abcd12345/original/manual.pdf" }]
+      )
+
+      post :create, params: params, as: :json
+
+      expect(response).to be_successful
+      installment = Installment.last
+      expect(installment.has_files?).to eq(true)
+      expect(received_url_redirect).to be_present
+      expect(received_url_redirect.installment_id).to eq(installment.id)
+      expect(received_url_redirect.purchase_id).to eq(purchase.id)
+    end
+
     it "returns a JSON 404 when the purchase does not belong to the seller" do
       other_purchase = create(:purchase, email: "other@example.com")
       expect(PostEmailApi).to_not receive(:process)

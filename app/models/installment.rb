@@ -94,6 +94,7 @@ class Installment < ApplicationRecord
             9 => :send_emails,
             10 => :ready_to_publish,
             11 => :allow_comments,
+            12 => :single_recipient_email,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -155,6 +156,7 @@ class Installment < ApplicationRecord
     SQL
 
     send_emails.
+      not_single_recipient_email.
       where(id: product_installment_ids + seller_installment_ids).
       where(where_sent_sql)
   }
@@ -248,9 +250,9 @@ class Installment < ApplicationRecord
 
   scope :emailable_posts_for_purchase, ->(purchase:) do
     subqueries = [
-      for_products(product_ids: [purchase.link_id]).send_emails,
-      for_variants(variant_ids: purchase.variant_attributes.pluck(:id)).send_emails,
-      seller_posts_for_sellers(seller_ids: [purchase.seller_id]).send_emails,
+      for_products(product_ids: [purchase.link_id]).send_emails.not_single_recipient_email,
+      for_variants(variant_ids: purchase.variant_attributes.pluck(:id)).send_emails.not_single_recipient_email,
+      seller_posts_for_sellers(seller_ids: [purchase.seller_id]).send_emails.not_single_recipient_email,
     ]
     subqueries_sqls = subqueries.map { "(" + _1.to_sql + ")" }
     from("(" + subqueries_sqls.join(" UNION ") + ") AS #{table_name}")

@@ -50,7 +50,8 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
             installment_type: Installment::SELLER_TYPE,
             send_emails: true,
             shown_on_profile: false,
-            allow_comments: false
+            allow_comments: false,
+            single_recipient_email: true
           )
           installment.save!
           SaveFilesService.perform(installment, files_params(permitted_params))
@@ -85,13 +86,23 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
             {
               email: purchase.email,
               purchase:,
-              url_redirect: purchase.url_redirect,
+              url_redirect: url_redirect_for(installment, purchase),
               subscription: purchase.subscription,
             }.compact_blank
           ]
         )
         true
       end
+    end
+
+    # A post's own attachments live behind an (installment, purchase) UrlRedirect, not
+    # the purchase's product redirect, so resolve/create the installment-specific one
+    # when the post has files (matching the workflow send path). Otherwise fall back to
+    # the purchase redirect for the customer's existing product download.
+    def url_redirect_for(installment, purchase)
+      return purchase.url_redirect unless installment.has_files?
+
+      installment.purchase_url_redirect(purchase) || installment.generate_url_redirect_for_purchase(purchase)
     end
 
     def files_params(permitted_params)
