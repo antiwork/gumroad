@@ -196,6 +196,21 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(Installment.missed_for_purchase(other_purchase)).to_not include(installment)
     end
 
+    it "is viewable only by the recipient, not by other customers of the seller" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+
+      post :create, params: request_params, as: :json
+
+      expect(response).to be_successful
+      installment = Installment.last
+      other_purchase = create(:purchase, seller:, link: product, email: "another@example.com", can_contact: true)
+
+      expect(installment.eligible_purchase?(purchase)).to eq(true)
+      expect(installment.eligible_purchase?(other_purchase)).to eq(false)
+    end
+
     it "delivers attachments through an installment-scoped download link" do
       received_url_redirect = nil
       allow(PostEmailApi).to receive(:process) do |post:, recipients:|

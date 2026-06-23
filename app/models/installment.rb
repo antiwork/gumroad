@@ -848,6 +848,10 @@ class Installment < ApplicationRecord
   def eligible_purchase?(purchase)
     return true unless needs_purchase_to_access_content?
     return false if purchase.nil?
+    # A one-off email is a seller-type post with no audience filters, which would
+    # otherwise be viewable by any of the seller's customers. Restrict it to the
+    # single purchase it was actually delivered to.
+    return false if single_recipient_email? && !EmailInfo.exists?(installment_id: id, purchase_id: purchase.id)
 
     is_purchase_relevant = if product_type?
       purchase.link_id == link_id
