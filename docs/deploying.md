@@ -186,9 +186,9 @@ $ nomad run sidekiq_worker.nomad
 
 ## Deploying to a preview app
 
-Add the `preview` label to a pull request to deploy its branch to a preview app. This works for any branch except `main` and `comp-assets-*`.
+Add the `preview` label to a pull request to request a preview app for its branch. This works for any branch except `main` and `comp-assets-*`.
 
-Adding the label triggers a Buildkite build that deploys the branch. Each subsequent push to a labeled branch redeploys automatically.
+Adding the label triggers a Buildkite build with an approval block. Unblock it only after confirming the PR code is trusted to run with the preview deployment credentials. Each subsequent push to a labeled branch creates a new preview build that must be approved before deployment.
 
 The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
 

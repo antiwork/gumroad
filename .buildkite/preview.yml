@@ -1,6 +1,12 @@
 steps:
+  - block: "Approval required for preview app deployment"
+    key: require-preview-approval
+    prompt: "Provision and deploy a preview app for this branch? Only unblock trusted PR code because the preview pipeline has access to deployment credentials."
+    blocked_state: running
+
   - label: ":docker: Build Base Image"
     key: preview-build-base-image
+    depends_on: require-preview-approval
     command: ".buildkite/scripts/build_base.sh"
     timeout_in_minutes: 60
     plugins:
