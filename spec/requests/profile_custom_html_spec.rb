@@ -22,6 +22,13 @@ describe "Profile custom HTML rendering", type: :request do
     expect(response.body).not_to include("<h1>Profile landing</h1>")
   end
 
+  it "renders the wrapper for Accept: */* clients (crawlers/unfurlers), not just text/html" do
+    get "http://seller.example.com/", headers: { "Accept" => "*/*" }
+
+    expect(response).to be_successful
+    expect(response.body).to include(%(src="/landing/embed"))
+  end
+
   it "serves the embed with the strict CSP on the custom domain" do
     get "http://seller.example.com/landing/embed"
 
