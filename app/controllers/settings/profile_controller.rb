@@ -17,6 +17,13 @@ class Settings::ProfileController < Settings::BaseController
   def update
     return respond_error("You have to confirm your email address before you can do that.") unless current_seller.confirmed?
 
+    # custom_html is clear-only from this session surface. Authoring goes through the sanitized,
+    # OAuth-scoped v2 API (PUT /v2/user/custom_html). A non-blank value here would bypass
+    # Ai::PageSanitizer entirely (stored XSS), so reject anything but a blank reset.
+    if permitted_params.dig(:user, :custom_html).present?
+      return respond_error("Custom HTML can only be edited through the Gumroad CLI or API.")
+    end
+
     # Reject a stale layout before mutating anything (including the avatar), so a rejected save leaves
     # the profile untouched. The locked re-check inside the transaction is authoritative; this is an
     # early-out that avoids a partial write - e.g. attaching/purging the avatar - when we already know

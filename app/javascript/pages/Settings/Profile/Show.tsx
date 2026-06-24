@@ -17,6 +17,7 @@ import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Props as ProfileProps } from "$app/components/Profile";
 import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
+import { ProfileLandingPageEditor } from "$app/components/Profile/LandingPageEditor";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
@@ -40,12 +41,22 @@ type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
   profile_version: string | null;
+  custom_html_pages_enabled: boolean;
+  custom_html: string | null;
+  has_custom_landing_page: boolean;
+  username: string;
 } & ProfileProps;
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, editable_profile, profile_version } = typia.assert<ProfilePageProps>(
-    usePage().props,
-  );
+  const {
+    creator_profile,
+    profile_settings,
+    editable_profile,
+    profile_version,
+    custom_html_pages_enabled,
+    has_custom_landing_page,
+    username,
+  } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -157,6 +168,22 @@ export default function SettingsPage() {
   };
 
   const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
+
+  // Clear the custom profile HTML through the session-authed profile form. We send only the user
+  // payload (no tabs/sections), so this is a settings-only save that can't prune the layout. The
+  // controller rejects any NON-blank custom_html (authoring is API-only), so this is reset-only.
+  // Returns true on success so the modal closes only when the page was actually removed.
+  const removeCustomHtml = async (): Promise<boolean> => {
+    try {
+      await saveProfileSettings({ ...lastSavedSettings.current, custom_html: "" });
+      await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
+      return true;
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+      return false;
+    }
+  };
 
   useReactNativeMessage((data) => {
     if (data.type === "mobileAppSettingsSave") void save();
@@ -278,6 +305,14 @@ export default function SettingsPage() {
               disabled={!canUpdate}
             />
           </section>
+          {custom_html_pages_enabled ? (
+            <ProfileLandingPageEditor
+              username={username}
+              profileUrl={Routes.root_url({ host: creatorProfile.subdomain })}
+              hasLandingPage={has_custom_landing_page}
+              onRemove={removeCustomHtml}
+            />
+          ) : null}
         </div>
         <PreviewSidebar
           previewLink={(props) => {
