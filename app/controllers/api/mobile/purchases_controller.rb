@@ -82,7 +82,15 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       purchases_array = purchases.to_a
       ActiveRecord::Associations::Preloader.new(
         records: purchases_array,
-        associations: [:seller, { link: :user }]
+        associations: [
+          :seller,
+          :purchaser,
+          :preorder,
+          :url_redirect,
+          :product_review,
+          { link: :user },
+          { subscription: { true_original_purchase: :product_review } }
+        ]
       ).call
       Purchase.preload_product_updates_data!(purchases_array)
       purchases_array.map(&:json_data_for_mobile)

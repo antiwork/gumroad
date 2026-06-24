@@ -722,6 +722,31 @@ describe Api::Mobile::PurchasesController do
       end
     end
 
+    it "does not issue per-row queries for product reviews" do
+      product = create(:product, user: @user)
+      create_list(:purchase, 3, :with_review, purchaser: @purchaser, seller: @user, link: product)
+
+      per_row_review_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        next unless sql.include?("`product_reviews`")
+        next unless sql.match?(/LIMIT\s+1\z/)
+
+        per_row_review_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: @params
+      end
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:purchases].size).to eq(3)
+      expect(response.parsed_body[:purchases]).to all(include(product_rating: 5))
+      expect(per_row_review_queries).to be_empty,
+                                        "Expected zero per-row SELECTs for product reviews, got:\n#{per_row_review_queries.join("\n")}"
+    end
+
     describe "ordering" do
       it "returns purchases sorted by the requested order" do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, name: "money money money cash"))
