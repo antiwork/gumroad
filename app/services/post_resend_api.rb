@@ -9,12 +9,13 @@ class PostResendApi
 
   def self.process(**args) = new(**args).send_emails
 
-  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false)
+  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil)
     @post = post
     @recipients = recipients
     @cache = cache
     @blast = blast
     @preview = preview
+    @after_provider_delivery = after_provider_delivery
 
     @cache[@post] ||= {}
   end
@@ -48,10 +49,12 @@ class PostResendApi
         " (perform_deliveries = false)")
     end
 
+    @after_provider_delivery&.call
+
     unless @preview
+      create_email_info_records
       update_delivery_statistics
       send_push_notifications
-      create_email_info_records
       upsert_email_events_documents
     end
 

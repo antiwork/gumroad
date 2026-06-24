@@ -36,7 +36,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     it "creates a published non-blastable seller email and sends it only to the purchase email" do
       purchase.create_url_redirect!
 
-      expect(PostEmailApi).to receive(:process) do |post:, recipients:|
+      expect(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         expect(recipients).to eq(
           [
             {
@@ -75,7 +75,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     end
 
     it "deduplicates identical retries and sends different content separately" do
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         expect(recipients).to eq(
           [
             {
@@ -125,7 +125,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
 
     it "does not create a second installment when delivery fails, and re-delivers on retry" do
       attempts = 0
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         attempts += 1
         raise "provider unavailable" if attempts == 1
 
@@ -149,9 +149,77 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(PostEmailApi).to have_received(:process).twice
     end
 
+    it "does not send again when sent cache writes fail after provider delivery is recorded" do
+      sent_cache_write_attempts = 0
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
+        after_provider_delivery&.call
+        create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
+      end
+      allow(Rails.cache).to receive(:write).and_wrap_original do |original_method, key, value, *args, **kwargs|
+        if key.to_s.start_with?("single_customer_email_delivery:") && value == described_class::DELIVERY_SENT_CACHE_VALUE
+          sent_cache_write_attempts += 1
+          raise "cache unavailable after provider send" if sent_cache_write_attempts <= 2
+        end
+
+        original_method.call(key, value, *args, **kwargs)
+      end
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+        .and change(CreatorContactingCustomersEmailInfo, :count).by(1)
+
+      expect(response).to be_successful
+      first_installment = Installment.last
+      delivery_cache_key = "single_customer_email_delivery:#{first_installment.id}:#{purchase.id}"
+      expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE)
+      expect(PostEmailApi).to have_received(:process).once
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+        .and not_change(CreatorContactingCustomersEmailInfo, :count)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(Installment.last).to eq(first_installment)
+      expect(PostEmailApi).to have_received(:process).once
+      expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_SENT_CACHE_VALUE)
+    end
+
+    it "does not send again when provider delivery is accepted before a post-send failure" do
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
+        after_provider_delivery&.call
+        raise "post-provider side effect failed"
+      end
+
+      expect do
+        expect { post :create, params: request_params, as: :json }.to raise_error("post-provider side effect failed")
+      end.to change(Installment, :count).by(1)
+        .and change(PostEmailBlast, :count).by(1)
+        .and not_change(CreatorContactingCustomersEmailInfo, :count)
+
+      first_installment = Installment.last
+      delivery_cache_key = "single_customer_email_delivery:#{first_installment.id}:#{purchase.id}"
+      expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_SENT_CACHE_VALUE)
+      expect(PostEmailApi).to have_received(:process).once
+
+      expect do
+        post :create, params: request_params, as: :json
+      end.to not_change(Installment, :count)
+        .and not_change(PostEmailBlast, :count)
+        .and not_change(CreatorContactingCustomersEmailInfo, :count)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+      expect(PostEmailApi).to have_received(:process).once
+    end
+
     it "uses Redis locks for both installment creation and delivery idempotency" do
       lock_keys = []
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
       allow($redis).to receive(:set).and_wrap_original do |original_method, *args, **kwargs|
@@ -181,7 +249,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
         original_method.call(*args, **kwargs)
       end
 
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         delivery_cache_key = "single_customer_email_delivery:#{post.id}:#{purchase.id}"
         delivery_cache_values << Rails.cache.read(delivery_cache_key)
         delivery_lock_values << $redis.get("#{delivery_cache_key}:lock")
@@ -204,7 +272,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     end
 
     it "does not send again while delivery for the cached installment is already in progress" do
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 
@@ -213,6 +281,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(response).to be_successful
       installment = Installment.last
       delivery_cache_key = "single_customer_email_delivery:#{installment.id}:#{purchase.id}"
+      CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
       Rails.cache.write(
         delivery_cache_key,
         described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE,
@@ -244,7 +313,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     end
 
     it "accepts image-only messages that survive installment message scrubbing" do
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 
@@ -262,7 +331,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
 
     it "resolves inline upsell cards so the published message can render" do
       upsell_product = create(:product, user: seller)
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 
@@ -281,7 +350,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     end
 
     it "keeps the one-off email out of seller-post targeting for other customers" do
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 
@@ -297,7 +366,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
     end
 
     it "is viewable only by the recipient, not by other customers of the seller" do
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 
@@ -313,7 +382,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
 
     it "delivers attachments through an installment-scoped download link" do
       received_url_redirect = nil
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         received_url_redirect = recipients.first[:url_redirect]
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
@@ -397,7 +466,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
         giftee_email: gift_receiver_purchase.email,
         link: product
       )
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         expect(recipients).to eq([{ email: gift_receiver_purchase.email, purchase: gift_receiver_purchase }])
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase: gift_receiver_purchase)
       end
@@ -416,7 +485,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
       allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
-      allow(PostEmailApi).to receive(:process) do |post:, recipients:|
+      allow(PostEmailApi).to receive(:process) do |post:, recipients:, after_provider_delivery: nil|
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
       end
 

@@ -101,8 +101,9 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     # send the same email again.
     def deliver_to_purchase(installment, purchase)
       cache_key = delivery_cache_key(installment, purchase)
-      return if delivery_already_sent_or_reserved!(cache_key) == :sent
+      return if delivery_already_sent_or_reserved!(cache_key, installment, purchase) == :sent
 
+      provider_delivery_recorded = false
       begin
         CreatorContactingCustomersEmailInfo.where(purchase:, installment:).destroy_all
         PostEmailApi.process(
@@ -114,27 +115,51 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
               url_redirect: installment.delivery_url_redirect_for(purchase),
               subscription: purchase.subscription,
             }.compact_blank
-          ]
+          ],
+          after_provider_delivery: lambda {
+            provider_delivery_recorded = mark_delivery_sent(cache_key)
+          }
         )
-        Rails.cache.write(cache_key, DELIVERY_SENT_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
+        mark_delivery_sent(cache_key) unless provider_delivery_recorded
       rescue StandardError
-        Rails.cache.delete(cache_key)
+        Rails.cache.delete(cache_key) unless delivery_recorded?(installment, purchase) || delivery_sent_cache?(cache_key)
         raise
       end
     end
 
-    def delivery_already_sent_or_reserved!(cache_key)
+    def delivery_already_sent_or_reserved!(cache_key, installment, purchase)
       with_redis_lock("#{cache_key}:lock") do
-        case Rails.cache.read(cache_key)
-        when DELIVERY_SENT_CACHE_VALUE, true
+        cache_value = Rails.cache.read(cache_key)
+        if [DELIVERY_SENT_CACHE_VALUE, true].include?(cache_value)
           :sent
-        when DELIVERY_IN_PROGRESS_CACHE_VALUE
+        elsif delivery_recorded?(installment, purchase)
+          mark_delivery_sent(cache_key)
+          :sent
+        elsif cache_value == DELIVERY_IN_PROGRESS_CACHE_VALUE
           raise Installment::InstallmentInvalid, "This email is already being sent. Please wait a few minutes before trying again."
         else
           Rails.cache.write(cache_key, DELIVERY_IN_PROGRESS_CACHE_VALUE, expires_in: DELIVERY_IN_PROGRESS_CACHE_TTL)
           :reserved
         end
       end
+    end
+
+    def mark_delivery_sent(cache_key)
+      Rails.cache.write(cache_key, DELIVERY_SENT_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
+      true
+    rescue StandardError => e
+      Rails.logger.warn("Failed to write single-customer email delivery cache #{cache_key}: #{e.class}: #{e.message}")
+      false
+    end
+
+    def delivery_sent_cache?(cache_key)
+      Rails.cache.read(cache_key) == DELIVERY_SENT_CACHE_VALUE
+    rescue StandardError
+      false
+    end
+
+    def delivery_recorded?(installment, purchase)
+      CreatorContactingCustomersEmailInfo.exists?(purchase:, installment:)
     end
 
     def delivery_cache_key(installment, purchase)

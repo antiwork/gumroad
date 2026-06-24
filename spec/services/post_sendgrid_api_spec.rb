@@ -307,6 +307,18 @@ describe PostSendgridApi, :freeze_time do
     ).on("low")
   end
 
+  it "runs the provider-delivered callback before post-send side effects" do
+    events = []
+    allow(@post).to receive(:increment_total_delivered).and_wrap_original do |original_method, *args, **kwargs|
+      events << :delivery_statistics
+      original_method.call(*args, **kwargs)
+    end
+
+    send_emails(recipients: [{ email: "c1@example.com" }], after_provider_delivery: -> { events << :provider_delivery })
+
+    expect(events).to eq([:provider_delivery, :delivery_statistics])
+  end
+
   it "updates delivery statistics" do
     blast_1 = create(:post_email_blast, post: @post, delivery_count: 0)
     send_emails(recipients: [
