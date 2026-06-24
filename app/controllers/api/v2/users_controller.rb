@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 class Api::V2::UsersController < Api::V2::BaseController
-  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger]
-  before_action(only: [:update]) { doorkeeper_authorize! :edit_profile }
+  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html]
+  before_action(only: [:update, :update_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
+  before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :preview_custom_html]
 
   def show
     if params[:is_ifttt]
@@ -23,6 +24,84 @@ class Api::V2::UsersController < Api::V2::BaseController
       success_with_object(:user, user)
     else
       error_with_object(:user, user)
+    end
+  end
+
+  # GET the seller's own profile landing page HTML. has_landing_page lets the
+  # agent decide whether it's editing an existing page or authoring a new one.
+  def custom_html
+    user = current_resource_owner
+    render_response(true, custom_html: user.custom_html, has_landing_page: user.has_custom_landing_page?)
+  end
+
+  # PUT the profile landing page. Mirrors the product custom_html surface but is
+  # profile-scoped and drops the buy-affordance warning — a profile has no
+  # native checkout, so its custom HTML is never expected to carry a buy element.
+  def update_custom_html
+    user = current_resource_owner
+
+    return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
+    return render_response(false, message: "custom_html is required.") unless params.key?(:custom_html)
+
+    if !params[:custom_html].nil? && !params[:custom_html].is_a?(String)
+      return render_response(false, message: "custom_html must be a string.")
+    end
+
+    if (length_error = custom_html_length_error)
+      return render_response(false, message: length_error)
+    end
+
+    previous_custom_html = nil
+    sanitization_report = nil
+    begin
+      ActiveRecord::Base.transaction do
+        # Lock the user row so concurrent custom_html PUTs serialize their
+        # build_page calls — otherwise they race against the pages unique index.
+        # lock! reloads the row, swapping in a fresh association cache so the
+        # previous_custom_html read reflects a concurrent writer's committed page.
+        user.lock!
+        previous_custom_html = user.custom_html
+        if params[:custom_html].blank?
+          user.custom_html = nil
+          sanitization_report = Ai::PageSanitizer.empty_report
+        else
+          result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
+          user.custom_html = result.html.presence
+          sanitization_report = result.report
+        end
+        user.save!
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      return error_with_object(:user, e.record)
+    end
+
+    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:)
+  end
+
+  # Dry-run sanitize: returns what custom_html would look like after the
+  # sanitizer runs, without writing. Lets the agent iterate without rewriting
+  # the live page every attempt. Mirrors update_custom_html's blank-to-nil
+  # normalization so the dry-run and the real PUT agree on edge cases.
+  def preview_custom_html
+    return render_response(false, message: "custom_html is required.") unless params.key?(:custom_html)
+
+    custom_html = params[:custom_html]
+    return render_response(false, message: "custom_html must be a string.") unless custom_html.nil? || custom_html.is_a?(String)
+
+    if (length_error = custom_html_length_error)
+      return render_response(false, message: length_error)
+    end
+
+    result = Ai::PageSanitizer.sanitize_with_report(custom_html)
+    sanitized = result.html.presence
+    candidate_page = Page.new(pageable: current_resource_owner, custom_html: sanitized)
+    candidate_page.validate
+    errors = candidate_page.errors.where(:custom_html)
+
+    if errors.any?
+      render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)
+    else
+      render_response(true, custom_html: sanitized, sanitization_report: result.report)
     end
   end
 
@@ -55,5 +134,21 @@ class Api::V2::UsersController < Api::V2::BaseController
   private
     def permitted_update_params
       params.permit(:name, :bio)
+    end
+
+    def ensure_custom_html_pages_enabled
+      return if Feature.active?(:custom_html_pages, current_resource_owner)
+
+      render_response(false, message: "You do not have access to custom HTML pages.")
+    end
+
+    # Reject oversized HTML before the sanitizer parses it. Page validates the
+    # same 500 KB cap, but only after Nokogiri has parsed the whole payload — a
+    # cheap length check first bounds CPU on the rate-limited agent path.
+    def custom_html_length_error
+      value = params[:custom_html]
+      return unless value.is_a?(String) && value.length > Page::MAX_CUSTOM_HTML_LENGTH
+
+      "custom_html is too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
     end
 end

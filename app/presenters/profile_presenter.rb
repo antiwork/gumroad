@@ -42,6 +42,7 @@ class ProfilePresenter
           name: seller.name,
           bio: seller.bio,
           profile_picture_blob_id: seller.avatar.signed_id,
+          custom_html: seller.custom_html,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server

@@ -138,4 +138,68 @@ describe Pages::Interpolator do
       expect(result).to include(%(data-gumroad-checkout-params="{}"))
     end
   end
+
+  describe ".interpolate_profile" do
+    let(:seller) { create(:user, name: "Jane Doe", bio: "Maker of things") }
+
+    it "replaces data-gumroad-field='name' with the seller's display name" do
+      html = %(<h1 data-gumroad-field="name">placeholder</h1>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).to include("<h1 data-gumroad-field=\"name\">Jane Doe</h1>")
+      expect(result).not_to include("placeholder")
+    end
+
+    it "replaces data-gumroad-field='bio' with the seller's bio" do
+      html = %(<p data-gumroad-field="bio">placeholder</p>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).to include("Maker of things")
+      expect(result).not_to include("placeholder")
+    end
+
+    it "falls back to the username when the seller has no name" do
+      seller.update!(name: nil, username: "janedoe")
+      html = %(<h1 data-gumroad-field="name"></h1>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).to include(">janedoe<")
+    end
+
+    it "does not rewrite buy elements (profiles have no checkout)" do
+      html = %(<a data-gumroad-action="buy" href="/elsewhere">Link</a>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).to include(%(href="/elsewhere"))
+      expect(result).not_to include("wanted=true")
+      expect(result).not_to include("data-gumroad-checkout-params")
+    end
+
+    it "html-escapes interpolated values to prevent XSS" do
+      seller.update!(name: %(<script>alert("xss")</script>))
+      html = %(<h1 data-gumroad-field="name"></h1>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).not_to include("<script>")
+      expect(result).to include("&lt;script&gt;")
+    end
+
+    it "leaves unknown field markers untouched (graceful fallback)" do
+      html = %(<span data-gumroad-field="price">fallback text</span>)
+
+      result = described_class.interpolate_profile(html, profile: seller)
+
+      expect(result).to include(">fallback text<")
+    end
+
+    it "returns blank input as-is" do
+      expect(described_class.interpolate_profile("", profile: seller)).to eq("")
+      expect(described_class.interpolate_profile(nil, profile: seller)).to be_nil
+    end
+  end
 end

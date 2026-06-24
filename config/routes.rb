@@ -64,6 +64,9 @@ Rails.application.routes.draw do
 
       get "/user", to: "users#show"
       match "/user", to: "users#update", via: [:put, :patch]
+      get "/user/custom_html", to: "users#custom_html"
+      match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
+      post "/user/preview_custom_html", to: "users#preview_custom_html"
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
@@ -1181,6 +1184,9 @@ Rails.application.routes.draw do
     # Root-domain profile routes. Subdomain and custom-domain equivalents live in UserCustomDomainConstraint below.
     get "/:username/edit", to: "users#edit", as: nil
     get "/:username", to: "users#show", as: "user"
+    # Iframe content endpoint for profiles with custom_html. Subdomain and
+    # custom-domain equivalents live in UserCustomDomainConstraint below.
+    get "/:username/landing/embed", to: "users#landing_iframe_content", as: :user_landing
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
     get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
@@ -1350,6 +1356,7 @@ Rails.application.routes.draw do
       resource :upload_context, only: [:show]
     end
 
+    get "/landing/embed", to: "users#landing_iframe_content"
     get "/", to: "users#show"
   end
 

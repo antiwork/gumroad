@@ -13,4 +13,5 @@ export type ProfileSettings = {
   name: string | null;
   bio: string | null;
   profile_picture_blob_id: string | null;
+  custom_html: string | null;
 };

@@ -10,6 +10,24 @@ class Pages::Interpolator
     "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) }
   }.freeze
 
+  PROFILE_FIELDS = {
+    "name" => ->(user) { user.name_or_username.to_s },
+    "bio" => ->(user) { user.bio.to_s }
+  }.freeze
+
+  # Profiles have no buy affordance, so profile interpolation only fills in
+  # display fields — no buy-button validation or ?wanted=true href rewriting.
+  def self.interpolate_profile(html, profile:)
+    return html if html.blank?
+
+    fragment = Loofah.fragment(html)
+    fragment.css("[data-gumroad-field]").each do |node|
+      handler = PROFILE_FIELDS[node["data-gumroad-field"]]
+      node.inner_html = ERB::Util.h(handler.call(profile)) if handler
+    end
+    fragment.to_html
+  end
+
   def self.interpolate(html, product:)
     return html if html.blank?
 
