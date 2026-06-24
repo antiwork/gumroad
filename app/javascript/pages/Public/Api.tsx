@@ -69,7 +69,12 @@ import {
 import { GetSubscribers, GetSubscriber } from "$app/components/ApiDocumentation/Endpoints/Subscribers";
 import { GetTaxForms, DownloadTaxForm } from "$app/components/ApiDocumentation/Endpoints/TaxForms";
 import { CreateThumbnail, DeleteThumbnail } from "$app/components/ApiDocumentation/Endpoints/Thumbnails";
-import { GetUser } from "$app/components/ApiDocumentation/Endpoints/User";
+import {
+  GetUser,
+  GetUserCustomHtml,
+  UpdateUserCustomHtml,
+  PreviewUserCustomHtml,
+} from "$app/components/ApiDocumentation/Endpoints/User";
 import {
   CreateVariant,
   CreateVariantCategory,
@@ -206,6 +211,9 @@ export default function Api() {
 
               <ApiResource name="User" id="user">
                 <GetUser />
+                <GetUserCustomHtml />
+                <UpdateUserCustomHtml />
+                <PreviewUserCustomHtml />
               </ApiResource>
 
               <ApiResource name="Public profile" id="public-profile">
