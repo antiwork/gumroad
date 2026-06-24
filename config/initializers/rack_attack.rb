@@ -390,6 +390,19 @@ class Rack::Attack
   throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds
   throttle_by_params path: /\A\/(api\/)?v2\/products\/[^\/]+\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds, throttle_params: v2_product_token
 
+  # Profile custom HTML mirrors the product custom_html limits: the agent-driven
+  # PUT (publish) and the CPU-heavy preview sanitizer need the same per-IP +
+  # per-token ceilings. The token extractor above is generic, so it's reused.
+  # Initial: 30rpm, Max: 150 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/user\/custom_html(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds
+  throttle_by_ip path: /\A\/(api\/)?v2\/user\/custom_html(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds
+  throttle_by_params path: /\A\/(api\/)?v2\/user\/custom_html(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds, throttle_params: v2_product_token
+  throttle_by_params path: /\A\/(api\/)?v2\/user\/custom_html(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds, throttle_params: v2_product_token
+
+  # Initial: 60rpm, Max: 300 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds
+  throttle_by_params path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds, throttle_params: v2_product_token
+
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
 end
