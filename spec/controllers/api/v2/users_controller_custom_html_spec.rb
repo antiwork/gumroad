@@ -20,6 +20,7 @@ describe Api::V2::UsersController do
       body = response.parsed_body
       expect(body["custom_html"]).to eq("<section>Published HTML</section>")
       expect(body["has_landing_page"]).to eq(true)
+      expect(body["profile_url"]).to eq(@user.profile_url)
     end
 
     it "reports no landing page when none is published" do
@@ -82,6 +83,7 @@ describe Api::V2::UsersController do
       body = response.parsed_body
       expect(body["custom_html"]).to eq("<section>New HTML</section>")
       expect(body["previous_custom_html"]).to eq("<section>Old HTML</section>")
+      expect(body["profile_url"]).to eq(@user.profile_url)
     end
 
     it "returns previous_custom_html as null on the first push (nothing to recover)" do

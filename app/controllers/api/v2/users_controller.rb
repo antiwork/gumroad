@@ -31,7 +31,7 @@ class Api::V2::UsersController < Api::V2::BaseController
   # agent decide whether it's editing an existing page or authoring a new one.
   def custom_html
     user = current_resource_owner
-    render_response(true, custom_html: user.custom_html, has_landing_page: user.has_custom_landing_page?)
+    render_response(true, custom_html: user.custom_html, has_landing_page: user.has_custom_landing_page?, profile_url: profile_url_for(user))
   end
 
   # PUT the profile landing page. Mirrors the product custom_html surface but is
@@ -75,7 +75,7 @@ class Api::V2::UsersController < Api::V2::BaseController
       return error_with_object(:user, e.record)
     end
 
-    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:)
+    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:, profile_url: profile_url_for(user))
   end
 
   # Dry-run sanitize: returns what custom_html would look like after the
@@ -140,5 +140,11 @@ class Api::V2::UsersController < Api::V2::BaseController
       return if Feature.active?(:custom_html_pages, current_resource_owner)
 
       render_response(false, message: "You do not have access to custom HTML pages.")
+    end
+
+    # Where the published page is live. Nil for the rare seller without a
+    # username (no public profile yet), since profile_url has nothing to build.
+    def profile_url_for(user)
+      user.username.present? ? user.profile_url : nil
     end
 end
