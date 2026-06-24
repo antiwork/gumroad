@@ -199,11 +199,14 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
         expect { post :create, params: request_params, as: :json }.to raise_error("post-provider side effect failed")
       end.to change(Installment, :count).by(1)
         .and change(PostEmailBlast, :count).by(1)
-        .and not_change(CreatorContactingCustomersEmailInfo, :count)
+        .and change(CreatorContactingCustomersEmailInfo, :count).by(1)
 
       first_installment = Installment.last
       delivery_cache_key = "single_customer_email_delivery:#{first_installment.id}:#{purchase.id}"
       expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_SENT_CACHE_VALUE)
+      email_info = CreatorContactingCustomersEmailInfo.where(purchase:, installment: first_installment).sole
+      expect(email_info.state).to eq("sent")
+      expect(email_info.sent_at).to be_present
       expect(PostEmailApi).to have_received(:process).once
 
       expect do

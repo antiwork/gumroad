@@ -122,7 +122,11 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
         )
         mark_delivery_sent(cache_key) unless provider_delivery_recorded
       rescue StandardError
-        Rails.cache.delete(cache_key) unless delivery_recorded?(installment, purchase) || delivery_sent_cache?(cache_key)
+        if delivery_sent_cache?(cache_key)
+          ensure_delivery_recorded!(installment, purchase)
+        elsif !delivery_recorded?(installment, purchase)
+          Rails.cache.delete(cache_key)
+        end
         raise
       end
     end
@@ -131,6 +135,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
       with_redis_lock("#{cache_key}:lock") do
         cache_value = Rails.cache.read(cache_key)
         if [DELIVERY_SENT_CACHE_VALUE, true].include?(cache_value)
+          ensure_delivery_recorded!(installment, purchase)
           :sent
         elsif delivery_recorded?(installment, purchase)
           mark_delivery_sent(cache_key)
@@ -160,6 +165,14 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
 
     def delivery_recorded?(installment, purchase)
       CreatorContactingCustomersEmailInfo.exists?(purchase:, installment:)
+    end
+
+    def ensure_delivery_recorded!(installment, purchase)
+      CreatorContactingCustomersEmailInfo.where(purchase:, installment:).first_or_create!(
+        email_name: EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD,
+        state: "sent",
+        sent_at: Time.current
+      )
     end
 
     def delivery_cache_key(installment, purchase)
