@@ -39,6 +39,7 @@ class Order::ChargeService
         # Skip purchases rejected by `Purchase.validate_offer_code_usage_across_line_items`.
         # Re-saving would clear the in-memory errors we need for the line item response.
         next if rejected_by_offer_code_limit.include?(purchase)
+        next unless purchase.in_progress? && purchase.errors.empty?
         purchase.charge = charge
         purchase.save!
         # Mark free or test purchase as successful as it does not require any further processing

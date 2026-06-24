@@ -1342,4 +1342,52 @@ describe Order::ChargeService, :vcr do
       end
     end
   end
+
+  describe "#perform with a same-seller cart where one line item fails before charging" do
+    it "keeps the failed line item off the charge so only the chargeable line items are captured" do
+      seller = create(:user)
+      create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+      chargeable_product = create(:product, user: seller, price_cents: 10_00)
+      failing_product = create(:product, user: seller, price_cents: 10_00)
+      create(:offer_code, products: [failing_product], code: "expired", valid_at: 2.years.ago, expires_at: 1.year.ago)
+
+      params = {
+        email: "buyer@gumroad.com",
+        cc_zipcode: "12345",
+        purchase: {
+          full_name: "Edgar Gumstein",
+          street_address: "123 Gum Road",
+          country: "US",
+          state: "CA",
+          city: "San Francisco",
+          zip_code: "94117"
+        },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+        is_mobile: false,
+        line_items: [
+          { uid: "uid-ok", permalink: chargeable_product.unique_permalink, perceived_price_cents: chargeable_product.price_cents, quantity: 1 },
+          { uid: "uid-expired", permalink: failing_product.unique_permalink, perceived_price_cents: failing_product.price_cents, quantity: 1, discount_code: "expired" },
+        ]
+      }.merge(StripePaymentMethodHelper.success.to_stripejs_params)
+
+      order, _ = Order::CreateService.new(params:).perform
+
+      chargeable_purchase = order.purchases.find_by(link: chargeable_product)
+      failed_purchase = order.purchases.find_by(link: failing_product)
+      expect(failed_purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_INACTIVE)
+
+      Order::ChargeService.new(order:, params:).perform
+
+      expect(order.charges.count).to eq(1)
+      charge = order.charges.last
+      expect(charge.purchases).to contain_exactly(chargeable_purchase)
+      expect(charge.purchases).not_to include(failed_purchase)
+      expect(charge.amount_cents).to eq(chargeable_purchase.reload.total_transaction_cents)
+
+      expect(chargeable_purchase.reload).to be_successful
+      expect(failed_purchase.reload).to be_failed
+    end
+  end
 end
