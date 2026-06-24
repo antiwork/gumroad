@@ -165,14 +165,24 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       expect(lock_keys).to include(
         a_string_starting_with("single_customer_email:#{seller.id}:#{purchase.id}:")
       )
-      expect(lock_keys).to include("post_email:#{Installment.last.id}:#{purchase.id}:lock")
+      expect(lock_keys).to include("single_customer_email_delivery:#{Installment.last.id}:#{purchase.id}:lock")
     end
 
-    it "reserves delivery before the provider call without holding the Redis lock while sending" do
+    it "reserves delivery with a short in-progress TTL before the provider call without holding the Redis lock while sending" do
       delivery_cache_values = []
       delivery_lock_values = []
+      delivery_cache_writes = []
+
+      allow(Rails.cache).to receive(:write).and_wrap_original do |original_method, *args, **kwargs|
+        key, value, options = args
+        options = (options || {}).merge(kwargs)
+        delivery_cache_writes << { key:, value:, expires_in: options[:expires_in] } if key.to_s.start_with?("single_customer_email_delivery:")
+
+        original_method.call(*args, **kwargs)
+      end
+
       allow(PostEmailApi).to receive(:process) do |post:, recipients:|
-        delivery_cache_key = "post_email:#{post.id}:#{purchase.id}"
+        delivery_cache_key = "single_customer_email_delivery:#{post.id}:#{purchase.id}"
         delivery_cache_values << Rails.cache.read(delivery_cache_key)
         delivery_lock_values << $redis.get("#{delivery_cache_key}:lock")
         create(:creator_contacting_customers_email_info_sent, installment: post, purchase:)
@@ -181,10 +191,15 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
       post :create, params: request_params, as: :json
 
       expect(response).to be_successful
-      delivery_cache_key = "post_email:#{Installment.last.id}:#{purchase.id}"
+      delivery_cache_key = "single_customer_email_delivery:#{Installment.last.id}:#{purchase.id}"
       expect(delivery_cache_values).to eq([described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE])
       expect(delivery_lock_values).to eq([nil])
+      expect(delivery_cache_writes).to include(
+        { key: delivery_cache_key, value: described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE, expires_in: described_class::DELIVERY_IN_PROGRESS_CACHE_TTL },
+        { key: delivery_cache_key, value: described_class::DELIVERY_SENT_CACHE_VALUE, expires_in: described_class::DELIVERY_CACHE_TTL }
+      )
       expect(Rails.cache.read(delivery_cache_key)).to eq(described_class::DELIVERY_SENT_CACHE_VALUE)
+      expect(Rails.cache.read("post_email:#{Installment.last.id}:#{purchase.id}")).to be_nil
       expect(PostEmailApi).to have_received(:process).once
     end
 
@@ -197,11 +212,11 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
 
       expect(response).to be_successful
       installment = Installment.last
-      delivery_cache_key = "post_email:#{installment.id}:#{purchase.id}"
+      delivery_cache_key = "single_customer_email_delivery:#{installment.id}:#{purchase.id}"
       Rails.cache.write(
         delivery_cache_key,
         described_class::DELIVERY_IN_PROGRESS_CACHE_VALUE,
-        expires_in: described_class::DELIVERY_CACHE_TTL
+        expires_in: described_class::DELIVERY_IN_PROGRESS_CACHE_TTL
       )
 
       expect do
@@ -210,7 +225,7 @@ describe Api::Internal::Customers::SingleCustomerEmailsController do
         .and not_change(PostEmailBlast, :count)
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body).to eq("success" => false, "message" => "This email is already being sent. Please wait a few seconds before trying again.")
+      expect(response.parsed_body).to eq("success" => false, "message" => "This email is already being sent. Please wait a few minutes before trying again.")
       expect(PostEmailApi).to have_received(:process).once
     end
 

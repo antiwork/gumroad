@@ -7,6 +7,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
   REDIS_LOCK_WAIT_TIMEOUT = 10.seconds
   REDIS_LOCK_RETRY_INTERVAL_SECONDS = 0.05
   DELIVERY_CACHE_TTL = 8.hours
+  DELIVERY_IN_PROGRESS_CACHE_TTL = 5.minutes
   DELIVERY_IN_PROGRESS_CACHE_VALUE = "in_progress"
   DELIVERY_SENT_CACHE_VALUE = "sent"
   REDIS_LOCK_RELEASE_SCRIPT = <<~LUA.squish
@@ -88,8 +89,10 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
       current_seller.installments.find(installment_id)
     end
 
-    # Deliver after the installment is committed and behind its own per-(installment,
-    # purchase) idempotency key, mirroring PostsController#send_for_purchase.
+    # Deliver after the installment is committed and behind its own single-customer
+    # idempotency key. Do not reuse PostsController's generic resend key; sellers
+    # should still be able to resend the email from the post UI after the initial
+    # one-off send succeeds.
     # PostEmailApi.process hits an external provider (Resend/SendGrid), so it must
     # not run inside the creation transaction: a post-send rollback would orphan an
     # already-delivered email. Reserve the delivery cache key before the provider
@@ -97,7 +100,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     # call longer than the lock TTL could allow a retry to acquire the lock and
     # send the same email again.
     def deliver_to_purchase(installment, purchase)
-      cache_key = "post_email:#{installment.id}:#{purchase.id}"
+      cache_key = delivery_cache_key(installment, purchase)
       return if delivery_already_sent_or_reserved!(cache_key) == :sent
 
       begin
@@ -114,7 +117,7 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
           ]
         )
         Rails.cache.write(cache_key, DELIVERY_SENT_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
-      rescue
+      rescue StandardError
         Rails.cache.delete(cache_key)
         raise
       end
@@ -126,12 +129,16 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
         when DELIVERY_SENT_CACHE_VALUE, true
           :sent
         when DELIVERY_IN_PROGRESS_CACHE_VALUE
-          raise Installment::InstallmentInvalid, "This email is already being sent. Please wait a few seconds before trying again."
+          raise Installment::InstallmentInvalid, "This email is already being sent. Please wait a few minutes before trying again."
         else
-          Rails.cache.write(cache_key, DELIVERY_IN_PROGRESS_CACHE_VALUE, expires_in: DELIVERY_CACHE_TTL)
+          Rails.cache.write(cache_key, DELIVERY_IN_PROGRESS_CACHE_VALUE, expires_in: DELIVERY_IN_PROGRESS_CACHE_TTL)
           :reserved
         end
       end
+    end
+
+    def delivery_cache_key(installment, purchase)
+      "single_customer_email_delivery:#{installment.id}:#{purchase.id}"
     end
 
     def with_redis_lock(lock_key)
