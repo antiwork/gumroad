@@ -59,6 +59,17 @@ class Api::V2::BaseController < ApplicationController
       render status: :bad_request, json: output
     end
 
+    # Reject oversized custom HTML before the sanitizer parses it. Page validates
+    # the same 500 KB cap, but only after Nokogiri has parsed the whole payload — a
+    # cheap length check first bounds CPU on the rate-limited agent path. Shared by
+    # the product and profile custom_html endpoints, which guard the same column.
+    def custom_html_length_error
+      value = params[:custom_html]
+      return unless value.is_a?(String) && value.length > Page::MAX_CUSTOM_HTML_LENGTH
+
+      "custom_html is too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
+    end
+
     def log_method_use
       return unless current_resource_owner.present?
       return unless doorkeeper_token.present?

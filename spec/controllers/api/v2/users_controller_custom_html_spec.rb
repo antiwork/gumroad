@@ -132,6 +132,18 @@ describe Api::V2::UsersController do
       expect(response.parsed_body["message"]).to match(/required/i)
     end
 
+    it "refuses to publish until the account email is confirmed" do
+      unconfirmed = create(:user, confirmed_at: nil)
+      Feature.activate_user(:custom_html_pages, unconfirmed)
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: unconfirmed.id, scopes: "edit_profile")
+
+      put :update_custom_html, params: { format: :json, access_token: token.token, custom_html: "<section>HTML</section>" }
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to match(/confirm your email/i)
+      expect(unconfirmed.reload.custom_html).to be_nil
+    end
+
     it "returns 401 without a token" do
       put :update_custom_html, params: { format: :json, custom_html: "<section>HTML</section>" }
       expect(response).to have_http_status(:unauthorized)

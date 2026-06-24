@@ -599,10 +599,6 @@ class LinksController < ApplicationController
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end
 
-    def stick_to_primary_for_landing_iframe
-      ActiveRecord::Base.connection.stick_to_primary!
-    end
-
     def fetch_product_by_custom_domain
       @product = product_by_custom_domain
     end

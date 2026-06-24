@@ -169,10 +169,6 @@ class UsersController < ApplicationController
   end
 
   private
-    def stick_to_primary_for_landing_iframe
-      ActiveRecord::Base.connection.stick_to_primary!
-    end
-
     # The profile is authored entirely through the seller's agent + CLI, so the
     # custom HTML never carries a buy affordance — there's no checkout bridge or
     # ?wanted=true fall-through like the product landing page has. The wrapper is
@@ -186,12 +182,11 @@ class UsersController < ApplicationController
       render html: profile_custom_html_wrapper_document(@user).html_safe, layout: false
     end
 
+    # set_user_and_custom_domain_config already 404s any non-active account
+    # before these actions run (unlike products, which aren't gated on alive?
+    # upstream), so there's no owner/team preview branch to add here.
     def custom_html_visible?
-      @user.present? && Feature.active?(:custom_html_pages, @user) && @user.custom_html.present? && (@user.account_active? || can_preview_custom_html?)
-    end
-
-    def can_preview_custom_html?
-      logged_in_user.present? && (logged_in_user == @user || logged_in_user.is_team_member?)
+      Feature.active?(:custom_html_pages, @user) && @user.custom_html.present?
     end
 
     def profile_landing_embed_src(user)
@@ -224,8 +219,9 @@ class UsersController < ApplicationController
       iframe_src = ERB::Util.h(profile_landing_embed_src(user))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
-      og_image = user.avatar_url
-      og_image_tag = og_image ? %(<meta property="og:image" content="#{ERB::Util.h(og_image)}">) : ""
+      # avatar_url always returns a value (it falls back to the default avatar),
+      # so only advertise og:image when the seller uploaded a real one.
+      og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
       <<~HTML
         <!doctype html>
         <html lang="en">

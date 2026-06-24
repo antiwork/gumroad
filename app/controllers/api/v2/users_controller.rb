@@ -141,14 +141,4 @@ class Api::V2::UsersController < Api::V2::BaseController
 
       render_response(false, message: "You do not have access to custom HTML pages.")
     end
-
-    # Reject oversized HTML before the sanitizer parses it. Page validates the
-    # same 500 KB cap, but only after Nokogiri has parsed the whole payload — a
-    # cheap length check first bounds CPU on the rate-limited agent path.
-    def custom_html_length_error
-      value = params[:custom_html]
-      return unless value.is_a?(String) && value.length > Page::MAX_CUSTOM_HTML_LENGTH
-
-      "custom_html is too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
-    end
 end
