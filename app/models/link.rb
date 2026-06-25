@@ -415,6 +415,7 @@ class Link < ApplicationRecord
   def delete!
     mark_deleted!
     clear_featured_product_sections!
+    remove_from_profile_sections!
     custom_domain&.mark_deleted!
     alive_public_files.update_all(scheduled_for_deletion_at: 10.minutes.from_now)
     CancelSubscriptionsForProductWorker.perform_in(10.minutes, id) if subscriptions.active.present?
@@ -1366,6 +1367,20 @@ class Link < ApplicationRecord
         .where(seller_id: user_id)
         .where('CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?', id)
         .find_each { |section| section.update!(json_data: section.json_data.except("featured_product_id")) }
+    end
+
+    # When a product is soft-deleted, strip its id from any
+    # SellerProfileProductsSection.shown_products (a JSON array of product ids).
+    # Without this, the section keeps pointing at the dead product id and
+    # renders as an empty container the seller can't remove, since
+    # ProfileSectionsPresenter filters shown products by is_alive_on_profile.
+    def remove_from_profile_sections!
+      user.with_profile_sections_lock do
+        user.seller_profile_products_sections.reload.each do |section|
+          next unless section.shown_products.include?(id)
+          section.update!(shown_products: section.shown_products - [id])
+        end
+      end
     end
 
     def compute_ppp_prices(price_cents, factors, currency)

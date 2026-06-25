@@ -3045,6 +3045,19 @@ describe Link, :vcr do
       expect { product.delete! }.not_to raise_error
       expect(product.reload.deleted?).to be(true)
     end
+
+    it "removes the deleted product's id from every profile products section's shown_products" do
+      seller = create(:user)
+      product = create(:product, user: seller)
+      other_product = create(:product, user: seller)
+      section_with_product = create(:seller_profile_products_section, seller:, shown_products: [product.id, other_product.id])
+      section_without_product = create(:seller_profile_products_section, seller:, shown_products: [other_product.id])
+
+      product.delete!
+
+      expect(section_with_product.reload.shown_products).to eq([other_product.id])
+      expect(section_without_product.reload.shown_products).to eq([other_product.id])
+    end
   end
 
   describe "#ordered_by_ids" do
