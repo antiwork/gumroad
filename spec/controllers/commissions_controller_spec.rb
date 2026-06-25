@@ -75,6 +75,31 @@ describe CommissionsController, :vcr do
       end
     end
 
+    context "when the completion charge fails on the buyer's card" do
+      it "surfaces the underlying decline message instead of a generic error" do
+        failed_purchase = Purchase.new
+        failed_purchase.errors.add(:base, "Your card was declined.")
+        allow_any_instance_of(Commission).to receive(:create_completion_purchase!)
+          .and_raise(ActiveRecord::RecordInvalid.new(failed_purchase))
+
+        post :complete, params: { id: commission.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ "errors" => ["Your card was declined."] })
+      end
+    end
+
+    context "when an unexpected error occurs during completion" do
+      it "returns the generic error message" do
+        allow_any_instance_of(Commission).to receive(:create_completion_purchase!).and_raise(StandardError.new("boom"))
+
+        post :complete, params: { id: commission.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ "errors" => ["Failed to complete commission"] })
+      end
+    end
+
     context "when commission is not found" do
       it "raises an ActiveRecord::RecordNotFound error" do
         expect do

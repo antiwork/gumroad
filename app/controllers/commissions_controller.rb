@@ -23,11 +23,17 @@ class CommissionsController < ApplicationController
 
     begin
       commission.create_completion_purchase!
-
-      head :no_content
-    rescue
-      render json: { errors: ["Failed to complete commission"] }, status: :unprocessable_entity
+    rescue ActiveRecord::RecordInvalid => e
+      # Surface the underlying reason (e.g. the buyer's card was declined) instead of a
+      # generic message, so the seller knows the completion charge failed on the buyer's card.
+      errors = e.record&.errors&.full_messages.presence || ["Failed to complete commission"]
+      return render json: { errors: }, status: :unprocessable_entity
+    rescue => e
+      Rails.logger.error("Commission #{params[:id]} completion failed: #{e.class}: #{e.message}")
+      return render json: { errors: ["Failed to complete commission"] }, status: :unprocessable_entity
     end
+
+    head :no_content
   end
 
   private
