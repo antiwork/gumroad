@@ -17,6 +17,7 @@ module StripeMerchantAccountManager
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
+  ACCOUNT_CREATION_FAILURE_NOTE_PREFIX = "Stripe account creation failed"
 
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
@@ -149,6 +150,7 @@ module StripeMerchantAccountManager
 
     clear_stale_postal_code_failure_notes(user)
     clear_stale_bank_sync_failure_notes(user)
+    clear_stale_account_creation_failure_notes(user)
 
     merchant_account
   rescue => e
@@ -156,8 +158,21 @@ module StripeMerchantAccountManager
       cleanup_failed_merchant_account(merchant_account)
       ErrorNotifier.notify(e)
     end
-    record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
-    record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
+    if notify
+      if postal_code_invalid_error?(e)
+        record_postal_code_failure_note(user, e)
+      elsif bank_account_invalid_error?(e)
+        record_bank_sync_failure_note(user, e)
+      elsif e.is_a?(Stripe::InvalidRequestError)
+        # Catch-all breadcrumb: a Stripe::InvalidRequestError that neither specific
+        # matcher recognized (e.g. "We couldn't find the bank for that BIC / bank code")
+        # would otherwise fail completely silently — the half-provisioned merchant
+        # account is cleaned up above and the seller is left unable to publish with no
+        # signal anywhere (gumroad-private#683). Record a payout-note breadcrumb so the
+        # failure is visible in admin and the seller can be told what to fix.
+        record_account_creation_failure_note(user, e)
+      end
+    end
     raise
   end
 
@@ -416,6 +431,28 @@ module StripeMerchantAccountManager
         .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale bank sync failure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.record_account_creation_failure_note(user, error)
+    code = error.respond_to?(:code) ? error.code : nil
+    user.add_payout_note(content: "#{ACCOUNT_CREATION_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+  rescue => e
+    Rails.logger.error "Failed to record account-creation payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.clear_stale_account_creation_failure_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{ACCOUNT_CREATION_FAILURE_NOTE_PREFIX}%")
+        .update_all(deleted_at: Time.current)
+  rescue => e
+    Rails.logger.error "Failed to clear stale account creation failure notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 

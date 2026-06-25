@@ -128,6 +128,35 @@ describe StripeMerchantAccountManager, :vcr do
         end.to raise_error(Stripe::InvalidRequestError)
       end
 
+      it "records an account-creation failure payout note when account creation fails with an otherwise-unrecognized Stripe::InvalidRequestError" do
+        error_message = "We couldn't find the bank for that BIC / bank code (BRSTN)"
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::InvalidRequestError.new(error_message, "bank_code", code: "invalid_bank_code"))
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        note = user.reload.comments.with_type_payout_note.alive
+                   .where("content LIKE ?", "#{described_class::ACCOUNT_CREATION_FAILURE_NOTE_PREFIX}%").last
+        expect(note).to be_present
+        expect(note.content).to include("invalid_bank_code")
+        expect(note.content).to include("BIC / bank code")
+      end
+
+      it "does not record a generic account-creation failure note when the error is already covered by the bank-sync matcher" do
+        allow(Stripe::Account).to receive(:create)
+          .and_raise(Stripe::InvalidRequestError.new("We couldn't find the bank for that routing number", "bank_account[routing_number]", code: "routing_number_invalid"))
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(user.reload.comments.with_type_payout_note.alive
+                   .where("content LIKE ?", "#{described_class::ACCOUNT_CREATION_FAILURE_NOTE_PREFIX}%")).to be_empty
+        expect(user.comments.with_type_payout_note.alive
+                   .where("content LIKE ?", "#{described_class::BANK_SYNC_FAILURE_NOTE_PREFIX}%")).to be_present
+      end
+
       it "cleans up the merchant account when onboarding is interrupted by a non-Stripe error" do
         allow(Stripe::Account).to receive(:create).and_raise(Timeout::Error.new("execution expired"))
         expect do
