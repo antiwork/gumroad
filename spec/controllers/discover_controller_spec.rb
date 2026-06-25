@@ -290,6 +290,20 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("some tag | Software Development » Programming » C# | Gumroad")
       end
 
+      it "does not raise when tags are sent as nested bracket params alongside a taxonomy" do
+        get :index, params: { tags: { foo: "bar" }, taxonomy: "software-development/programming/c-sharp" }
+
+        expect(response).to be_successful
+        expect(meta_tags["title"][:inner_content]).to eq("bar | Software Development » Programming » C# | Gumroad")
+      end
+
+      it "does not raise when tags are sent as nested bracket params without a taxonomy" do
+        get :index, params: { tags: { foo: "bar" } }
+
+        expect(response).to be_successful
+        expect(meta_tags["title"][:inner_content]).to eq("bar | Gumroad")
+      end
+
       it "sets the proper meta tags when a specific tag has been selected" do
         get :index, params: { tags: "3d models" }
 

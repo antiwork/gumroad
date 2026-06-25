@@ -100,6 +100,16 @@ describe SearchProducts do
         expect(JSON.parse(response.body)["tags"]).to eq(["design", "art"])
       end
 
+      it "extracts string values when tags are sent as nested bracket params" do
+        get :index, params: { tags: { foo: "design", bar: "art" } }
+        expect(JSON.parse(response.body)["tags"]).to eq(["design", "art"])
+      end
+
+      it "drops non-string values when tags are deeply nested bracket params" do
+        get :index, params: { tags: { foo: { bar: "baz" } } }
+        expect(JSON.parse(response.body)["tags"]).to eq([])
+      end
+
       it "parses filetypes from string" do
         get :index, params: { filetypes: "pdf,video" }
         expect(JSON.parse(response.body)["filetypes"]).to eq(["pdf", "video"])
