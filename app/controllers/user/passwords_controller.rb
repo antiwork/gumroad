@@ -17,7 +17,7 @@ class User::PasswordsController < Devise::PasswordsController
   end
 
   def create
-    email = params[:user][:email]
+    email = params.dig(:user, :email)
     user = User.alive.by_email(email).first if EmailFormatValidator.valid?(email)
 
     if user&.send_reset_password_instructions

@@ -48,6 +48,12 @@ describe User::PasswordsController, type: :controller, inertia: true do
       expect(response).to redirect_to(login_url)
       expect(flash[:warning]).to eq("An account does not exist with that email.")
     end
+
+    it "redirects with warning when the user param is missing" do
+      post(:create)
+      expect(response).to redirect_to(login_url)
+      expect(flash[:warning]).to eq("An account does not exist with that email.")
+    end
   end
 
   describe "#edit" do
