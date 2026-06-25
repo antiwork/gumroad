@@ -290,6 +290,13 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("some tag | Software Development » Programming » C# | Gumroad")
       end
 
+      it "sets the proper title when tags are sent as nested hash params alongside taxonomy" do
+        get :index, params: { tags: { "0" => "some-tag" }, taxonomy: "software-development/programming/c-sharp" }
+
+        expect(response).to have_http_status(:ok)
+        expect(meta_tags["title"][:inner_content]).to eq("some tag | Software Development » Programming » C# | Gumroad")
+      end
+
       it "sets the proper meta tags when a specific tag has been selected" do
         get :index, params: { tags: "3d models" }
 

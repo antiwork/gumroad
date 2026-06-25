@@ -100,6 +100,11 @@ describe SearchProducts do
         expect(JSON.parse(response.body)["tags"]).to eq(["design", "art"])
       end
 
+      it "parses tags from nested hash params" do
+        get :index, params: { tags: { "0" => "audio", "1" => "3d-models" } }
+        expect(JSON.parse(response.body)["tags"]).to eq(["audio", "3d models"])
+      end
+
       it "parses filetypes from string" do
         get :index, params: { filetypes: "pdf,video" }
         expect(JSON.parse(response.body)["filetypes"]).to eq(["pdf", "video"])
