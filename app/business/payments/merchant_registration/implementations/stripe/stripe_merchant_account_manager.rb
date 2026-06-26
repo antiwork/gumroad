@@ -256,7 +256,7 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    Stripe::Account.update(stripe_account.id, diff_attributes)
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
 
     person_address_submitted = false
     if user_compliance_info.is_business?
@@ -306,7 +306,7 @@ module StripeMerchantAccountManager
     # actually re-validates a previously rejected representative postal code.
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+    Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
   end
 
@@ -369,7 +369,7 @@ module StripeMerchantAccountManager
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
-    Stripe::Account.update(stripe_account.id, attributes)
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
 
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
     clear_stale_bank_sync_failure_notes(user)

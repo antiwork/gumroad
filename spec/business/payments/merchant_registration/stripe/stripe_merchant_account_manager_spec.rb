@@ -515,6 +515,30 @@ describe StripeMerchantAccountManager, :vcr do
         expect(merchant_account.charge_processor_merchant_id).to be_present
         expect(merchant_account.alive?).to be(false)
       end
+
+      it "normalizes Strongbox-decrypted ASCII-8BIT params to UTF-8 before they reach Stripe" do
+        binary_strings = []
+        collect_binary = lambda do |value|
+          case value
+          when Hash then value.each_value { |v| collect_binary.call(v) }
+          when Array then value.each { |v| collect_binary.call(v) }
+          when String then binary_strings << value if value.encoding == Encoding::ASCII_8BIT
+          end
+        end
+
+        allow(Stripe::Account).to receive(:create).and_wrap_original do |original, params|
+          collect_binary.call(params)
+          original.call(params)
+        end
+        allow(Stripe::Account).to receive(:create_person).and_wrap_original do |original, account_id, params|
+          collect_binary.call(params)
+          original.call(account_id, params)
+        end
+
+        subject.create_account(user, passphrase: "1234")
+
+        expect(binary_strings).to be_empty
+      end
     end
 
     describe "US business with a foreign-resident representative (person_hash)" do
