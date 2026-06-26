@@ -11,8 +11,13 @@ class BackfillOrphanedShownProductsInProfileSections < ActiveRecord::Migration[7
 
   def up
     # json_data is a native MySQL `json` column, so AR auto-casts it to a Hash.
+    # `seller_profile_sections` has an STI `type` column; disable inheritance on
+    # the stub so AR loads every row as a plain record instead of trying to
+    # resolve `type` (e.g. "SellerProfileProductsSection") to a subclass of this
+    # anonymous class — which it isn't, raising ActiveRecord::SubclassNotFound.
     sections = Class.new(ActiveRecord::Base) do
       self.table_name = "seller_profile_sections"
+      self.inheritance_column = :_type_disabled
     end
 
     # Use an anonymous AR stub for links too, rather than the live `Link` model.
