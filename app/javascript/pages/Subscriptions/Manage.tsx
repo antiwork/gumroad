@@ -209,7 +209,9 @@ export default function SubscriptionsManage() {
     shippableCountryCodes: product.shippable_country_codes,
     hasTippingEnabled: false,
     hasFreeTrial: false,
+    isPreorder: false,
     nativeType: product.native_type,
+    recurrence: selection.recurrence,
     canGift: false,
   };
   const payLabel = restartable ? `Restart ${subscriptionEntity}` : `Update ${subscriptionEntity}`;

@@ -40,8 +40,10 @@ const product = (overrides: Partial<Product> = {}): Product => ({
   requirePayment: true,
   hasFreeTrial: false,
   hasTippingEnabled: false,
+  isPreorder: false,
   canGift: false,
   nativeType: "digital",
+  recurrence: null,
   shippableCountryCodes: [],
   ...overrides,
 });
@@ -97,6 +99,10 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ checkoutPayment: cardElementConfig }))).toBe(false);
   });
 
+  it("falls back when the cart is empty", () => {
+    expect(canUseStripePaymentElement(state({ products: [] }))).toBe(false);
+  });
+
   it("falls back when a saved card is available", () => {
     expect(
       canUseStripePaymentElement(
@@ -119,11 +125,13 @@ describe("canUseStripePaymentElement", () => {
       ),
     ).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ subscription_id: "sub_123" })] }))).toBe(false);
+    expect(canUseStripePaymentElement(state({ products: [product({ recurrence: "monthly" })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ nativeType: "commission" })] }))).toBe(false);
   });
 
-  it("falls back for setup, installment, and free-trial flows", () => {
+  it("falls back for setup, installment, preorder, and free-trial flows", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(false);
+    expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
   });
 

@@ -9,6 +9,7 @@ import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
+import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Creator } from "$app/components/Checkout/cartState";
@@ -21,6 +22,12 @@ enableMapSet();
 
 export type PaymentMethodType = "paypal" | "stripePaymentRequest" | "card";
 export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement | null };
+export type PaymentElementConfig = {
+  mode: "payment";
+  currency: "usd";
+  payment_method_types: ["card"];
+  payment_method_creation: "manual";
+};
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
@@ -30,12 +37,7 @@ export type CheckoutPaymentConfig =
   | {
       integration: "payment_element";
       fallback_reason: null;
-      elements_options: {
-        mode: "payment";
-        currency: "usd";
-        payment_method_types: ["card"];
-        payment_method_creation: "manual";
-      };
+      elements_options: PaymentElementConfig;
     };
 
 export type Product = {
@@ -53,8 +55,10 @@ export type Product = {
   requirePayment: boolean;
   hasFreeTrial: boolean;
   hasTippingEnabled: boolean;
+  isPreorder: boolean;
   canGift: boolean;
   nativeType: ProductNativeType;
+  recurrence: RecurrenceId | null;
   subscription_id?: string;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
@@ -164,6 +168,7 @@ export function requiresReusablePaymentMethod(state: State) {
 }
 
 export function canUseStripePaymentElement(state: State) {
+  if (state.products.length === 0) return false;
   if (state.surcharges.type === "loaded" && !getTotalPrice(state)) return false;
 
   return (
@@ -171,7 +176,13 @@ export function canUseStripePaymentElement(state: State) {
     !state.savedCreditCard &&
     !requiresReusablePaymentMethod(state) &&
     !state.products.some(
-      (product) => product.payInInstallments || product.hasFreeTrial || product.nativeType === "commission",
+      (product) =>
+        product.payInInstallments ||
+        product.hasFreeTrial ||
+        product.isPreorder ||
+        !!product.recurrence ||
+        !!product.subscription_id ||
+        product.nativeType === "commission",
     )
   );
 }
