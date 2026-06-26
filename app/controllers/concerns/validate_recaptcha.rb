@@ -6,6 +6,7 @@ module ValidateRecaptcha
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
   RECAPTCHA_FAIL_OPEN_DEFAULTS = {
     checkout: true,
+    checkout_score: true,
     login: false,
     signup: false,
   }.freeze
@@ -14,8 +15,8 @@ module ValidateRecaptcha
   private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
 
   private
-    def valid_recaptcha_response_and_hostname?(site_key:)
-      recaptcha_passes?(site_key:, surface: :checkout, require_hostname: true)
+    def valid_recaptcha_response_and_hostname?(site_key:, surface: :checkout)
+      recaptcha_passes?(site_key:, surface:, require_hostname: true)
     end
 
     def valid_recaptcha_response?(site_key:, surface: :login)

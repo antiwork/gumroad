@@ -22,6 +22,10 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_site_key"))
     end
 
+    def checkout_score_action
+      render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score))
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -38,6 +42,7 @@ describe ValidateRecaptcha, type: :controller do
       post :login_action, to: "anonymous#login_action"
       post :signup_action, to: "anonymous#signup_action"
       post :checkout_action, to: "anonymous#checkout_action"
+      post :checkout_score_action, to: "anonymous#checkout_score_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -128,6 +133,40 @@ describe ValidateRecaptcha, type: :controller do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(parsed_body["error"]).to eq("captcha_failed")
+    end
+
+    context "with the score-based checkout surface" do
+      it "fails open on infrastructure errors by default" do
+        allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
+
+        expect(Rails.logger).to receive(:info).with(/\[recaptcha_score\].*surface=checkout_score.*decision=infra_error_fail_open/)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "gates on its own threshold, independent of the challenge checkout surface" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT").and_return("0.5")
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE").and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.1)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "fails a low score when its own threshold is configured" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE").and_return("0.5")
+        stub_recaptcha_response(valid: true, score: 0.1)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
     end
 
     context "in production" do

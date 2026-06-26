@@ -27,6 +27,8 @@ class CheckoutPresenter
     user = params[:username] && User.find_by_username(params[:username])
     {
       **checkout_common,
+      recaptcha_key: CheckoutRecaptcha.site_key(logged_in_user),
+      recaptcha_score_based: CheckoutRecaptcha.score_based?(logged_in_user),
       country: Compliance::Countries.find_by_name(country)&.alpha2,
       state: logged_in_user&.state || detected_state,
       address: logged_in_user ? {
