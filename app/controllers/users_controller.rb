@@ -210,12 +210,8 @@ class UsersController < ApplicationController
       Feature.active?(:custom_html_pages, @user) && @user.custom_html.present?
     end
 
-    def profile_landing_embed_src(user)
-      @is_user_custom_domain ? "/landing/embed" : "/#{user.username}/landing/embed"
-    end
-
-    def profile_landing_version_src(user)
-      @is_user_custom_domain ? "/landing/version" : "/#{user.username}/landing/version"
+    def profile_landing_src(user, suffix)
+      @is_user_custom_domain ? "/landing/#{suffix}" : "/#{user.username}/landing/#{suffix}"
     end
 
     def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false)
@@ -243,14 +239,14 @@ class UsersController < ApplicationController
     # visitor's tab away from gumroad.com. Unlike the product wrapper there is no
     # checkout postMessage bridge: a profile has no native buy button.
     def profile_custom_html_wrapper_document(user)
-      iframe_src = ERB::Util.h(profile_landing_embed_src(user))
+      iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
       live_reload = if owner_viewing_custom_html?
-        custom_html_live_reload_script(version_src: profile_landing_version_src(user), nonce: SecureHeaders.content_security_policy_script_nonce(request))
+        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce: SecureHeaders.content_security_policy_script_nonce(request))
       else
         ""
       end
