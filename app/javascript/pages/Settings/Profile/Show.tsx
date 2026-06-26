@@ -1,4 +1,4 @@
-import { Link as LinkIcon, TwitterX } from "@boxicons/react";
+import { TwitterX } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -11,9 +11,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -26,8 +24,8 @@ import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { postToMobileApp } from "$app/components/Settings/Layout";
+import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
-import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -441,19 +439,11 @@ export default function SettingsPage() {
                 <header>
                   <h2>Share</h2>
                 </header>
-                <div className="flex flex-wrap gap-2">
-                  <TwitterShareButton
-                    url={profileUrl}
-                    text={`Check out ${profileSettings.name || username} on @Gumroad`}
-                  />
-                  <FacebookShareButton url={profileUrl} text={profileSettings.name || username} />
-                  <CopyToClipboard text={profileUrl} tooltipPosition="top">
-                    <Button color="primary">
-                      <LinkIcon className="size-5" />
-                      Copy URL
-                    </Button>
-                  </CopyToClipboard>
-                </div>
+                <ShareButtons
+                  url={profileUrl}
+                  twitterText={`Check out ${profileSettings.name || username} on @Gumroad`}
+                  facebookText={profileSettings.name || username}
+                />
               </section>
               {custom_html_pages_enabled ? (
                 <ProfileLandingPageEditor

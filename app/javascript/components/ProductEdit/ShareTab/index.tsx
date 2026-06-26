@@ -1,11 +1,7 @@
-import { Link } from "@boxicons/react";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
-import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
-import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { LandingPageEditor } from "$app/components/ProductEdit/ShareTab/LandingPageEditor";
@@ -13,7 +9,7 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { ShareButtons } from "$app/components/ShareButtons";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
@@ -42,16 +38,7 @@ export const ShareTab = () => {
             <header>
               <h2>Share</h2>
             </header>
-            <div className="flex flex-wrap gap-2">
-              <TwitterShareButton url={url} text={`Buy ${product.name} on @Gumroad`} />
-              <FacebookShareButton url={url} text={product.name} />
-              <CopyToClipboard text={url} tooltipPosition="top">
-                <Button color="primary">
-                  <Link className="size-5" />
-                  Copy URL
-                </Button>
-              </CopyToClipboard>
-            </div>
+            <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name} />
           </section>
           <LandingPageEditor />
           <ProfileSectionsEditor
