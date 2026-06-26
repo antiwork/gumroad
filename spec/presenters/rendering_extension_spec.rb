@@ -139,6 +139,9 @@ describe "RenderingExtension" do
                   },
                   churn: {
                     show: false,
+                  },
+                  user: {
+                    use_store_agent: true,
                   }
                 },
                 is_gumroad_admin: false,
