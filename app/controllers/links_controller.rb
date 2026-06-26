@@ -197,12 +197,10 @@ class LinksController < ApplicationController
     render html: custom_html_document(interpolated).html_safe, layout: false
   end
 
-  # Version token for the wrapper's owner-only live-reload poll (mirrors UsersController#landing_version).
   def landing_version
-    return render json: { present: false, version: nil } unless can_preview_custom_html?
+    return render_landing_version(visible: false, page: nil) unless can_preview_custom_html?
     page = @product&.page
-    visible = custom_html_visible? && page&.custom_html.present?
-    render json: { present: visible, version: visible ? page.updated_at.to_i : nil }
+    render_landing_version(visible: custom_html_visible? && page&.custom_html.present?, page:)
   end
 
   def search

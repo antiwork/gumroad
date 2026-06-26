@@ -113,6 +113,12 @@ module RendersCustomHtmlPages
   end
 
   private
+    # Single source of the version-token JSON contract the owner poll consumes (see
+    # custom_html_live_reload_script). Both controllers' landing_version actions render through this.
+    def render_landing_version(visible:, page:)
+      render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
+    end
+
     # Live-reload poll for the wrapper document. The seller authors the page through their agent
     # + the CLI/API; this lets them keep the public page open and watch each publish land without
     # a manual refresh. Injected ONLY for the authenticated owner (see each controller's
