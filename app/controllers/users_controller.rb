@@ -53,6 +53,7 @@ class UsersController < ApplicationController
   # every republish. Stays out of custom_html_visible?'s 404 path so the poll can also observe a
   # removal (present:false) and restore the default profile.
   def landing_version
+    return render json: { present: false, version: nil } unless owner_viewing_custom_html?
     page = @user.page
     visible = Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?
     render json: { present: visible, version: visible ? page.updated_at.to_i : nil }

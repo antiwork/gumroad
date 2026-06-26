@@ -330,7 +330,9 @@ describe LinksController, :vcr, type: :controller do
   end
 
   describe "GET landing_version" do
-    it "reports the live page with a version token" do
+    it "reports the live page with a version token to the owner" do
+      sign_in seller
+
       get :landing_version, params: { id: product.unique_permalink }
 
       expect(response).to be_successful
@@ -339,11 +341,19 @@ describe LinksController, :vcr, type: :controller do
     end
 
     it "reports present:false once the custom_html is cleared" do
+      sign_in seller
       product.update!(custom_html: "")
 
       get :landing_version, params: { id: product.unique_permalink }
 
       expect(response.parsed_body["present"]).to be(false)
+    end
+
+    it "reports present:false to an anonymous caller, never leaking the edit timestamp" do
+      get :landing_version, params: { id: product.unique_permalink }
+
+      expect(response.parsed_body["present"]).to be(false)
+      expect(response.parsed_body["version"]).to be_nil
     end
   end
 end

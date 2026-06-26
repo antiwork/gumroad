@@ -199,6 +199,7 @@ class LinksController < ApplicationController
 
   # Version token for the wrapper's owner-only live-reload poll (mirrors UsersController#landing_version).
   def landing_version
+    return render json: { present: false, version: nil } unless can_preview_custom_html?
     page = @product&.page
     visible = custom_html_visible? && page&.custom_html.present?
     render json: { present: visible, version: visible ? page.updated_at.to_i : nil }

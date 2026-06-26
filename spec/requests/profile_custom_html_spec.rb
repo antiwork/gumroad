@@ -112,7 +112,9 @@ describe "Profile custom HTML rendering", type: :request do
   end
 
   describe "version endpoint" do
-    it "reports the live page with a version token" do
+    before { sign_in seller }
+
+    it "reports the live page with a version token to the owner" do
       get "http://seller.example.com/landing/version"
 
       expect(response).to be_successful
@@ -136,6 +138,15 @@ describe "Profile custom HTML rendering", type: :request do
       get "http://seller.example.com/landing/version"
 
       expect(response.parsed_body["present"]).to be(false)
+    end
+
+    it "reports present:false to a non-owner, never leaking the edit timestamp" do
+      sign_out seller
+
+      get "http://seller.example.com/landing/version"
+
+      expect(response.parsed_body["present"]).to be(false)
+      expect(response.parsed_body["version"]).to be_nil
     end
   end
 end
