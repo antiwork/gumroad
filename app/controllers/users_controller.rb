@@ -44,7 +44,7 @@ class UsersController < ApplicationController
     render html: profile_custom_html_document(
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
-      live_fields: params[:preview].present?,
+      live_fields: params[:preview].present? && owner_viewing_custom_html?,
     ).html_safe, layout: false
   end
 

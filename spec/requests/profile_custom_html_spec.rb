@@ -94,9 +94,15 @@ describe "Profile custom HTML rendering", type: :request do
   end
 
   describe "preview field sync" do
-    it "includes the name/bio live-update listener only on ?preview embeds" do
+    it "includes the name/bio live-update listener on the owner's ?preview embed" do
+      sign_in seller
       get "http://seller.example.com/landing/embed?preview=true"
       expect(response.body).to include("gumroad:profile-fields")
+    end
+
+    it "omits the listener on a ?preview embed for anyone other than the owner" do
+      get "http://seller.example.com/landing/embed?preview=true"
+      expect(response.body).not_to include("gumroad:profile-fields")
     end
 
     it "omits the listener on the public embed" do
