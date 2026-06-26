@@ -316,6 +316,9 @@ Rails.application.routes.draw do
             get :products
           end
         end
+        get "/agent/meta", to: "agent#meta"
+        post "/agent/messages", to: "agent#create"
+        post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
         resources :installments, only: :show
         resources :consumption_analytics, only: [:create], format: :json
