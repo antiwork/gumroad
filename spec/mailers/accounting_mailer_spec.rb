@@ -149,6 +149,30 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#global_sales_tax_summary_report_failed" do
+    let(:mail) do
+      AccountingMailer.global_sales_tax_summary_report_failed(
+        2, 2026, "WithMaxExecutionTime::QueryTimeoutError", "Mysql2::Error: Query execution was interrupted, maximum statement execution time exceeded"
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "includes the period in the subject" do
+      expect(mail.subject).to include("Global Sales Tax Summary Report failed - 2/2026")
+    end
+
+    it "includes the failure context and restart instructions in the body" do
+      body = mail.body.encoded
+      expect(body).to include("2/2026")
+      expect(body).to include("WithMaxExecutionTime::QueryTimeoutError")
+      expect(body).to include("maximum statement execution time exceeded")
+      expect(body).to include("CreateGlobalSalesTaxSummaryReportJob.perform_async")
+    end
+  end
+
   describe "ytd_sales_report" do
     let(:csv_data) { "country,state,sales\\nUSA,CA,100\\nUSA,NY,200" }
     let(:recipient_email) { "test@example.com" }

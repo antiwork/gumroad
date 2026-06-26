@@ -6,6 +6,21 @@ describe CreateGlobalSalesTaxSummaryReportJob do
   let(:month) { 1 }
   let(:year) { 2024 }
 
+  describe "sidekiq_retries_exhausted" do
+    it "emails the payments notification with the failure context when an unhandled exception kills the job" do
+      job = { "args" => [2, 2026] }
+      exception = WithMaxExecutionTime::QueryTimeoutError.new("Mysql2::Error: Query execution was interrupted, maximum statement execution time exceeded")
+      mailer = double("mailer")
+
+      expect(AccountingMailer).to receive(:global_sales_tax_summary_report_failed)
+        .with(2, 2026, "WithMaxExecutionTime::QueryTimeoutError", "Mysql2::Error: Query execution was interrupted, maximum statement execution time exceeded")
+        .and_return(mailer)
+      expect(mailer).to receive(:deliver_later)
+
+      described_class.sidekiq_retries_exhausted_block.call(job, exception)
+    end
+  end
+
   it "raises an argument error if the year is out of bounds" do
     expect { described_class.new.perform(month, 2013) }.to raise_error(ArgumentError)
   end

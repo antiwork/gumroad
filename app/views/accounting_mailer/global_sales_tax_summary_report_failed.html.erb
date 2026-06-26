@@ -1,0 +1,9 @@
+<%= header_section("Global Sales Tax Summary Report failed - #{@month}/#{@year}") %>
+<div>
+  <p><code>CreateGlobalSalesTaxSummaryReportJob</code> exhausted Sidekiq retries and did not produce the report.</p>
+  <ul>
+    <li>Period: <%= @month %>/<%= @year %></li>
+    <li>Error: <%= @error_class %>: <%= @error_message %></li>
+  </ul>
+  <p>Re-run <code>CreateGlobalSalesTaxSummaryReportJob.perform_async(<%= @month %>, <%= @year %>)</code> after addressing the failure. See Sentry and the Sidekiq dead set for more details.</p>
+</div>
