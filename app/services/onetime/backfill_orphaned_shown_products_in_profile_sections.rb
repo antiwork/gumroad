@@ -35,9 +35,14 @@ module Onetime
         alive_ids = alive_ids_among(shown)
         next if shown.all? { |id| alive_ids.include?(id) }
 
+        # Orphaned section whose seller was hard-deleted: there's nothing to lock
+        # against, so skip it explicitly rather than letting the lock call raise.
+        seller = section.seller
+        next if seller.nil?
+
         # Re-read and rewrite under the seller's profile lock, recomputing against
         # the current array, so a concurrent profile edit can't be overwritten.
-        section.seller.with_profile_sections_lock do
+        seller.with_profile_sections_lock do
           section.reload
           shown = shown_product_ids(section)
           next if shown.empty?

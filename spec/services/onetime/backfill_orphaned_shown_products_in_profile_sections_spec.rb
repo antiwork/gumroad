@@ -66,5 +66,41 @@ describe Onetime::BackfillOrphanedShownProductsInProfileSections do
 
       expect(valid.reload.shown_products).to eq([alive.id])
     end
+
+    it "skips sections whose seller no longer exists" do
+      alive = create(:product, user: seller)
+      deleted = create(:product, user: seller)
+      deleted.update_columns(deleted_at: Time.current)
+      section = section_with_shown([alive.id, deleted.id])
+      allow_any_instance_of(SellerProfileProductsSection).to receive(:seller).and_return(nil)
+
+      expect(described_class.process).to eq(0)
+
+      expect(section.reload.shown_products).to eq([alive.id, deleted.id])
+    end
+
+    it "logs and continues when a section raises mid-cleanup" do
+      alive = create(:product, user: seller)
+      deleted = create(:product, user: seller)
+      deleted.update_columns(deleted_at: Time.current)
+      first = section_with_shown([alive.id, deleted.id])
+      second = section_with_shown([alive.id, deleted.id])
+
+      # Raise on the first section's write; the run must still clean the rest.
+      raised = false
+      allow_any_instance_of(SellerProfileProductsSection).to receive(:update!).and_wrap_original do |original, *args, **kwargs|
+        next original.call(*args, **kwargs) if raised
+
+        raised = true
+        raise ActiveRecord::StatementInvalid, "boom"
+      end
+      allow(Rails.logger).to receive(:warn).and_call_original
+
+      expect(described_class.process).to eq(1)
+
+      expect(first.reload.shown_products).to eq([alive.id, deleted.id])
+      expect(second.reload.shown_products).to eq([alive.id])
+      expect(Rails.logger).to have_received(:warn).with(/skipped section #{first.id}/)
+    end
   end
 end
