@@ -15,6 +15,16 @@ class BackfillOrphanedShownProductsInProfileSections < ActiveRecord::Migration[7
       self.table_name = "seller_profile_sections"
     end
 
+    # Use an anonymous AR stub for links too, rather than the live `Link` model.
+    # A backfill migration must be reproducible years from now from a fresh
+    # `db:migrate`; coupling it to the application model means a future rename,
+    # default scope, or change to how `deleted_at` is interpreted would silently
+    # alter what this one-time cleanup considers "alive". The stub pins the
+    # behavior to the raw table + column as they exist at write time.
+    links = Class.new(ActiveRecord::Base) do
+      self.table_name = "links"
+    end
+
     sections
       .where(type: "SellerProfileProductsSection")
       .find_each(batch_size: 500) do |section|
@@ -24,7 +34,7 @@ class BackfillOrphanedShownProductsInProfileSections < ActiveRecord::Migration[7
         shown = data["shown_products"]
         next unless shown.is_a?(Array) && shown.present?
 
-        alive_ids = Link.where(id: shown, deleted_at: nil).pluck(:id).to_set
+        alive_ids = links.where(id: shown, deleted_at: nil).pluck(:id).to_set
         cleaned = shown.select { |pid| alive_ids.include?(pid) }
         next if cleaned.length == shown.length
 
