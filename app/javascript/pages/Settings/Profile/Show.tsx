@@ -119,7 +119,7 @@ export default function SettingsPage() {
 
   const uid = React.useId();
   const [tab, setTab] = React.useState<ProfileSettingsTab>("about");
-  const profileUrl = Routes.root_url({ host: creatorProfile.subdomain });
+  const profileUrl = creatorProfile.subdomain ? Routes.root_url({ host: creatorProfile.subdomain }) : Routes.root_url();
 
   const [isSaving, setIsSaving] = React.useState(false);
   const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
