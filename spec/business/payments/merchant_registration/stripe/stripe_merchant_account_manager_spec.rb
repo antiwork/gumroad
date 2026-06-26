@@ -1191,6 +1191,52 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    # Regression: gh-private #683. Strongbox decrypts (IBAN, tax id) return ASCII-8BIT (binary)
+    # strings. When the Stripe gem serializes the params alongside a UTF-8 compliance field that
+    # carries non-ASCII bytes (an umlaut/accent in a business name or address), Ruby raised
+    # Encoding::CompatibilityError and the Stripe::Account.create call never reached Stripe, silently
+    # blocking the seller from getting a merchant account. force_utf8_encoding normalizes the params.
+    describe ".force_utf8_encoding" do
+      it "re-encodes ASCII-8BIT strings to UTF-8 recursively while leaving other values untouched" do
+        binary_iban = "DE89370400440532013000".dup.force_encoding(Encoding::ASCII_8BIT)
+        binary_tax_id = "DE123456789".dup.force_encoding(Encoding::ASCII_8BIT)
+        params = {
+          business_profile: { name: "Häuserhelden UG" },
+          company: { name: "Häuserhelden UG", tax_id: binary_tax_id, address: { city: "Düsseldorf" } },
+          bank_account: { account_number: binary_iban, currency: "eur" },
+          metadata: { count: 3, flag: true, missing: nil }
+        }
+
+        result = described_class.force_utf8_encoding(params)
+
+        expect(result[:bank_account][:account_number].encoding).to eq(Encoding::UTF_8)
+        expect(result[:bank_account][:account_number]).to eq("DE89370400440532013000")
+        expect(result[:company][:tax_id].encoding).to eq(Encoding::UTF_8)
+        expect(result[:company][:tax_id]).to eq("DE123456789")
+        # UTF-8 umlaut fields are preserved verbatim
+        expect(result[:company][:name]).to eq("Häuserhelden UG")
+        expect(result[:company][:address][:city]).to eq("Düsseldorf")
+        # non-string values pass through unchanged
+        expect(result[:metadata]).to eq(count: 3, flag: true, missing: nil)
+      end
+
+      it "produces params that serialize without an Encoding::CompatibilityError when binary and UTF-8 fields are mixed" do
+        params = {
+          company: {
+            name: "Häuserhelden UG",
+            tax_id: "DE123456789".dup.force_encoding(Encoding::ASCII_8BIT)
+          },
+          bank_account: { account_number: "DE89370400440532013000".dup.force_encoding(Encoding::ASCII_8BIT) }
+        }
+
+        # Before the fix this raised Encoding::CompatibilityError during string concatenation.
+        normalized = described_class.force_utf8_encoding(params)
+        serialized = "#{normalized[:company][:name]}#{normalized[:company][:tax_id]}#{normalized[:bank_account][:account_number]}"
+
+        expect(serialized).to eq("Häuserhelden UGDE123456789DE89370400440532013000")
+      end
+    end
+
     describe "all info provided of an HK individual" do
       let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Hong Kong",
                                                                   street_address: "address_full_match", state: nil, zip_code: "999077",
