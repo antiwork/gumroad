@@ -24,8 +24,6 @@ class CommissionsController < ApplicationController
     begin
       commission.create_completion_purchase!
     rescue ActiveRecord::RecordInvalid => e
-      # Surface the underlying reason (e.g. the buyer's card was declined) instead of a
-      # generic message, so the seller knows the completion charge failed on the buyer's card.
       errors = e.record&.errors&.full_messages.presence || ["Failed to complete commission"]
       return render json: { errors: }, status: :unprocessable_entity
     rescue => e

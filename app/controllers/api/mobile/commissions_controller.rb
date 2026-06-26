@@ -12,7 +12,11 @@ class Api::Mobile::CommissionsController < Api::Mobile::BaseController
     begin
       commission.create_completion_purchase!
       render json: { success: true }
-    rescue StandardError
+    rescue ActiveRecord::RecordInvalid => e
+      message = e.record&.errors&.full_messages&.first.presence || "Failed to complete commission"
+      render json: { success: false, message: }, status: :unprocessable_entity
+    rescue => e
+      Rails.logger.error("Commission #{params[:id]} completion failed: #{e.class}: #{e.message}")
       render json: { success: false, message: "Failed to complete commission" }, status: :unprocessable_entity
     end
   end

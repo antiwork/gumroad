@@ -34,6 +34,27 @@ describe Api::Mobile::CommissionsController, :vcr do
       expect(response.parsed_body).to eq("success" => false, "message" => "Failed to complete commission")
     end
 
+    it "surfaces the underlying decline message when the buyer's card fails" do
+      failed_purchase = Purchase.new
+      failed_purchase.errors.add(:base, "Your card was declined.")
+      allow_any_instance_of(Commission).to receive(:create_completion_purchase!)
+        .and_raise(ActiveRecord::RecordInvalid.new(failed_purchase))
+
+      post :complete, params: @params.merge(id: @commission.external_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Your card was declined.")
+    end
+
+    it "returns the generic message for an unexpected error" do
+      allow_any_instance_of(Commission).to receive(:create_completion_purchase!).and_raise(StandardError.new("boom"))
+
+      post :complete, params: @params.merge(id: @commission.external_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Failed to complete commission")
+    end
+
     it "returns 404 for another seller's commission" do
       other_seller = create(:user, :eligible_for_service_products)
       other_commission = create(:commission, deposit_purchase: create(:purchase, seller: other_seller, link: create(:commission_product, user: other_seller), price_cents: 100, displayed_price_cents: 100, credit_card: create(:credit_card)))
