@@ -51,12 +51,16 @@ describe Onetime::BackfillOrphanedShownProductsInProfileSections do
     end
 
     it "skips malformed legacy rows without aborting the run" do
-      malformed = create(:seller_profile_products_section, seller:, add_new_products: false)
-      malformed.update_columns(json_data: nil)
       alive = create(:product, user: seller)
       deleted = create(:product, user: seller)
       deleted.update_columns(deleted_at: Time.current)
       valid = section_with_shown([alive.id, deleted.id])
+
+      # A legacy row with NULL json_data. Created last and nulled via update_columns
+      # so it can't trip the add-to-profile-sections callback during the product
+      # setup above (that callback reads section.add_new_products on every section).
+      create(:seller_profile_products_section, seller:, add_new_products: false)
+        .update_columns(json_data: nil)
 
       expect { expect(described_class.process).to eq(1) }.not_to raise_error
 
