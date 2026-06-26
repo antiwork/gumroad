@@ -7,32 +7,45 @@
 # render products/posts/pages dynamically, and it refreshes on every page load. Only
 # already-public data is included (alive products, profile-visible posts, page names).
 class Pages::ProfileData
+  CACHE_VERSION = "v1"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
   def self.build(seller)
-    {
-      products: products(seller),
-      posts: posts(seller),
-      pages: pages(seller),
-    }
+    Rails.cache.fetch(cache_key(seller)) do
+      {
+        products: products(seller),
+        posts: posts(seller),
+        pages: pages(seller),
+      }
+    end
+  end
+
+  def self.cache_key(seller)
+    [
+      "profile_data",
+      CACHE_VERSION,
+      seller.products.cache_key_with_version,
+      seller.installments.visible_on_profile.cache_key_with_version,
+      seller.seller_profile&.cache_key_with_version,
+    ].join("/")
   end
 
   def self.products(seller)
-    seller.products.alive.not_archived.order(created_at: :desc).limit(MAX_ITEMS).map do |product|
+    seller.products.alive.not_archived.includes(:thumbnail_alive).order(created_at: :desc).limit(MAX_ITEMS).map do |product|
       {
         name: product.name,
         url: product.long_url,
         price: product.price_formatted_verbose,
         native_type: product.native_type,
-        thumbnail_url: product.thumbnail&.alive&.url,
+        thumbnail_url: product.thumbnail_alive&.url,
         description: ActionView::Base.full_sanitizer.sanitize(product.description.to_s).squish.truncate(DESCRIPTION_LIMIT),
       }
     end
   end
 
   def self.posts(seller)
-    seller.installments.visible_on_profile.order(published_at: :desc).limit(MAX_ITEMS).map do |post|
+    seller.installments.visible_on_profile.includes(:seller).order(published_at: :desc).limit(MAX_ITEMS).map do |post|
       {
         name: post.name,
         url: post.full_url,
