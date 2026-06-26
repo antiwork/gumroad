@@ -10,9 +10,16 @@ module ValidateRecaptcha
     login: false,
     signup: false,
   }.freeze
+  # Default score thresholds used when the per-surface env var is unset. Surfaces
+  # not listed here default to nil (no score gating — token validity alone). The
+  # score-based checkout key returns a score for ~every valid token, so it gates
+  # at 0.5 out of the box; raise/lower via RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE.
+  RECAPTCHA_SCORE_THRESHOLD_DEFAULTS = {
+    checkout_score: 0.5,
+  }.freeze
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"
 
-  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
+  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_THRESHOLD_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
 
   private
     def valid_recaptcha_response_and_hostname?(site_key:, surface: :checkout)
@@ -72,7 +79,9 @@ module ValidateRecaptcha
     end
 
     def recaptcha_score_threshold(surface)
-      value = GlobalConfig.get("RECAPTCHA_SCORE_THRESHOLD_#{surface.to_s.upcase}")
+      env_name = "RECAPTCHA_SCORE_THRESHOLD_#{surface.to_s.upcase}"
+      default = RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
+      value = default.nil? ? GlobalConfig.get(env_name) : GlobalConfig.get(env_name, default)
       return nil if value.to_s.strip.blank?
 
       Float(value)

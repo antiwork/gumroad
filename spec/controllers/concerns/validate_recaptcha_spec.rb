@@ -147,10 +147,19 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["success"]).to be true
       end
 
-      it "gates on its own threshold, independent of the challenge checkout surface" do
-        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT").and_return("0.5")
-        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE").and_return(nil)
+      it "rejects a low score using the default 0.5 threshold when none is configured" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE", 0.5).and_call_original
         stub_recaptcha_response(valid: true, score: 0.1)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "passes a score at or above the default 0.5 threshold when none is configured" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE", 0.5).and_call_original
+        stub_recaptcha_response(valid: true, score: 0.7)
 
         post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
 
@@ -158,9 +167,9 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["success"]).to be true
       end
 
-      it "fails a low score when its own threshold is configured" do
-        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE").and_return("0.5")
-        stub_recaptcha_response(valid: true, score: 0.1)
+      it "honors an explicitly configured threshold over the default" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE", 0.5).and_return("0.9")
+        stub_recaptcha_response(valid: true, score: 0.7)
 
         post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
 
