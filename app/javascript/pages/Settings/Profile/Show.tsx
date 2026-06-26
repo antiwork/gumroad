@@ -53,7 +53,6 @@ type ProfilePageProps = {
   custom_html: string | null;
   has_custom_landing_page: boolean;
   username: string;
-  has_legacy_profile_pages: boolean;
 } & ProfileProps;
 
 export default function SettingsPage() {
@@ -65,7 +64,6 @@ export default function SettingsPage() {
     custom_html_pages_enabled,
     has_custom_landing_page,
     username,
-    has_legacy_profile_pages,
   } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
@@ -232,7 +230,7 @@ export default function SettingsPage() {
 
   // The legacy section editor stays available only for sellers who already built one AND aren't
   // running a custom page — a live custom page replaces the whole profile, so editing sections is moot.
-  const showPagesTab = has_legacy_profile_pages && !has_custom_landing_page;
+  const showPagesTab = !has_custom_landing_page;
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
     <Tab
