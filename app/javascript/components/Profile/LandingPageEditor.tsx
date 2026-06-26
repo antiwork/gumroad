@@ -31,11 +31,15 @@ export const ProfileLandingPageEditor = ({
 
 Design a unique, on-brand profile page that reflects who I am and what I sell — fully responsive, accessible, and supporting light and dark mode. Save it as one self-contained file, profile.html. The page is sanitized and runs sandboxed: inline CSS/JS (animations, scroll effects, modals) and a Tailwind CDN work. For images and media, use only inline data: URIs or CSS — external image/media hosts are blocked, and the page can't fetch external URLs or read your account.
 
-A custom profile page REPLACES your entire public profile at gumroad.com/${username}, including the default sections and product grid. There is NO buy button on a profile, so don't add checkout elements — instead, link visitors to your individual product pages (run gumroad products list to get their URLs) or to a section of your storefront.
+A custom profile page REPLACES your entire public profile at gumroad.com/${username}, including the default sections and product grid. There is NO buy button on a profile, so don't add checkout elements — instead, link visitors to your individual product pages or to a section of your storefront.
 
-Gumroad fills in a couple of live values server-side; mark them with data attributes:
+Gumroad fills in live values server-side, so the page stays current without you editing it. Mark text with data attributes:
 - data-gumroad-field="name" — interpolated with your profile name.
 - data-gumroad-field="bio" — interpolated with your profile bio.
+
+Your live catalog is injected server-side as JSON in <script id="gumroad-data" type="application/json">, so prefer rendering products/posts/pages dynamically from it (it updates automatically as you add or remove them) instead of hardcoding. Read it with:
+  const data = JSON.parse(document.getElementById("gumroad-data").textContent);
+Shape: { products: [{ name, url, price, native_type, thumbnail_url, description }], posts: [{ name, url, published_at }], pages: [{ name }] }. Link products via product.url (their public product page). The page can't fetch anything at runtime (it's sandboxed), so this injected data is the source of truth.
 
 Then preview, publish, and verify it with the Gumroad CLI:
 - Run the real server-side sanitizer WITHOUT publishing and read what it changed: gumroad user page preview ./profile.html --json --no-input --non-interactive — inspect .sanitization_report. If it stripped tags or attributes your page needs, fix the HTML and preview again. Do this until the report is clean so you never publish a broken page.

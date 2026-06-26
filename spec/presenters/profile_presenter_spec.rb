@@ -141,10 +141,20 @@ describe ProfilePresenter do
           custom_html: nil,
           has_custom_landing_page: false,
           username: seller.username,
+          has_legacy_profile_pages: true,
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
         }
       )
       expect(props[:profile_settings]).not_to have_key(:username)
+    end
+
+    it "reports has_legacy_profile_pages as false for a seller with no profile sections or tabs" do
+      seller.seller_profile_sections.destroy_all
+      seller.seller_profile.update!(json_data: seller.seller_profile.json_data.except("tabs"))
+
+      props = described_class.new(pundit_user:, seller: seller.reload).profile_settings_props(request:)
+
+      expect(props[:has_legacy_profile_pages]).to be(false)
     end
 
     context "when the custom_html_pages feature is enabled and a custom profile page is live" do

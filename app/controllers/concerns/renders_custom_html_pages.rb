@@ -80,6 +80,27 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  POLL_INTERVAL_MS = 2000
+
+  # Preview-only: lets the Settings → Profile editor reflect unsaved name/bio edits in the live
+  # page preview without a republish. The dashboard posts {type, name, bio}; this updates the
+  # same data-gumroad-field nodes the server-side interpolator fills, in place. textContent only
+  # (never innerHTML), so it can't introduce markup. Included solely on ?preview embeds, so public
+  # pages don't carry it.
+  PROFILE_FIELDS_PREVIEW_SCRIPT = <<~HTML
+    <script data-cfasync="false">
+      window.addEventListener("message", function (e) {
+        var d = e.data;
+        if (!d || d.type !== "gumroad:profile-fields") return;
+        ["name", "bio"].forEach(function (field) {
+          var value = d[field] == null ? "" : String(d[field]);
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
+        });
+      });
+    </script>
+  HTML
+
   module ClassMethods
     # Memoized per process — the file ships with the deployed artifact and
     # only changes on deploy, which restarts the process.
@@ -92,6 +113,45 @@ module RendersCustomHtmlPages
   end
 
   private
+    # Live-reload poll for the wrapper document. The seller authors the page through their agent
+    # + the CLI/API; this lets them keep the public page open and watch each publish land without
+    # a manual refresh. Injected ONLY for the authenticated owner (see each controller's
+    # owner_viewing_custom_html? gate), so public visitors never poll - that keeps load off the
+    # public page and limits the version endpoint's tiny timestamp to the one person already
+    # allowed to edit it. The poll hits a same-origin JSON endpoint (connect-src 'self') for the
+    # page's version (its Page#updated_at): on a republish it cache-busts the iframe; on removal
+    # it reloads the top document so the default profile/product page returns. Pauses while the
+    # tab is hidden. The wrapper is trusted chrome, so the inline script runs under the app CSP
+    # via the same nonce the wrapper already uses.
+    def custom_html_live_reload_script(version_src:, nonce:)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var versionUrl = #{ERB::Util.json_escape(version_src.to_json)};
+            var known = null;
+            function poll() {
+              if (document.hidden) return;
+              fetch(versionUrl, { headers: { "Accept": "application/json" }, cache: "no-store", credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                  if (!data) return;
+                  var current = data.present ? "v" + String(data.version) : "absent";
+                  if (known === null) { known = current; return; }
+                  if (current === known) return;
+                  if (current === "absent") { window.location.reload(); return; }
+                  known = current;
+                  if (frame) frame.src = frame.src.split("#")[0].split("?")[0] + "?" + encodeURIComponent(current);
+                })
+                .catch(function () {});
+            }
+            setInterval(poll, #{POLL_INTERVAL_MS});
+            poll();
+          })();
+        </script>
+      HTML
+    end
+
     # The landing iframe HTML must reflect a just-published edit, so read from the
     # primary rather than a possibly-lagging replica. Wired via a before_action in
     # each controller (the product and profile embed actions both need it).

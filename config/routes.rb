@@ -945,6 +945,7 @@ Rails.application.routes.draw do
     # path can't collide with the single-segment offer-code route below, so a
     # seller's "landing" offer code keeps working.
     get "/l/:id/landing/embed", to: "links#landing_iframe_content", as: :short_link_landing
+    get "/l/:id/landing/version", to: "links#landing_version", as: :short_link_landing_version
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code
     get "/cart_items_count", to: "links#cart_items_count"
 
@@ -1190,6 +1191,7 @@ Rails.application.routes.draw do
     # Iframe content endpoint for profiles with custom_html. Subdomain and
     # custom-domain equivalents live in UserCustomDomainConstraint below.
     get "/:username/landing/embed", to: "users#landing_iframe_content", as: :user_landing
+    get "/:username/landing/version", to: "users#landing_version", as: :user_landing_version
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
     get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
@@ -1249,6 +1251,7 @@ Rails.application.routes.draw do
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/landing/embed", to: "links#landing_iframe_content"
+    get "/l/:id/landing/version", to: "links#landing_version"
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
     get "/:code", to: "links#show", defaults: { format: "html" }
   end
@@ -1274,6 +1277,7 @@ Rails.application.routes.draw do
     get "/updates", to: redirect("/posts")
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/landing/embed", to: "links#landing_iframe_content"
+    get "/l/:id/landing/version", to: "links#landing_version"
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
     get "/subscribe", to: "users#subscribe", as: :custom_domain_subscribe
     get "/follow", to: redirect("/subscribe")
@@ -1360,6 +1364,7 @@ Rails.application.routes.draw do
     end
 
     get "/landing/embed", to: "users#landing_iframe_content"
+    get "/landing/version", to: "users#landing_version"
     get "/", to: "users#show", defaults: { format: "html" }
   end
 

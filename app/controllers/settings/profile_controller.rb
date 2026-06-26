@@ -9,6 +9,7 @@ class Settings::ProfileController < Settings::BaseController
   before_action :authorize
 
   def show
+    set_meta_tag(title: "Profile settings")
     profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
 
     render inertia: "Settings/Profile/Show", props: profile_presenter.profile_settings_props(request:)

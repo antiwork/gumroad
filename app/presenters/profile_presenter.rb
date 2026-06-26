@@ -56,6 +56,11 @@ class ProfilePresenter
         custom_html: seller.custom_html,
         has_custom_landing_page: seller.has_custom_landing_page?,
         username: seller.username,
+        # The legacy section/tab editor ("Pages") is deprecated in favor of agent-authored custom
+        # HTML. Surface its tab only to sellers who already built one historically, so existing
+        # layouts stay editable while new sellers are funneled to the agent path.
+        has_legacy_profile_pages: seller.seller_profile_sections.on_profile.exists? ||
+          (seller.seller_profile.json_data["tabs"] || []).any?,
       }
     )
   end

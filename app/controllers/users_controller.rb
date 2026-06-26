@@ -7,13 +7,13 @@ class UsersController < ApplicationController
   include PageMeta::Favicon, PageMeta::User
   include RendersCustomHtmlPages
 
-  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content]
+  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version]
 
   after_action :verify_authorized, only: %i[deactivate edit]
 
-  before_action :stick_to_primary_for_landing_iframe, only: :landing_iframe_content
+  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :set_as_modal, only: %i[show]
-  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content]
+  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
@@ -41,7 +41,21 @@ class UsersController < ApplicationController
 
     apply_custom_html_response_headers
     interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user)
-    render html: profile_custom_html_document(interpolated).html_safe, layout: false
+    render html: profile_custom_html_document(
+      interpolated,
+      data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
+      live_fields: params[:preview].present?,
+    ).html_safe, layout: false
+  end
+
+  # Tiny public version token for the wrapper's owner-only live-reload poll. Reports whether a
+  # custom page is currently live and a monotonic token (the Page's updated_at) that changes on
+  # every republish. Stays out of custom_html_visible?'s 404 path so the poll can also observe a
+  # removal (present:false) and restore the default profile.
+  def landing_version
+    page = @user.page
+    visible = Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?
+    render json: { present: visible, version: visible ? page.updated_at.to_i : nil }
   end
 
   def edit
@@ -182,6 +196,13 @@ class UsersController < ApplicationController
       render html: profile_custom_html_wrapper_document(@user).html_safe, layout: false
     end
 
+    # Only the seller (viewing their own live profile while signed in) gets the live-reload poll -
+    # they're the one authoring via the agent and watching publishes land. Public visitors get a
+    # static wrapper with no polling.
+    def owner_viewing_custom_html?
+      current_user.present? && current_user == @user
+    end
+
     # set_user_and_custom_domain_config already 404s any non-active account
     # before these actions run (unlike products, which aren't gated on alive?
     # upstream), so there's no owner/team preview branch to add here.
@@ -193,7 +214,11 @@ class UsersController < ApplicationController
       @is_user_custom_domain ? "/landing/embed" : "/#{user.username}/landing/embed"
     end
 
-    def profile_custom_html_document(custom_html)
+    def profile_landing_version_src(user)
+      @is_user_custom_domain ? "/landing/version" : "/#{user.username}/landing/version"
+    end
+
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -204,7 +229,9 @@ class UsersController < ApplicationController
             #{self.class.pages_tailwind_inline}
           </head>
           <body>
+            <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
+            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>
       HTML
@@ -222,6 +249,11 @@ class UsersController < ApplicationController
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
+      live_reload = if owner_viewing_custom_html?
+        custom_html_live_reload_script(version_src: profile_landing_version_src(user), nonce: SecureHeaders.content_security_policy_script_nonce(request))
+      else
+        ""
+      end
       <<~HTML
         <!doctype html>
         <html lang="en">
@@ -243,6 +275,7 @@ class UsersController < ApplicationController
               title="#{title}"
               sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
+            #{live_reload}
           </body>
         </html>
       HTML
