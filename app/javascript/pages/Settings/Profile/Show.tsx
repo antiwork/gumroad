@@ -226,8 +226,6 @@ export default function SettingsPage() {
     }
   });
 
-  // The legacy section editor stays available only for sellers who already built one AND aren't
-  // running a custom page — a live custom page replaces the whole profile, so editing sections is moot.
   const showPagesTab = !has_custom_landing_page;
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
@@ -280,8 +278,6 @@ export default function SettingsPage() {
       )}
     >
       {has_custom_landing_page ? (
-        // A live custom page replaces the entire public profile, so preview the real
-        // rendered page (the default-profile editor preview below would be misleading).
         <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
       ) : (
         <Preview

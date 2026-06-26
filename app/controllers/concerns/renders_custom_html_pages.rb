@@ -82,11 +82,6 @@ module RendersCustomHtmlPages
 
   POLL_INTERVAL_MS = 2000
 
-  # Preview-only: lets the Settings → Profile editor reflect unsaved name/bio edits in the live
-  # page preview without a republish. The dashboard posts {type, name, bio}; this updates the
-  # same data-gumroad-field nodes the server-side interpolator fills, in place. textContent only
-  # (never innerHTML), so it can't introduce markup. Included solely on ?preview embeds, so public
-  # pages don't carry it.
   PROFILE_FIELDS_PREVIEW_SCRIPT = <<~HTML
     <script data-cfasync="false">
       window.addEventListener("message", function (e) {
@@ -113,22 +108,10 @@ module RendersCustomHtmlPages
   end
 
   private
-    # Single source of the version-token JSON contract the owner poll consumes (see
-    # custom_html_live_reload_script). Both controllers' landing_version actions render through this.
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end
 
-    # Live-reload poll for the wrapper document. The seller authors the page through their agent
-    # + the CLI/API; this lets them keep the public page open and watch each publish land without
-    # a manual refresh. Injected ONLY for the authenticated owner (see each controller's
-    # owner_viewing_custom_html? gate), so public visitors never poll - that keeps load off the
-    # public page and limits the version endpoint's tiny timestamp to the one person already
-    # allowed to edit it. The poll hits a same-origin JSON endpoint (connect-src 'self') for the
-    # page's version (its Page#updated_at): on a republish it cache-busts the iframe; on removal
-    # it reloads the top document so the default profile/product page returns. Pauses while the
-    # tab is hidden. The wrapper is trusted chrome, so the inline script runs under the app CSP
-    # via the same nonce the wrapper already uses.
     def custom_html_live_reload_script(version_src:, nonce:)
       <<~HTML
         <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">

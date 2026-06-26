@@ -48,10 +48,6 @@ class UsersController < ApplicationController
     ).html_safe, layout: false
   end
 
-  # Tiny public version token for the wrapper's owner-only live-reload poll. Reports whether a
-  # custom page is currently live and a monotonic token (the Page's updated_at) that changes on
-  # every republish. Stays out of custom_html_visible?'s 404 path so the poll can also observe a
-  # removal (present:false) and restore the default profile.
   def landing_version
     return render_landing_version(visible: false, page: nil) unless owner_viewing_custom_html?
     page = @user.page
@@ -196,9 +192,6 @@ class UsersController < ApplicationController
       render html: profile_custom_html_wrapper_document(@user).html_safe, layout: false
     end
 
-    # Only the seller (viewing their own live profile while signed in) gets the live-reload poll -
-    # they're the one authoring via the agent and watching publishes land. Public visitors get a
-    # static wrapper with no polling.
     def owner_viewing_custom_html?
       current_user.present? && current_user == @user
     end

@@ -1,11 +1,5 @@
 # frozen_string_literal: true
 
-# Public, render-safe snapshot of a seller's catalog for their custom profile page.
-# The page is sandboxed (opaque origin, connect-src 'none'), so it can't fetch at
-# render time - we inject this server-side as JSON instead, mirroring how product
-# custom HTML has its fields filled in server-side. The seller's HTML/JS reads it to
-# render products/posts/pages dynamically, and it refreshes on every page load. Only
-# already-public data is included (alive products, profile-visible posts, page names).
 class Pages::ProfileData
   CACHE_VERSION = "v1"
   MAX_ITEMS = 100
