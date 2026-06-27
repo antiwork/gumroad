@@ -24,16 +24,26 @@ class ContentModeration::ContentExtractor
   end
 
   private
-    # A seller linking to their OWN storefront/profile (or one of their own
-    # product pages) is inherently first-party and must never be treated as
-    # policy-violating content. Domain labels are arbitrary identifiers
-    # (usernames, brand names) that can coincidentally contain a blocklisted
-    # word as a boundary-delimited token, producing false positives such as a
-    # bulk email being rejected for including the seller's own subdomain URL.
-    # We neutralize only the scheme+host (the arbitrary domain label) of the
-    # seller's own URLs, while PRESERVING any path/query text so user-controlled
-    # content in a permalink or query string is still moderated. Third-party
-    # URLs are left fully intact so genuine off-site abuse is still caught.
+    # A seller linking to their OWN Gumroad storefront/profile (or one of their
+    # own product pages on `<handle>.gumroad.com`) is inherently first-party and
+    # must never be treated as policy-violating content. The subdomain label is an
+    # arbitrary identifier (the seller's handle) that can read as a random token to
+    # the spam classifier, producing false positives such as a bulk email being
+    # rejected for including the seller's own subdomain URL (gumroad-private#727).
+    # We neutralize only the scheme+host (the arbitrary handle label) of those
+    # URLs, while PRESERVING any path/query text so user-controlled content in a
+    # permalink or query string is still moderated. Everything else — third-party
+    # URLs AND seller custom domains — is left fully intact so genuine off-site
+    # abuse is still caught.
+    #
+    # Custom domains are deliberately NOT treated as first-party here: unlike the
+    # gumroad subdomain (which is unconditionally Gumroad-hosted), a custom domain
+    # is only the seller's Gumroad URL when it is verified AND DNS currently points
+    # to Gumroad (see UrlService#custom_domain_with_protocol, which does a live
+    # CustomDomainVerificationService check). A merely-`active?` domain can be
+    # repointed off-site with a still-fresh cert, so stripping it would let an
+    # off-site URL bypass moderation. We don't replicate that live DNS check in the
+    # moderation path; custom domains keep going through normal moderation.
     def strip_seller_first_party_urls(text, seller)
       hosts = seller_first_party_hosts(seller)
       return text if hosts.empty?
@@ -46,7 +56,7 @@ class ContentModeration::ContentExtractor
         end
         next url unless uri&.host && hosts.include?(uri.host.downcase)
 
-        # Drop scheme+host (the false-positive domain label); keep path/query/
+        # Drop scheme+host (the false-positive handle label); keep path/query/
         # fragment so any blocklisted term the seller put after the host is still
         # seen by the keyword/AI strategies.
         remainder = [uri.path.presence, uri.query.present? ? "?#{uri.query}" : nil,
@@ -58,14 +68,7 @@ class ContentModeration::ContentExtractor
     def seller_first_party_hosts(seller)
       return [] if seller.blank?
 
-      # Only treat a custom domain as first-party when it is ACTIVE (verified +
-      # valid cert) — matching UrlService#custom_domain_with_protocol. An alive
-      # but unverified custom domain can be an arbitrary off-site URL the seller
-      # set without proving ownership, so stripping it would let genuine off-site
-      # links bypass moderation.
-      custom_domain = seller.custom_domain&.active? ? seller.custom_domain.domain : nil
-
-      [seller.subdomain, custom_domain]
+      [seller.subdomain]
         .compact_blank
         .filter_map { |value| normalize_host(value) }
         .uniq
