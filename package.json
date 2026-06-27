@@ -45,7 +45,7 @@
     "immer": "^10.0.0",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.0.0",
-    "libphonenumber-js": "^1.12.23",
+    "libphonenumber-js": "^1.13.7",
     "lodash-es": "^4.17.22",
     "lowlight": "^3.0.0",
     "pdfjs-dist": "4.5.136",
