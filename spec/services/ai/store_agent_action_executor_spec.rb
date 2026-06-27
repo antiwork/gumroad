@@ -68,6 +68,15 @@ describe Ai::StoreAgentActionExecutor do
         expect(other_product.reload.price_cents).to eq(1000)
       end
 
+      it "refuses to mutate an archived product (never surfaced by the listing tool)" do
+        archived = create(:product, user: seller, price_cents: 1000, archived: true)
+
+        result = executor.execute(type: "update_product_price", params: { product_id: archived.external_id, new_price_cents: 5 })
+
+        expect(result[:success]).to be(false)
+        expect(archived.reload.price_cents).to eq(1000)
+      end
+
       it "refuses a tiered membership (price lives on tiers, not price_cents)" do
         membership = create(:membership_product, user: seller)
 

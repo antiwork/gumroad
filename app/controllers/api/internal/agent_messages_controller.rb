@@ -9,6 +9,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   include Throttling
 
   before_action :authenticate_user!
+  before_action :authorize_store_agent
   before_action :throttle_agent_requests
   after_action :verify_authorized
 
@@ -19,8 +20,6 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   # POST /internal/agent/messages
   # params: { messages: [{ role:, content: }, ...] }
   def create
-    authorize current_seller, :use_store_agent?
-
     messages = sanitize_messages(params[:messages])
     if messages.empty?
       render json: { success: false, error: "A message is required." }, status: :bad_request
@@ -42,11 +41,11 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   # POST /internal/agent/actions
   # params: { type:, params: {...} } — the confirmed proposed action
   def execute
-    authorize current_seller, :use_store_agent?
-
     type = params[:type].to_s
     unless ::Ai::StoreAgentActionExecutor::SUPPORTED_TYPES.include?(type)
-      render json: { success: false, error: "That action isn't supported." }, status: :bad_request
+      # Use `message` (not `error`) so the client's executeAgentAction response parser, which expects
+      # { success, message }, can surface this instead of failing to parse.
+      render json: { success: false, message: "That action isn't supported." }, status: :bad_request
       return
     end
 
@@ -54,9 +53,21 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       .execute(type:, params: action_params)
 
     render json: result, status: result[:success] ? :ok : :unprocessable_entity
+  rescue => e
+    # The executor only rescues expected validation failures; log + report anything unexpected from a
+    # real store mutation (e.g. ActiveRecord::StatementInvalid) instead of leaking a 500 with no trail.
+    Rails.logger.error("Store agent action failed: #{e.full_message}")
+    ErrorNotifier.notify(e)
+    render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
   end
 
   private
+    # Runs before throttling so a team member denied the Agent tab can't burn the seller-scoped
+    # rate-limit quota for users who are allowed to use it.
+    def authorize_store_agent
+      authorize current_seller, :use_store_agent?
+    end
+
     def sanitize_messages(raw)
       return [] unless raw.is_a?(ActionController::Parameters) || raw.is_a?(Array)
 

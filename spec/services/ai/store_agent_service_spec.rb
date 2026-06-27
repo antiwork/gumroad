@@ -133,5 +133,96 @@ describe Ai::StoreAgentService do
         expect(captured).to have_key("gross_sales")
       end
     end
+
+    context "when the model proposes more than one write in a single turn" do
+      # Two write tool calls in one assistant message: only the first may be staged, and the second
+      # must be rejected back to the model so the confirmation card can't describe a different change.
+      def two_write_calls_message
+        {
+          "choices" => [{
+            "message" => {
+              "content" => nil,
+              "tool_calls" => [
+                { "id" => "call_a", "function" => { "name" => "create_discount", "arguments" => { "code" => "FIRST", "percent_off" => 10 }.to_json } },
+                { "id" => "call_b", "function" => { "name" => "create_discount", "arguments" => { "code" => "SECOND", "percent_off" => 50 }.to_json } },
+              ],
+            },
+          }],
+        }
+      end
+
+      it "stages only the first proposal and tells the model the second was dropped" do
+        captured_tool_results = []
+        allow(client).to receive(:chat) do |args|
+          tool_msgs = args[:parameters][:messages].select { |m| m[:role] == "tool" }
+          if tool_msgs.any?
+            captured_tool_results = tool_msgs.map { |m| JSON.parse(m[:content]) }
+            assistant_message("I've prepared the FIRST code for your confirmation.")
+          else
+            two_write_calls_message
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "make two codes" }])
+
+        expect(result[:proposed_action]).to include(type: "create_discount", params: include(code: "FIRST"))
+        # The second write call was rejected, not staged.
+        expect(captured_tool_results.last).to include("error")
+        expect(captured_tool_results.last["error"]).to match(/one change/i)
+      end
+    end
+
+    context "when the model never finishes within the tool-iteration cap" do
+      it "does not claim there is a change to confirm when none was staged" do
+        # Always ask for a read tool, never returning a final answer, so the loop exhausts the cap
+        # without any write action being proposed.
+        allow(client).to receive(:chat).and_return(tool_call_message("list_products", {}))
+
+        result = service.respond(messages: [{ role: "user", content: "loop forever" }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(result[:reply]).not_to match(/confirm/i)
+      end
+    end
+
+    context "product resolution scope" do
+      it "refuses to propose a price change for an archived product" do
+        archived = create(:product, user: seller, name: "Archived One", price_cents: 500, archived: true)
+        captured_tool_results = []
+        allow(client).to receive(:chat) do |args|
+          tool_msgs = args[:parameters][:messages].select { |m| m[:role] == "tool" }
+          if tool_msgs.any?
+            captured_tool_results = tool_msgs.map { |m| JSON.parse(m[:content]) }
+            assistant_message("done")
+          else
+            tool_call_message("update_product_price", { "product_id" => archived.external_id, "new_price" => 9 })
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "set archived price" }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(captured_tool_results.last).to include("error")
+      end
+
+      it "refuses a non-numeric price instead of proposing a free product" do
+        product = create(:product, user: seller, name: "Real One", price_cents: 1000)
+        captured_tool_results = []
+        allow(client).to receive(:chat) do |args|
+          tool_msgs = args[:parameters][:messages].select { |m| m[:role] == "tool" }
+          if tool_msgs.any?
+            captured_tool_results = tool_msgs.map { |m| JSON.parse(m[:content]) }
+            assistant_message("done")
+          else
+            tool_call_message("update_product_price", { "product_id" => product.external_id, "new_price" => "free" })
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "make it free-ish" }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(captured_tool_results.last["error"]).to match(/number/i)
+      end
+    end
   end
 end

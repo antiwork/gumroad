@@ -113,7 +113,9 @@ class Ai::StoreAgentActionExecutor
 
     def find_product(external_id)
       return nil if external_id.blank?
-      seller.products.visible.find_by_external_id(external_id.to_s)
+      # Mirror the service's scope (visible_and_not_archived) so a confirmed action carrying an
+      # archived product id — which the listing tool never surfaces — can't mutate it.
+      seller.products.visible_and_not_archived.find_by_external_id(external_id.to_s)
     end
 
     # Mirror controller-style authorization so the agent is bound by the seller's real permissions.

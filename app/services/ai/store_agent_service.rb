@@ -67,13 +67,15 @@ class Ai::StoreAgentService
     proposed_action = nil
 
     MAX_TOOL_ITERATIONS.times do
-      response = client.chat(parameters: {
-        model: MODEL,
-        messages: conversation,
-        tools: tool_schemas,
-        tool_choice: "auto",
-        temperature: 0.3,
-      })
+      response = client.chat(
+        parameters: {
+          model: MODEL,
+          messages: conversation,
+          tools: tool_schemas,
+          tool_choice: "auto",
+          temperature: 0.3,
+        },
+      )
 
       message = response.dig("choices", 0, "message")
       raise Error, "No response from model" if message.nil?
@@ -91,7 +93,16 @@ class Ai::StoreAgentService
         name = tool_call.dig("function", "name")
         arguments = parse_arguments(tool_call.dig("function", "arguments"))
         result, action = run_tool(name:, arguments:)
-        proposed_action = action if action.present?
+        if action.present?
+          if proposed_action.nil?
+            proposed_action = action
+          else
+            # Only one change may be staged per turn. If the model proposes a second write in the
+            # same turn we drop it and tell the model, so the confirmation card can never describe a
+            # different mutation than the one the seller sees and confirms.
+            result = { error: "Only one change can be proposed at a time. Ask the seller to confirm the first change before proposing another." }
+          end
+        end
         conversation << {
           role: "tool",
           tool_call_id: tool_call["id"],
@@ -101,11 +112,15 @@ class Ai::StoreAgentService
       end
     end
 
-    # The model kept calling tools past our cap. Return whatever change it staged plus a safe message.
-    {
-      reply: "I gathered the details but need you to confirm the next step before I continue.",
-      proposed_action: proposed_action&.as_json,
-    }
+    # The model kept calling tools past our cap. Return whatever change it staged plus a message that
+    # matches reality: only mention confirmation when there is actually a proposed action to confirm.
+    reply =
+      if proposed_action
+        "I gathered the details but need you to confirm the next step before I continue."
+      else
+        "I gathered the details but couldn't finish in one go. Please rephrase or ask again."
+      end
+    { reply:, proposed_action: proposed_action&.as_json }
   end
 
   private
@@ -244,6 +259,9 @@ class Ai::StoreAgentService
 
       new_price = arguments["new_price"]
       return [{ error: "A new price is required." }, nil] if new_price.blank?
+      # string_to_price_cents turns a digit-less string into 0 cents, which would silently propose
+      # making the product free. Require an actual number so garbage can't become a $0 price.
+      return [{ error: "The new price must be a number." }, nil] unless new_price.to_s.match?(/\d/)
 
       new_price_cents = string_to_price_cents(product.price_currency_type, new_price.to_s)
       summary = "Change the price of \"#{product.name}\" from " \
@@ -275,7 +293,10 @@ class Ai::StoreAgentService
 
     def find_product(external_id)
       return nil if external_id.blank?
-      seller.products.visible.find_by_external_id(external_id.to_s)
+      # Match the listing tool's scope (visible_and_not_archived): the model is only ever shown
+      # non-archived products, so an archived id can only arrive by a seller typing it in. Don't let
+      # the agent propose price/publish changes against archived products the UI never surfaced.
+      seller.products.visible_and_not_archived.find_by_external_id(external_id.to_s)
     end
 
     # True when the buyer-visible price lives on tiers/variants rather than the product's own

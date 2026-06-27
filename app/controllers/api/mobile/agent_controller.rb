@@ -63,6 +63,12 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
 
     result = ::Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type:, params: action_params)
     render json: result, status: result[:success] ? :ok : :unprocessable_entity
+  rescue => e
+    # The executor only rescues expected validation failures; log + report anything unexpected from a
+    # real store mutation (e.g. ActiveRecord::StatementInvalid) instead of leaking a 500 with no trail.
+    Rails.logger.error("Mobile store agent action failed: #{e.full_message}")
+    ErrorNotifier.notify(e)
+    render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
   end
 
   private
