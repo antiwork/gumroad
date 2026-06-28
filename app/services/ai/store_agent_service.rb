@@ -311,7 +311,13 @@ class Ai::StoreAgentService
 
     def parse_arguments(raw)
       return {} if raw.blank?
-      JSON.parse(raw)
+      # OpenAI tool-call arguments are *supposed* to be a JSON object, but a hallucinating model can
+      # emit a bare array ("[1,2,3]") or scalar ("42"). The propose_* tools index arguments by key
+      # (arguments["code"]), which raises TypeError on an Array/Integer and would surface as an
+      # unhandled 500. Coerce anything that isn't an object to an empty hash so the tool falls through
+      # to its normal "field is required" validation instead.
+      parsed = JSON.parse(raw)
+      parsed.is_a?(Hash) ? parsed : {}
     rescue JSON::ParserError
       {}
     end

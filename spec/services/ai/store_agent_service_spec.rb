@@ -224,5 +224,27 @@ describe Ai::StoreAgentService do
         expect(captured_tool_results.last["error"]).to match(/number/i)
       end
     end
+
+    context "when the model emits malformed tool-call arguments" do
+      # OpenAI tool-call `arguments` is supposed to be a JSON object string, but a hallucinating
+      # model can return a bare array or scalar. The write tools index arguments by key, which used
+      # to raise TypeError (Integer#[] / no implicit conversion) and surface as an unhandled 500.
+      # parse_arguments now coerces non-objects to {} so the tool falls through to its normal
+      # "field is required" validation instead of crashing.
+      ["[1,2,3]", "42", "\"just a string\"", "null", "{not valid json"].each do |raw_args|
+        it "does not raise on argument payload #{raw_args.inspect}" do
+          allow(client).to receive(:chat).and_return(
+            { "choices" => [{ "message" => { "content" => nil, "tool_calls" => [{ "id" => "call_1", "function" => { "name" => "create_discount", "arguments" => raw_args } }] } }] },
+            assistant_message("I need a bit more detail to create that discount."),
+          )
+
+          expect do
+            result = service.respond(messages: [{ role: "user", content: "make a discount" }])
+            expect(result[:reply]).to be_present
+            expect(result[:proposed_action]).to be_nil
+          end.not_to change { seller.offer_codes.count }
+        end
+      end
+    end
   end
 end
