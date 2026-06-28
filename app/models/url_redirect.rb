@@ -294,12 +294,13 @@ class UrlRedirect < ApplicationRecord
   # Mobile specific methods
 
   def product_file_json_data_for_mobile
+    media_locations_by_file = latest_media_locations_by_product_file_id
     alive_product_files.map do |file|
-      mobile_product_file_json_data(file)
+      mobile_product_file_json_data(file, media_locations_by_file:)
     end
   end
 
-  def mobile_product_file_json_data(file)
+  def mobile_product_file_json_data(file, media_locations_by_file: nil)
     product_file_mobile_json_data = file.mobile_json_data
     if is_file_downloadable?(file)
       download_url = Rails.application.routes.url_helpers.api_mobile_download_product_file_url(token,
@@ -308,7 +309,11 @@ class UrlRedirect < ApplicationRecord
       download_url += "?mobile_token=#{Api::Mobile::BaseController::MOBILE_TOKEN}"
       product_file_mobile_json_data[:download_url] = download_url
     end
-    product_file_mobile_json_data[:latest_media_location] = file.latest_media_location_for(purchase)
+    product_file_mobile_json_data[:latest_media_location] = if media_locations_by_file
+      media_locations_by_file[file.id].as_json
+    else
+      file.latest_media_location_for(purchase)
+    end
     product_file_mobile_json_data[:content_length] = file.content_length
     product_file_mobile_json_data[:streaming_url] = Rails.application.routes.url_helpers.api_mobile_stream_video_url(token, file.external_id, host: UrlService.api_domain_with_protocol) if file.streamable?
     product_file_mobile_json_data[:external_link_url] = file.url if file.external_link?
@@ -377,6 +382,12 @@ class UrlRedirect < ApplicationRecord
   private
     def set_token
       self.token ||= self.class.generate_new_token
+    end
+
+    def latest_media_locations_by_product_file_id
+      return {} if purchase.nil? || installment.present?
+
+      MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id).index_by(&:product_file_id)
     end
 
     def rich_content_provider
