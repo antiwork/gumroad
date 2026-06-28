@@ -2,11 +2,12 @@ import { Copy, Share } from "@boxicons/react";
 import * as React from "react";
 
 import {
+  type AgentStreamHandlers,
   type ChatMessage,
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
-  sendAgentMessage,
+  streamAgentMessage,
 } from "$app/data/agent";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -132,12 +133,18 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
   const [input, setInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
+  // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
+  // which we show only until the first token lands, then let the streaming text take over.
+  const [isStreaming, setIsStreaming] = React.useState(false);
+  // "What next" prompts suggested after the latest reply, to keep the conversation going. Cleared
+  // when a new turn starts and refreshed from the stream's `suggestions` event.
+  const [followUps, setFollowUps] = React.useState<string[]>([]);
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, isSending]);
+  }, [messages, isSending, followUps]);
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -148,29 +155,88 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       role,
       content,
     }));
+    // The index the streamed assistant reply will occupy: right after the user message we add.
+    const assistantIndex = messages.length + 1;
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
+    setFollowUps([]);
     setIsSending(true);
+    setIsStreaming(false);
+
+    // Append text to the streaming assistant message, creating it on the first token so the bubble
+    // appears exactly when content starts arriving.
+    const appendToken = (chunk: string) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        const existing = next[assistantIndex];
+        if (existing && existing.role === "assistant") {
+          next[assistantIndex] = { ...existing, content: existing.content + chunk };
+        } else {
+          next[assistantIndex] = { role: "assistant", content: chunk };
+        }
+        return next;
+      });
+
+    // Merge a patch into the assistant message at assistantIndex, creating it if no token has
+    // arrived yet. This is what lets a tokenless turn (e.g. the model stages a write and returns an
+    // empty final reply) still render its proposed-action card / object cards.
+    const upsertAssistant = (patch: Partial<DisplayMessage>) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        const existing = next[assistantIndex];
+        const base: DisplayMessage =
+          existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
+        next[assistantIndex] = { ...base, ...patch };
+        return next;
+      });
+
+    const handlers: AgentStreamHandlers = {
+      onToken: (chunk) => {
+        setIsStreaming(true);
+        appendToken(chunk);
+      },
+      onReset: () =>
+        // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
+        // it instead of appending to it.
+        setMessages((prev) =>
+          prev.map((msg, i) => (i === assistantIndex && msg.role === "assistant" ? { ...msg, content: "" } : msg)),
+        ),
+      onObjects: (objects) => upsertAssistant({ objects }),
+      onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
+      onSuggestions: (next) => setFollowUps(next),
+    };
 
     try {
-      const { reply, proposedAction, objects } = await sendAgentMessage(history);
-      setMessages((prev) => [
-        ...prev,
-        {
+      const result = await streamAgentMessage(history, handlers);
+      // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
+      // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
+      setMessages((prev) => {
+        const next = [...prev];
+        const existing = next[assistantIndex];
+        const prior: DisplayMessage =
+          existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
+        next[assistantIndex] = {
           role: "assistant",
-          content: reply,
-          ...(proposedAction ? { proposedAction } : {}),
-          ...(objects.length > 0 ? { objects } : {}),
-        },
-      ]);
+          content: result.reply || prior.content || "",
+          ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+          ...(result.objects.length > 0 ? { objects: result.objects } : {}),
+        };
+        return next;
+      });
+      setFollowUps(result.suggestions);
     } catch (e) {
       showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, I ran into a problem. Please try again." },
-      ]);
+      setMessages((prev) => {
+        const next = [...prev];
+        // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
+        if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
+          next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
+        }
+        return next;
+      });
     } finally {
       setIsSending(false);
+      setIsStreaming(false);
     }
   };
 
@@ -227,7 +293,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
             </div>
           </div>
         ))}
-        {isSending ? (
+        {isSending && !isStreaming ? (
           <div className="flex justify-start" aria-label="Assistant">
             <div className="bg-filled rounded-2xl border px-4 py-2 text-muted">Thinking...</div>
           </div>
@@ -241,6 +307,19 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
               {suggestion}
             </Button>
           ))}
+        </div>
+      ) : followUps.length > 0 ? (
+        // Follow-up prompts suggested after the latest reply, so the conversation has an obvious next
+        // step. Hidden while a turn is in flight so they don't compete with the streaming answer.
+        <div className="flex flex-col gap-2" aria-label="Suggested follow-ups">
+          <span className="text-sm text-muted">Keep going</span>
+          <div className="flex flex-wrap gap-2">
+            {followUps.map((suggestion) => (
+              <Button key={suggestion} size="sm" onClick={() => void send(suggestion)} disabled={isSending}>
+                {suggestion}
+              </Button>
+            ))}
+          </div>
         </div>
       ) : null}
 
