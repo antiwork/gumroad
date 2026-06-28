@@ -404,7 +404,7 @@ class LinksController < ApplicationController
         end
 
         if @product.native_type === Link::NATIVE_TYPE_COFFEE
-          @product.suggested_price_cents = product_permitted_params[:variants].map { _1[:price_difference_cents] }.max
+          @product.suggested_price_cents = product_permitted_params[:variants].filter_map { _1[:price_difference_cents] }.max
         end
 
         # TODO clean this up
