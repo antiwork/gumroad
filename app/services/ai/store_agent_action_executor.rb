@@ -49,14 +49,16 @@ class Ai::StoreAgentActionExecutor
     attr_reader :seller, :pundit_user
 
     # Map the v2 API's { success:, message:, ... } envelope (and HTTP status) to the { success:,
-    # message: } shape the chat UI expects. Reuses the API's own validation messages so the seller
-    # sees the same error they would hitting the endpoint directly.
+    # message:, object: } shape the chat UI expects. Reuses the API's own validation messages so the
+    # seller sees the same error they would hitting the endpoint directly, and surfaces the
+    # created/edited object so the chat can render it inline as a card.
     def interpret(endpoint, response)
       status = response["http_status"].to_i
       api_success = response["success"]
 
       if api_success == true || (api_success.nil? && status.between?(200, 299))
-        success(response["message"].presence || "Done: #{endpoint.summary}")
+        object = Ai::StoreAgentObjectFormatter.from_response(endpoint, response).first
+        success(response["message"].presence || "Done: #{endpoint.summary}", object:)
       elsif status == 401 || status == 403
         failure("You don't have permission to do that.")
       else
@@ -75,6 +77,6 @@ class Ai::StoreAgentActionExecutor
       @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
     end
 
-    def success(message) = { success: true, message: }
+    def success(message, object: nil) = { success: true, message:, object: }.compact
     def failure(message) = { success: false, message: }
 end

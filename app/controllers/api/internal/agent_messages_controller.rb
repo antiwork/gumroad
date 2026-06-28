@@ -28,7 +28,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
     begin
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond(messages:)
-      render json: { success: true, reply: result[:reply], proposed_action: result[:proposed_action] }
+      render json: { success: true, reply: result[:reply], proposed_action: result[:proposed_action], objects: result[:objects] || [] }
     rescue ::Ai::StoreAgentService::Error => e
       render json: { success: false, error: e.message }, status: :unprocessable_entity
     rescue => e

@@ -21,14 +21,26 @@ export type ProposedAction = {
 };
 
 type SendMessageResponse =
-  | { success: true; reply: string; proposed_action: ProposedAction | null }
+  | { success: true; reply: string; proposed_action: ProposedAction | null; objects?: DisplayObject[] }
   | { success: false; error: string };
 
-type ExecuteActionResponse = { success: boolean; message: string };
+type ExecuteActionResponse = { success: boolean; message: string; object?: DisplayObject | null };
+
+// A renderable object the agent looked up or changed (a product, discount, sale, payout, ...). The
+// server builds these from the real API response, so they only ever contain data the creator can
+// already see. The chat renders them inline as cards / a list beneath the message.
+export type DisplayObject = {
+  type: string;
+  title: string;
+  subtitle?: string | null;
+  fields: { label: string; value: string }[];
+  url?: string | null;
+  copy?: string | null;
+};
 
 export const sendAgentMessage = async (
   messages: ChatMessage[],
-): Promise<{ reply: string; proposedAction: ProposedAction | null }> => {
+): Promise<{ reply: string; proposedAction: ProposedAction | null; objects: DisplayObject[] }> => {
   const response = await request({
     method: "POST",
     accept: "json",
@@ -37,10 +49,12 @@ export const sendAgentMessage = async (
   });
   const json = typia.assert<SendMessageResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
-  return { reply: json.reply, proposedAction: json.proposed_action };
+  return { reply: json.reply, proposedAction: json.proposed_action, objects: json.objects ?? [] };
 };
 
-export const executeAgentAction = async (action: ProposedAction): Promise<string> => {
+export const executeAgentAction = async (
+  action: ProposedAction,
+): Promise<{ message: string; object: DisplayObject | null }> => {
   const response = await request({
     method: "POST",
     accept: "json",
@@ -49,5 +63,5 @@ export const executeAgentAction = async (action: ProposedAction): Promise<string
   });
   const json = typia.assert<ExecuteActionResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.message);
-  return json.message;
+  return { message: json.message, object: json.object ?? null };
 };

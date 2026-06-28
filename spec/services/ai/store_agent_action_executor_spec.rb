@@ -34,6 +34,8 @@ describe Ai::StoreAgentActionExecutor do
         offer_code = product.reload.offer_codes.alive.last
         expect(offer_code.code).to eq("LAUNCH")
         expect(offer_code.amount_percentage).to eq(20)
+        # The created object is returned so the chat can render it inline as a card.
+        expect(result[:object]).to include(type: "discount", title: "LAUNCH")
       end
     end
 

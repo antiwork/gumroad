@@ -27,10 +27,11 @@ describe "Agent tab", type: :system, js: true do
     login_as seller
   end
 
-  # Stub one turn of the agent: the next user message yields `reply` (+ optional proposed_action).
-  def stub_agent_turn(reply:, proposed_action: nil)
+  # Stub one turn of the agent: the next user message yields `reply` (+ optional proposed_action /
+  # objects rendered inline as cards).
+  def stub_agent_turn(reply:, proposed_action: nil, objects: [])
     allow_any_instance_of(Ai::StoreAgentService).to receive(:respond).and_return(
-      { reply:, proposed_action: }.compact,
+      { reply:, proposed_action:, objects: }.compact,
     )
   end
 
@@ -125,7 +126,40 @@ describe "Agent tab", type: :system, js: true do
       offer_code = product.offer_codes.alive.last
       expect(offer_code.code).to eq("LAUNCH25")
       expect(offer_code.amount_percentage).to eq(25)
+
+      # The created discount renders inline as an object card with a copy affordance.
+      expect(page).to have_text("LAUNCH25", wait: 10)
+      expect(page).to have_button("Copy LAUNCH25")
       screenshot("04_discount_applied")
+    end
+
+    it "renders looked-up products inline as object cards with copy and open links" do
+      product.update!(name: "Portrait Masterclass")
+      stub_agent_turn(
+        reply: "Here are your products.",
+        objects: [
+          {
+            type: "product",
+            title: "Portrait Masterclass",
+            subtitle: "$49",
+            fields: [{ label: "Status", value: "Published" }, { label: "Sales", value: "128" }],
+            url: "https://seller.gumroad.com/l/portrait",
+            copy: "https://seller.gumroad.com/l/portrait",
+          },
+        ],
+      )
+
+      send_message("List my products")
+
+      expect(page).to have_text("Portrait Masterclass", wait: 10)
+      expect(page).to have_text("$49")
+      expect(page).to have_text("Sales")
+      # Copy + open-in-new-tab affordances beneath the object.
+      expect(page).to have_button("Copy Portrait Masterclass")
+      open_link = find("a[aria-label='Open Portrait Masterclass in a new tab']")
+      expect(open_link[:href]).to eq("https://seller.gumroad.com/l/portrait")
+      expect(open_link[:target]).to eq("_blank")
+      screenshot("08_product_cards")
     end
 
     it "lets the seller dismiss a proposed change without applying it" do

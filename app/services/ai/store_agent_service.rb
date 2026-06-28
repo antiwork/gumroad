@@ -28,6 +28,8 @@ class Ai::StoreAgentService
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to OpenAI.
   MAX_HISTORY_MESSAGES = 20
+  # Cap how many object cards we render inline per turn so a large list can't flood the chat.
+  MAX_DISPLAY_OBJECTS = 20
 
   # The system prompt is assembled at runtime (see #system_prompt) so it can embed the live catalog
   # manifest of every endpoint the agent can reach. This keeps the prompt and the actual tool surface
@@ -39,23 +41,34 @@ class Ai::StoreAgentService
     You have two tools that together expose the creator's ENTIRE Gumroad API:
     - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
-    - api_write: PROPOSE any change (create/update/delete products, discounts, variants, upsells,
-      emails, refunds, shipping, licenses, webhooks, profile, and more). Writes NEVER take effect
-      immediately — they produce a proposed change the creator must review and confirm in the UI.
+    - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
+      emails, refunds, shipping, licenses, webhooks, profile, and more). Writes never take effect
+      immediately — they produce a proposed change the creator reviews and confirms in the UI.
 
     To call a tool you pass `endpoint` (one of the ids listed below), `path_params` (the ids the
     endpoint's path needs, e.g. the product id), and `params` (query for reads, body for writes).
 
-    Rules:
+    How to act:
+    - Be helpful and proactive. If the creator describes a change they want, go ahead and prepare it
+      for them with api_write so it's ready to confirm — don't just explain how they could do it
+      themselves. Offer to make the change.
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
-    - Never claim a change has been made. For any api_write, say you've prepared it for the creator's
-      confirmation.
-    - Propose at most ONE change per reply. If the creator asks for several, do the first and tell
+    - Never claim a change has already been made. After api_write, tell the creator you've prepared it
+      and it's ready for them to confirm.
+    - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
-    - Be concise and concrete. Reference products by name.
+
+    How to write:
+    - Write like a person: warm, plain, and direct. Short sentences. No corporate filler.
+    - Do not use emoji.
+    - Do not use markdown headers, bold, bullet characters, tables, or other decorative formatting.
+      Just write normal sentences. Products, discounts, and other objects you look up or change are
+      shown to the creator automatically as cards beneath your message, so don't re-list their
+      details or paste links in the text — refer to them by name and keep your reply brief.
+    - Don't mention other people, teammates, or @-handles.
 
     READ endpoints (api_read):
     %<reads>s
@@ -74,10 +87,12 @@ class Ai::StoreAgentService
   end
 
   # @param messages [Array<Hash>] prior conversation, each { role: "user"|"assistant", content: String }
-  # @return [Hash] { reply: String, proposed_action: Hash|nil }
+  # @return [Hash] { reply: String, proposed_action: Hash|nil, objects: Array<Hash> }
   def respond(messages:)
     conversation = build_conversation(messages)
     proposed_action = nil
+    # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
+    @objects = []
 
     MAX_TOOL_ITERATIONS.times do
       response = client.chat(
@@ -95,7 +110,7 @@ class Ai::StoreAgentService
 
       tool_calls = message["tool_calls"]
       if tool_calls.blank?
-        return { reply: message["content"].to_s.strip, proposed_action: proposed_action&.as_json }
+        return { reply: message["content"].to_s.strip, proposed_action: proposed_action&.as_json, objects: deduped_objects }
       end
 
       # Echo the assistant tool-call message back into the conversation before answering each call,
@@ -133,11 +148,17 @@ class Ai::StoreAgentService
       else
         "I gathered the details but couldn't finish in one go. Please rephrase or ask again."
       end
-    { reply:, proposed_action: proposed_action&.as_json }
+    { reply:, proposed_action: proposed_action&.as_json, objects: deduped_objects }
   end
 
   private
     attr_reader :seller, :pundit_user
+
+    # De-duplicate the collected objects (the model may read the same list twice in one turn) while
+    # preserving order, and cap how many cards we render so a huge list can't flood the chat.
+    def deduped_objects
+      Array(@objects).uniq.first(MAX_DISPLAY_OBJECTS)
+    end
 
     def build_conversation(messages)
       history = Array(messages).last(MAX_HISTORY_MESSAGES).filter_map do |msg|
@@ -189,6 +210,8 @@ class Ai::StoreAgentService
 
       path = endpoint.expand_path(arguments["path_params"])
       result = api_client.get(path, sanitize_param_hash(arguments["params"]))
+      # Collect any renderable objects from the response so the chat can show them inline as cards.
+      @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
       [result, nil]
     rescue ArgumentError => e
       # Missing/blank path param (e.g. the model forgot the product id).

@@ -41,7 +41,7 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
     end
 
     result = ::Ai::StoreAgentService.new(seller:, pundit_user:).respond(messages:)
-    render json: { success: true, reply: result[:reply], proposed_action: result[:proposed_action] }
+    render json: { success: true, reply: result[:reply], proposed_action: result[:proposed_action], objects: result[:objects] || [] }
   rescue ::Ai::StoreAgentService::Error => e
     render json: { success: false, error: e.message }, status: :unprocessable_entity
   rescue => e

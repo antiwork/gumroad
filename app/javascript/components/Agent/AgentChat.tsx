@@ -1,9 +1,19 @@
+import { Copy, Share } from "@boxicons/react";
 import * as React from "react";
 
-import { type ChatMessage, type ProposedAction, executeAgentAction, sendAgentMessage } from "$app/data/agent";
+import {
+  type ChatMessage,
+  type DisplayObject,
+  type ProposedAction,
+  executeAgentAction,
+  sendAgentMessage,
+} from "$app/data/agent";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
+import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Textarea } from "$app/components/ui/Textarea";
 
 type DisplayMessage = ChatMessage & {
@@ -11,12 +21,73 @@ type DisplayMessage = ChatMessage & {
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
   proposedAction?: ProposedAction;
   actionStatus?: "applied" | "dismissed";
+  // Objects the agent looked up or changed this turn, rendered inline as cards beneath the message.
+  objects?: DisplayObject[];
 };
 
 type Props = {
   greeting: string;
   suggestions: string[];
 };
+
+// One object (product, discount, sale, ...) rendered as a card: a title, an optional subtitle, a
+// few key/value rows, and easy copy / open-in-new-tab affordances. Reuses the same Card,
+// DefinitionList, and CopyToClipboard primitives used across the dashboard.
+const ObjectCard = ({ object }: { object: DisplayObject }) => {
+  const copyText = object.copy ?? object.url ?? null;
+  return (
+    <Card>
+      <CardContent className="flex-col items-stretch gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <strong className="block break-words">{object.title}</strong>
+            {object.subtitle ? <span className="break-words text-muted">{object.subtitle}</span> : null}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {copyText ? (
+              <CopyToClipboard text={copyText} copyTooltip="Copy">
+                <Button size="icon" aria-label={`Copy ${object.title}`}>
+                  <Copy className="size-4" />
+                </Button>
+              </CopyToClipboard>
+            ) : null}
+            {object.url ? (
+              <NavigationButton
+                size="icon"
+                aria-label={`Open ${object.title} in a new tab`}
+                href={object.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Share className="size-4" />
+              </NavigationButton>
+            ) : null}
+          </div>
+        </div>
+        {object.fields.length > 0 ? (
+          <DefinitionList className="text-sm">
+            {object.fields.map((field) => (
+              <React.Fragment key={field.label}>
+                <dt className="text-muted">{field.label}</dt>
+                <dd className="break-words">{field.value}</dd>
+              </React.Fragment>
+            ))}
+          </DefinitionList>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
+
+// A turn's objects: a single card on its own, or a compact list view when the agent returned several.
+const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
+  objects.length > 0 ? (
+    <div className="flex flex-col gap-2">
+      {objects.map((object, index) => (
+        <ObjectCard key={`${object.type}-${object.copy ?? object.title}-${index}`} object={object} />
+      ))}
+    </div>
+  ) : null;
 
 const ProposedActionCard = ({
   action,
@@ -82,10 +153,15 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     setIsSending(true);
 
     try {
-      const { reply, proposedAction } = await sendAgentMessage(history);
+      const { reply, proposedAction, objects } = await sendAgentMessage(history);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: reply, ...(proposedAction ? { proposedAction } : {}) },
+        {
+          role: "assistant",
+          content: reply,
+          ...(proposedAction ? { proposedAction } : {}),
+          ...(objects.length > 0 ? { objects } : {}),
+        },
       ]);
     } catch (e) {
       showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
@@ -101,9 +177,14 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const confirmAction = async (index: number, action: ProposedAction) => {
     setPendingActionIndex(index);
     try {
-      const message = await executeAgentAction(action);
+      const { message, object } = await executeAgentAction(action);
       showAlert(message, "success");
-      setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionStatus: "applied" } : msg)));
+      // Mark the proposal applied and attach the created/edited object so it renders as a card.
+      setMessages((prev) =>
+        prev.map((msg, i) =>
+          i === index ? { ...msg, actionStatus: "applied", ...(object ? { objects: [object] } : {}) } : msg,
+        ),
+      );
     } catch (e) {
       showAlert(e instanceof Error && e.message ? e.message : "That change couldn't be applied.", "error");
     } finally {
@@ -130,7 +211,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                   message.role === "user" ? "bg-accent text-accent-foreground" : "bg-filled border"
                 }`}
               >
-                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                <p className="break-words whitespace-pre-wrap">{message.content}</p>
               </div>
               {message.proposedAction ? (
                 <ProposedActionCard
@@ -142,6 +223,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                   onDismiss={() => dismissAction(index)}
                 />
               ) : null}
+              {message.objects && message.objects.length > 0 ? <ObjectList objects={message.objects} /> : null}
             </div>
           </div>
         ))}
@@ -184,7 +266,12 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           disabled={isSending}
           className="flex-1"
         />
-        <Button type="submit" color="accent" className="shrink-0 whitespace-nowrap" disabled={isSending || input.trim().length === 0}>
+        <Button
+          type="submit"
+          color="accent"
+          className="shrink-0 whitespace-nowrap"
+          disabled={isSending || input.trim().length === 0}
+        >
           Send
         </Button>
       </form>

@@ -51,7 +51,7 @@ describe Ai::StoreAgentService do
     describe "api_read" do
       it "runs a read endpoint against the API and feeds the result back to the model" do
         expect(api_client).to receive(:get).with("/products", {}).and_return(
-          { "success" => true, "products" => [{ "name" => "Cool Ebook", "price" => 999 }], "http_status" => 200 },
+          { "success" => true, "products" => [{ "id" => "p1", "name" => "Cool Ebook", "formatted_price" => "$9.99", "published" => true }], "http_status" => 200 },
         )
         allow(client).to receive(:chat).and_return(
           tool_call_message("api_read", { "endpoint" => "list_products" }),
@@ -62,6 +62,8 @@ describe Ai::StoreAgentService do
 
         expect(result[:reply]).to eq("Your product Cool Ebook is $9.99.")
         expect(client).to have_received(:chat).twice
+        # The product is surfaced as a display object for the chat to render inline as a card.
+        expect(result[:objects]).to include(include(type: "product", title: "Cool Ebook"))
       end
 
       it "expands path params into the endpoint path" do
