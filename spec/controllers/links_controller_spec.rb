@@ -597,6 +597,8 @@ describe LinksController, :vcr, inertia: true do
 
           expect(response).to be_successful
           expect(coffee_product.reload.suggested_price_cents).to eq(10000)
+          # The nil-priced amount is dropped entirely, not persisted as a variant.
+          expect(coffee_product.alive_variants.map(&:price_difference_cents)).to contain_exactly(10000)
         end
       end
 
