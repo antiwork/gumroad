@@ -552,6 +552,63 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(controller.logged_in_user.alive_cart.alive_cart_products).to be_empty
       end
 
+      it "does not treat a present-but-nonnumeric quantity as a removal" do
+        product = create(:product, user: seller)
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product = create(:cart_product, cart:, product:)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product.external_id },
+                price: product.price_cents,
+                quantity: "abc",
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        # "abc" is not a numeric zero, so it must NOT silently delete the existing item via the
+        # removal path. It falls through and fails the quantity validation, so the transaction
+        # rolls back and the existing item is preserved.
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_present
+        expect(cart_product.reload).not_to be_deleted
+      end
+
+      it "does not treat a fractional quantity as a removal" do
+        product = create(:product, user: seller)
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product = create(:cart_product, cart:, product:)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product.external_id },
+                price: product.price_cents,
+                quantity: 0.5,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        # 0.5 must NOT be treated as a numeric-zero removal (Integer() would truncate it to 0).
+        # It falls through, fails the integer/quantity validation, and the existing item is kept.
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_present
+        expect(cart_product.reload).not_to be_deleted
+      end
+
       it "returns an error when params are invalid" do
         expect do
           patch :update, params: {

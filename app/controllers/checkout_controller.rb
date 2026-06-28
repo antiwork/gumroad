@@ -38,9 +38,14 @@ class CheckoutController < ApplicationController
       cart.lock!
 
       updated_cart_products = items.filter_map do |item|
-        # A zero quantity signals removal; skip it so it isn't persisted (quantity must be > 0)
-        # and let the deletion step below clean up any existing matching record.
-        next if item[:quantity].present? && item[:quantity].to_i.zero?
+        # The frontend sends quantity 0 to signal removal (ConfigurationSelector falls back to
+        # `quantity ?? 0`). Skip those so they aren't persisted (quantity must be > 0) and let the
+        # deletion step below clean up any existing matching record. Match a real numeric zero only:
+        # a present-but-nonnumeric quantity ("abc") or a fractional one (0.5, which Integer() would
+        # truncate to 0) is NOT a removal signal and must fall through to validation instead of
+        # silently deleting the item.
+        quantity = Integer(item[:quantity], exception: false) if item[:quantity].present?
+        next if quantity&.zero? && item[:quantity].to_f.zero?
 
         product = Link.find_by_external_id!(item[:product][:id])
         option = item[:option_id].present? ? BaseVariant.find_by_external_id(item[:option_id]) : nil
