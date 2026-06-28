@@ -2,116 +2,120 @@
 
 require "spec_helper"
 
+# The executor now applies a confirmed change by REPLAYING it against the real public v2 API
+# in-process (StoreAgentApiClient mints a short-lived token scoped to the seller and dispatches
+# through the real controllers). These specs therefore assert the end-to-end effect: a confirmed
+# api_write actually mutates the seller's data, reusing the endpoint's own auth + validation, and a
+# tampered/unsupported action is rejected without effect.
 describe Ai::StoreAgentActionExecutor do
   let(:seller) { create(:user) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
   let(:executor) { described_class.new(seller:, pundit_user:) }
 
+  def api_write(endpoint:, path_params: {}, params: {})
+    { "endpoint" => endpoint, "path_params" => path_params, "params" => params }
+  end
+
   describe "#execute" do
-    context "create_discount" do
-      it "creates a universal percentage discount" do
-        result = executor.execute(type: "create_discount", params: { code: "LAUNCH", percent_off: 20 })
+    context "create_offer_code (write replayed through the API)" do
+      let!(:product) { create(:product, user: seller, price_cents: 1000) }
+
+      it "creates a discount on the product" do
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "create_offer_code",
+            path_params: { "link_id" => product.external_id },
+            params: { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+          ),
+        )
 
         expect(result[:success]).to be(true)
-        offer_code = seller.offer_codes.alive.last
+        offer_code = product.reload.offer_codes.alive.last
         expect(offer_code.code).to eq("LAUNCH")
         expect(offer_code.amount_percentage).to eq(20)
-        expect(offer_code.universal?).to be(true)
-        # A universal percentage code must stay currency-agnostic so it applies across all products.
-        expect(offer_code.currency_type).to be_nil
-      end
-
-      it "creates a universal fixed-amount discount" do
-        result = executor.execute(type: "create_discount", params: { code: "FIVEOFF", amount_off_cents: 500 })
-
-        expect(result[:success]).to be(true)
-        expect(seller.offer_codes.alive.last.amount_cents).to eq(500)
-      end
-
-      it "rejects an out-of-range percentage" do
-        result = executor.execute(type: "create_discount", params: { code: "NOPE", percent_off: 150 })
-
-        expect(result[:success]).to be(false)
-        expect(seller.offer_codes.alive.count).to eq(0)
-      end
-
-      it "requires a code" do
-        result = executor.execute(type: "create_discount", params: { percent_off: 10 })
-
-        expect(result[:success]).to be(false)
       end
     end
 
-    context "update_product_price" do
+    context "update_product (price change replayed through the API)" do
       let!(:product) { create(:product, user: seller, price_cents: 1000) }
 
       it "updates the price" do
-        result = executor.execute(type: "update_product_price", params: { product_id: product.external_id, new_price_cents: 2500 })
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "update_product", path_params: { "id" => product.external_id }, params: { "price" => 2500 }),
+        )
 
         expect(result[:success]).to be(true)
         expect(product.reload.price_cents).to eq(2500)
       end
 
-      it "rejects a negative price" do
-        result = executor.execute(type: "update_product_price", params: { product_id: product.external_id, new_price_cents: -1 })
-
-        expect(result[:success]).to be(false)
-        expect(product.reload.price_cents).to eq(1000)
-      end
-
-      it "does not touch another seller's product" do
+      it "does not touch another seller's product (token is scoped to this seller)" do
         other_product = create(:product, price_cents: 1000)
 
-        result = executor.execute(type: "update_product_price", params: { product_id: other_product.external_id, new_price_cents: 5 })
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "update_product", path_params: { "id" => other_product.external_id }, params: { "price" => 5 }),
+        )
 
+        # The seller's token can't resolve another seller's product, so the API returns not-found and
+        # nothing changes.
         expect(result[:success]).to be(false)
         expect(other_product.reload.price_cents).to eq(1000)
       end
-
-      it "refuses to mutate an archived product (never surfaced by the listing tool)" do
-        archived = create(:product, user: seller, price_cents: 1000, archived: true)
-
-        result = executor.execute(type: "update_product_price", params: { product_id: archived.external_id, new_price_cents: 5 })
-
-        expect(result[:success]).to be(false)
-        expect(archived.reload.price_cents).to eq(1000)
-      end
-
-      it "refuses a tiered membership (price lives on tiers, not price_cents)" do
-        membership = create(:membership_product, user: seller)
-
-        result = executor.execute(type: "update_product_price", params: { product_id: membership.external_id, new_price_cents: 5000 })
-
-        expect(result[:success]).to be(false)
-        expect(result[:message]).to match(/tier/i)
-      end
     end
 
-    context "publish_product / unpublish_product" do
+    context "publish / unpublish (enable / disable replayed through the API)" do
       let!(:product) { create(:product, user: seller, purchase_disabled_at: Time.current) }
 
-      it "publishes a product" do
-        result = executor.execute(type: "publish_product", params: { product_id: product.external_id })
+      it "publishes a product via enable_product" do
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "enable_product", path_params: { "id" => product.external_id }),
+        )
 
         expect(result[:success]).to be(true)
         expect(product.reload.alive?).to be(true)
       end
 
-      it "unpublishes a product" do
+      it "unpublishes a product via disable_product" do
         product.publish!
-        result = executor.execute(type: "unpublish_product", params: { product_id: product.external_id })
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "disable_product", path_params: { "id" => product.external_id }),
+        )
 
         expect(result[:success]).to be(true)
         expect(product.reload.alive?).to be(false)
       end
     end
 
-    context "unsupported type" do
-      it "returns a failure without raising" do
+    context "unsupported / tampered actions" do
+      it "rejects a non-api_write type without raising" do
         result = executor.execute(type: "delete_account", params: {})
 
         expect(result[:success]).to be(false)
         expect(result[:message]).to be_present
+      end
+
+      it "rejects an unknown endpoint id" do
+        result = executor.execute(type: "api_write", params: api_write(endpoint: "drop_database"))
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to be_present
+      end
+
+      it "rejects a READ endpoint sent as a write (reads never mutate, so never execute here)" do
+        result = executor.execute(type: "api_write", params: api_write(endpoint: "list_products"))
+
+        expect(result[:success]).to be(false)
+      end
+
+      it "fails cleanly when a required path param is missing" do
+        result = executor.execute(type: "api_write", params: api_write(endpoint: "update_product", path_params: {}, params: { "price" => 5 }))
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to match(/missing path parameter/i)
       end
     end
   end

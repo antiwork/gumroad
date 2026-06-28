@@ -10,9 +10,12 @@ export type ChatMessage = {
 };
 
 // A store change the agent has prepared. It is NOT applied until the seller confirms it, at which
-// point we POST it back to the `actions` endpoint.
+// point we POST it back to the `actions` endpoint. The agent now stages every change as a single
+// generic `api_write` (a real Gumroad API call it will replay after confirmation); `summary` is the
+// human-readable description shown on the confirmation card, and `params` carries the endpoint id
+// plus its path params and body so the server can replay the exact call.
 export type ProposedAction = {
-  type: "create_discount" | "update_product_price" | "publish_product" | "unpublish_product";
+  type: "api_write";
   params: Record<string, unknown>;
   summary: string;
 };

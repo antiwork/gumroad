@@ -2,126 +2,77 @@
 
 # Ai::StoreAgentActionExecutor applies a write action that the seller has explicitly confirmed in the
 # Agent chat UI. The agent service only ever *proposes* actions; this is the single place a store
-# mutation actually happens, and it deliberately re-validates everything rather than trusting the
-# proposal:
-#   - It re-resolves every product/discount by external_id scoped to the seller, so a tampered or
-#     stale id can't touch another seller's data.
-#   - It runs the SAME Pundit authorization the equivalent controller action runs, so the agent can
-#     never do something the seller couldn't do by hand.
-#   - It validates the action type against an allowlist; an unknown type is rejected, not guessed.
+# mutation actually happens.
 #
-# Returns { success:, message: } and never raises for expected validation failures.
+# Every confirmed action is a single catalog `api_write`: { endpoint, path_params, params }. The
+# executor re-validates the endpoint id against the catalog, confirms it is a write endpoint, and
+# REPLAYS the exact same request against the real public v2 API in-process, authenticated with a
+# short-lived token minted for this seller (see StoreAgentApiClient). Because it goes through the
+# real controller, the endpoint's own Doorkeeper scope check, Pundit/role authorization, and
+# validation run again — the executor can never do anything the seller's own API token couldn't, and
+# we never trust the proposal blindly:
+#   - An unknown or non-write endpoint id is rejected, not guessed.
+#   - The token is scoped to THIS seller, so a tampered id can't touch another seller's data; the API
+#     resolves every record under the token's resource owner.
+#
+# Returns { success:, message: } and never raises for expected API failures.
 class Ai::StoreAgentActionExecutor
-  SUPPORTED_TYPES = %w[create_discount update_product_price publish_product unpublish_product].freeze
+  # The agent now stages every change as a single generic catalog write. We keep the constant name
+  # (the controller checks it) but it contains just the one supported proposed-action type.
+  SUPPORTED_TYPES = %w[api_write].freeze
 
   def initialize(seller:, pundit_user:)
     @seller = seller
     @pundit_user = pundit_user
   end
 
-  # @param type [String] one of SUPPORTED_TYPES
-  # @param params [Hash] the params from the confirmed proposed action
+  # @param type [String] must be "api_write"
+  # @param params [Hash] { "endpoint" => id, "path_params" => {...}, "params" => {...} }
   # @return [Hash] { success: Boolean, message: String }
   def execute(type:, params:)
+    return failure("That action isn't supported.") unless type.to_s == "api_write"
+
     params = (params || {}).with_indifferent_access
-    case type.to_s
-    when "create_discount" then create_discount(params)
-    when "update_product_price" then update_product_price(params)
-    when "publish_product" then set_published(params, published: true)
-    when "unpublish_product" then set_published(params, published: false)
-    else
-      failure("That action isn't supported.")
-    end
-  rescue Pundit::NotAuthorizedError
-    failure("You don't have permission to do that.")
-  rescue ActiveRecord::RecordInvalid => e
-    failure(e.record&.errors&.full_messages&.first || "That change couldn't be saved.")
+    endpoint = Ai::StoreAgentApiCatalog.find(params[:endpoint])
+    return failure("That action isn't supported.") if endpoint.nil? || endpoint.read?
+
+    path = endpoint.expand_path(params[:path_params])
+    response = api_client.write(endpoint.method, path, normalize_body(params[:params]))
+
+    interpret(endpoint, response)
+  rescue ArgumentError => e
+    # Missing path param on a tampered/stale action.
+    failure(e.message)
   end
 
   private
     attr_reader :seller, :pundit_user
 
-    def create_discount(params)
-      authorize!([:checkout, OfferCode], :create?)
+    # Map the v2 API's { success:, message:, ... } envelope (and HTTP status) to the { success:,
+    # message: } shape the chat UI expects. Reuses the API's own validation messages so the seller
+    # sees the same error they would hitting the endpoint directly.
+    def interpret(endpoint, response)
+      status = response["http_status"].to_i
+      api_success = response["success"]
 
-      code = params[:code].to_s.strip
-      return failure("A discount code is required.") if code.blank?
-
-      # A universal percentage code must stay currency-agnostic: setting currency_type would scope it
-      # (via OfferCode.universal_with_matching_currency) to only one currency's products, so a
-      # multi-currency seller would get a "universal" percent code that silently skips some products.
-      # Only fixed-amount codes carry a currency.
-      attributes = { code:, universal: true }
-      if params[:percent_off].present?
-        percent = params[:percent_off].to_i
-        return failure("Percentage off must be between 1 and 100.") unless percent.between?(1, 100)
-        attributes[:amount_percentage] = percent
-      elsif params[:amount_off_cents].present?
-        cents = params[:amount_off_cents].to_i
-        return failure("Discount amount must be greater than zero.") unless cents.positive?
-        attributes[:amount_cents] = cents
-        attributes[:currency_type] = seller.currency_type
+      if api_success == true || (api_success.nil? && status.between?(200, 299))
+        success(response["message"].presence || "Done: #{endpoint.summary}")
+      elsif status == 401 || status == 403
+        failure("You don't have permission to do that.")
       else
-        return failure("Provide a percentage or a fixed amount off.")
-      end
-
-      offer_code = seller.offer_codes.build(attributes)
-      if offer_code.save
-        success("Created discount code #{offer_code.code}.")
-      else
-        failure(offer_code.errors.full_messages.first || "That discount couldn't be created.")
+        failure(response["message"].presence || response["error"].presence || "That change couldn't be saved.")
       end
     end
 
-    def update_product_price(params)
-      product = find_product(params[:product_id])
-      return failure("I couldn't find that product.") if product.nil?
-      authorize!(product, :update?)
-      # Mirror the service guard: tiered/variant-priced products keep their buyer-visible price on
-      # tiers/variants, so writing the flat price_cents would report success without changing what
-      # buyers pay. Reject here too so a replayed/tampered action can't slip past.
-      if product.is_tiered_membership? || product.alive_variants.exists?
-        return failure("That product is priced per tier/version and can't be changed from here.")
-      end
-
-      new_price_cents = params[:new_price_cents].to_i
-      return failure("Price must be zero or greater.") if new_price_cents.negative?
-
-      if product.update(price_cents: new_price_cents)
-        success("Updated the price of \"#{product.name}\".")
-      else
-        failure(product.errors.full_messages.first || "That price couldn't be saved.")
-      end
+    # The proposed params arrive with string keys (they round-tripped through JSON in the proposal).
+    # Hand the body to the client as a plain hash; the API normalizes types itself.
+    def normalize_body(raw)
+      return {} unless raw.respond_to?(:to_h)
+      raw.to_h
     end
 
-    def set_published(params, published:)
-      product = find_product(params[:product_id])
-      return failure("I couldn't find that product.") if product.nil?
-      authorize!(product, published ? :publish? : :unpublish?)
-
-      if published
-        return failure("Add an email to your account before publishing a product.") if product.user.email.blank?
-        product.publish!
-        success("Published \"#{product.name}\".")
-      else
-        product.unpublish!
-        success("Unpublished \"#{product.name}\".")
-      end
-    rescue Link::LinkInvalid
-      failure(product.errors.full_messages.first || "That product can't be published yet.")
-    end
-
-    def find_product(external_id)
-      return nil if external_id.blank?
-      # Mirror the service's scope (visible_and_not_archived) so a confirmed action carrying an
-      # archived product id — which the listing tool never surfaces — can't mutate it.
-      seller.products.visible_and_not_archived.find_by_external_id(external_id.to_s)
-    end
-
-    # Mirror controller-style authorization so the agent is bound by the seller's real permissions.
-    def authorize!(record, query)
-      policy = Pundit.policy!(pundit_user, record)
-      raise Pundit::NotAuthorizedError, query: query, record: record unless policy.public_send(query)
+    def api_client
+      @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
     end
 
     def success(message) = { success: true, message: }

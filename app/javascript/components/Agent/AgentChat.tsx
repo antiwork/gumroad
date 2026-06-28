@@ -35,7 +35,7 @@ const ProposedActionCard = ({
 }) => (
   <div className="flex flex-col gap-2 rounded-2xl border border-dashed p-4">
     <strong>Proposed change</strong>
-    <span>{action.summary}</span>
+    <span className="break-words">{action.summary}</span>
     {status === "applied" ? (
       <span role="status" className="text-green">
         Applied
@@ -127,10 +127,10 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
             <div className="flex max-w-[85%] flex-col gap-2">
               <div
                 className={`rounded-2xl px-4 py-2 ${
-                  message.role === "user" ? "bg-accent text-white" : "bg-filled border"
+                  message.role === "user" ? "bg-accent text-accent-foreground" : "bg-filled border"
                 }`}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap break-words">{message.content}</p>
               </div>
               {message.proposedAction ? (
                 <ProposedActionCard
@@ -182,8 +182,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           rows={2}
           aria-label="Message"
           disabled={isSending}
+          className="flex-1"
         />
-        <Button type="submit" color="accent" disabled={isSending || input.trim().length === 0}>
+        <Button type="submit" color="accent" className="shrink-0 whitespace-nowrap" disabled={isSending || input.trim().length === 0}>
           Send
         </Button>
       </form>

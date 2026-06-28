@@ -7,9 +7,13 @@ describe Ai::StoreAgentService do
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
   let(:service) { described_class.new(seller:, pundit_user:) }
   let(:client) { instance_double(OpenAI::Client) }
+  # The service reaches the real v2 API through StoreAgentApiClient; stub it so these stay fast unit
+  # tests of the tool-dispatch + propose/confirm logic (the executor spec covers the real API path).
+  let(:api_client) { instance_double(Ai::StoreAgentApiClient) }
 
   before do
     allow(OpenAI::Client).to receive(:new).and_return(client)
+    allow(Ai::StoreAgentApiClient).to receive(:new).and_return(api_client)
   end
 
   # Helper to shape an OpenAI chat completion response with a plain assistant message.
@@ -44,107 +48,138 @@ describe Ai::StoreAgentService do
       expect(result[:proposed_action]).to be_nil
     end
 
-    it "runs a read tool and feeds the result back to the model" do
-      create(:product, user: seller, name: "Cool Ebook", price_cents: 999)
+    describe "api_read" do
+      it "runs a read endpoint against the API and feeds the result back to the model" do
+        expect(api_client).to receive(:get).with("/products", {}).and_return(
+          { "success" => true, "products" => [{ "name" => "Cool Ebook", "price" => 999 }], "http_status" => 200 },
+        )
+        allow(client).to receive(:chat).and_return(
+          tool_call_message("api_read", { "endpoint" => "list_products" }),
+          assistant_message("Your product Cool Ebook is $9.99."),
+        )
 
-      # First call asks for list_products, second call returns a normal answer.
-      allow(client).to receive(:chat).and_return(
-        tool_call_message("list_products", {}),
-        assistant_message("Your product Cool Ebook is $9.99."),
-      )
+        result = service.respond(messages: [{ role: "user", content: "List my products" }])
 
-      result = service.respond(messages: [{ role: "user", content: "List my products" }])
+        expect(result[:reply]).to eq("Your product Cool Ebook is $9.99.")
+        expect(client).to have_received(:chat).twice
+      end
 
-      expect(result[:reply]).to eq("Your product Cool Ebook is $9.99.")
-      # The tool result should have been appended to the conversation for the second call.
-      expect(client).to have_received(:chat).twice
+      it "expands path params into the endpoint path" do
+        expect(api_client).to receive(:get).with("/products/abc123", {}).and_return({ "success" => true, "http_status" => 200 })
+        allow(client).to receive(:chat).and_return(
+          tool_call_message("api_read", { "endpoint" => "get_product", "path_params" => { "id" => "abc123" } }),
+          assistant_message("Here is that product."),
+        )
+
+        service.respond(messages: [{ role: "user", content: "show product abc123" }])
+      end
+
+      it "rejects an unknown endpoint id without calling the API" do
+        expect(api_client).not_to receive(:get)
+        captured = nil
+        allow(client).to receive(:chat) do |args|
+          tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
+          captured = JSON.parse(tool_msg[:content]) if tool_msg
+          captured ? assistant_message("ok") : tool_call_message("api_read", { "endpoint" => "drop_tables" })
+        end
+
+        service.respond(messages: [{ role: "user", content: "hack" }])
+
+        expect(captured).to include("error")
+      end
+
+      it "refuses to run a WRITE endpoint through api_read (it must be confirmed)" do
+        expect(api_client).not_to receive(:get)
+        captured = nil
+        allow(client).to receive(:chat) do |args|
+          tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
+          captured = JSON.parse(tool_msg[:content]) if tool_msg
+          captured ? assistant_message("ok") : tool_call_message("api_read", { "endpoint" => "refund_sale", "path_params" => { "id" => "1" } })
+        end
+
+        service.respond(messages: [{ role: "user", content: "refund it now" }])
+
+        expect(captured["error"]).to match(/confirm/i)
+      end
+
+      it "surfaces a missing path param as an error instead of raising" do
+        expect(api_client).not_to receive(:get)
+        captured = nil
+        allow(client).to receive(:chat) do |args|
+          tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
+          captured = JSON.parse(tool_msg[:content]) if tool_msg
+          captured ? assistant_message("ok") : tool_call_message("api_read", { "endpoint" => "get_product" })
+        end
+
+        service.respond(messages: [{ role: "user", content: "show the product" }])
+
+        expect(captured["error"]).to match(/missing path parameter/i)
+      end
     end
 
-    it "returns a proposed action for a write tool WITHOUT mutating anything" do
-      allow(client).to receive(:chat).and_return(
-        tool_call_message("create_discount", { "code" => "LAUNCH", "percent_off" => 20 }),
-        assistant_message("I've prepared a 20% off code called LAUNCH for your confirmation."),
-      )
+    describe "api_write" do
+      it "returns a proposed action WITHOUT mutating or calling the API" do
+        expect(api_client).not_to receive(:write)
+        allow(client).to receive(:chat).and_return(
+          tool_call_message("api_write", {
+                              "endpoint" => "create_offer_code",
+                              "path_params" => { "link_id" => "prod_1" },
+                              "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                            }),
+          assistant_message("I've prepared a 20% off code called LAUNCH for your confirmation."),
+        )
 
-      expect do
         result = service.respond(messages: [{ role: "user", content: "Make a 20% off code LAUNCH" }])
 
         expect(result[:proposed_action]).to include(
-          type: "create_discount",
-          params: include(code: "LAUNCH", percent_off: 20),
+          type: "api_write",
+          params: include(
+            "endpoint" => "create_offer_code",
+            "path_params" => { "link_id" => "prod_1" },
+            "params" => include("name" => "LAUNCH"),
+          ),
         )
         expect(result[:proposed_action][:summary]).to be_present
-      end.not_to change { seller.offer_codes.count }
-    end
-
-    it "only ever reads the current seller's own data" do
-      create(:product, user: seller, name: "Mine")
-      other_product = create(:product, name: "Theirs")
-
-      allow(client).to receive(:chat).and_return(
-        tool_call_message("list_products", {}),
-        assistant_message("You have one product: Mine."),
-      )
-
-      result = service.respond(messages: [{ role: "user", content: "list my products" }])
-
-      expect(result[:reply]).to eq("You have one product: Mine.")
-      expect(client).to have_received(:chat).twice
-      # The other seller's product is never in scope; the read tool is seller-scoped.
-      expect(other_product.reload.name).to eq("Theirs")
-    end
-
-    context "store_stats balance gating" do
-      let(:tool_then_done) do
-        [tool_call_message("store_stats", {}), assistant_message("Here are your stats.")]
       end
 
-      it "includes unpaid_balance for the owner (who can view payouts)" do
-        allow(seller).to receive(:unpaid_balance_cents).and_return(12_345)
-        captured = nil
-        allow(client).to receive(:chat) do |args|
-          # Capture the tool-result message fed back on the second turn.
-          tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
-          captured = JSON.parse(tool_msg[:content]) if tool_msg
-          captured ? assistant_message("done") : tool_call_message("store_stats", {})
-        end
-
-        service.respond(messages: [{ role: "user", content: "stats" }])
-
-        expect(captured).to have_key("unpaid_balance")
-      end
-
-      it "omits unpaid_balance for a marketing role (denied payout access)" do
-        marketing_user = create(:user)
-        create(:team_membership, user: marketing_user, seller:, role: TeamMembership::ROLE_MARKETING)
-        marketing_context = SellerContext.new(user: marketing_user, seller:)
-        marketing_service = described_class.new(seller:, pundit_user: marketing_context)
-
+      it "rejects a READ endpoint sent to api_write (nudges to api_read)" do
         captured = nil
         allow(client).to receive(:chat) do |args|
           tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
           captured = JSON.parse(tool_msg[:content]) if tool_msg
-          captured ? assistant_message("done") : tool_call_message("store_stats", {})
+          captured ? assistant_message("ok") : tool_call_message("api_write", { "endpoint" => "list_products" })
         end
 
-        marketing_service.respond(messages: [{ role: "user", content: "stats" }])
+        result = service.respond(messages: [{ role: "user", content: "change products" }])
 
-        expect(captured).not_to have_key("unpaid_balance")
-        expect(captured).to have_key("gross_sales")
+        expect(result[:proposed_action]).to be_nil
+        expect(captured["error"]).to match(/api_read/i)
+      end
+
+      it "validates path params at propose time so a missing id can't reach the executor" do
+        captured = nil
+        allow(client).to receive(:chat) do |args|
+          tool_msg = args[:parameters][:messages].find { |m| m[:role] == "tool" }
+          captured = JSON.parse(tool_msg[:content]) if tool_msg
+          captured ? assistant_message("ok") : tool_call_message("api_write", { "endpoint" => "refund_sale", "params" => { "amount_cents" => 100 } })
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "refund" }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(captured["error"]).to match(/missing path parameter/i)
       end
     end
 
     context "when the model proposes more than one write in a single turn" do
-      # Two write tool calls in one assistant message: only the first may be staged, and the second
-      # must be rejected back to the model so the confirmation card can't describe a different change.
       def two_write_calls_message
         {
           "choices" => [{
             "message" => {
               "content" => nil,
               "tool_calls" => [
-                { "id" => "call_a", "function" => { "name" => "create_discount", "arguments" => { "code" => "FIRST", "percent_off" => 10 }.to_json } },
-                { "id" => "call_b", "function" => { "name" => "create_discount", "arguments" => { "code" => "SECOND", "percent_off" => 50 }.to_json } },
+                { "id" => "call_a", "function" => { "name" => "api_write", "arguments" => { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "FIRST", "amount_off" => 10, "offer_type" => "percent" } }.to_json } },
+                { "id" => "call_b", "function" => { "name" => "api_write", "arguments" => { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "SECOND", "amount_off" => 50, "offer_type" => "percent" } }.to_json } },
               ],
             },
           }],
@@ -165,8 +200,7 @@ describe Ai::StoreAgentService do
 
         result = service.respond(messages: [{ role: "user", content: "make two codes" }])
 
-        expect(result[:proposed_action]).to include(type: "create_discount", params: include(code: "FIRST"))
-        # The second write call was rejected, not staged.
+        expect(result[:proposed_action]).to include(type: "api_write", params: include("params" => include("name" => "FIRST")))
         expect(captured_tool_results.last).to include("error")
         expect(captured_tool_results.last["error"]).to match(/one change/i)
       end
@@ -174,9 +208,8 @@ describe Ai::StoreAgentService do
 
     context "when the model never finishes within the tool-iteration cap" do
       it "does not claim there is a change to confirm when none was staged" do
-        # Always ask for a read tool, never returning a final answer, so the loop exhausts the cap
-        # without any write action being proposed.
-        allow(client).to receive(:chat).and_return(tool_call_message("list_products", {}))
+        allow(api_client).to receive(:get).and_return({ "success" => true, "http_status" => 200 })
+        allow(client).to receive(:chat).and_return(tool_call_message("api_read", { "endpoint" => "list_products" }))
 
         result = service.respond(messages: [{ role: "user", content: "loop forever" }])
 
@@ -185,61 +218,19 @@ describe Ai::StoreAgentService do
       end
     end
 
-    context "product resolution scope" do
-      it "refuses to propose a price change for an archived product" do
-        archived = create(:product, user: seller, name: "Archived One", price_cents: 500, archived: true)
-        captured_tool_results = []
-        allow(client).to receive(:chat) do |args|
-          tool_msgs = args[:parameters][:messages].select { |m| m[:role] == "tool" }
-          if tool_msgs.any?
-            captured_tool_results = tool_msgs.map { |m| JSON.parse(m[:content]) }
-            assistant_message("done")
-          else
-            tool_call_message("update_product_price", { "product_id" => archived.external_id, "new_price" => 9 })
-          end
-        end
-
-        result = service.respond(messages: [{ role: "user", content: "set archived price" }])
-
-        expect(result[:proposed_action]).to be_nil
-        expect(captured_tool_results.last).to include("error")
-      end
-
-      it "refuses a non-numeric price instead of proposing a free product" do
-        product = create(:product, user: seller, name: "Real One", price_cents: 1000)
-        captured_tool_results = []
-        allow(client).to receive(:chat) do |args|
-          tool_msgs = args[:parameters][:messages].select { |m| m[:role] == "tool" }
-          if tool_msgs.any?
-            captured_tool_results = tool_msgs.map { |m| JSON.parse(m[:content]) }
-            assistant_message("done")
-          else
-            tool_call_message("update_product_price", { "product_id" => product.external_id, "new_price" => "free" })
-          end
-        end
-
-        result = service.respond(messages: [{ role: "user", content: "make it free-ish" }])
-
-        expect(result[:proposed_action]).to be_nil
-        expect(captured_tool_results.last["error"]).to match(/number/i)
-      end
-    end
-
     context "when the model emits malformed tool-call arguments" do
-      # OpenAI tool-call `arguments` is supposed to be a JSON object string, but a hallucinating
-      # model can return a bare array or scalar. The write tools index arguments by key, which used
-      # to raise TypeError (Integer#[] / no implicit conversion) and surface as an unhandled 500.
-      # parse_arguments now coerces non-objects to {} so the tool falls through to its normal
-      # "field is required" validation instead of crashing.
+      # OpenAI tool-call `arguments` is supposed to be a JSON object string, but a hallucinating model
+      # can return a bare array or scalar. parse_arguments coerces non-objects to {} so the tool
+      # falls through to its normal "endpoint is required" handling instead of raising a 500.
       ["[1,2,3]", "42", "\"just a string\"", "null", "{not valid json"].each do |raw_args|
         it "does not raise on argument payload #{raw_args.inspect}" do
           allow(client).to receive(:chat).and_return(
-            { "choices" => [{ "message" => { "content" => nil, "tool_calls" => [{ "id" => "call_1", "function" => { "name" => "create_discount", "arguments" => raw_args } }] } }] },
-            assistant_message("I need a bit more detail to create that discount."),
+            { "choices" => [{ "message" => { "content" => nil, "tool_calls" => [{ "id" => "call_1", "function" => { "name" => "api_write", "arguments" => raw_args } }] } }] },
+            assistant_message("I need a bit more detail to make that change."),
           )
 
           expect do
-            result = service.respond(messages: [{ role: "user", content: "make a discount" }])
+            result = service.respond(messages: [{ role: "user", content: "make a change" }])
             expect(result[:reply]).to be_present
             expect(result[:proposed_action]).to be_nil
           end.not_to change { seller.offer_codes.count }

@@ -29,26 +29,39 @@ class Ai::StoreAgentService
   # echoing an unbounded client-supplied history back to OpenAI.
   MAX_HISTORY_MESSAGES = 20
 
-  SYSTEM_PROMPT = <<~PROMPT.strip
+  # The system prompt is assembled at runtime (see #system_prompt) so it can embed the live catalog
+  # manifest of every endpoint the agent can reach. This keeps the prompt and the actual tool surface
+  # from drifting apart as endpoints are added to the catalog.
+  SYSTEM_PROMPT_HEADER = <<~PROMPT.strip
     You are Gumroad's store assistant. You help a creator understand and manage their own Gumroad
     store through a chat interface in their dashboard.
 
-    You can:
-    - Answer questions about the creator's products, sales, payouts, and discounts using the read tools.
-    - Propose changes to the store (create a discount code, change a product's price, publish or
-      unpublish a product) using the write tools.
+    You have two tools that together expose the creator's ENTIRE Gumroad API:
+    - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
+      subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
+    - api_write: PROPOSE any change (create/update/delete products, discounts, variants, upsells,
+      emails, refunds, shipping, licenses, webhooks, profile, and more). Writes NEVER take effect
+      immediately — they produce a proposed change the creator must review and confirm in the UI.
+
+    To call a tool you pass `endpoint` (one of the ids listed below), `path_params` (the ids the
+    endpoint's path needs, e.g. the product id), and `params` (query for reads, body for writes).
 
     Rules:
-    - Only ever act on the current creator's own store. You cannot access other creators' data.
-    - Read tools return live data; use them instead of guessing numbers.
-    - Write tools NEVER take effect immediately. They produce a proposed change that the creator must
-      review and confirm in the UI. Never claim a change has been made; say you've prepared it for
-      their confirmation.
-    - Propose at most one change per reply. If the creator asks for several changes, do the first and
-      tell them you'll continue once they confirm.
-    - Prices are in the product's own currency. Amounts you pass to tools are in whole currency units
-      (dollars), not cents.
+    - Only ever act on the current creator's own store. You cannot access other creators' data; the
+      API enforces this and an endpoint the creator's role can't use will simply fail.
+    - Always use api_read to get real ids and live numbers before acting. Never invent ids.
+    - Never claim a change has been made. For any api_write, say you've prepared it for the creator's
+      confirmation.
+    - Propose at most ONE change per reply. If the creator asks for several, do the first and tell
+      them you'll continue once they confirm.
+    - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
     - Be concise and concrete. Reference products by name.
+
+    READ endpoints (api_read):
+    %<reads>s
+
+    WRITE endpoints (api_write — each requires confirmation):
+    %<writes>s
   PROMPT
 
   ProposedAction = Struct.new(:type, :params, :summary, keyword_init: true) do
@@ -137,183 +150,112 @@ class Ai::StoreAgentService
       end
       raise Error, "Message is required" if history.empty? || history.last[:role] != "user"
 
-      [{ role: "system", content: SYSTEM_PROMPT }, *history]
+      [{ role: "system", content: system_prompt }, *history]
     end
 
+    # Assemble the system prompt with the live read/write endpoint manifests embedded, so the model
+    # is told exactly which endpoint ids exist and what each does.
+    def system_prompt
+      format(
+        SYSTEM_PROMPT_HEADER,
+        reads: Ai::StoreAgentApiCatalog.manifest(:read),
+        writes: Ai::StoreAgentApiCatalog.manifest(:write),
+      )
+    end
+
+    # Two generic tools drive the whole catalog. `api_read` runs a read endpoint immediately;
+    # `api_write` turns a write endpoint into a single proposed action (never mutates here).
     def run_tool(name:, arguments:)
       case name
-      when "list_products" then [tool_list_products, nil]
-      when "store_stats" then [tool_store_stats, nil]
-      when "list_discounts" then [tool_list_discounts, nil]
-      when "create_discount" then propose_create_discount(arguments)
-      when "update_product_price" then propose_update_product_price(arguments)
-      when "publish_product" then propose_set_published(arguments, published: true)
-      when "unpublish_product" then propose_set_published(arguments, published: false)
+      when "api_read" then run_api_read(arguments)
+      when "api_write" then propose_api_write(arguments)
       else
         [{ error: "Unknown tool: #{name}" }, nil]
       end
     end
 
-    # ---- Read tools (auto-executed, current_seller-scoped) ----
+    # ---- api_read: auto-executed, creator-scoped via the real v2 API ----
 
-    def tool_list_products
-      products = seller.products.visible_and_not_archived.order(created_at: :desc).limit(50).to_a
-      sales_counts = cached_sales_counts_for(products)
-      {
-        products: products.map do |product|
-          {
-            id: product.external_id,
-            name: product.name,
-            price: format_amount(product.price_cents, product.price_currency_type),
-            currency: product.price_currency_type,
-            published: product.alive?,
-            sales_count: sales_counts[product.id] || 0,
-          }
-        end,
-      }
-    end
-
-    # Read each product's sales count from its most recent ProductCachedValue row in two queries,
-    # instead of running a per-product Elasticsearch count (which would be a 50x N+1).
-    def cached_sales_counts_for(products)
-      return {} if products.empty?
-
-      latest_ids = ProductCachedValue.where(product_id: products.map(&:id)).group(:product_id).maximum(:id).values
-      return {} if latest_ids.empty?
-
-      ProductCachedValue.where(id: latest_ids).pluck(:product_id, :successful_sales_count).to_h
-    end
-
-    def tool_store_stats
-      stats = {
-        total_products: seller.products.visible_and_not_archived.count,
-        published_products: seller.products.alive.count,
-        gross_sales: format_amount(seller.sales_cents_total, seller.currency_type),
-        currency: seller.currency_type,
-      }
-      # Payout/balance data is gated by the SAME policy as the Payouts page (BalancePolicy#index?),
-      # which excludes roles like marketing. Only expose the unpaid balance to roles that can already
-      # see it through the dashboard, so the agent can't become a side channel around that policy.
-      if can_view_balance?
-        stats[:unpaid_balance] = format_amount(seller.unpaid_balance_cents, seller.currency_type)
+    def run_api_read(arguments)
+      endpoint = Ai::StoreAgentApiCatalog.find(arguments["endpoint"])
+      if endpoint.nil?
+        return [{ error: "Unknown endpoint. Use one of the read endpoint ids listed for api_read." }, nil]
       end
-      stats
-    end
-
-    def can_view_balance?
-      Pundit.policy!(pundit_user, :balance).index?
-    end
-
-    def tool_list_discounts
-      offer_codes = seller.offer_codes.alive.order(created_at: :desc).limit(50)
-      {
-        discounts: offer_codes.map do |offer_code|
-          {
-            id: offer_code.external_id,
-            code: offer_code.code,
-            amount: offer_code.is_percent? ? "#{offer_code.amount_percentage}%" : format_amount(offer_code.amount_cents, seller.currency_type),
-            universal: offer_code.universal?,
-          }
-        end,
-      }
-    end
-
-    # ---- Write tools (return a proposed action; never mutate) ----
-
-    def propose_create_discount(arguments)
-      code = arguments["code"].to_s.strip
-      percent_off = arguments["percent_off"]
-      amount_off = arguments["amount_off"]
-
-      if code.blank?
-        return [{ error: "A discount code is required." }, nil]
-      end
-      if percent_off.blank? && amount_off.blank?
-        return [{ error: "Provide either percent_off or amount_off." }, nil]
+      unless endpoint.read?
+        # A write id was sent to the read tool. Don't run it (that would mutate without confirmation);
+        # tell the model to use api_write so it goes through the confirmation card.
+        return [{ error: "#{endpoint.id} changes data — use api_write so the creator can confirm it." }, nil]
       end
 
-      summary =
-        if percent_off.present?
-          "Create discount code #{code} for #{percent_off.to_i}% off (applies to all products)."
-        else
-          "Create discount code #{code} for #{format_amount(string_to_price_cents(seller.currency_type, amount_off.to_s), seller.currency_type)} off (applies to all products)."
-        end
+      path = endpoint.expand_path(arguments["path_params"])
+      result = api_client.get(path, sanitize_param_hash(arguments["params"]))
+      [result, nil]
+    rescue ArgumentError => e
+      # Missing/blank path param (e.g. the model forgot the product id).
+      [{ error: e.message }, nil]
+    end
 
+    # ---- api_write: returns a proposed action; never mutates ----
+
+    def propose_api_write(arguments)
+      endpoint = Ai::StoreAgentApiCatalog.find(arguments["endpoint"])
+      if endpoint.nil?
+        return [{ error: "Unknown endpoint. Use one of the write endpoint ids listed for api_write." }, nil]
+      end
+      unless endpoint.write?
+        # A read id was sent to the write tool. Reads never need confirmation; nudge the model to use
+        # api_read instead so it gets the data immediately.
+        return [{ error: "#{endpoint.id} only reads data — use api_read to get it immediately." }, nil]
+      end
+
+      path_params = sanitize_param_hash(arguments["path_params"])
+      body = sanitize_param_hash(arguments["params"])
+      # Validate the path can actually be built now (so the confirmation card never describes a call
+      # that would fail on a missing id at execute time).
+      begin
+        endpoint.expand_path(path_params)
+      rescue ArgumentError => e
+        return [{ error: e.message }, nil]
+      end
+
+      summary = write_summary(endpoint, path_params, body)
       action = ProposedAction.new(
-        type: "create_discount",
-        params: { code:, percent_off: percent_off.presence&.to_i, amount_off_cents: amount_off.present? ? string_to_price_cents(seller.currency_type, amount_off.to_s) : nil }.compact,
+        type: "api_write",
+        # Everything the executor needs to replay the exact same call after the creator confirms.
+        params: { "endpoint" => endpoint.id, "path_params" => path_params, "params" => body },
         summary:,
       )
       [{ proposed: true, summary: }, action]
     end
 
-    def propose_update_product_price(arguments)
-      product = find_product(arguments["product_id"])
-      return [{ error: "I couldn't find that product." }, nil] if product.nil?
-      # Tiered memberships and variant-priced products keep the buyer-visible price on their
-      # tiers/variants, not the product's own price_cents column — changing price_cents there would
-      # silently no-op the displayed price. Refuse rather than report a misleading success.
-      if priced_by_variants?(product)
-        return [{ error: "\"#{product.name}\" is priced per tier/version, so I can't change its price from here. Edit it on the product page." }, nil]
-      end
-
-      new_price = arguments["new_price"]
-      return [{ error: "A new price is required." }, nil] if new_price.blank?
-      # string_to_price_cents turns a digit-less string into 0 cents, which would silently propose
-      # making the product free. Require an actual number so garbage can't become a $0 price.
-      return [{ error: "The new price must be a number." }, nil] unless new_price.to_s.match?(/\d/)
-
-      new_price_cents = string_to_price_cents(product.price_currency_type, new_price.to_s)
-      summary = "Change the price of \"#{product.name}\" from " \
-                "#{format_amount(product.price_cents, product.price_currency_type)} to " \
-                "#{format_amount(new_price_cents, product.price_currency_type)}."
-      action = ProposedAction.new(
-        type: "update_product_price",
-        params: { product_id: product.external_id, new_price_cents: },
-        summary:,
-      )
-      [{ proposed: true, summary: }, action]
+    # A human-readable description of the pending change for the confirmation card. Built from the
+    # catalog summary plus the concrete ids/params so the creator sees exactly what will happen.
+    def write_summary(endpoint, path_params, body)
+      parts = [endpoint.summary]
+      detail = path_params.merge(body).map { |k, v| "#{k}: #{v}" }.join(", ")
+      parts << "(#{detail})" if detail.present?
+      parts.join(" ")
     end
 
-    def propose_set_published(arguments, published:)
-      product = find_product(arguments["product_id"])
-      return [{ error: "I couldn't find that product." }, nil] if product.nil?
+    # Tool-call sub-objects are supposed to be JSON objects; a hallucinating model can emit an array
+    # or scalar. Coerce anything that isn't a Hash to an empty hash, and stringify keys, so downstream
+    # indexing/path-expansion can't raise a TypeError that surfaces as a 500.
+    def sanitize_param_hash(raw)
+      return {} unless raw.is_a?(Hash)
+      raw.transform_keys(&:to_s)
+    end
 
-      verb = published ? "Publish" : "Unpublish"
-      summary = "#{verb} \"#{product.name}\"."
-      action = ProposedAction.new(
-        type: published ? "publish_product" : "unpublish_product",
-        params: { product_id: product.external_id },
-        summary:,
-      )
-      [{ proposed: true, summary: }, action]
+    def api_client
+      @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
     end
 
     # ---- helpers ----
 
-    def find_product(external_id)
-      return nil if external_id.blank?
-      # Match the listing tool's scope (visible_and_not_archived): the model is only ever shown
-      # non-archived products, so an archived id can only arrive by a seller typing it in. Don't let
-      # the agent propose price/publish changes against archived products the UI never surfaced.
-      seller.products.visible_and_not_archived.find_by_external_id(external_id.to_s)
-    end
-
-    # True when the buyer-visible price lives on tiers/variants rather than the product's own
-    # price_cents column, so a flat price_cents change wouldn't affect what buyers actually pay.
-    def priced_by_variants?(product)
-      product.is_tiered_membership? || product.alive_variants.exists?
-    end
-
-    def format_amount(cents, currency_type)
-      MoneyFormatter.format(cents.to_i, (currency_type || "usd").to_sym, symbol: true, no_cents_if_whole: false)
-    end
-
     def parse_arguments(raw)
       return {} if raw.blank?
       # OpenAI tool-call arguments are *supposed* to be a JSON object, but a hallucinating model can
-      # emit a bare array ("[1,2,3]") or scalar ("42"). The propose_* tools index arguments by key
-      # (arguments["code"]), which raises TypeError on an Array/Integer and would surface as an
+      # emit a bare array ("[1,2,3]") or scalar ("42"). The tools index arguments by key
+      # (arguments["endpoint"]), which raises TypeError on an Array/Integer and would surface as an
       # unhandled 500. Coerce anything that isn't an object to an empty hash so the tool falls through
       # to its normal "field is required" validation instead.
       parsed = JSON.parse(raw)
@@ -326,32 +268,31 @@ class Ai::StoreAgentService
       @_client ||= OpenAI::Client.new(request_timeout: REQUEST_TIMEOUT_IN_SECONDS)
     end
 
+    # Two generic tools. The endpoint id (constrained to the catalog by an enum) selects which of the
+    # ~60 real API endpoints to hit; path_params/params carry the ids and payload. Keeping the JSON
+    # schema this small avoids a 60-function tool list while still reaching the entire API.
     def tool_schemas
       [
-        tool_schema("list_products", "List the creator's products with price, currency, publish status, and sales count.", {}),
-        tool_schema("store_stats", "Get high-level store stats: product counts, gross sales, and unpaid balance.", {}),
-        tool_schema("list_discounts", "List the creator's active discount codes.", {}),
         tool_schema(
-          "create_discount",
-          "Propose creating a universal discount code that applies to all products. Provide exactly one of percent_off or amount_off.",
+          "api_read",
+          "Read live data from the creator's Gumroad store by calling a READ API endpoint. Runs immediately.",
           {
-            code: { type: "string", description: "The discount code, e.g. SUMMER25." },
-            percent_off: { type: "integer", description: "Percentage off, 1-100." },
-            amount_off: { type: "number", description: "Fixed amount off in whole currency units (dollars)." },
+            endpoint: { type: "string", enum: Ai::StoreAgentApiCatalog.read_ids, description: "Which read endpoint to call (see the READ endpoints list)." },
+            path_params: { type: "object", description: "Ids the endpoint's path needs, e.g. {\"id\": \"<product id>\"}. Omit if none.", additionalProperties: { type: "string" } },
+            params: { type: "object", description: "Query parameters, e.g. {\"after\": \"2024-01-01\"}. Omit if none." },
           },
-          required: ["code"],
+          required: ["endpoint"],
         ),
         tool_schema(
-          "update_product_price",
-          "Propose changing a product's price.",
+          "api_write",
+          "PROPOSE a change to the creator's store by calling a WRITE API endpoint. Does NOT take effect until the creator confirms. Propose only one change per reply.",
           {
-            product_id: { type: "string", description: "The product id from list_products." },
-            new_price: { type: "number", description: "The new price in whole currency units (dollars)." },
+            endpoint: { type: "string", enum: Ai::StoreAgentApiCatalog.write_ids, description: "Which write endpoint to call (see the WRITE endpoints list)." },
+            path_params: { type: "object", description: "Ids the endpoint's path needs, e.g. {\"id\": \"<product id>\"}. Omit if none.", additionalProperties: { type: "string" } },
+            params: { type: "object", description: "Request body. Monetary amounts are in cents (integer). Omit if none." },
           },
-          required: %w[product_id new_price],
+          required: ["endpoint"],
         ),
-        tool_schema("publish_product", "Propose publishing a product so it becomes available for sale.", { product_id: { type: "string", description: "The product id from list_products." } }, required: ["product_id"]),
-        tool_schema("unpublish_product", "Propose unpublishing a product so it is no longer available for sale.", { product_id: { type: "string", description: "The product id from list_products." } }, required: ["product_id"]),
       ]
     end
 
