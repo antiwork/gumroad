@@ -50,6 +50,7 @@ describe Api::Mobile::AgentController do
         "success" => true,
         "reply" => "You have 3 products.",
         "proposed_action" => nil,
+        "objects" => [],
       )
     end
 
@@ -85,7 +86,7 @@ describe Api::Mobile::AgentController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { @auth_params.merge(type: "create_discount", params: { code: "LAUNCH", percent_off: 20 }) }
+    let(:valid_params) { @auth_params.merge(type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 }) }
 
     it "executes a confirmed action and returns the result" do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
@@ -102,8 +103,8 @@ describe Api::Mobile::AgentController do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
       allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
       expect(executor_double).to receive(:execute).with(
-        type: "create_discount",
-        params: { "code" => "LAUNCH", "percent_off" => "20" },
+        type: "api_write",
+        params: { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => "20" },
       ).and_return(success: true, message: "Created discount LAUNCH.")
 
       post :execute, params: valid_params

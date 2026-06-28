@@ -35,7 +35,7 @@ describe Api::Internal::AgentMessagesController do
         post :create, params: valid_params, format: :json
 
         expect(response).to be_successful
-        expect(response.parsed_body).to eq("success" => true, "reply" => "You have 3 products.", "proposed_action" => nil)
+        expect(response.parsed_body).to eq("success" => true, "reply" => "You have 3 products.", "proposed_action" => nil, "objects" => [])
       end
 
       it "rejects an empty message list" do
@@ -48,7 +48,7 @@ describe Api::Internal::AgentMessagesController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { { type: "create_discount", params: { code: "LAUNCH", percent_off: 20 } } }
+    let(:valid_params) { { type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } } }
 
     it_behaves_like "authentication required for action", :post, :execute do
       let(:request_params) { valid_params }
