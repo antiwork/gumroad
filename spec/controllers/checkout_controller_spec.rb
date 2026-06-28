@@ -486,6 +486,72 @@ describe CheckoutController, type: :controller, inertia: true do
         )
       end
 
+      it "removes an existing cart product when its quantity is zero" do
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product1 = create(:cart_product, cart:, product: product1)
+        create(:cart_product, cart:, product: product2)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product1.external_id },
+                price: product1.price_cents,
+                quantity: 0,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              },
+              {
+                product: { id: product2.external_id },
+                price: product2.price_cents,
+                quantity: 1,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+
+        cart.reload
+        expect(cart_product1.reload).to be_deleted
+        expect(cart.alive_cart_products.sole.product).to eq(product2)
+      end
+
+      it "does not create a cart product when its quantity is zero" do
+        product = create(:product, user: seller)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: product.external_id },
+                  price: product.price_cents,
+                  quantity: 0,
+                  rent: false,
+                  referrer: "direct",
+                  url_parameters: {}
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change(CartProduct, :count)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(controller.logged_in_user.alive_cart.alive_cart_products).to be_empty
+      end
+
       it "returns an error when params are invalid" do
         expect do
           patch :update, params: {

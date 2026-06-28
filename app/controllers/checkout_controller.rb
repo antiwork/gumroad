@@ -37,7 +37,11 @@ class CheckoutController < ApplicationController
       cart.save!
       cart.lock!
 
-      updated_cart_products = items.map do |item|
+      updated_cart_products = items.filter_map do |item|
+        # A zero quantity signals removal; skip it so it isn't persisted (quantity must be > 0)
+        # and let the deletion step below clean up any existing matching record.
+        next if item[:quantity].present? && item[:quantity].to_i.zero?
+
         product = Link.find_by_external_id!(item[:product][:id])
         option = item[:option_id].present? ? BaseVariant.find_by_external_id(item[:option_id]) : nil
 
