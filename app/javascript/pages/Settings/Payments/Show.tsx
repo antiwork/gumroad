@@ -1122,9 +1122,7 @@ export default function PaymentsPage() {
                   </Button>
                 </Tab>
               ) : null}
-              {props.user.country_code === "BR" ||
-              props.user.can_connect_stripe ||
-              props.stripe_connect.has_connected_stripe ? (
+              {props.user.country_code === "BR" || props.stripe_connect.has_connected_stripe ? (
                 <Tab key="stripe" isSelected={selectedPayoutMethod === "stripe"} asChild>
                   <Button
                     role="radio"

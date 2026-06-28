@@ -545,7 +545,6 @@ describe SettingsPresenter do
           business_tax_id_entered: false,
           business_tax_id_last_four: nil,
           requires_credit_card: false,
-          can_connect_stripe: false,
           is_charged_paypal_payout_fee: true,
           joined_at: seller.created_at.iso8601,
         },
@@ -1033,16 +1032,6 @@ describe SettingsPresenter do
 
       it "returns the quarterly payout frequency" do
         expect(presenter.payments_props[:payout_frequency]).to eq(User::PayoutSchedule::QUARTERLY)
-      end
-    end
-
-    context "when seller can connect Stripe" do
-      before do
-        seller.update!(can_connect_stripe: true)
-      end
-
-      it "returns true for can_connect_stripe" do
-        expect(presenter.payments_props[:user][:can_connect_stripe]).to eq(true)
       end
     end
 
