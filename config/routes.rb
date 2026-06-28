@@ -1144,6 +1144,7 @@ Rails.application.routes.draw do
 
         # Conversational store agent
         post "/agent/messages", to: "agent_messages#create", as: :agent_messages
+        post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
       end
     end

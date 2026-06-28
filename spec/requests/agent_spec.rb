@@ -28,11 +28,18 @@ describe "Agent tab", type: :system, js: true do
   end
 
   # Stub one turn of the agent: the next user message yields `reply` (+ optional proposed_action /
-  # objects rendered inline as cards).
-  def stub_agent_turn(reply:, proposed_action: nil, objects: [])
-    allow_any_instance_of(Ai::StoreAgentService).to receive(:respond).and_return(
-      { reply:, proposed_action:, objects: }.compact,
-    )
+  # objects rendered inline as cards, and follow-up `suggestions`). The Agent tab streams its reply
+  # over Server-Sent Events, so we stub the streaming entrypoint (respond_streaming): it emits the
+  # reply as a single token, then the objects / proposed action / suggestions, mirroring what the
+  # real service streams, and returns the same hash shape the controller's `done` event uses.
+  def stub_agent_turn(reply:, proposed_action: nil, objects: [], suggestions: [])
+    allow_any_instance_of(Ai::StoreAgentService).to receive(:respond_streaming) do |_service, **_kwargs, &emit|
+      emit.call(:token, { text: reply })
+      emit.call(:objects, { objects: }) if objects.any?
+      emit.call(:proposed_action, { proposed_action: }) if proposed_action
+      emit.call(:suggestions, { suggestions: }) if suggestions.any?
+      { reply:, proposed_action:, objects:, suggestions: }
+    end
   end
 
   # Load the Agent tab directly. The Agent page renders inside the full dashboard shell (the same
@@ -87,13 +94,31 @@ describe "Agent tab", type: :system, js: true do
 
     it "answers a sales-insights question (read)" do
       stub_agent_turn(reply: "Here's your month so far: gross sales $18,420 across 642 orders. " \
-                             "Your top seller is Portrait Masterclass at $7,240.")
+                             "Your top seller is Portrait Masterclass at $7,240.",
+                      suggestions: ["Show my best sellers this month", "Email my customers about it"])
 
       send_message("How did sales go this month, and what's my best seller?")
 
       expect(page).to have_text("gross sales $18,420", wait: 10)
       expect(page).to have_text("Portrait Masterclass at $7,240")
+      # The turn ends with one-tap follow-up prompts to keep the conversation going.
+      expect(page).to have_text("Keep going")
+      expect(page).to have_button("Show my best sellers this month")
+      expect(page).to have_button("Email my customers about it")
       screenshot("02_sales_insights")
+    end
+
+    it "continues the conversation when a follow-up suggestion is clicked" do
+      stub_agent_turn(reply: "Your three best sellers this month are Portrait Masterclass, " \
+                             "Lightroom Pack, and Brush Set.",
+                      suggestions: ["Show my best sellers this month"])
+      send_message("How are sales?")
+      expect(page).to have_button("Show my best sellers this month", wait: 10)
+
+      # Clicking a follow-up sends it as the next message, so the chat keeps going hands-free.
+      stub_agent_turn(reply: "Portrait Masterclass leads with 128 sales at $49 each.")
+      click_on "Show my best sellers this month"
+      expect(page).to have_text("Portrait Masterclass leads with 128 sales", wait: 10)
     end
 
     it "proposes a discount and applies it on confirmation (write round-trip)" do

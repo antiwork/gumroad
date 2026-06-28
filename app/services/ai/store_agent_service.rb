@@ -3,33 +3,57 @@
 # Ai::StoreAgentService powers the conversational "Agent" dashboard tab. The seller chats with an
 # assistant that can answer questions about their store and *propose* changes to it.
 #
-# Safety model:
-#   - READ tools (list_products, store_stats, list_discounts) run automatically and only ever query
-#     data the seller already owns. They are scoped to current_seller, so the agent can never read
-#     another seller's data.
-#   - WRITE tools (create_discount, update_product_price, publish_product, unpublish_product) DO NOT
-#     mutate anything here. They return a structured "proposed action" that the frontend renders as a
-#     confirmation card. Nothing is applied until the seller explicitly confirms, at which point the
-#     controller hands the action to Ai::StoreAgentActionExecutor. This keeps an LLM hallucination or
-#     a prompt injection from silently changing a store.
+# The agent runs on Anthropic's Claude Opus 4.7 (via Ai::AnthropicClient). Opus 4.7 currently leads
+# the vending-bench leaderboard for autonomous commercial operation, so it is the strongest model
+# for the agent's actual job: helping a creator run and grow their store.
 #
-# The loop is a standard OpenAI tool-calling exchange: we send the conversation + tool schemas, run
-# any read tools the model asks for, feed the results back, and repeat until the model returns a
-# normal assistant message (optionally carrying one proposed write action).
+# Safety model:
+#   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
+#     are scoped to current_seller, so the agent can never read another seller's data.
+#   - WRITE tools (api_write) DO NOT mutate anything here. They return a structured "proposed action"
+#     that the frontend renders as a confirmation card. Nothing is applied until the seller explicitly
+#     confirms, at which point the controller hands the action to Ai::StoreAgentActionExecutor. This
+#     keeps an LLM hallucination or a prompt injection from silently changing a store.
+#
+# The loop is a standard Anthropic tool-use exchange: we send the system prompt + conversation + tool
+# schemas, run any read tools the model asks for, feed the results back as tool_result blocks, and
+# repeat until the model returns a normal assistant message (optionally carrying one proposed write).
 class Ai::StoreAgentService
   include CurrencyHelper
 
   class Error < StandardError; end
 
-  MODEL = "gpt-4o-mini"
+  MODEL = Ai::AnthropicClient::DEFAULT_MODEL
   REQUEST_TIMEOUT_IN_SECONDS = 60
   MAX_TOOL_ITERATIONS = 5
   MAX_MESSAGE_LENGTH = 2_000
+  # Anthropic requires max_tokens; size it for a brief chat reply plus a tool call's JSON args.
+  MAX_REPLY_TOKENS = 1_500
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
-  # echoing an unbounded client-supplied history back to OpenAI.
+  # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
   # Cap how many object cards we render inline per turn so a large list can't flood the chat.
   MAX_DISPLAY_OBJECTS = 20
+  # How many "what next" follow-up prompts we suggest at the end of a turn to keep the conversation
+  # going, and the max length of each so a chip stays a tappable phrase, not a paragraph.
+  MAX_SUGGESTIONS = 3
+  SUGGESTION_MAX_LENGTH = 80
+  MAX_SUGGESTION_TOKENS = 200
+
+  # A tiny separate completion turns the just-finished exchange into a few natural next prompts the
+  # creator is likely to want, phrased in their own voice so they read as one-tap continuations.
+  FOLLOW_UP_PROMPT = <<~PROMPT.strip
+    You suggest what a Gumroad creator might want to ask their store assistant NEXT, to keep the
+    conversation going. Given the creator's last message and the assistant's answer, return up to
+    three short follow-up prompts.
+
+    Rules:
+    - Phrase each as something the CREATOR would say to the assistant, in the first person
+      (e.g. "Show my best sellers this month", "Email my customers about it").
+    - Keep each under 8 words. No numbering, no quotes, no trailing punctuation.
+    - Make them specific and relevant to what was just discussed and to running a store.
+    - Return ONLY a JSON array of strings, nothing else. If nothing useful fits, return [].
+  PROMPT
 
   # The system prompt is assembled at runtime (see #system_prompt) so it can embed the live catalog
   # manifest of every endpoint the agent can reach. This keeps the prompt and the actual tool surface
@@ -95,32 +119,93 @@ class Ai::StoreAgentService
     @objects = []
 
     MAX_TOOL_ITERATIONS.times do
-      response = client.chat(
-        parameters: {
-          model: MODEL,
-          messages: conversation,
-          tools: tool_schemas,
-          tool_choice: "auto",
-          temperature: 0.3,
-        },
+      result = client.messages(
+        system: system_prompt,
+        messages: conversation,
+        tools: tool_schemas,
+        max_tokens: MAX_REPLY_TOKENS,
+        temperature: 0.3,
       )
 
-      message = response.dig("choices", 0, "message")
-      raise Error, "No response from model" if message.nil?
-
-      tool_calls = message["tool_calls"]
-      if tool_calls.blank?
-        return { reply: message["content"].to_s.strip, proposed_action: proposed_action&.as_json, objects: deduped_objects }
+      if result.tool_uses.blank?
+        return { reply: result.text.to_s.strip, proposed_action: proposed_action&.as_json, objects: deduped_objects }
       end
 
-      # Echo the assistant tool-call message back into the conversation before answering each call,
-      # as required by the OpenAI tool-calling protocol.
-      conversation << { role: "assistant", content: message["content"], tool_calls: }
+      proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
+    end
 
-      tool_calls.each do |tool_call|
-        name = tool_call.dig("function", "name")
-        arguments = parse_arguments(tool_call.dig("function", "arguments"))
-        result, action = run_tool(name:, arguments:)
+    { reply: tool_cap_reply(proposed_action), proposed_action: proposed_action&.as_json, objects: deduped_objects }
+  end
+
+  # Streaming counterpart of #respond. Runs the same read/propose tool loop, but streams the final
+  # assistant reply token-by-token and, once the answer is complete, suggests a few follow-up prompts
+  # to keep the conversation going. Communicates by yielding [event, payload] pairs the controller
+  # writes to the client as Server-Sent Events:
+  #   [:token, { text: }]                 — a chunk of the reply text, as it arrives
+  #   [:objects, { objects: }]            — object cards looked up/changed this turn
+  #   [:proposed_action, { proposed_action: }] — a single staged change awaiting confirmation
+  #   [:suggestions, { suggestions: }]    — up to three "what next" prompts
+  # Returns the same hash shape as #respond (plus :suggestions) once the stream is complete.
+  def respond_streaming(messages:, &emit)
+    conversation = build_conversation(messages)
+    last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
+    proposed_action = nil
+    @objects = []
+
+    MAX_TOOL_ITERATIONS.times do
+      # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
+      # intermediate tool-use turn that happens to include preamble text, so track whether anything
+      # was streamed: if the turn turns out to be a tool-use turn, we emit :reset to discard its
+      # preamble from the UI, and only the final (tool_uses-blank) turn's text survives on screen.
+      streamed_any = false
+      result = client.stream_messages(
+        system: system_prompt,
+        messages: conversation,
+        tools: tool_schemas,
+        max_tokens: MAX_REPLY_TOKENS,
+        temperature: 0.3,
+      ) do |text|
+        streamed_any = true
+        emit.call(:token, { text: })
+      end
+
+      if result.tool_uses.blank?
+        reply = result.text.to_s.strip
+        return finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+      end
+
+      # Intermediate tool-use turn: any text it streamed was preamble, not the answer. Tell the UI to
+      # clear it so the seller never sees an interim claim that gets replaced by the real reply.
+      emit.call(:reset, {}) if streamed_any
+      proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
+    end
+
+    # Hit the tool-iteration cap. Stream the fallback line as a single token so the UI still renders a
+    # reply, then close out with the same objects/action/suggestions as a normal turn.
+    reply = tool_cap_reply(proposed_action)
+    emit.call(:token, { text: reply })
+    finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+  end
+
+  private
+    attr_reader :seller, :pundit_user
+
+    # Echo the assistant's tool-use turn back into the conversation, run each requested tool, and
+    # append a single user message carrying the tool_result blocks (the Anthropic tool-use protocol).
+    # Returns the (possibly updated) proposed action. Shared by #respond and #respond_streaming so the
+    # two paths can't drift.
+    def apply_tool_uses(text:, tool_uses:, conversation:, proposed_action:)
+      # The assistant turn must replay both any text it produced AND the tool_use blocks, in order.
+      assistant_content = []
+      assistant_content << { type: "text", text: text.to_s } if text.to_s.strip.present?
+      tool_uses.each do |tool_use|
+        assistant_content << { type: "tool_use", id: tool_use[:id], name: tool_use[:name], input: tool_use[:input] || {} }
+      end
+      conversation << { role: "assistant", content: assistant_content }
+
+      tool_results = tool_uses.map do |tool_use|
+        arguments = sanitize_param_hash(tool_use[:input])
+        result, action = run_tool(name: tool_use[:name], arguments:)
         if action.present?
           if proposed_action.nil?
             proposed_action = action
@@ -131,28 +216,75 @@ class Ai::StoreAgentService
             result = { error: "Only one change can be proposed at a time. Ask the seller to confirm the first change before proposing another." }
           end
         end
-        conversation << {
-          role: "tool",
-          tool_call_id: tool_call["id"],
-          name:,
-          content: result.to_json,
-        }
+        { type: "tool_result", tool_use_id: tool_use[:id], content: result.to_json }
       end
+      conversation << { role: "user", content: tool_results }
+
+      proposed_action
     end
 
-    # The model kept calling tools past our cap. Return whatever change it staged plus a message that
-    # matches reality: only mention confirmation when there is actually a proposed action to confirm.
-    reply =
+    # The model kept calling tools past our cap. Return a message that matches reality: only mention
+    # confirmation when there is actually a proposed action to confirm.
+    def tool_cap_reply(proposed_action)
       if proposed_action
         "I gathered the details but need you to confirm the next step before I continue."
       else
         "I gathered the details but couldn't finish in one go. Please rephrase or ask again."
       end
-    { reply:, proposed_action: proposed_action&.as_json, objects: deduped_objects }
-  end
+    end
 
-  private
-    attr_reader :seller, :pundit_user
+    # Emit the trailing events for a completed streaming turn (objects, any staged change, and the
+    # follow-up suggestions) and return the full result hash.
+    def finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+      objects = deduped_objects
+      emit.call(:objects, { objects: }) if objects.any?
+      emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
+      suggestions = follow_up_suggestions(reply:, last_user_message:)
+      emit.call(:suggestions, { suggestions: }) if suggestions.any?
+      { reply:, proposed_action: proposed_action&.as_json, objects:, suggestions: }
+    end
+
+    # Ask the model for a few short, in-voice next prompts based on the turn that just happened. Kept
+    # deliberately cheap (no tools, low max_tokens) and fully best-effort: any failure or unparseable
+    # output yields no suggestions rather than breaking the reply the creator already received.
+    def follow_up_suggestions(reply:, last_user_message:)
+      return [] if reply.blank?
+
+      result = client.messages(
+        system: FOLLOW_UP_PROMPT,
+        messages: [
+          { role: "user", content: "The creator said: #{last_user_message}\n\nYou answered: #{reply}\n\nSuggest up to three follow-up prompts." },
+        ],
+        max_tokens: MAX_SUGGESTION_TOKENS,
+        temperature: 0.5,
+      )
+      parse_suggestions(result.text)
+    rescue => e
+      Rails.logger.warn("Store agent follow-up suggestions failed: #{e.message}")
+      []
+    end
+
+    # Coerce the model's reply into a clean list of suggestion strings. Prefers a JSON array but
+    # tolerates a newline/dash list, then trims, de-dupes, drops blanks, and caps count + length.
+    def parse_suggestions(raw)
+      text = raw.to_s.strip
+      return [] if text.blank?
+
+      parsed = (JSON.parse(text) rescue nil)
+      items =
+        if parsed.is_a?(Array)
+          parsed
+        else
+          text.split("\n").map { |line| line.sub(/\A\s*(?:[-*\d.)\s]+)/, "") }
+        end
+
+      items
+        .map { |item| item.to_s.strip.delete_prefix('"').delete_suffix('"').strip }
+        .reject(&:blank?)
+        .map { |item| item.truncate(SUGGESTION_MAX_LENGTH) }
+        .uniq
+        .first(MAX_SUGGESTIONS)
+    end
 
     # De-duplicate the collected objects (the model may read the same list twice in one turn) while
     # preserving order, and cap how many cards we render so a huge list can't flood the chat.
@@ -160,6 +292,8 @@ class Ai::StoreAgentService
       Array(@objects).uniq.first(MAX_DISPLAY_OBJECTS)
     end
 
+    # Build the Anthropic message array from the client-supplied history. The system prompt is passed
+    # separately (Anthropic's top-level `system` param), so it is NOT included here.
     def build_conversation(messages)
       history = Array(messages).last(MAX_HISTORY_MESSAGES).filter_map do |msg|
         role = msg[:role] || msg["role"]
@@ -169,9 +303,14 @@ class Ai::StoreAgentService
 
         { role:, content: content.truncate(MAX_MESSAGE_LENGTH, omission: "...") }
       end
+
+      # Anthropic's Messages API requires the conversation to START with a user message. The web chat
+      # always opens with a canned assistant greeting (and a turn could begin with other leading
+      # assistant turns), so drop any leading assistant messages before the first user message.
+      history = history.drop_while { |m| m[:role] != "user" }
       raise Error, "Message is required" if history.empty? || history.last[:role] != "user"
 
-      [{ role: "system", content: system_prompt }, *history]
+      history
     end
 
     # Assemble the system prompt with the live read/write endpoint manifests embedded, so the model
@@ -260,9 +399,9 @@ class Ai::StoreAgentService
       parts.join(" ")
     end
 
-    # Tool-call sub-objects are supposed to be JSON objects; a hallucinating model can emit an array
-    # or scalar. Coerce anything that isn't a Hash to an empty hash, and stringify keys, so downstream
-    # indexing/path-expansion can't raise a TypeError that surfaces as a 500.
+    # Tool-call inputs are supposed to be JSON objects; a hallucinating model can emit an array or
+    # scalar (or, for a nested key, a non-hash). Coerce anything that isn't a Hash to an empty hash,
+    # and stringify keys, so downstream indexing/path-expansion can't raise a TypeError as a 500.
     def sanitize_param_hash(raw)
       return {} unless raw.is_a?(Hash)
       raw.transform_keys(&:to_s)
@@ -272,28 +411,14 @@ class Ai::StoreAgentService
       @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
     end
 
-    # ---- helpers ----
-
-    def parse_arguments(raw)
-      return {} if raw.blank?
-      # OpenAI tool-call arguments are *supposed* to be a JSON object, but a hallucinating model can
-      # emit a bare array ("[1,2,3]") or scalar ("42"). The tools index arguments by key
-      # (arguments["endpoint"]), which raises TypeError on an Array/Integer and would surface as an
-      # unhandled 500. Coerce anything that isn't an object to an empty hash so the tool falls through
-      # to its normal "field is required" validation instead.
-      parsed = JSON.parse(raw)
-      parsed.is_a?(Hash) ? parsed : {}
-    rescue JSON::ParserError
-      {}
-    end
-
     def client
-      @_client ||= OpenAI::Client.new(request_timeout: REQUEST_TIMEOUT_IN_SECONDS)
+      @_client ||= Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
     end
 
     # Two generic tools. The endpoint id (constrained to the catalog by an enum) selects which of the
-    # ~60 real API endpoints to hit; path_params/params carry the ids and payload. Keeping the JSON
-    # schema this small avoids a 60-function tool list while still reaching the entire API.
+    # ~60 real API endpoints to hit; path_params/params carry the ids and payload. Keeping the schema
+    # this small avoids a 60-function tool list while still reaching the entire API. Anthropic tool
+    # schemas use `input_schema` (JSON Schema) instead of OpenAI's `function.parameters`.
     def tool_schemas
       [
         tool_schema(
@@ -321,12 +446,9 @@ class Ai::StoreAgentService
 
     def tool_schema(name, description, properties, required: [])
       {
-        type: "function",
-        function: {
-          name:,
-          description:,
-          parameters: { type: "object", properties:, required:, additionalProperties: false },
-        },
+        name:,
+        description:,
+        input_schema: { type: "object", properties:, required: },
       }
     end
 end
