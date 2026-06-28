@@ -747,6 +747,35 @@ describe Api::Mobile::PurchasesController do
                                         "Expected zero per-row SELECTs for product reviews, got:\n#{per_row_review_queries.join("\n")}"
     end
 
+    it "does not issue per-row queries for product creator avatars" do
+      seller_1 = create(:named_user, :with_avatar)
+      seller_2 = create(:named_user, :with_avatar)
+      seller_3 = create(:named_user, :with_avatar)
+      create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1))
+      create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
+      create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_3))
+
+      per_row_avatar_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        next unless sql.include?("`active_storage_attachments`")
+        next unless sql.include?("'avatar'")
+        next unless sql.match?(/LIMIT\s+1\z/)
+
+        per_row_avatar_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: @params
+      end
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:purchases].size).to eq(3)
+      expect(per_row_avatar_queries).to be_empty,
+                                        "Expected zero per-row SELECTs for creator avatars, got:\n#{per_row_avatar_queries.join("\n")}"
+    end
+
     describe "ordering" do
       it "returns purchases sorted by the requested order" do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, name: "money money money cash"))
