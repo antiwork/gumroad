@@ -191,7 +191,6 @@ export function canUseStripePaymentElement(state: State) {
 
   return (
     state.checkoutPayment.integration === "payment_element" &&
-    !state.savedCreditCard &&
     !hasMultipleSellers(state) &&
     !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder)
   );
@@ -210,6 +209,19 @@ export function isProcessing(state: State) {
 export function isSubmitDisabled(state: State) {
   const emailTypoBlocking = state.requireEmailTypoAcknowledgment && state.emailTypoSuggestion !== null;
   return isProcessing(state) || state.surcharges.type !== "loaded" || emailTypoBlocking;
+}
+
+export function isCardReadyToPay({
+  useSavedCard,
+  useStripePaymentElement,
+  paymentElementReady,
+}: {
+  useSavedCard: boolean;
+  useStripePaymentElement: boolean;
+  paymentElementReady: boolean;
+}) {
+  if (useSavedCard || !useStripePaymentElement) return true;
+  return paymentElementReady;
 }
 
 export const getTotalPriceFromProducts = (state: State) => state.products.reduce((sum, item) => sum + item.price, 0);

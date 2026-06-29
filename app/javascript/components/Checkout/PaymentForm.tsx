@@ -41,6 +41,7 @@ import {
   getStripePaymentElementAmount,
   getTotalPrice,
   hasShipping,
+  isCardReadyToPay,
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
@@ -679,18 +680,18 @@ const CreditCardContent = ({
       ? state.checkoutPayment.elements_options
       : null;
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
-  const handlePaymentElementReady = React.useCallback(
-    (controller: PaymentElementController | null) => {
-      paymentElementRef.current = controller;
-      setPaymentElementReady(controller !== null);
-      onPaymentElementReadyChange?.(controller !== null);
-    },
-    [onPaymentElementReadyChange],
-  );
+  const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
+    paymentElementRef.current = controller;
+    setPaymentElementReady(controller !== null);
+  }, []);
 
   React.useEffect(() => {
     if (!useStripePaymentElement) handlePaymentElementReady(null);
   }, [handlePaymentElementReady, useStripePaymentElement]);
+
+  React.useEffect(() => {
+    onPaymentElementReadyChange?.(isCardReadyToPay({ useSavedCard, useStripePaymentElement, paymentElementReady }));
+  }, [onPaymentElementReadyChange, useSavedCard, useStripePaymentElement, paymentElementReady]);
 
   React.useEffect(() => {
     dispatch({
@@ -758,17 +759,29 @@ const CreditCardContent = ({
 
   return (
     <div className="flex flex-col gap-4">
-      {stripePaymentElementConfig ? (
-        <PaymentElementInput
-          amount={stripePaymentElementAmount}
-          elementsOptions={stripePaymentElementConfig}
-          disabled={isProcessing(state)}
-          onReady={handlePaymentElementReady}
-          invalid={cardError}
-          onChange={(evt) => {
-            if (evt.complete) setCardError(false);
-          }}
-        />
+      {stripePaymentElementConfig && !useSavedCard ? (
+        <div className="flex flex-col gap-2">
+          {state.savedCreditCard && paymentElementReady ? (
+            <button
+              type="button"
+              className="relative z-10 -mb-7 cursor-pointer self-end pr-3 font-normal underline all-unset"
+              disabled={isProcessing(state)}
+              onClick={() => setUseSavedCard(true)}
+            >
+              Use saved card
+            </button>
+          ) : null}
+          <PaymentElementInput
+            amount={stripePaymentElementAmount}
+            elementsOptions={stripePaymentElementConfig}
+            disabled={isProcessing(state)}
+            onReady={handlePaymentElementReady}
+            invalid={cardError}
+            onChange={(evt) => {
+              if (evt.complete) setCardError(false);
+            }}
+          />
+        </div>
       ) : (
         <CreditCardInput
           savedCreditCard={state.savedCreditCard}
