@@ -67,7 +67,7 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
 
   return (
     <section className="grid gap-8 border-t border-border p-4 md:p-8">
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <header className="flex items-center justify-between">
         <h2>Custom profile page</h2>
         <a href="/api#custom-html" target="_blank" rel="noreferrer">
           Learn more

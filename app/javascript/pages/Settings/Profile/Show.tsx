@@ -48,7 +48,6 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
   profile_version: string | null;
   custom_html_pages_enabled: boolean;
-  custom_html: string | null;
   has_custom_landing_page: boolean;
   username: string;
 } & ProfileProps;
@@ -177,13 +176,14 @@ export default function SettingsPage() {
 
   const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
 
-  // Clear the custom profile HTML through the session-authed profile form. We send only the user
-  // payload (no tabs/sections), so this is a settings-only save that can't prune the layout. The
-  // controller rejects any NON-blank custom_html (authoring is API-only), so this is reset-only.
-  // Returns true on success so the modal closes only when the page was actually removed.
+  // Clear the custom profile HTML through the session-authed profile form. We send only custom_html
+  // (no name/bio/avatar, no tabs/sections), so this is a pure reset that can't prune the layout or
+  // clobber other profile fields with a stale snapshot. The controller rejects any NON-blank
+  // custom_html (authoring is API-only), so this is reset-only. Returns true on success so the modal
+  // closes only when the page was actually removed.
   const removeCustomHtml = async (): Promise<boolean> => {
     try {
-      await saveProfileSettings({ ...lastSavedSettings.current, custom_html: "" });
+      await saveProfileSettings({ custom_html: "" });
       await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
       return true;
     } catch (e) {
@@ -277,7 +277,7 @@ export default function SettingsPage() {
         />
       )}
     >
-      {has_custom_landing_page ? (
+      {custom_html_pages_enabled && has_custom_landing_page ? (
         <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
       ) : (
         <Preview

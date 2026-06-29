@@ -44,12 +44,12 @@ class UsersController < ApplicationController
     render html: profile_custom_html_document(
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
-      live_fields: params[:preview].present? && owner_viewing_custom_html?,
+      live_fields: params[:preview].present? && current_seller_owns_profile?,
     ).html_safe, layout: false
   end
 
   def landing_version
-    return render_landing_version(visible: false, page: nil) unless owner_viewing_custom_html?
+    return render_landing_version(visible: false, page: nil) unless current_seller_owns_profile?
     page = @user.page
     render_landing_version(visible: Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?, page:)
   end
@@ -192,8 +192,12 @@ class UsersController < ApplicationController
       render html: profile_custom_html_wrapper_document(@user).html_safe, layout: false
     end
 
-    def owner_viewing_custom_html?
-      current_user.present? && current_user == @user
+    # True for the seller and for any team member acting as the seller (admin/marketing can edit the
+    # profile per Settings::ProfilePolicy), so the live-fields preview and live reload reach every
+    # editor, not just the owner. current_seller is the account the viewer is acting as and is only
+    # set to a seller the viewer is a validated member of, so this never leaks to other visitors.
+    def current_seller_owns_profile?
+      current_seller.present? && current_seller == @user
     end
 
     # set_user_and_custom_domain_config already 404s any non-active account
@@ -238,7 +242,7 @@ class UsersController < ApplicationController
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
-      live_reload = if owner_viewing_custom_html?
+      live_reload = if current_seller_owns_profile?
         custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce: SecureHeaders.content_security_policy_script_nonce(request))
       else
         ""

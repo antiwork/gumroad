@@ -138,7 +138,6 @@ describe ProfilePresenter do
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
           profile_version: a_kind_of(String),
           custom_html_pages_enabled: false,
-          custom_html: nil,
           has_custom_landing_page: false,
           username: seller.username,
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
@@ -158,7 +157,6 @@ describe ProfilePresenter do
 
         expect(props[:custom_html_pages_enabled]).to be(true)
         expect(props[:has_custom_landing_page]).to be(true)
-        expect(props[:custom_html]).to eq("<h1 data-gumroad-field=\"name\"></h1>")
         expect(props[:username]).to eq(seller.username)
       end
     end

@@ -100,8 +100,7 @@ Do not push code with failing tests. CI is not a substitute for local verificati
 - Always use the latest version of Ruby, Rails, TypeScript, and React
 - Sentence case headers and buttons and stuff, not title case
 - Always write the code
-- Don't leave comments in the code
-- No explanatory comments please
+- Comments are welcome when they earn their place. Keep them concise and focused on the why — intent, non-obvious trade-offs, edge cases, the reason a surprising line exists. Don't narrate the what the code already says plainly.
 - Don't apologize for errors, fix them
 - Business logic (pricing, calculations, discount application) belongs in Rails, not the frontend. The frontend renders state provided by the backend. Enforce all constraints on the server.
 - Assign raw numbers to named constants (e.g., `MAX_CHARACTER_LIMIT` instead of `500`) to clarify their purpose.
