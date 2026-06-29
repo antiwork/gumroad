@@ -289,7 +289,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(new_purchase.preorder_authorization_successful?).to be(true)
     expect(new_purchase.stripe_transaction_id).not_to be_present
     expect(new_purchase.processor_setup_intent_id).to be_present
-    expect(new_purchase.credit_card.stripe_setup_intent_id).to be_present
+    expect(new_purchase.charge.stripe_setup_intent_id).to eq(new_purchase.processor_setup_intent_id)
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
