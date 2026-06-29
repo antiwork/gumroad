@@ -170,7 +170,10 @@ module Ai::StoreAgentApiCatalog
 
     # ---- Tax forms & earnings ----
     ep("list_tax_forms", :get, "/tax_forms", "List the creator's available tax forms.", read: true, scope: "view_tax_data"),
-    ep("get_earnings", :get, "/earnings", "Get the creator's earnings figures.", read: true, scope: "view_sales"),
+    # /v2/earnings is behind the tax-center access concern: it requires view_tax_data (NOT view_sales)
+    # and a tax `year` param. So it's effectively financial/tax data — only admin/owner get
+    # view_tax_data via StoreAgentScopes, which is the right boundary (marketing can't see tax data).
+    ep("get_earnings", :get, "/earnings", "Get the creator's earnings figures for a tax year.", read: true, scope: "view_tax_data", params: %w[year]),
 
     # ---- License management (creator-side) ----
     # The dashboard gates license management on Audience::PurchasePolicy#manage_license? (admin/
