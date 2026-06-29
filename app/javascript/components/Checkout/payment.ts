@@ -105,6 +105,7 @@ export type State = {
     | { type: "finished"; recaptchaResponse?: string; paymentMethod: PurchasePaymentMethod };
   payLabel?: string;
   recaptchaKey: string | null;
+  recaptchaScoreBased: boolean;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -329,6 +330,7 @@ export function createReducer(initial: {
   fullName?: string;
   payLabel?: string;
   recaptchaKey: string | null;
+  recaptchaScoreBased?: boolean;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
@@ -460,6 +462,7 @@ export function createReducer(initial: {
       return {
         fullName: "",
         ...initial,
+        recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
         country: initial.country ?? "US",
         vatId: "",
         address: initial.address?.street ?? "",

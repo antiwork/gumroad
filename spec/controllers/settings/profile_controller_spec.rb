@@ -91,6 +91,38 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "custom_html (clear-only from this surface)" do
+      it "clears a live custom profile page when sent a blank value" do
+        seller.update!(custom_html: "<h1>Custom</h1>")
+        expect(seller.reload.has_custom_landing_page?).to be(true)
+
+        put :update, params: { user: { custom_html: "" } }
+
+        expect(response).to redirect_to(profile_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
+        expect(seller.reload.has_custom_landing_page?).to be(false)
+      end
+
+      it "rejects a non-blank custom_html so it can't bypass the sanitized API" do
+        put :update, params: { user: { custom_html: "<script>alert(1)</script>" } }
+
+        expect(response).to redirect_to(profile_path)
+        expect(flash[:alert]).to eq("Custom HTML can only be edited through the Gumroad CLI or API.")
+        expect(seller.reload.has_custom_landing_page?).to be(false)
+      end
+
+      it "does not clobber an existing page when another field is saved without custom_html" do
+        seller.update!(custom_html: "<h1>Custom</h1>")
+
+        put :update, params: { user: { name: "New name" } }
+
+        expect(response).to have_http_status :see_other
+        expect(seller.reload.name).to eq("New name")
+        expect(seller.has_custom_landing_page?).to be(true)
+      end
+    end
+
     it "saves tabs and cleans up orphan sections" do
       section1 = create(:seller_profile_products_section, seller:)
       section2 = create(:seller_profile_posts_section, seller:)

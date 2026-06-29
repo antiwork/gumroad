@@ -6,16 +6,29 @@ module ValidateRecaptcha
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
   RECAPTCHA_FAIL_OPEN_DEFAULTS = {
     checkout: true,
+    checkout_score: true,
+    checkout_score_trusted: true,
     login: false,
     signup: false,
   }.freeze
+  # Default score thresholds used when the per-surface Redis key is unset.
+  # Surfaces not listed here default to nil (no score gating — token validity
+  # alone). The score-based checkout key returns a score for ~every valid token,
+  # so it gates at 0.5 out of the box; trusted buyers (see CheckoutRecaptcha) get
+  # a more lenient 0.3 bar. Override at runtime per surface by setting
+  # RedisKey.recaptcha_score_threshold(surface), e.g.
+  # $redis.set(RedisKey.recaptcha_score_threshold(:checkout_score), "0.4").
+  RECAPTCHA_SCORE_THRESHOLD_DEFAULTS = {
+    checkout_score: 0.5,
+    checkout_score_trusted: 0.3,
+  }.freeze
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"
 
-  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
+  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_THRESHOLD_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
 
   private
-    def valid_recaptcha_response_and_hostname?(site_key:)
-      recaptcha_passes?(site_key:, surface: :checkout, require_hostname: true)
+    def valid_recaptcha_response_and_hostname?(site_key:, surface: :checkout)
+      recaptcha_passes?(site_key:, surface:, require_hostname: true)
     end
 
     def valid_recaptcha_response?(site_key:, surface: :login)
@@ -71,8 +84,9 @@ module ValidateRecaptcha
     end
 
     def recaptcha_score_threshold(surface)
-      value = GlobalConfig.get("RECAPTCHA_SCORE_THRESHOLD_#{surface.to_s.upcase}")
-      return nil if value.to_s.strip.blank?
+      value = $redis.get(RedisKey.recaptcha_score_threshold(surface)).presence ||
+        RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
+      return nil if value.nil?
 
       Float(value)
     rescue ArgumentError, TypeError

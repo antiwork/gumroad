@@ -215,8 +215,18 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
       end
 
+      def open_profile_tab(name)
+        find("[role=tab]", text: name).click
+      end
+
       def within_profile_section_editor(&block)
+        open_profile_tab("Pages") unless has_css?("section[aria-label='Profile section editor']", wait: false)
         within("section[aria-label='Profile section editor']", &block)
+      end
+
+      def fill_in_bio(value)
+        open_profile_tab("About")
+        fill_in "Bio", with: value
       end
 
       def within_section_form(name, match: :first, &block)
@@ -300,7 +310,7 @@ describe "User profile page", type: :system, js: true do
         # Another tab/device adds a section while this editor holds a now-stale section list.
         concurrent_section = create(:seller_profile_products_section, seller:, header: "Added elsewhere", shown_products: [@product2.id])
 
-        fill_in "Bio", with: "Bio edit that must not touch sections"
+        fill_in_bio "Bio edit that must not touch sections"
         save_changes
 
         expect(SellerProfileSection.exists?(concurrent_section.id)).to be true
@@ -319,7 +329,7 @@ describe "User profile page", type: :system, js: true do
         # resend the section list and falsely conflict with the section added below.
         concurrent_section = create(:seller_profile_products_section, seller:, header: "Added elsewhere", shown_products: [@product1.id])
 
-        fill_in "Bio", with: "Bio only, sections untouched"
+        fill_in_bio "Bio only, sections untouched"
         save_changes
 
         expect(SellerProfileSection.exists?(concurrent_section.id)).to be true
@@ -587,7 +597,7 @@ describe "User profile page", type: :system, js: true do
 
         visit profile_path
 
-        expect(page).to have_css("[contenteditable=true]")
+        within_profile_section_editor { expect(page).to have_css("[contenteditable=true]") }
         expect(page).to have_button("Update profile", disabled: true)
       end
 
@@ -610,8 +620,9 @@ describe "User profile page", type: :system, js: true do
 
         visit profile_path
 
+        open_profile_tab("Pages")
         find("[contenteditable=true]").click
-        find_field("Name").click
+        find_field("Page name").click
 
         expect(page).to have_button("Update profile", disabled: true)
       end

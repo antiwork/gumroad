@@ -1305,7 +1305,11 @@ export const PaymentForm = ({
   const isFreePurchase = isTestPurchase || !requiresPayment(state);
 
   const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
-  const recaptcha = useRecaptcha({ siteKey: state.recaptchaKey });
+  const recaptcha = useRecaptcha({
+    siteKey: state.recaptchaKey,
+    scoreBased: state.recaptchaScoreBased,
+    action: "checkout",
+  });
 
   React.useEffect(() => {
     if (paymentFormRef.current && state.status.type === "input") {

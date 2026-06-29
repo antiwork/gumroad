@@ -40,6 +40,7 @@ describe CheckoutPresenter do
         gift: nil,
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
+        recaptcha_score_based: false,
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
@@ -47,6 +48,21 @@ describe CheckoutPresenter do
         default_tip_option: 15,
         checkout_payment: card_element_checkout_payment,
       )
+    end
+
+    context "when the buyer is in the recaptcha_score_checkout cohort" do
+      before do
+        allow(GlobalConfig).to receive(:get).and_call_original
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_MONEY_SCORE_SITE_KEY").and_return("money_score_site_key")
+        Feature.activate_user(:recaptcha_score_checkout, @user)
+      end
+
+      it "returns the score-based key and flags the checkout as score-based" do
+        props = @instance.checkout_props(params: {}, browser_guid:)
+
+        expect(props[:recaptcha_key]).to eq("money_score_site_key")
+        expect(props[:recaptcha_score_based]).to be(true)
+      end
     end
 
     it "does not show paused upsells" do
@@ -118,6 +134,7 @@ describe CheckoutPresenter do
         address: { city: nil, street: nil, zip: nil },
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
+        recaptcha_score_based: false,
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
         gift: nil,
         clear_cart: false,

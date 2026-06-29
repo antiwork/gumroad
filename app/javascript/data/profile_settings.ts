@@ -56,6 +56,10 @@ export type ProfileSection =
 
 export const updateProfileSettings = async (
   profileSettings: Partial<ProfileSettings> & {
+    // custom_html is write-only and clear-only from this surface (sent as "" to reset). It is not
+    // part of the server's profile_settings read payload, so it lives here rather than in the
+    // ProfileSettings parser type. It rides along in the `user` payload below.
+    custom_html?: string | null;
     tabs?: Tab[];
     sections?: ProfileSection[];
     profileVersion?: string | null;

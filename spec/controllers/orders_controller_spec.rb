@@ -1052,6 +1052,31 @@ describe OrdersController, :vcr do
         end
       end
 
+      describe "reCAPTCHA score-based cohort" do
+        before do
+          @buyer = create(:user)
+          sign_in @buyer
+          allow(GlobalConfig).to receive(:get).and_call_original
+          allow(GlobalConfig).to receive(:get).with("RECAPTCHA_MONEY_SCORE_SITE_KEY").and_return("money_score_site_key")
+        end
+
+        it "verifies against the score key and surface for a buyer in the cohort" do
+          Feature.activate_user(:recaptcha_score_checkout, @buyer)
+
+          expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
+            .with(site_key: "money_score_site_key", surface: :checkout_score).and_return(true)
+
+          post :create, params: multiple_purchase_params
+        end
+
+        it "verifies against the challenge key and surface for a buyer not in the cohort" do
+          expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
+            .with(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"), surface: :checkout).and_return(true)
+
+          post :create, params: multiple_purchase_params
+        end
+      end
+
       it "doesn't allow purchasing if reCAPTCHA verification fails" do
         allow_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
 

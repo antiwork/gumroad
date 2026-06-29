@@ -15,15 +15,15 @@ class LinksController < ApplicationController
 
 
 
-  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count landing_iframe_content].freeze
+  PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count landing_iframe_content landing_version].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
   skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
-  before_action :stick_to_primary_for_landing_iframe, only: :landing_iframe_content
-  before_action :fetch_product_for_show, only: %i[show landing_iframe_content]
-  before_action :check_banned, only: %i[show landing_iframe_content]
-  before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content]
+  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  before_action :fetch_product_for_show, only: %i[show landing_iframe_content landing_version]
+  before_action :check_banned, only: %i[show landing_iframe_content landing_version]
+  before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content landing_version]
   before_action :set_x_robots_tag_header, only: :show
   before_action :check_payment_details, only: :index
 
@@ -31,7 +31,7 @@ class LinksController < ApplicationController
 
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :check_if_needs_redirect, only: [:show]
-  before_action :ensure_domain_belongs_to_seller, only: %i[show landing_iframe_content]
+  before_action :ensure_domain_belongs_to_seller, only: %i[show landing_iframe_content landing_version]
   before_action :render_custom_html_if_present, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
@@ -195,6 +195,12 @@ class LinksController < ApplicationController
     apply_custom_html_response_headers
     interpolated = Pages::Interpolator.interpolate(@product.custom_html, product: @product)
     render html: custom_html_document(interpolated).html_safe, layout: false
+  end
+
+  def landing_version
+    return render_landing_version(visible: false, page: nil) unless can_preview_custom_html?
+    page = @product&.page
+    render_landing_version(visible: custom_html_visible? && page&.custom_html.present?, page:)
   end
 
   def search
@@ -1045,6 +1051,7 @@ class LinksController < ApplicationController
                 }
               });
             </script>
+            #{can_preview_custom_html? ? custom_html_live_reload_script(version_src: "/l/#{product.unique_permalink}/landing/version", nonce:) : ""}
           </body>
         </html>
       HTML

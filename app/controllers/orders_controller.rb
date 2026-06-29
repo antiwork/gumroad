@@ -76,13 +76,13 @@ class OrdersController < ApplicationController
       return render_error("Cookies are not enabled on your browser. Please enable cookies and refresh this page before continuing.") if contains_paid_purchase && browser_guid.blank?
 
       # Verify reCAPTCHA response
-      if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"))
+      if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
         render_error("Sorry, we could not verify the CAPTCHA. Please try again.")
       end
     end
 
     def skip_recaptcha?
-      site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
+      site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name == "create" && all_free_products_without_captcha?
       return true if valid_wallet_payment?

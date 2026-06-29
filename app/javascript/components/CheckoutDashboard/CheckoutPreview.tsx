@@ -75,6 +75,7 @@ export const CheckoutPreview = ({
         ],
         paypalClientId: "",
         recaptchaKey: "",
+        recaptchaScoreBased: false,
       },
       () => undefined,
     ],

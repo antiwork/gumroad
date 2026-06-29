@@ -124,6 +124,43 @@ describe UsersController, :vcr, type: :controller do
       expect(response).to be_successful
       expect(response.body).to include("<h1>Live profile page</h1>")
     end
+
+    describe "name/bio live-update listener on ?preview" do
+      it "injects the listener for the seller previewing their own page" do
+        sign_in seller
+
+        get :landing_iframe_content, params: { preview: true }
+
+        expect(response.body).to include("gumroad:profile-fields")
+      end
+
+      it "injects the listener for a team member acting as the seller" do
+        member = create(:user)
+        create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in member
+
+        get :landing_iframe_content, params: { preview: true }
+
+        expect(response.body).to include("gumroad:profile-fields")
+      end
+
+      it "omits the listener for a signed-in visitor who can't edit the profile" do
+        sign_in create(:user)
+
+        get :landing_iframe_content, params: { preview: true }
+
+        expect(response.body).not_to include("gumroad:profile-fields")
+      end
+
+      it "omits the listener without the preview param" do
+        sign_in seller
+
+        get :landing_iframe_content
+
+        expect(response.body).not_to include("gumroad:profile-fields")
+      end
+    end
   end
 
   describe "#profile_custom_html_wrapper_document" do

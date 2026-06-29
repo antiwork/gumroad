@@ -74,6 +74,7 @@ type CheckoutIndexPageProps = {
     max_allowed_cart_products: number;
     paypal_client_id: string;
     recaptcha_key: string | null;
+    recaptcha_score_based: boolean;
     saved_credit_card: SavedCreditCard | null;
     state: string | null;
     tip_options: number[];
@@ -111,6 +112,7 @@ const CheckoutIndexPage = () => {
       gift,
       saved_credit_card,
       recaptcha_key,
+      recaptcha_score_based,
       paypal_client_id,
       max_allowed_cart_products,
       cart_save_debounce_ms,
@@ -170,6 +172,7 @@ const CheckoutIndexPage = () => {
     state: addressState,
     products: getProducts(cartForm.data.cart),
     recaptchaKey: recaptcha_key,
+    recaptchaScoreBased: recaptcha_score_based,
     paypalClientId: paypal_client_id,
     gift,
     requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,

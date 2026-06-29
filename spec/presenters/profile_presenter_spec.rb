@@ -137,10 +137,28 @@ describe ProfilePresenter do
           },
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
           profile_version: a_kind_of(String),
+          custom_html_pages_enabled: false,
+          has_custom_landing_page: false,
+          username: seller.username,
           **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
         }
       )
       expect(props[:profile_settings]).not_to have_key(:username)
+    end
+
+    context "when the custom_html_pages feature is enabled and a custom profile page is live" do
+      before do
+        Feature.activate_user(:custom_html_pages, seller)
+        seller.update!(custom_html: "<h1 data-gumroad-field=\"name\"></h1>")
+      end
+
+      it "exposes the custom-HTML props for the Build-with-your-agent affordance" do
+        props = presenter.profile_settings_props(request:)
+
+        expect(props[:custom_html_pages_enabled]).to be(true)
+        expect(props[:has_custom_landing_page]).to be(true)
+        expect(props[:username]).to eq(seller.username)
+      end
     end
   end
 end

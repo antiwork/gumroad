@@ -17,18 +17,25 @@ import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Props as ProfileProps } from "$app/components/Profile";
 import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
+import { ProfileLandingPageEditor } from "$app/components/Profile/LandingPageEditor";
+import { ProfileLandingPagePreview } from "$app/components/Profile/LandingPagePreview";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { postToMobileApp } from "$app/components/Settings/Layout";
+import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
+
+type ProfileSettingsTab = "about" | "pages" | "share";
 
 type ProfileSettingsForm = {
   name: string | null;
@@ -40,12 +47,21 @@ type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
   profile_version: string | null;
+  custom_html_pages_enabled: boolean;
+  has_custom_landing_page: boolean;
+  username: string;
 } & ProfileProps;
 
 export default function SettingsPage() {
-  const { creator_profile, profile_settings, editable_profile, profile_version } = typia.assert<ProfilePageProps>(
-    usePage().props,
-  );
+  const {
+    creator_profile,
+    profile_settings,
+    editable_profile,
+    profile_version,
+    custom_html_pages_enabled,
+    has_custom_landing_page,
+    username,
+  } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -97,6 +113,8 @@ export default function SettingsPage() {
     setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
 
   const uid = React.useId();
+  const [tab, setTab] = React.useState<ProfileSettingsTab>("about");
+  const profileUrl = creatorProfile.subdomain ? Routes.root_url({ host: creatorProfile.subdomain }) : Routes.root_url();
 
   const [isSaving, setIsSaving] = React.useState(false);
   const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
@@ -158,6 +176,23 @@ export default function SettingsPage() {
 
   const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
 
+  // Clear the custom profile HTML through the session-authed profile form. We send only custom_html
+  // (no name/bio/avatar, no tabs/sections), so this is a pure reset that can't prune the layout or
+  // clobber other profile fields with a stale snapshot. The controller rejects any NON-blank
+  // custom_html (authoring is API-only), so this is reset-only. Returns true on success so the modal
+  // closes only when the page was actually removed.
+  const removeCustomHtml = async (): Promise<boolean> => {
+    try {
+      await saveProfileSettings({ custom_html: "" });
+      await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
+      return true;
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+      return false;
+    }
+  };
+
   useReactNativeMessage((data) => {
     if (data.type === "mobileAppSettingsSave") void save();
   });
@@ -191,165 +226,233 @@ export default function SettingsPage() {
     }
   });
 
+  const showPagesTab = !has_custom_landing_page;
+
+  const renderTab = (key: ProfileSettingsTab, label: string) => (
+    <Tab
+      isSelected={tab === key}
+      className="cursor-pointer"
+      onClick={() => setTab(key)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setTab(key);
+        }
+      }}
+      tabIndex={0}
+    >
+      {label}
+    </Tab>
+  );
+
+  const tabBar = (
+    <Tabs aria-label="Profile settings sections">
+      {renderTab("about", "About")}
+      {showPagesTab ? renderTab("pages", "Pages") : null}
+      {renderTab("share", "Share")}
+    </Tabs>
+  );
+
+  const previewSidebar = (
+    <PreviewSidebar
+      previewLink={(props) => (
+        <NavigationButton
+          {...props}
+          size="icon"
+          disabled={isSaving}
+          href={profileUrl}
+          onClick={(evt) => {
+            evt.preventDefault();
+            // Persist pending edits before previewing, but only when there's something to save -
+            // settings (name/bio/avatar) are sent on every save with no freshness check, so an
+            // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
+            // Open only after a successful save so a failed save doesn't surface a stale preview.
+            const openProfile = () => window.open(profileUrl, "_blank");
+            if (canSave)
+              void save().then((saved) => {
+                if (saved) openProfile();
+              });
+            else openProfile();
+          }}
+        />
+      )}
+    >
+      {custom_html_pages_enabled && has_custom_landing_page ? (
+        <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
+      ) : (
+        <Preview
+          scaleFactor={0.4}
+          style={{
+            border: "var(--border)",
+            borderRadius: "var(--border-radius-2)",
+            fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+            ...profileColors,
+            "--primary": "var(--color)",
+            "--body-bg": "rgb(var(--filled))",
+            "--contrast-primary": "var(--filled)",
+            "--contrast-filled": "var(--color)",
+            "--color-body": "var(--body-bg)",
+            "--color-background": "rgb(var(--filled))",
+            "--color-foreground": "rgb(var(--color))",
+            "--color-border": "rgb(var(--color) / var(--border-alpha))",
+            "--color-accent": "rgb(var(--accent))",
+            "--color-accent-foreground": "rgb(var(--contrast-accent))",
+            "--color-primary": "rgb(var(--primary))",
+            "--color-primary-foreground": "rgb(var(--contrast-primary))",
+            "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+            "--color-muted": "rgb(var(--color) / var(--gray-3))",
+            backgroundColor: "rgb(var(--filled))",
+            color: "rgb(var(--color))",
+          }}
+        >
+          {fontUrl ? (
+            <>
+              <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+              <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+              <link rel="stylesheet" href={fontUrl} />
+            </>
+          ) : null}
+          <div inert>
+            <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+              <EditProfile
+                {...editableProfile}
+                creator_profile={previewCreatorProfile}
+                bio={profileSettings.bio}
+                controls={false}
+                selectedTabIndex={previewTabIndex}
+              />
+            </ProfileLayout>
+          </div>
+        </Preview>
+      )}
+    </PreviewSidebar>
+  );
+
   return (
     <>
-      {isMobileAppWebView ? null : (
+      {isMobileAppWebView ? (
+        <div className="border-b border-border p-4 md:p-8">{tabBar}</div>
+      ) : (
         <PageHeader
           className="sticky-top"
-          title="Profile"
+          title="Profile settings"
           actions={
             <Button color="accent" onClick={() => void save()} disabled={!canSave}>
               Update profile
             </Button>
           }
-        />
+        >
+          {tabBar}
+        </PageHeader>
       )}
       <WithPreviewSidebar>
         <div>
-          <section className="grid gap-8 p-4! md:p-8!">
-            <header>
-              <h2>About you</h2>
-            </header>
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-name`}>Name</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-name`}
-                type="text"
-                value={profileSettings.name ?? ""}
-                disabled={!canUpdate}
-                onChange={(evt) => {
-                  updateCreatorProfile({ name: evt.target.value });
-                  updateProfileSettings({ name: evt.target.value });
-                }}
-              />
-            </Fieldset>
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-bio`}>Bio</Label>
-              </FieldsetTitle>
-              <Textarea
-                id={`${uid}-bio`}
-                value={profileSettings.bio ?? ""}
-                disabled={!canUpdate}
-                onChange={(e) => updateProfileSettings({ bio: e.target.value })}
-              />
-            </Fieldset>
-            <LogoInput
-              logoUrl={creatorProfile.avatar_url}
-              onChange={(blob) => {
-                updateCreatorProfile({
-                  avatar_url: blob ? Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) : "",
-                });
-                updateProfileSettings({ profile_picture_blob_id: blob?.signedId ?? null });
-              }}
-              disabled={!canUpdate}
-            />
-            {loggedInUser?.policies.settings_profile.manage_social_connections ? (
+          {tab === "about" ? (
+            <section className="grid gap-8 p-4! md:p-8!">
+              <header>
+                <h2>About you</h2>
+              </header>
               <Fieldset>
-                <FieldsetTitle>Social links</FieldsetTitle>
-                {creatorProfile.twitter_handle ? (
-                  <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-                    <TwitterX pack="brands" className="size-5" />
-                    Disconnect {creatorProfile.twitter_handle} from X
-                  </Button>
-                ) : (
-                  <SocialAuthButton
-                    provider="twitter"
-                    href={Routes.user_twitter_omniauth_authorize_path({
-                      state: "link_twitter_account",
-                      x_auth_access_type: "read",
-                    })}
-                  >
-                    <TwitterX pack="brands" className="size-5" />
-                    Connect to X
-                  </SocialAuthButton>
-                )}
-              </Fieldset>
-            ) : null}
-          </section>
-          <section aria-label="Profile section editor">
-            <ProfileSectionsForm
-              {...editableProfile}
-              creator_profile={creatorProfile}
-              bio={profileSettings.bio}
-              onChange={handleProfileEditorChange}
-              disabled={!canUpdate}
-            />
-          </section>
-        </div>
-        <PreviewSidebar
-          previewLink={(props) => {
-            const profileUrl = Routes.root_url({ host: creatorProfile.subdomain });
-            return (
-              <NavigationButton
-                {...props}
-                size="icon"
-                disabled={isSaving}
-                href={profileUrl}
-                onClick={(evt) => {
-                  evt.preventDefault();
-                  // Persist pending edits before previewing, but only when there's something to save -
-                  // settings (name/bio/avatar) are sent on every save with no freshness check, so an
-                  // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
-                  // Open only after a successful save so a failed save doesn't surface a stale preview.
-                  const openProfile = () => window.open(profileUrl, "_blank");
-                  if (canSave)
-                    void save().then((saved) => {
-                      if (saved) openProfile();
-                    });
-                  else openProfile();
-                }}
-              />
-            );
-          }}
-        >
-          <Preview
-            scaleFactor={0.4}
-            style={{
-              border: "var(--border)",
-              borderRadius: "var(--border-radius-2)",
-              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
-              ...profileColors,
-              "--primary": "var(--color)",
-              "--body-bg": "rgb(var(--filled))",
-              "--contrast-primary": "var(--filled)",
-              "--contrast-filled": "var(--color)",
-              "--color-body": "var(--body-bg)",
-              "--color-background": "rgb(var(--filled))",
-              "--color-foreground": "rgb(var(--color))",
-              "--color-border": "rgb(var(--color) / var(--border-alpha))",
-              "--color-accent": "rgb(var(--accent))",
-              "--color-accent-foreground": "rgb(var(--contrast-accent))",
-              "--color-primary": "rgb(var(--primary))",
-              "--color-primary-foreground": "rgb(var(--contrast-primary))",
-              "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
-              "--color-muted": "rgb(var(--color) / var(--gray-3))",
-              backgroundColor: "rgb(var(--filled))",
-              color: "rgb(var(--color))",
-            }}
-          >
-            {fontUrl ? (
-              <>
-                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                <link rel="stylesheet" href={fontUrl} />
-              </>
-            ) : null}
-            <div inert>
-              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
-                <EditProfile
-                  {...editableProfile}
-                  creator_profile={previewCreatorProfile}
-                  bio={profileSettings.bio}
-                  controls={false}
-                  selectedTabIndex={previewTabIndex}
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-name`}>Name</Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-name`}
+                  type="text"
+                  value={profileSettings.name ?? ""}
+                  disabled={!canUpdate}
+                  onChange={(evt) => {
+                    updateCreatorProfile({ name: evt.target.value });
+                    updateProfileSettings({ name: evt.target.value });
+                  }}
                 />
-              </ProfileLayout>
-            </div>
-          </Preview>
-        </PreviewSidebar>
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-bio`}>Bio</Label>
+                </FieldsetTitle>
+                <Textarea
+                  id={`${uid}-bio`}
+                  value={profileSettings.bio ?? ""}
+                  disabled={!canUpdate}
+                  onChange={(e) => updateProfileSettings({ bio: e.target.value })}
+                />
+              </Fieldset>
+              <LogoInput
+                logoUrl={creatorProfile.avatar_url}
+                onChange={(blob) => {
+                  updateCreatorProfile({
+                    avatar_url: blob ? Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) : "",
+                  });
+                  updateProfileSettings({ profile_picture_blob_id: blob?.signedId ?? null });
+                }}
+                disabled={!canUpdate}
+              />
+              {loggedInUser?.policies.settings_profile.manage_social_connections ? (
+                <Fieldset>
+                  <FieldsetTitle>Social links</FieldsetTitle>
+                  {creatorProfile.twitter_handle ? (
+                    <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
+                      <TwitterX pack="brands" className="size-5" />
+                      Disconnect {creatorProfile.twitter_handle} from X
+                    </Button>
+                  ) : (
+                    <SocialAuthButton
+                      provider="twitter"
+                      href={Routes.user_twitter_omniauth_authorize_path({
+                        state: "link_twitter_account",
+                        x_auth_access_type: "read",
+                      })}
+                    >
+                      <TwitterX pack="brands" className="size-5" />
+                      Connect to X
+                    </SocialAuthButton>
+                  )}
+                </Fieldset>
+              ) : null}
+            </section>
+          ) : tab === "pages" && showPagesTab ? (
+            <>
+              <section className="p-4! md:p-8!">
+                <Alert role="status" variant="warning">
+                  Pages are a legacy way to lay out your profile and are being phased out. To customize your profile,
+                  build a custom page from the Share tab — your agent designs and publishes it for you.
+                </Alert>
+              </section>
+              <section aria-label="Profile section editor">
+                <ProfileSectionsForm
+                  {...editableProfile}
+                  creator_profile={creatorProfile}
+                  bio={profileSettings.bio}
+                  onChange={handleProfileEditorChange}
+                  disabled={!canUpdate}
+                />
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="grid gap-8 p-4! md:p-8!">
+                <header>
+                  <h2>Share</h2>
+                </header>
+                <ShareButtons
+                  url={profileUrl}
+                  twitterText={`Check out ${profileSettings.name || username} on @Gumroad`}
+                  facebookText={profileSettings.name || username}
+                />
+              </section>
+              {custom_html_pages_enabled ? (
+                <ProfileLandingPageEditor
+                  username={username}
+                  profileUrl={profileUrl}
+                  hasLandingPage={has_custom_landing_page}
+                  onRemove={removeCustomHtml}
+                />
+              ) : null}
+            </>
+          )}
+        </div>
+        {previewSidebar}
       </WithPreviewSidebar>
     </>
   );

@@ -22,6 +22,14 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_site_key"))
     end
 
+    def checkout_score_action
+      render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score))
+    end
+
+    def checkout_score_trusted_action
+      render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score_trusted))
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -38,6 +46,8 @@ describe ValidateRecaptcha, type: :controller do
       post :login_action, to: "anonymous#login_action"
       post :signup_action, to: "anonymous#signup_action"
       post :checkout_action, to: "anonymous#checkout_action"
+      post :checkout_score_action, to: "anonymous#checkout_score_action"
+      post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -68,7 +78,7 @@ describe ValidateRecaptcha, type: :controller do
     end
 
     it "passes a valid token when score gating is enabled and the score meets the threshold" do
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_LOGIN").and_return("0.5")
+      $redis.set(RedisKey.recaptcha_score_threshold(:login), "0.5")
       stub_recaptcha_response(valid: true, score: 0.7)
 
       post :login_action, params: { "g-recaptcha-response" => "test_token" }
@@ -78,7 +88,7 @@ describe ValidateRecaptcha, type: :controller do
     end
 
     it "fails a valid token when score gating is enabled and the score is below the threshold" do
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_LOGIN").and_return("0.5")
+      $redis.set(RedisKey.recaptcha_score_threshold(:login), "0.5")
       stub_recaptcha_response(valid: true, score: 0.1)
 
       post :login_action, params: { "g-recaptcha-response" => "test_token" }
@@ -88,7 +98,7 @@ describe ValidateRecaptcha, type: :controller do
     end
 
     it "fails a valid token when score gating is enabled and the assessment has no score" do
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_LOGIN").and_return("0.5")
+      $redis.set(RedisKey.recaptcha_score_threshold(:login), "0.5")
       stub_recaptcha_response(valid: true, score: nil)
 
       post :login_action, params: { "g-recaptcha-response" => "test_token" }
@@ -121,13 +131,74 @@ describe ValidateRecaptcha, type: :controller do
     end
 
     it "fails checkout on low scores when score gating is enabled even though infrastructure errors fail open" do
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT").and_return("0.5")
+      $redis.set(RedisKey.recaptcha_score_threshold(:checkout), "0.5")
       stub_recaptcha_response(valid: true, score: 0.1)
 
       post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(parsed_body["error"]).to eq("captcha_failed")
+    end
+
+    context "with the score-based checkout surface" do
+      it "fails open on infrastructure errors by default" do
+        allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
+
+        expect(Rails.logger).to receive(:info).with(/\[recaptcha_score\].*surface=checkout_score.*decision=infra_error_fail_open/)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "rejects a low score using the default 0.5 threshold when Redis is unset" do
+        stub_recaptcha_response(valid: true, score: 0.1)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "passes a score at or above the default 0.5 threshold when Redis is unset" do
+        stub_recaptcha_response(valid: true, score: 0.7)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "honors a Redis-configured threshold over the default" do
+        $redis.set(RedisKey.recaptcha_score_threshold(:checkout_score), "0.9")
+        stub_recaptcha_response(valid: true, score: 0.7)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+    end
+
+    context "with the trusted score-based checkout surface" do
+      it "rejects a low score using the default 0.3 threshold when Redis is unset" do
+        stub_recaptcha_response(valid: true, score: 0.2)
+
+        post :checkout_score_trusted_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "passes a score that clears the lenient 0.3 default but would fail the untrusted 0.5 surface" do
+        stub_recaptcha_response(valid: true, score: 0.4)
+
+        post :checkout_score_trusted_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
     end
 
     context "in production" do

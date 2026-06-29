@@ -40,6 +40,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
                                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
                                                recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
+                                               recaptcha_score_based: false,
                                                saved_credit_card: nil,
                                                state: nil,
                                                tip_options: [0, 15, 20, 25],
