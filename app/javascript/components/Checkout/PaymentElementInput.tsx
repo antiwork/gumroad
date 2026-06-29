@@ -164,6 +164,9 @@ const StripePaymentElementProvider = ({
           focusBoxShadow: "none",
         },
         rules: {
+          ".Tab": {
+            display: "none",
+          },
           ".TabLabel": {
             fontSize: "1rem",
             fontWeight: "400",
@@ -171,6 +174,7 @@ const StripePaymentElementProvider = ({
           ".Input": {
             borderColor,
             boxShadow: "none",
+            minHeight: "3rem",
             padding: "0.75rem 1rem",
           },
           ".Input:focus": {
