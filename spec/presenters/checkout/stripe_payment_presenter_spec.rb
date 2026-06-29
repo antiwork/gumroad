@@ -166,6 +166,19 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
+  it "selects Stripe Payment Element SetupIntent mode for mixed future-charge products" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    preorder_product = create(:product, user: seller, price_cents: 1234)
+    free_trial_product = create(:product, user: seller, price_cents: 5678)
+
+    expect(stripe_payment_props(add_products: [
+                                  checkout_product_for(preorder_product, is_preorder: true),
+                                  checkout_product_for(free_trial_product, free_trial: true, recurrence: "monthly"),
+                                ]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
+  end
+
   it "falls back to CardElement when the checkout total is not positive" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(price: 0)]))
       .to eq(card_element_fallback("not_charged"))

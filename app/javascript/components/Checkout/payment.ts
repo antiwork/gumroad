@@ -190,9 +190,13 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
 }
 
 export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
-  return useStripePaymentElement
-    ? requiresPaymentElementReusablePaymentMethod(state)
-    : requiresReusablePaymentMethod(state);
+  if (!useStripePaymentElement) return requiresReusablePaymentMethod(state);
+  if (
+    state.checkoutPayment.integration === "payment_element" &&
+    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+  )
+    return false;
+  return requiresPaymentElementReusablePaymentMethod(state);
 }
 
 export function canUseStripePaymentElement(state: State) {
@@ -211,11 +215,9 @@ export function canUseStripePaymentElement(state: State) {
 function canUseStripePaymentElementForFutureChargeSetup(state: State) {
   return (
     !hasMultipleSellers(state) &&
-    !state.products.some(
-      (product) => product.payInInstallments || product.subscription_id || product.nativeType === "commission",
-    ) &&
+    !state.products.some((product) => product.payInInstallments) &&
     state.products.every((product) => product.isPreorder || product.hasFreeTrial) &&
-    state.products.some((product) => product.price > 0)
+    getTotalPriceFromProducts(state) > 0
   );
 }
 

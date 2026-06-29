@@ -176,6 +176,17 @@ describe("canUseStripePaymentElement", () => {
         state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ hasFreeTrial: true })] }),
       ),
     ).toBe(true);
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: futureChargePaymentElementConfig,
+          products: [
+            product({ isPreorder: true }),
+            product({ permalink: "membership", hasFreeTrial: true, recurrence: "monthly" }),
+          ],
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("falls back in SetupIntent mode when future-charge products are mixed with charged products", () => {
@@ -189,10 +200,13 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(false);
   });
 
-  it("falls back in SetupIntent mode for unsupported reusable, installment, and zero-amount products", () => {
+  it("falls back in SetupIntent mode for non-future-charge, installment, and zero-amount products", () => {
     expect(
       canUseStripePaymentElement(
-        state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ nativeType: "commission" })] }),
+        state({
+          checkoutPayment: futureChargePaymentElementConfig,
+          products: [product({ nativeType: "commission" })],
+        }),
       ),
     ).toBe(false);
     expect(
@@ -276,6 +290,15 @@ describe("requiresReusablePaymentMethodForCardCollection", () => {
 
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, true)).toBe(true);
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
+  });
+
+  it("collects a one-off PaymentMethod in Payment Element SetupIntent mode", () => {
+    const setupState = state({
+      checkoutPayment: futureChargePaymentElementConfig,
+      products: [product({ hasFreeTrial: true, recurrence: "monthly" })],
+    });
+
+    expect(requiresReusablePaymentMethodForCardCollection(setupState, true)).toBe(false);
   });
 });
 
