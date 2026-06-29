@@ -83,6 +83,20 @@ describe Api::Mobile::AgentController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to eq("success" => false, "error" => "The assistant is unavailable.")
     end
+
+    it "halts on throttle without invoking the agent (429 stops the action)" do
+      # Pre-fill the seller-scoped throttle counter past its limit so this request is rejected. The
+      # throttle runs as a before_action, so a 429 must HALT — the LLM service must never be called.
+      key = RedisKey.agent_request_throttle(@seller.id)
+      $redis.set(key, 999)
+      expect(Ai::StoreAgentService).not_to receive(:new)
+
+      post :create, params: valid_params
+
+      expect(response).to have_http_status(:too_many_requests)
+    ensure
+      $redis.del(RedisKey.agent_request_throttle(@seller.id))
+    end
   end
 
   describe "POST execute" do

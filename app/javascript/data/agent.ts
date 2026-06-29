@@ -177,7 +177,10 @@ export const streamAgentMessage = async (
         const data = typia.assert<DoneData>(raw);
         return {
           reply: data.reply,
-          proposedAction: data.proposed_action,
+          // Fall back to the proposed action accumulated mid-stream (the `proposed_action` event),
+          // the same way objects/suggestions fall back to their accumulated state. A done frame that
+          // omits (or nulls) proposed_action must not erase a confirmation card already shown.
+          proposedAction: data.proposed_action ?? proposedAction,
           objects: data.objects ?? objects,
           suggestions: data.suggestions ?? suggestions,
         };

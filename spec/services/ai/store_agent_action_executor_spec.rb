@@ -120,5 +120,37 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:message]).to match(/missing path parameter/i)
       end
     end
+
+    context "role-scoped access (acting user is a non-owner team member)" do
+      let(:seller) { create(:named_seller) }
+      # A marketing member is allowed on the Agent tab but cannot refund/view payouts in the
+      # dashboard. The executor must refuse those writes (defense in depth on top of the narrowed
+      # token scopes) rather than replay them as the store owner.
+      let(:marketing) { create(:user) }
+      let(:pundit_user) { SellerContext.new(user: marketing, seller:) }
+      let!(:product) { create(:product, user: seller, price_cents: 1000) }
+
+      before { create(:team_membership, user: marketing, seller:, role: TeamMembership::ROLE_MARKETING) }
+
+      it "lets a marketing member perform a content write (edit_products)" do
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "update_product", path_params: { "id" => product.external_id }, params: { "price" => 2500 }),
+        )
+
+        expect(result[:success]).to be(true)
+        expect(product.reload.price_cents).to eq(2500)
+      end
+
+      it "refuses a refund (refund_sales) for a marketing member without mutating" do
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "refund_sale", path_params: { "id" => "sale_1" }, params: { "amount_cents" => 100 }),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to match(/permission/i)
+      end
+    end
   end
 end

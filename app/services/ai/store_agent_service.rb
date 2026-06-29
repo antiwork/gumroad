@@ -346,6 +346,11 @@ class Ai::StoreAgentService
         # tell the model to use api_write so it goes through the confirmation card.
         return [{ error: "#{endpoint.id} changes data — use api_write so the creator can confirm it." }, nil]
       end
+      unless endpoint_permitted?(endpoint)
+        # Defense in depth: the minted token's scopes already exclude this, so the API would 403, but
+        # refusing here avoids a wasted dispatch and gives the model a clear reason.
+        return [{ error: "The current user's role can't access #{endpoint.id}." }, nil]
+      end
 
       path = endpoint.expand_path(arguments["path_params"])
       result = api_client.get(path, sanitize_param_hash(arguments["params"]))
@@ -368,6 +373,11 @@ class Ai::StoreAgentService
         # A read id was sent to the write tool. Reads never need confirmation; nudge the model to use
         # api_read instead so it gets the data immediately.
         return [{ error: "#{endpoint.id} only reads data — use api_read to get it immediately." }, nil]
+      end
+      unless endpoint_permitted?(endpoint)
+        # Defense in depth: don't even stage a proposal the acting user's role can't execute, so the
+        # seller never sees a confirmation card for a change that would 403 on confirm.
+        return [{ error: "The current user's role can't perform #{endpoint.id}." }, nil]
       end
 
       path_params = sanitize_param_hash(arguments["path_params"])
@@ -408,7 +418,18 @@ class Ai::StoreAgentService
     end
 
     def api_client
-      @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
+      @_api_client ||= Ai::StoreAgentApiClient.new(seller:, pundit_user:)
+    end
+
+    # True if the acting user's role carries the scope this endpoint requires (or the endpoint needs
+    # no special scope beyond the baseline). Mirrors the narrowing applied to the minted token, so a
+    # read/proposal the API would 403 is refused up front rather than dispatched.
+    def endpoint_permitted?(endpoint)
+      endpoint.scope.blank? || permitted_scopes.include?(endpoint.scope)
+    end
+
+    def permitted_scopes
+      @_permitted_scopes ||= Ai::StoreAgentScopes.permitted_for(pundit_user)
     end
 
     def client

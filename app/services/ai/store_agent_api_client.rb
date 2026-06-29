@@ -8,29 +8,33 @@
 # token, and we don't reimplement per-endpoint logic or auth.
 #
 # Safety model:
-#   - The token is scoped to the SINGLE creator (resource_owner_id), expires in 5 minutes, is created
-#     per agent turn, and is revoked immediately after the turn. It never leaves the server and is
-#     never shown to the LLM or the browser.
-#   - The token's scopes are the creator's own; an endpoint the creator's role can't reach 403s.
+#   - The token's RESOURCE OWNER is always the store owner (so the right records resolve), but its
+#     SCOPES are narrowed to what the ACTING user's team role is allowed to drive (see
+#     Ai::StoreAgentScopes). The v2 API gates each endpoint by scope only — it never consults the
+#     acting team member's role — so narrowing the scopes is what stops a non-owner teammate (e.g.
+#     marketing) from reaching payouts/tax/refunds the dashboard denies their role.
+#   - The token expires in 5 minutes, is created per request, and is revoked immediately after. It
+#     never leaves the server and is never shown to the LLM or the browser.
 #   - GET (read) calls run automatically. NON-GET (write) calls are NOT executed here — the caller
 #     (StoreAgentService) turns them into a proposed action the creator must confirm, and only then
 #     does StoreAgentActionExecutor replay the same request to mutate.
 class Ai::StoreAgentApiClient
   # The dedicated first-party OAuth application that backs the agent. Owned by the creator so the
-  # token's application owner and resource owner are the same account. Scopes cover the full public
-  # surface; the per-endpoint doorkeeper_authorize! still gates each call to what the creator's role
-  # actually permits.
+  # token's application owner and resource owner are the same account. The app is registered with the
+  # FULL scope superset; each minted token, however, carries only the subset the acting user's role
+  # permits (Ai::StoreAgentScopes.permitted_for), so role narrowing happens per-token, not per-app.
   AGENT_APP_NAME = "Gumroad Store Agent (internal)"
-  # The full public scope set plus `account` (Api::V2::BaseController#doorkeeper_authorize! appends
-  # :account to every endpoint's check, so the token must carry it). These are the SAME scopes a
-  # creator can grant their own API integration; the per-endpoint authorize! and Pundit role checks
-  # still gate each call, so a role that can't refund/edit simply 403s.
-  AGENT_APP_SCOPES = "view_public account edit_products view_sales view_payouts edit_sales " \
-                     "refund_sales mark_sales_as_shipped edit_emails view_profile edit_profile view_tax_data"
+  # The full public scope superset the agent app is registered with. Individual tokens are minted
+  # with a narrowed SUBSET of these based on the acting user's role; see Ai::StoreAgentScopes.
+  AGENT_APP_SCOPES = Ai::StoreAgentScopes.all_scopes_string
   TOKEN_TTL_SECONDS = 300
 
-  def initialize(seller:)
+  # @param seller [User] the store owner (token resource owner; records resolve under this account)
+  # @param pundit_user [SellerContext] the acting user + seller; its user's role narrows the scopes
+  #   minted on the token. Required so a non-owner teammate can't inherit owner-level scopes.
+  def initialize(seller:, pundit_user:)
     @seller = seller
+    @pundit_user = pundit_user
   end
 
   # Run a read (GET) request against the v2 API as the creator. Returns a parsed Hash.
@@ -44,7 +48,7 @@ class Ai::StoreAgentApiClient
   end
 
   private
-    attr_reader :seller
+    attr_reader :seller, :pundit_user
 
     def request(method, path, params)
       token = mint_token
@@ -80,10 +84,15 @@ class Ai::StoreAgentApiClient
     end
 
     def mint_token
+      # Resource owner is the store owner (records resolve under their account), but the SCOPES are
+      # narrowed to what the acting user's role permits, so a non-owner teammate can't drive an
+      # endpoint outside their dashboard role. A user with no permitted scopes can mint a baseline
+      # token only (it can still satisfy :account but reaches no gated endpoint).
+      scopes = Ai::StoreAgentScopes.permitted_for(pundit_user)
       Doorkeeper::AccessToken.create!(
         application: agent_application,
         resource_owner_id: seller.id,
-        scopes: agent_application.scopes.to_s,
+        scopes: scopes.join(" "),
         expires_in: TOKEN_TTL_SECONDS,
         use_refresh_token: false,
       )

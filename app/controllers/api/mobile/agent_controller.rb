@@ -14,6 +14,10 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
 
   before_action { doorkeeper_authorize! :mobile_api }
   before_action :ensure_can_use_agent
+  # Throttle AFTER authorization, and as a before_action so a 429 render HALTS the action — otherwise
+  # the LLM call / store mutation would still run (and a second response try to render) past the
+  # throttle. Only the mutating turns are throttled; `meta` is a cheap static read.
+  before_action :throttle_agent_requests, only: %i[create execute]
 
   AGENT_REQUESTS_PER_PERIOD = 30
   AGENT_REQUESTS_PERIOD_WINDOW = 1.hour
@@ -32,8 +36,6 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   # POST /mobile/agent/messages
   # params: { messages: [{ role:, content: }, ...] }
   def create
-    throttle_agent_requests
-
     messages = sanitize_messages(params[:messages])
     if messages.empty?
       render json: { success: false, error: "A message is required." }, status: :bad_request
@@ -53,8 +55,6 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   # POST /mobile/agent/actions
   # params: { type:, params: {...} } — the confirmed proposed action
   def execute
-    throttle_agent_requests
-
     type = params[:type].to_s
     unless ::Ai::StoreAgentActionExecutor::SUPPORTED_TYPES.include?(type)
       render json: { success: false, message: "That action isn't supported." }, status: :bad_request

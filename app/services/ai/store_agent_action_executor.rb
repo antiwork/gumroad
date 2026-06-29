@@ -36,6 +36,13 @@ class Ai::StoreAgentActionExecutor
     endpoint = Ai::StoreAgentApiCatalog.find(params[:endpoint])
     return failure("That action isn't supported.") if endpoint.nil? || endpoint.read?
 
+    # Defense in depth: the minted token's scopes are already narrowed to the acting user's role
+    # (so a denied endpoint would 403 at the v2 layer), but refuse here too so a tampered/stale
+    # proposal for an endpoint outside the user's role never even dispatches a mutation.
+    unless endpoint_permitted?(endpoint)
+      return failure("You don't have permission to do that.")
+    end
+
     path = endpoint.expand_path(params[:path_params])
     response = api_client.write(endpoint.method, path, normalize_body(params[:params]))
 
@@ -74,7 +81,13 @@ class Ai::StoreAgentActionExecutor
     end
 
     def api_client
-      @_api_client ||= Ai::StoreAgentApiClient.new(seller:)
+      @_api_client ||= Ai::StoreAgentApiClient.new(seller:, pundit_user:)
+    end
+
+    # True if the acting user's role carries the scope this endpoint requires. Mirrors the narrowing
+    # on the minted token so a write outside the user's role is refused before any mutation.
+    def endpoint_permitted?(endpoint)
+      endpoint.scope.blank? || Ai::StoreAgentScopes.permitted_for(pundit_user).include?(endpoint.scope)
     end
 
     def success(message, object: nil) = { success: true, message:, object: }.compact
