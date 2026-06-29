@@ -22,6 +22,11 @@ module CheckoutRecaptcha
   CHALLENGE_SURFACE = :checkout
   SCORE_SURFACE = :checkout_score
   SCORE_TRUSTED_SURFACE = :checkout_score_trusted
+  # A qualifying purchase must be at least this old. Without an age floor a
+  # fraudster could buy a single cheap product from any compliant seller and
+  # immediately inherit the lenient score bar; a years-old purchase can't be
+  # manufactured on demand.
+  MIN_TRUSTED_PURCHASE_AGE = 5.years
 
   class << self
     def score_based?(user)
@@ -44,16 +49,20 @@ module CheckoutRecaptcha
     end
 
     private
-      # A buyer is trusted when they are a compliant seller themselves, or have
-      # at least one paid purchase from a currently-compliant seller. Both signal
-      # a real, established account rather than a throwaway used for fraud, so we
-      # can afford a more lenient score bar for them.
+      # A buyer is trusted when they are a compliant seller themselves, or have a
+      # paid purchase from a currently-compliant seller made at least
+      # MIN_TRUSTED_PURCHASE_AGE ago. Both signal a real, established account
+      # rather than a throwaway used for fraud, so we can afford a more lenient
+      # score bar for them.
       def trusted_buyer?(user)
-        user.compliant? || bought_from_compliant_seller?(user)
+        user.compliant? || established_buyer_of_compliant_seller?(user)
       end
 
-      def bought_from_compliant_seller?(user)
-        user.purchases.paid.joins(:seller).merge(User.compliant).exists?
+      def established_buyer_of_compliant_seller?(user)
+        user.purchases.paid
+            .where(created_at: ..MIN_TRUSTED_PURCHASE_AGE.ago)
+            .joins(:seller).merge(User.compliant)
+            .exists?
       end
 
       def challenge_site_key

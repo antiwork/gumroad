@@ -75,16 +75,23 @@ describe CheckoutRecaptcha do
         expect(described_class.surface(user)).to eq(:checkout_score_trusted)
       end
 
-      it "is :checkout_score_trusted when the buyer has a paid purchase from a compliant seller" do
+      it "is :checkout_score_trusted when the buyer has an aged paid purchase from a compliant seller" do
         compliant_seller = create(:compliant_user)
-        create(:purchase, link: create(:product, user: compliant_seller), purchaser: user)
+        create(:purchase, link: create(:product, user: compliant_seller), purchaser: user, created_at: 6.years.ago)
 
         expect(described_class.surface(user)).to eq(:checkout_score_trusted)
       end
 
-      it "is :checkout_score when the buyer's only paid purchase is from a non-compliant seller" do
+      it "is :checkout_score when the buyer's purchase from a compliant seller is too recent" do
+        compliant_seller = create(:compliant_user)
+        create(:purchase, link: create(:product, user: compliant_seller), purchaser: user, created_at: 1.year.ago)
+
+        expect(described_class.surface(user)).to eq(:checkout_score)
+      end
+
+      it "is :checkout_score when the buyer's aged paid purchase is from a non-compliant seller" do
         non_compliant_seller = create(:user)
-        create(:purchase, link: create(:product, user: non_compliant_seller), purchaser: user)
+        create(:purchase, link: create(:product, user: non_compliant_seller), purchaser: user, created_at: 6.years.ago)
 
         expect(described_class.surface(user)).to eq(:checkout_score)
       end
