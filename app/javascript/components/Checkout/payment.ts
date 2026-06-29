@@ -213,7 +213,10 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  if (state.surcharges.type === "loaded" && !isStripePaymentElementAmountAllowed(getTotalPrice(state))) return false;
+  if (state.surcharges.type === "loaded") {
+    const total = getTotalPrice(state);
+    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
+  }
 
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
@@ -231,12 +234,7 @@ export function getStripePaymentElementAmount(state: State) {
   if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
   if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     return null;
-  const total = getTotalPrice(state);
-  return isStripePaymentElementAmountAllowed(total) ? total : null;
-}
-
-function isStripePaymentElementAmountAllowed(amount: number | null) {
-  return amount !== null && amount >= STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS;
+  return getTotalPrice(state);
 }
 
 export function isProcessing(state: State) {
