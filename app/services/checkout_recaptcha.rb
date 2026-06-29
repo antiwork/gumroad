@@ -21,6 +21,7 @@ module CheckoutRecaptcha
   COHORT_FEATURE = :recaptcha_score_checkout
   CHALLENGE_SURFACE = :checkout
   SCORE_SURFACE = :checkout_score
+  SCORE_TRUSTED_SURFACE = :checkout_score_trusted
 
   class << self
     def score_based?(user)
@@ -31,11 +32,30 @@ module CheckoutRecaptcha
       score_based?(user) ? score_site_key : challenge_site_key
     end
 
+    # Trusted buyers in the score cohort get their own verification surface,
+    # which carries a lower score threshold (see ValidateRecaptcha's
+    # RECAPTCHA_SCORE_THRESHOLD_DEFAULTS). The site key is identical to the
+    # untrusted score surface — only the server-side threshold differs — so the
+    # frontend is unaffected.
     def surface(user)
-      score_based?(user) ? SCORE_SURFACE : CHALLENGE_SURFACE
+      return CHALLENGE_SURFACE unless score_based?(user)
+
+      trusted_buyer?(user) ? SCORE_TRUSTED_SURFACE : SCORE_SURFACE
     end
 
     private
+      # A buyer is trusted when they are a compliant seller themselves, or have
+      # at least one paid purchase from a currently-compliant seller. Both signal
+      # a real, established account rather than a throwaway used for fraud, so we
+      # can afford a more lenient score bar for them.
+      def trusted_buyer?(user)
+        user.compliant? || bought_from_compliant_seller?(user)
+      end
+
+      def bought_from_compliant_seller?(user)
+        user.purchases.paid.joins(:seller).merge(User.compliant).exists?
+      end
+
       def challenge_site_key
         GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
       end

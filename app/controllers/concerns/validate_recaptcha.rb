@@ -7,6 +7,7 @@ module ValidateRecaptcha
   RECAPTCHA_FAIL_OPEN_DEFAULTS = {
     checkout: true,
     checkout_score: true,
+    checkout_score_trusted: true,
     login: false,
     signup: false,
   }.freeze
@@ -14,8 +15,11 @@ module ValidateRecaptcha
   # not listed here default to nil (no score gating — token validity alone). The
   # score-based checkout key returns a score for ~every valid token, so it gates
   # at 0.5 out of the box; raise/lower via RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE.
+  # Trusted buyers (see CheckoutRecaptcha) get a more lenient 0.3 bar via
+  # RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE_TRUSTED.
   RECAPTCHA_SCORE_THRESHOLD_DEFAULTS = {
     checkout_score: 0.5,
+    checkout_score_trusted: 0.3,
   }.freeze
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"
 

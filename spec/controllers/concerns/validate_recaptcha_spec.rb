@@ -26,6 +26,10 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score))
     end
 
+    def checkout_score_trusted_action
+      render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score_trusted))
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -43,6 +47,7 @@ describe ValidateRecaptcha, type: :controller do
       post :signup_action, to: "anonymous#signup_action"
       post :checkout_action, to: "anonymous#checkout_action"
       post :checkout_score_action, to: "anonymous#checkout_score_action"
+      post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -175,6 +180,28 @@ describe ValidateRecaptcha, type: :controller do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+    end
+
+    context "with the trusted score-based checkout surface" do
+      it "rejects a low score using the default 0.3 threshold when none is configured" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE_TRUSTED", 0.3).and_call_original
+        stub_recaptcha_response(valid: true, score: 0.2)
+
+        post :checkout_score_trusted_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "passes a score that clears the lenient 0.3 default but would fail the untrusted 0.5 surface" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE_TRUSTED", 0.3).and_call_original
+        stub_recaptcha_response(valid: true, score: 0.4)
+
+        post :checkout_score_trusted_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
       end
     end
 

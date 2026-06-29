@@ -60,10 +60,38 @@ describe CheckoutRecaptcha do
       expect(described_class.surface(user)).to eq(:checkout)
     end
 
-    it "is :checkout_score for a buyer in the cohort" do
+    it "is :checkout_score for an untrusted buyer in the cohort" do
       Feature.activate_user(:recaptcha_score_checkout, user)
 
       expect(described_class.surface(user)).to eq(:checkout_score)
+    end
+
+    context "for a trusted buyer in the cohort" do
+      before { Feature.activate_user(:recaptcha_score_checkout, user) }
+
+      it "is :checkout_score_trusted when the buyer is themselves a compliant seller" do
+        user.update!(user_risk_state: "compliant")
+
+        expect(described_class.surface(user)).to eq(:checkout_score_trusted)
+      end
+
+      it "is :checkout_score_trusted when the buyer has a paid purchase from a compliant seller" do
+        compliant_seller = create(:compliant_user)
+        create(:purchase, link: create(:product, user: compliant_seller), purchaser: user)
+
+        expect(described_class.surface(user)).to eq(:checkout_score_trusted)
+      end
+
+      it "is :checkout_score when the buyer's only paid purchase is from a non-compliant seller" do
+        non_compliant_seller = create(:user)
+        create(:purchase, link: create(:product, user: non_compliant_seller), purchaser: user)
+
+        expect(described_class.surface(user)).to eq(:checkout_score)
+      end
+    end
+
+    it "does not treat an anonymous buyer as trusted" do
+      expect(described_class.surface(nil)).to eq(:checkout)
     end
   end
 end
