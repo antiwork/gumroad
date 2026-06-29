@@ -7,6 +7,7 @@
 # checkout may render Payment Element or must fall back to CardElement.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
+  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
 
@@ -31,6 +32,7 @@ class Checkout::StripePaymentPresenter
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
+        link_enabled: Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, @seller),
       },
     }
   end
@@ -58,8 +60,8 @@ class Checkout::StripePaymentPresenter
       return "unknown_seller" if sellers.any?(&:blank?)
       return "multi_seller_cart" if sellers.length > 1
 
-      seller = sellers.first
-      return "stripe_payment_element_flag_disabled" unless Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      @seller = sellers.first
+      return "stripe_payment_element_flag_disabled" unless Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, @seller)
       return "setup_or_installment_flow" if items.any? { setup_or_installment_flow?(_1) }
       return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
 

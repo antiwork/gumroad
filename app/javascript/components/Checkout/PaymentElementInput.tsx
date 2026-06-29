@@ -20,11 +20,11 @@ export type PaymentElementController = { stripe: Stripe; elements: StripeElement
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 
-const PAYMENT_ELEMENT_WALLETS: PaymentElementWallets = {
+const paymentElementWallets = (linkEnabled: boolean): PaymentElementWallets => ({
   applePay: "never",
   googlePay: "never",
-  link: "never",
-};
+  link: linkEnabled ? "auto" : "never",
+});
 
 export const PaymentElementInput = ({
   amount,
@@ -54,6 +54,7 @@ export const PaymentElementInput = ({
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
+            linkEnabled={elementsOptions.link_enabled}
             onReady={onReady}
             onChange={onChange}
           />
@@ -70,11 +71,13 @@ export const PaymentElementInput = ({
 const PaymentElementControllerInput = ({
   amount,
   disabled,
+  linkEnabled,
   onReady,
   onChange,
 }: {
   amount: number;
   disabled?: boolean | undefined;
+  linkEnabled: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
 }) => {
@@ -110,7 +113,7 @@ const PaymentElementControllerInput = ({
             },
           },
         },
-        wallets: PAYMENT_ELEMENT_WALLETS,
+        wallets: paymentElementWallets(linkEnabled),
       }}
       {...(onChange ? { onChange } : {})}
     />

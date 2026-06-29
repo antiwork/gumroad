@@ -19,6 +19,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
     currency: "usd",
     payment_method_types: ["card"],
     payment_method_creation: "manual",
+    link_enabled: false,
   },
 };
 
