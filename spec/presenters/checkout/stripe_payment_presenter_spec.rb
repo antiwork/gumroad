@@ -98,14 +98,14 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products:)).to eq(card_element_fallback("unknown_seller"))
   end
 
-  it "falls back to CardElement for a recurring membership product" do
+  it "selects Stripe Payment Element for a recurring membership product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(recurrence: "monthly")]))
-      .to eq(card_element_fallback("reusable_payment_method_required"))
+      .to eq(payment_element_props)
   end
 
-  it "falls back to CardElement for a commission product" do
+  it "selects Stripe Payment Element for a commission product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(native_type: Link::NATIVE_TYPE_COMMISSION)]))
-      .to eq(card_element_fallback("reusable_payment_method_required"))
+      .to eq(payment_element_props)
   end
 
   it "falls back to CardElement for an installment-plan product" do
@@ -120,6 +120,11 @@ describe Checkout::StripePaymentPresenter do
 
   it "falls back to CardElement for a free-trial product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(free_trial: true)]))
+      .to eq(card_element_fallback("setup_or_installment_flow"))
+  end
+
+  it "falls back to CardElement for a recurring free-trial product" do
+    expect(stripe_payment_props(add_products: [flagged_seller_product(recurrence: "monthly", free_trial: true)]))
       .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 

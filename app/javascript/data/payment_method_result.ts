@@ -242,7 +242,7 @@ export async function getReusablePaymentMethodResult(
   options: ReusableOptions,
 ): Promise<PayPalPaymentMethodResult>;
 export async function getReusablePaymentMethodResult(
-  selected: NewCardSelectedPaymentMethod,
+  selected: NewCardSelectedPaymentMethod | NewPaymentElementSelectedPaymentMethod,
   options: ReusableOptions,
 ): Promise<ReusableNewCardPaymentMethodResult>;
 // catch-all

@@ -275,7 +275,7 @@ describe("Library Scenario", type: :system, js: true) do
     purchase_2 = create(:purchase, link: products[1], created_at: 40.minutes.ago, purchaser: @user)
     purchase_3 = create(:purchase, link: products[0], created_at: 30.minutes.ago, purchaser: @user, variant_attributes: [variant_2])
 
-    visit "/library"
+    visit library_path(sort: "purchase_date")
     expect(page).to have_product_card(count: 3)
     expect_to_show_purchases_in_order([purchase_3, purchase_2, purchase_1])
   end

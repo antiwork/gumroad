@@ -60,15 +60,10 @@ class Checkout::StripePaymentPresenter
 
       seller = sellers.first
       return "stripe_payment_element_flag_disabled" unless Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      return "reusable_payment_method_required" if items.any? { requires_reusable_payment_method?(_1) }
       return "setup_or_installment_flow" if items.any? { setup_or_installment_flow?(_1) }
       return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
 
       nil
-    end
-
-    def requires_reusable_payment_method?(item)
-      item[:recurrence].present? || item[:native_type] == Link::NATIVE_TYPE_COMMISSION
     end
 
     def setup_or_installment_flow?(item)

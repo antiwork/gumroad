@@ -44,6 +44,7 @@ import {
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
+  requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
   usePayLabel,
@@ -738,7 +739,8 @@ const CreditCardContent = ({
               email: state.email,
             };
 
-      const paymentMethod = await (!useStripePaymentElement && requiresReusablePaymentMethod(state)
+      const useReusablePaymentMethod = requiresReusablePaymentMethodForCardCollection(state, useStripePaymentElement);
+      const paymentMethod = await (useReusablePaymentMethod
         ? getReusablePaymentMethodResult(selectedPaymentMethod, { products: state.products })
         : getPaymentMethodResult(selectedPaymentMethod));
 

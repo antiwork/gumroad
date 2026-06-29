@@ -83,6 +83,50 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
+  it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:membership_product_with_preset_tiered_pricing, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+
+    tier = product.variant_categories.alive.first.variants.alive.find_by!(name: "First Tier")
+
+    visit("/checkout?product=#{product.unique_permalink}&option=#{tier.external_id}")
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+
+    setup_intent_ids = []
+    allow(ChargeProcessor).to receive(:setup_future_charges!).and_wrap_original do |original, *args, **kwargs|
+      setup_intent = original.call(*args, **kwargs)
+      setup_intent_ids << setup_intent.id if setup_intent.present?
+      setup_intent
+    end
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    check_out(product, payment_element: true)
+
+    purchase = Purchase.last
+    expect(purchase.successful?).to be(true)
+    expect(purchase.subscription).to be_alive
+    expect(purchase.credit_card).to be_present
+    expect(purchase.credit_card.stripe_customer_id).to be_present
+    expect(setup_intent_ids).to all(match(/\Aseti_/))
+    expect(setup_intent_ids).not_to be_empty
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
   describe "save credit card payment" do
     before :each do
       @buyer = create(:user)
