@@ -7,6 +7,8 @@ class AssetPreviewsController < ApplicationController
   def create
     authorize AssetPreview
 
+    return render(json: { success: false, error: "Could not process your preview, please try again." }) unless params[:asset_preview].is_a?(ActionController::Parameters)
+
     asset_preview = @product.asset_previews.build
 
     if permitted_params[:signed_blob_id].present?
