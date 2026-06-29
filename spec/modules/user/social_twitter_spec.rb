@@ -66,6 +66,14 @@ describe User::SocialTwitter do
       it "sets the name", :vcr do
         expect { User.query_twitter(@user, @data) }.to change { @user.reload.name }.from(nil).to(@data["name"])
       end
+
+      it "sets the name with colons removed", :vcr do
+        data_with_colon = @data.deep_dup
+        data_with_colon["name"] = "Test: User"
+
+        expect { User.query_twitter(@user, data_with_colon) }.to change { @user.reload.name }.from(nil).to("Test User")
+        expect(@user).to be_valid
+      end
     end
   end
 end

@@ -213,6 +213,34 @@ describe ProductPresenter::Card do
                           "Expected no per-row #{label} queries, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
+
+      it "does not issue per-row bundle inventory queries when computing inventory" do
+        bundles = Array.new(2) { create(:product, :bundle, user: creator_with_domain) }
+
+        ids = bundles.map(&:id)
+        # Pre-warm caches so we do not count one-shot setup queries as N+1.
+        Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a.each do |product|
+          described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: true)
+        end
+
+        queries = capture_queries do
+          loaded = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a
+          loaded.each do |product|
+            described_class.new(product:).for_web(request:, show_seller: true, compute_description: false, compute_inventory: true)
+          end
+        end
+
+        # `Link#remaining_for_sale_count` walks `bundle_products` (and each
+        # bundled product/variant) to compute the minimum bundle inventory.
+        # Without preloading these, ActiveRecord fires one query per bundle in
+        # the result set (`WHERE bundle_id = N`), the N+1 from GUMROAD-SQ.
+        bundles.each do |bundle|
+          pattern = /FROM `bundle_products`.*WHERE `bundle_products`\.`bundle_id` = #{bundle.id}\b/
+          hits = queries.grep(pattern)
+          expect(hits).to be_empty,
+                          "Expected no per-row bundle_products queries for bundle_id=#{bundle.id}, got #{hits.size}:\n#{hits.join("\n")}"
+        end
+      end
     end
 
     context "membership product" do

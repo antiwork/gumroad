@@ -1,9 +1,10 @@
-import { StripeCardElement } from "@stripe/stripe-js";
+import { Stripe, StripeCardElement, StripeElements } from "@stripe/stripe-js";
 
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
   confirmCardIfNeeded,
   prepareCardPaymentMethodData,
+  preparePaymentElementPaymentMethodData,
   prepareFutureCharges,
 } from "$app/data/card_payment_method_data";
 import {
@@ -30,6 +31,19 @@ export type NewCardSelectedPaymentMethod = {
   keepOnFile: null | boolean;
   zipCode: null | string;
 };
+export type NewPaymentElementSelectedPaymentMethod = {
+  type: "payment-element";
+  stripe: Stripe;
+  elements: StripeElements;
+  email: string;
+  fullName: string;
+  keepOnFile: null | boolean;
+  zipCode: null | string;
+  country: string;
+  state: string;
+  city: string;
+  address: string;
+};
 export type NewPayPalBraintreeSelectedPaymentMethod = {
   type: "paypal-braintree";
   nonce: string;
@@ -44,6 +58,7 @@ export type NewPayPalNativeSelectedPaymentMethod = {
 export type SelectedPaymentMethod =
   | SavedSelectedPaymentMethod
   | NewCardSelectedPaymentMethod
+  | NewPaymentElementSelectedPaymentMethod
   | NewPayPalBraintreeSelectedPaymentMethod
   | NewPayPalNativeSelectedPaymentMethod;
 type SavedPaymentMethodResult = { type: "saved" };
@@ -110,7 +125,7 @@ export async function getPaymentMethodResult(
   selected: NewPayPalNativeSelectedPaymentMethod | NewPayPalBraintreeSelectedPaymentMethod,
 ): Promise<PayPalPaymentMethodResult>;
 export async function getPaymentMethodResult(
-  selected: NewCardSelectedPaymentMethod,
+  selected: NewCardSelectedPaymentMethod | NewPaymentElementSelectedPaymentMethod,
 ): Promise<OneOffNewCardPaymentMethodResult>;
 // catch-all
 export async function getPaymentMethodResult(
@@ -162,6 +177,37 @@ export async function getPaymentMethodResult(
       const paymentMethodData = await prepareCardPaymentMethodData({
         cardElement: selected.element,
         email: selected.email,
+      });
+      if (paymentMethodData.status === "success") {
+        return {
+          type: "new",
+          cardParamsResult: {
+            type: "cc",
+            cardParams: paymentMethodData,
+            keepOnFile: selected.keepOnFile,
+            zipCode: selected.zipCode,
+          },
+        };
+      }
+      return {
+        type: "new",
+        cardParamsResult: {
+          type: "error",
+          cardParams: paymentMethodData,
+        },
+      };
+    }
+    case "payment-element": {
+      const paymentMethodData = await preparePaymentElementPaymentMethodData({
+        stripe: selected.stripe,
+        elements: selected.elements,
+        email: selected.email,
+        fullName: selected.fullName,
+        zipCode: selected.zipCode,
+        country: selected.country,
+        state: selected.state,
+        city: selected.city,
+        address: selected.address,
       });
       if (paymentMethodData.status === "success") {
         return {

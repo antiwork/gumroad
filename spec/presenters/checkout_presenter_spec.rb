@@ -18,6 +18,13 @@ describe CheckoutPresenter do
     end
 
     let(:browser_guid) { SecureRandom.uuid }
+    let(:card_element_checkout_payment) do
+      {
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "empty_cart",
+        elements_options: nil,
+      }
+    end
 
     it "returns basic props for the checkout page" do
       expect(@instance.checkout_props(params: {}, browser_guid:)).to eq(
@@ -39,6 +46,7 @@ describe CheckoutPresenter do
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
+        checkout_payment: card_element_checkout_payment,
       )
     end
 
@@ -221,6 +229,11 @@ describe CheckoutPresenter do
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
+        checkout_payment: {
+          integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+          fallback_reason: "saved_credit_card",
+          elements_options: nil,
+        },
       )
     end
 

@@ -75,12 +75,65 @@ describe "PurchaseInstallments", :vcr do
         expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id, enabled_purchase_with_variant.id, disabled_purchase.id, disabled_purchase_with_variant.id]).map(&:id)).to match_array [enabled_product_post, enabled_product_variant_post, multi_product_post, multi_product_variant_post].map(&:id)
       end
 
-      it "excludes past posts that are not directly targeted at the purchased product or variant" do
-        create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago)
+      it "includes untargeted seller-wide past posts but excludes posts targeted at OTHER products/variants" do
+        # Seller-wide post with no product/variant targeting: a should_show_all_posts
+        # buyer (e.g. a member) is entitled to it even without an email_info row
+        # (gumroad-private#749).
+        untargeted_seller_post = create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago)
+        # Posts targeted at a DIFFERENT product/variant must still be excluded.
         create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago, bought_products: [create(:product).unique_permalink])
         create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago, bought_variants: [create(:variant).external_id])
 
-        expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id, enabled_purchase_with_variant.id])).to eq []
+        expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id, enabled_purchase_with_variant.id]).map(&:id))
+          .to eq([untargeted_seller_post.id])
+      end
+
+      it "surfaces an untargeted seller-wide post to a member who was never emailed it (gumroad-private#749)" do
+        # Reproduces the reported bug: two members of the same should_show_all_posts
+        # product, only one of whom received the email for a seller-wide post.
+        seller = enabled_product.user
+        emailed_member = create(:purchase, link: enabled_product, seller:)
+        non_emailed_member = create(:purchase, link: enabled_product, seller:)
+        seller_wide_post = create(:seller_installment, seller:, published_at: 1.day.ago)
+        create(:creator_contacting_customers_email_info_sent, purchase: emailed_member, installment: seller_wide_post)
+
+        # Before the fix, only the emailed member saw it. Now both do.
+        expect(Purchase.product_installments(purchase_ids: [emailed_member.id]).map(&:id)).to include(seller_wide_post.id)
+        expect(Purchase.product_installments(purchase_ids: [non_emailed_member.id]).map(&:id)).to include(seller_wide_post.id)
+      end
+
+      it "still hides an untargeted seller-wide post that fails the post's audience filters" do
+        # The entitlement relaxation must NOT bypass purchase_passes_filters: a post
+        # restricted to customers created after a date the buyer pre-dates stays hidden.
+        create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago,
+                                    created_after: (enabled_purchase.created_at + 1.day).to_date.to_s)
+
+        expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id])).to eq []
+      end
+
+      it "never surfaces a private single-recipient one-off email seller-wide (gumroad-private#749 guard)" do
+        # A one-off email is a seller-type post with no targeting; it must stay
+        # private to its single recipient and NOT leak to other should_show_all_posts buyers.
+        other_buyer = create(:purchase, link: enabled_product, seller: enabled_product.user)
+        one_off = create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago, single_recipient_email: true)
+        one_off.update!(json_data: one_off.json_data.merge("single_recipient_purchase_id" => other_buyer.id))
+
+        expect(one_off.single_recipient_email?).to be(true) # guard: fixture sets the real flag
+        expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id]).map(&:id)).not_to include(one_off.id)
+      end
+
+      it "does not leak an untargeted seller-wide post across sellers in a mixed batch (gumroad-private#749 guard)" do
+        # product_installments can be called with purchases from multiple sellers.
+        # A seller-wide post belongs to ONE seller and must not surface for another
+        # seller's buyer just because that buyer's product has should_show_all_posts.
+        other_seller_product = create(:product, should_show_all_posts: true)
+        other_seller_purchase = create(:purchase, link: other_seller_product, seller: other_seller_product.user)
+        sellerA_post = create(:seller_installment, seller: enabled_product.user, published_at: 1.day.ago)
+
+        result = Purchase.product_installments(purchase_ids: [enabled_purchase.id, other_seller_purchase.id]).map(&:id)
+        expect(result).to include(sellerA_post.id) # visible to seller A's own buyer
+        # and NOT visible to the other seller's buyer: confirm by querying that buyer alone
+        expect(Purchase.product_installments(purchase_ids: [other_seller_purchase.id]).map(&:id)).not_to include(sellerA_post.id)
       end
 
       context "with a restarted subscription" do

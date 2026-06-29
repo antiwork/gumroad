@@ -88,7 +88,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
           :preorder,
           :url_redirect,
           :product_review,
-          { link: :user },
+          { link: { user: { avatar_attachment: :blob } } },
           { subscription: { true_original_purchase: :product_review } }
         ]
       ).call

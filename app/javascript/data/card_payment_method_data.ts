@@ -1,4 +1,4 @@
-import { PaymentRequestPaymentMethodEvent, StripeCardElement } from "@stripe/stripe-js";
+import { PaymentRequestPaymentMethodEvent, Stripe, StripeCardElement, StripeElements } from "@stripe/stripe-js";
 import typia from "typia";
 
 import {
@@ -39,15 +39,76 @@ export const prepareCardPaymentMethodData = async (
   if (paymentMethodResult.error) {
     return { status: "error", stripe_error: paymentMethodResult.error };
   }
-  return {
-    status: "success",
-    type: "card",
-    reusable: false,
-    stripe_payment_method_id: paymentMethodResult.paymentMethod.id,
-    card_country: paymentMethodResult.paymentMethod.card?.country ?? null,
-    card_country_source: "stripe",
-  };
+  return cardPaymentMethodParams(paymentMethodResult.paymentMethod);
 };
+
+type PaymentElementCardData = {
+  stripe: Stripe;
+  elements: StripeElements;
+  email: string;
+  fullName: string | null;
+  zipCode: string | null;
+  country: string | null;
+  state: string | null;
+  city: string | null;
+  address: string | null;
+};
+
+type PaymentElementBillingDetailsData = Pick<
+  PaymentElementCardData,
+  "address" | "city" | "country" | "email" | "fullName" | "state" | "zipCode"
+>;
+
+export const paymentElementBillingDetails = (cardData: PaymentElementBillingDetailsData) => ({
+  email: cardData.email,
+  name: cardData.fullName || null,
+  phone: null,
+  address: {
+    city: cardData.city || null,
+    country: cardData.country || null,
+    line1: cardData.address || null,
+    line2: null,
+    postal_code: cardData.zipCode || null,
+    state: cardData.state || null,
+  },
+});
+
+export const preparePaymentElementPaymentMethodData = async (
+  cardData: PaymentElementCardData,
+): Promise<CardPaymentMethodParams | StripeErrorParams> => {
+  const submitResult = await cardData.elements.submit();
+  if (submitResult.error) {
+    return { status: "error", stripe_error: submitResult.error };
+  }
+
+  const paymentMethodResult = await cardData.stripe.createPaymentMethod({
+    elements: cardData.elements,
+    params: {
+      billing_details: paymentElementBillingDetails(cardData),
+    },
+  });
+
+  if (paymentMethodResult.error) {
+    return { status: "error", stripe_error: paymentMethodResult.error };
+  }
+
+  return cardPaymentMethodParams(paymentMethodResult.paymentMethod);
+};
+
+type CardPaymentMethodPayload = {
+  id: string;
+  card?: {
+    country?: string | null;
+  } | null;
+};
+export const cardPaymentMethodParams = (paymentMethod: CardPaymentMethodPayload): CardPaymentMethodParams => ({
+  status: "success",
+  type: "card",
+  reusable: false,
+  stripe_payment_method_id: paymentMethod.id,
+  card_country: paymentMethod.card?.country ?? null,
+  card_country_source: "stripe",
+});
 
 export const preparePaymentRequestPaymentMethodData = (
   paymentRequestEvent: PaymentRequestPaymentMethodEvent,

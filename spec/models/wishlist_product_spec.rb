@@ -130,6 +130,21 @@ describe WishlistProduct do
       end
     end
 
+    context "when a variant-less product becomes versioned after the wishlist product is created" do
+      let(:product) { create(:product) }
+
+      it "allows the wishlist product to be marked as deleted" do
+        wishlist_product.save!
+
+        category = create(:variant_category, title: "Category", link: product)
+        create(:variant, variant_category: category, name: "Untitled 1")
+        product.reload
+
+        expect(wishlist_product.reload).to be_invalid
+        expect { wishlist_product.mark_deleted! }.to change { wishlist_product.reload.deleted? }.from(false).to(true)
+      end
+    end
+
     context "when the variant doesn't belong to the product" do
       before do
         wishlist_product.variant = create(:variant)

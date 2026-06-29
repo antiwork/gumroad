@@ -557,6 +557,27 @@ const b = 2;</code></pre>
     end
   end
 
+  describe "#targeted_at_all_seller_customers?" do
+    it "is true only for a seller-type post with no product/variant targeting" do
+      expect(build(:seller_installment).targeted_at_all_seller_customers?).to eq true
+      expect(build(:seller_installment, bought_products: ["abc"]).targeted_at_all_seller_customers?).to eq false
+      expect(build(:seller_installment, bought_variants: ["xyz"]).targeted_at_all_seller_customers?).to eq false
+    end
+
+    it "is false for a single-recipient one-off email (must stay private)" do
+      post = build(:seller_installment)
+      allow(post).to receive(:single_recipient_email?).and_return(true)
+      expect(post.targeted_at_all_seller_customers?).to eq false
+    end
+
+    it "is false for non-seller post types" do
+      expect(build(:installment).targeted_at_all_seller_customers?).to eq false
+      expect(build(:variant_installment).targeted_at_all_seller_customers?).to eq false
+      expect(build(:follower_installment).targeted_at_all_seller_customers?).to eq false
+      expect(build(:audience_installment).targeted_at_all_seller_customers?).to eq false
+    end
+  end
+
   describe "#passes_member_cancellation_checks?" do
     before do
       @creator = create(:user, name: "dude")

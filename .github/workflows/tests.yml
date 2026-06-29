@@ -638,14 +638,6 @@ jobs:
               exit 0
             fi
 
-            # Only deploy Mon-Fri 9am-5pm Eastern
-            CURRENT_HOUR=$(TZ=America/New_York date +%H)
-            CURRENT_DOW=$(TZ=America/New_York date +%u)  # 1=Mon, 7=Sun
-            if [ "$CURRENT_DOW" -gt 5 ] || [ "$CURRENT_HOUR" -lt 9 ] || [ "$CURRENT_HOUR" -ge 17 ]; then
-              echo "Outside deploy window (Mon-Fri 9am-5pm ET). Current: DOW=$CURRENT_DOW Hour=$CURRENT_HOUR. Skipping unblock."
-              exit 0
-            fi
-
             echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
             # Fetch builds for the specific commit, including jobs
             BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \

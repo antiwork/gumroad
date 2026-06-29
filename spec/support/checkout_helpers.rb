@@ -57,7 +57,7 @@ module CheckoutHelpers
     expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code) if offer_code.present? && ((offer_code.amount_cents || 0) > 0 || (offer_code.amount_percentage || 0) > 0)
   end
 
-  def fill_checkout_form(product, email: "test@gumroad.com", address: nil, offer_code: nil, is_free: false, country: nil, zip_code: "94107", vat_id: nil, abn_id: nil, gst_id: nil, qst_id: nil, mva_id: nil, cn_id: nil, ird_id: nil, sst_id: nil, vsk_id: nil, trn_id: nil, oman_vat_number: nil, unp_id: nil, rut_id: nil, nit_id: nil, cpj_id: nil, ruc_id: nil, tn_id: nil, tin_id: nil, rfc_id: nil, inn_id: nil, pib_id: nil, brn_id: nil, vkn_id: nil, edrpou_id: nil, mst_id: nil, kra_pin_id: nil, firs_tin_id: nil, tra_tin: nil, gift: nil, custom_fields: [], credit_card: {}, logged_in_user: nil)
+  def fill_checkout_form(product, email: "test@gumroad.com", address: nil, offer_code: nil, is_free: false, country: nil, zip_code: "94107", vat_id: nil, abn_id: nil, gst_id: nil, qst_id: nil, mva_id: nil, cn_id: nil, ird_id: nil, sst_id: nil, vsk_id: nil, trn_id: nil, oman_vat_number: nil, unp_id: nil, rut_id: nil, nit_id: nil, cpj_id: nil, ruc_id: nil, tn_id: nil, tin_id: nil, rfc_id: nil, inn_id: nil, pib_id: nil, brn_id: nil, vkn_id: nil, edrpou_id: nil, mst_id: nil, kra_pin_id: nil, firs_tin_id: nil, tra_tin: nil, gift: nil, custom_fields: [], credit_card: {}, logged_in_user: nil, payment_element: false)
     fill_in "Email address", with: email if email.present? && logged_in_user.nil?
 
     if gift&.dig(:email).present?
@@ -138,6 +138,8 @@ module CheckoutHelpers
     elsif logged_in_user&.credit_card.present? && logged_in_user.credit_card.charge_processor_id != PaypalChargeProcessor.charge_processor_id
       expect(page).to have_command("Use a different card?")
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
+    elsif payment_element && !is_free
+      fill_in_payment_element
     elsif !credit_card.nil? && !is_free
       fill_in_credit_card(**credit_card)
     end
@@ -207,6 +209,29 @@ end
 def within_credit_card_frame(&block)
   stripe_frame = all("iframe", wait: 10).find { |f| f["title"]&.include?("Secure") || f["src"]&.include?("elements-inner-card") } || first("iframe", wait: 10)
   within_frame(stripe_frame, &block)
+end
+
+def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123")
+  within_payment_element_frame do
+    fill_in_stripe_field ["Card number"], with: number
+    fill_in_stripe_field ["Expiration date", "Expiration", "MM / YY"], with: expiry
+    fill_in_stripe_field ["Security code", "CVC", "CVV"], with: cvc
+  end
+end
+
+def within_payment_element_frame(&block)
+  stripe_frame = all("iframe", wait: 10).find { |f| f["src"]&.include?("elements-inner-payment") || f["title"]&.include?("payment input") }
+  raise Capybara::ElementNotFound, "Unable to find Stripe Payment Element frame" if stripe_frame.nil?
+
+  within_frame(stripe_frame, &block)
+end
+
+def fill_in_stripe_field(labels, with:)
+  field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
+  field ||= first(:fillable_field, labels.first, visible: false)
+  raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
+
+  field.fill_in(with:)
 end
 
 def within_sca_frame(&block)
