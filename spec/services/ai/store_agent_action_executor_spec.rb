@@ -163,6 +163,21 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/permission/i)
       end
+
+      it "refuses creating a webhook (admin-only) for a marketing member without mutating" do
+        # The v2 resource_subscriptions endpoint only needs view_sales, but installing a webhook is
+        # OAuth-app management — admin-only in the dashboard — so the agent gates it admin_only. A
+        # marketing member must not be able to point store webhooks at an arbitrary URL.
+        expect do
+          result = executor.execute(
+            type: "api_write",
+            params: api_write(endpoint: "create_resource_subscription", params: { "resource_name" => "sale", "post_url" => "https://evil.example.com/hook" }),
+          )
+
+          expect(result[:success]).to be(false)
+          expect(result[:message]).to match(/permission/i)
+        end.not_to change { seller.resource_subscriptions.count }
+      end
     end
   end
 end

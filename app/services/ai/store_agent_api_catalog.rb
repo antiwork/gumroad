@@ -19,9 +19,15 @@
 # query (reads) or body (writes) keys the endpoint accepts, purely to teach the model; the API still
 # validates the real payload.
 module Ai::StoreAgentApiCatalog
-  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :summary, :path_params, :params, keyword_init: true) do
+  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, keyword_init: true) do
     def read? = read == true
     def write? = !read?
+
+    # True if this endpoint may only be driven by an owner/admin (not a marketing member), even
+    # though the underlying v2 endpoint's scope (e.g. view_sales) is broader. Used for capabilities
+    # the dashboard restricts to admins beyond what the OAuth scope implies — e.g. webhook/resource
+    # subscription management, which is OAuth-app management and admin-only in the dashboard.
+    def admin_only? = admin_only == true
 
     # Expand the path template against a hash of path params, percent-decoding nothing (ids are safe
     # external ids). Raises if a required placeholder is missing so a malformed call fails loudly
@@ -38,8 +44,8 @@ module Ai::StoreAgentApiCatalog
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).
-  def self.ep(id, method, path, summary, read: false, scope: nil, path_params: [], params: [])
-    Endpoint.new(id:, method:, path:, read:, scope:, summary:, path_params:, params:)
+  def self.ep(id, method, path, summary, read: false, scope: nil, admin_only: false, path_params: [], params: [])
+    Endpoint.new(id:, method:, path:, read:, scope:, admin_only:, summary:, path_params:, params:)
   end
 
   ENDPOINTS = [
@@ -142,9 +148,13 @@ module Ai::StoreAgentApiCatalog
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 
     # ---- Resource subscriptions (webhooks) ----
-    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions.", read: true),
-    ep("create_resource_subscription", :put, "/resource_subscriptions", "Create a webhook resource subscription.", params: %w[resource_name post_url]),
-    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a webhook resource subscription.", path_params: %w[id]),
+    # The underlying v2 endpoints only require view_sales, but creating/removing a webhook is OAuth-
+    # app management, which the dashboard restricts to admins/owner. Gate them admin_only here so a
+    # marketing member can't install a data-exfiltrating webhook through the agent. Listing is gated
+    # too since it exposes the configured callback URLs. (Flagged for product review — see PR thread.)
+    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions.", read: true, scope: "view_sales", admin_only: true),
+    ep("create_resource_subscription", :put, "/resource_subscriptions", "Create a webhook resource subscription.", scope: "view_sales", admin_only: true, params: %w[resource_name post_url]),
+    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
 
     # ---- Tax forms & earnings ----
     ep("list_tax_forms", :get, "/tax_forms", "List the creator's available tax forms.", read: true, scope: "view_tax_data"),

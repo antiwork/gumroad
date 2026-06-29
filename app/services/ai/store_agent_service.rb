@@ -421,11 +421,19 @@ class Ai::StoreAgentService
       @_api_client ||= Ai::StoreAgentApiClient.new(seller:, pundit_user:)
     end
 
-    # True if the acting user's role carries the scope this endpoint requires (or the endpoint needs
-    # no special scope beyond the baseline). Mirrors the narrowing applied to the minted token, so a
-    # read/proposal the API would 403 is refused up front rather than dispatched.
+    # True if the acting user's role may drive this endpoint. Requires the role to carry the
+    # endpoint's scope AND, for endpoints the dashboard restricts to admins beyond their OAuth scope
+    # (admin_only?, e.g. webhook management), the acting user to be an owner/admin. Mirrors the token
+    # narrowing so a read/proposal the API or our role boundary would refuse is rejected up front.
     def endpoint_permitted?(endpoint)
+      return false if endpoint.admin_only? && !admin_or_owner?
       endpoint.scope.blank? || permitted_scopes.include?(endpoint.scope)
+    end
+
+    def admin_or_owner?
+      user = pundit_user&.user
+      seller = pundit_user&.seller
+      user.present? && seller.present? && user.role_admin_for?(seller)
     end
 
     def permitted_scopes
