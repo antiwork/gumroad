@@ -79,7 +79,7 @@ class Checkout::StripePaymentPresenter
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
 
-      # Initial eligibility uses pre-tax item prices; the browser re-gates the final loaded total.
+      # Initial eligibility uses pre-tax item prices; the browser waits for the final loaded total.
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
