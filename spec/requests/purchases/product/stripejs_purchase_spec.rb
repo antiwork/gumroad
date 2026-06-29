@@ -139,7 +139,8 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     near_zero_price_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS + 10
     product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide")
     # Product creation enforces Gumroad's minimum; this synthetic checkout verifies Stripe's lower charge floor.
-    product.update_column(:price_cents, near_zero_price_cents)
+    product.default_price.update_column(:price_cents, near_zero_price_cents)
+    product.reload
     Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     visit("/checkout?product=#{product.unique_permalink}")
