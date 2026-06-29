@@ -526,6 +526,40 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(cart.alive_cart_products.sole.product).to eq(product2)
       end
 
+      it "soft-deletes a stale cart product with an invalid quantity left over from legacy data" do
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+
+        cart = create(:cart, user: controller.logged_in_user)
+        legacy_cart_product = create(:cart_product, cart:, product: product1)
+        # Simulate a legacy/corrupt record that predates the `quantity > 0` validation.
+        legacy_cart_product.update_column(:quantity, 0)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product2.external_id },
+                price: product2.price_cents,
+                quantity: 1,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_nil
+
+        cart.reload
+        expect(legacy_cart_product.reload).to be_deleted
+        expect(cart.alive_cart_products.sole.product).to eq(product2)
+      end
+
       it "does not create a cart product when its quantity is zero" do
         product = create(:product, user: seller)
 

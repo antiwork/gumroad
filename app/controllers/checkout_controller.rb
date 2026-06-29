@@ -74,7 +74,10 @@ class CheckoutController < ApplicationController
         cart_product
       end
 
-      cart.alive_cart_products.where.not(id: updated_cart_products.map(&:id)).find_each(&:mark_deleted!)
+      # Soft-deleting a stale cart product must not require it to be otherwise valid. Legacy/corrupt
+      # records can have `quantity <= 0`, which would fail validation and abort the whole update, so
+      # skip validations when removing them.
+      cart.alive_cart_products.where.not(id: updated_cart_products.map(&:id)).find_each { _1.mark_deleted(validate: false) }
     end
 
     redirect_to checkout_path, status: :see_other
