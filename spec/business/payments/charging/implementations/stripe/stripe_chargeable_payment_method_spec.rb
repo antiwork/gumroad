@@ -125,5 +125,37 @@ describe StripeChargeablePaymentMethod, :vcr do
       expect(chargeable.stripe_charge_params[:payment_method]).to be_present
       expect(chargeable.stripe_charge_params[:payment_method]).not_to eq(stripe_payment_method_id)
     end
+
+    it "uses the connected-account copy for direct charges with platform payment methods" do
+      seller = create(:user, check_merchant_account_is_linked: true)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      product = create(:product, user: seller)
+      platform_payment_method_id = "pm_platform_123"
+      connected_payment_method_id = "pm_connected_456"
+      platform_payment_method = OpenStruct.new(
+        id: platform_payment_method_id,
+        customer: nil,
+        card: { last4: "4242", brand: "visa", funding: "credit", fingerprint: "fp_123", exp_month: 12, exp_year: 2050, country: "US" },
+        billing_details: { address: { postal_code: "94107" } }
+      )
+      connected_payment_method = OpenStruct.new(
+        id: connected_payment_method_id,
+        card: { last4: "4242", brand: "visa", funding: "credit", fingerprint: "fp_456", exp_month: 12, exp_year: 2050, country: "US" }
+      )
+      direct_chargeable = StripeChargeablePaymentMethod.new(platform_payment_method_id, zip_code: "94107", product_permalink: product.unique_permalink)
+
+      expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method_id).and_return(platform_payment_method)
+      expect(Stripe::Customer).to receive(:create).with(hash_including(payment_method: platform_payment_method_id)).and_return(OpenStruct.new(id: "cus_platform_123"))
+      expect(Stripe::PaymentMethod).to receive(:create).with(
+        { customer: "cus_platform_123", payment_method: platform_payment_method_id },
+        { stripe_account: merchant_account.charge_processor_merchant_id }
+      ).and_return(connected_payment_method)
+
+      direct_chargeable.prepare!
+
+      expect(direct_chargeable.stripe_charge_params).to eq(payment_method: connected_payment_method_id)
+      expect(direct_chargeable.last4).to eq("4242")
+      expect(direct_chargeable.country).to eq("US")
+    end
   end
 end

@@ -28,6 +28,19 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
   end
 
+  def payment_element_props
+    {
+      integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
+      fallback_reason: nil,
+      elements_options: {
+        mode: "payment",
+        currency: "usd",
+        payment_method_types: ["card"],
+        payment_method_creation: "manual",
+      },
+    }
+  end
+
   def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil)
     described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:).props
   end
@@ -37,16 +50,16 @@ describe Checkout::StripePaymentPresenter do
     product = create(:product, user: seller, price_cents: 1234)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
-      integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-      fallback_reason: nil,
-      elements_options: {
-        mode: "payment",
-        currency: "usd",
-        payment_method_types: ["card"],
-        payment_method_creation: "manual",
-      },
-    )
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
+  end
+
+  it "selects Stripe Payment Element for a flagged single-seller direct-charge checkout" do
+    seller = create(:user, check_merchant_account_is_linked: true)
+    product = create(:product, user: seller, price_cents: 1234)
+    create(:merchant_account_stripe_connect, user: seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
   end
 
   it "selects Stripe Payment Element even when the buyer has a saved card" do
@@ -132,15 +145,6 @@ describe Checkout::StripePaymentPresenter do
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product: create(:product, user: create(:user)))
 
-    expect(stripe_payment_props(cart:, add_products: [flagged_seller_product], clear_cart: true)).to eq(
-      integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-      fallback_reason: nil,
-      elements_options: {
-        mode: "payment",
-        currency: "usd",
-        payment_method_types: ["card"],
-        payment_method_creation: "manual",
-      },
-    )
+    expect(stripe_payment_props(cart:, add_products: [flagged_seller_product], clear_cart: true)).to eq(payment_element_props)
   end
 end

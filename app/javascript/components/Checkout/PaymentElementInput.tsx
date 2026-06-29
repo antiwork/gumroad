@@ -131,7 +131,8 @@ const StripePaymentElementProvider = ({
   const font = useFont();
   const color = getCssVariable("color").split(" ").join(",");
   const backgroundColor = `rgb(${getCssVariable("filled").split(" ").join(",")})`;
-  const borderColor = `rgb(${color}, ${getCssVariable("gray-2")})`;
+  const borderColor = `rgb(${color}, ${getCssVariable("border-alpha")})`;
+  const dangerColor = `rgb(${getCssVariable("danger").split(" ").join(",")})`;
   const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
   const fontFamily = `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
 
@@ -148,14 +149,14 @@ const StripePaymentElementProvider = ({
           fontFamily,
           fontSizeBase: "1rem",
           fontSizeSm: "0.875rem",
-          fontLineHeight: "1.35",
+          fontLineHeight: "1.375",
           spacingUnit: "0.25rem",
-          gridRowSpacing: "0.75rem",
+          gridRowSpacing: "1rem",
           gridColumnSpacing: "1rem",
           colorText: `rgb(${color})`,
           colorTextPlaceholder: placeholderColor,
           colorBackground: backgroundColor,
-          colorDanger: "#df1b41",
+          colorDanger: dangerColor,
           borderRadius: "4px",
           focusOutline: `2px solid rgb(${getCssVariable("accent").split(" ").join(",")})`,
           focusBoxShadow: "none",
@@ -175,13 +176,13 @@ const StripePaymentElementProvider = ({
             padding: "0.75rem 1rem",
           },
           ".Input:focus": {
-            borderColor: `rgb(${color})`,
             boxShadow: "none",
           },
           ".Label": {
             color: `rgb(${color})`,
             fontSize: "1rem",
             fontWeight: "400",
+            marginBottom: "0.5rem",
           },
         },
       },
@@ -190,6 +191,7 @@ const StripePaymentElementProvider = ({
       backgroundColor,
       borderColor,
       color,
+      dangerColor,
       elementsOptions,
       font.name,
       font.url,

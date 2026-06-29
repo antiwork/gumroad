@@ -68,7 +68,7 @@ export const paymentElementBillingDetails = (cardData: PaymentElementBillingDeta
     country: cardData.country || null,
     line1: cardData.address || null,
     line2: null,
-    postal_code: cardData.zipCode ?? "",
+    postal_code: cardData.zipCode || null,
     state: cardData.state || null,
   },
 });
