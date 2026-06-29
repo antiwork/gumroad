@@ -151,6 +151,18 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/permission/i)
       end
+
+      it "refuses resend_receipt for a marketing member (edit_sales, which marketing lacks)" do
+        # resend_receipt is guarded by edit_sales on the real v2 endpoint, NOT view_sales, so a
+        # marketing member (who has only view_sales) must not be able to trigger a buyer email.
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "resend_receipt", path_params: { "id" => "sale_1" }),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to match(/permission/i)
+      end
     end
   end
 end

@@ -116,9 +116,11 @@ module Ai::StoreAgentApiCatalog
     ep("delete_upsell", :delete, "/upsells/:id", "Delete an upsell offer.", scope: "edit_products", path_params: %w[id]),
 
     # ---- Emails (workflows / posts) ----
-    ep("list_emails", :get, "/emails", "List the creator's email posts.", read: true, scope: "view_sales"),
-    ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "view_sales", path_params: %w[id]),
-    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject message published audience_type]),
+    # The v2 EmailsController gates EVERY action (incl. index/show) on edit_emails, so the reads use
+    # edit_emails too (not view_sales) to match the real contract.
+    ep("list_emails", :get, "/emails", "List the creator's email posts.", read: true, scope: "edit_emails"),
+    ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "edit_emails", path_params: %w[id]),
+    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish]),
     ep("preview_email", :post, "/emails/:id/preview", "Send a preview of an email to the creator.", scope: "edit_emails", path_params: %w[id]),
     ep("send_email", :post, "/emails/:id/send", "Send an email post to its audience.", scope: "edit_emails", path_params: %w[id]),
     ep("delete_email", :delete, "/emails/:id", "Delete an email post.", scope: "edit_emails", path_params: %w[id]),
@@ -132,7 +134,7 @@ module Ai::StoreAgentApiCatalog
     ep("mark_sale_as_shipped", :put, "/sales/:id/mark_as_shipped", "Mark a sale as shipped (optionally with tracking).", scope: "mark_sales_as_shipped",
                                                                                                                          path_params: %w[id], params: %w[tracking_url]),
     ep("refund_sale", :put, "/sales/:id/refund", "Refund a sale, fully or partially.", scope: "refund_sales", path_params: %w[id], params: %w[amount_cents]),
-    ep("resend_receipt", :post, "/sales/:id/resend_receipt", "Resend the purchase receipt email to the buyer.", scope: "view_sales", path_params: %w[id]),
+    ep("resend_receipt", :post, "/sales/:id/resend_receipt", "Resend the purchase receipt email to the buyer.", scope: "edit_sales", path_params: %w[id]),
 
     # ---- Payouts ----
     ep("list_payouts", :get, "/payouts", "List the creator's payouts.", read: true, scope: "view_payouts"),
