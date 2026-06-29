@@ -764,7 +764,7 @@ const CreditCardContent = ({
           {state.savedCreditCard && paymentElementReady ? (
             <button
               type="button"
-              className="relative z-10 -mb-7 cursor-pointer self-end pr-3 font-normal underline all-unset"
+              className="cursor-pointer self-end font-normal underline all-unset"
               disabled={isProcessing(state)}
               onClick={() => setUseSavedCard(true)}
             >
