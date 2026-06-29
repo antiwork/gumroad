@@ -11,7 +11,7 @@ import * as React from "react";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
-import { type PaymentElementConfig } from "$app/components/Checkout/payment";
+import { STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -49,7 +49,7 @@ export const PaymentElementInput = ({
 
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
-      {mountedAmount ? (
+      {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
         <StripePaymentElementProvider amount={mountedAmount} elementsOptions={elementsOptions}>
           <PaymentElementControllerInput
             amount={mountedAmount}
@@ -73,7 +73,7 @@ const PaymentElementControllerInput = ({
   onReady,
   onChange,
 }: {
-  amount: number;
+  amount: number | null;
   disabled?: boolean | undefined;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -88,7 +88,7 @@ const PaymentElementControllerInput = ({
   }, [stripe, elements, ready, onReady]);
 
   React.useEffect(() => {
-    elements?.update({ amount });
+    if (amount !== null) elements?.update({ amount });
   }, [amount, elements]);
 
   return (
@@ -124,7 +124,7 @@ const StripePaymentElementProvider = ({
   elementsOptions,
   children,
 }: {
-  amount: number;
+  amount: number | null;
   elementsOptions: PaymentElementConfig;
   children: React.ReactNode;
 }) => {
@@ -140,9 +140,9 @@ const StripePaymentElementProvider = ({
 
   const options = React.useMemo<StripeElementsOptions>(
     () => ({
-      mode: elementsOptions.mode,
+      mode: elementsOptions.stripe_elements_mode,
       currency: elementsOptions.currency,
-      amount: initialAmount,
+      ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
       paymentMethodCreation: elementsOptions.payment_method_creation,
       fonts: [{ family: font.name, src: `url(${font.url})` }],
@@ -204,7 +204,11 @@ const StripePaymentElementProvider = ({
   );
 
   return (
-    <Elements stripe={stripePromise} options={options}>
+    <Elements
+      stripe={stripePromise}
+      options={options}
+      key={`${elementsOptions.stripe_elements_mode}-${elementsOptions.currency}`}
+    >
       {children}
     </Elements>
   );

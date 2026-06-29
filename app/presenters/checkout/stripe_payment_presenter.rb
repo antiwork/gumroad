@@ -9,6 +9,10 @@ class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
+  # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
+  # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
+  STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
+  STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -20,19 +24,17 @@ class Checkout::StripePaymentPresenter
   end
 
   def props
-    fallback_reason = fallback_reason_for(items)
+    checkout_items = items
+    fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason) if fallback_reason.present?
 
-    {
-      integration: STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-      fallback_reason: nil,
-      elements_options: {
-        mode: "payment",
-        currency: "usd",
-        payment_method_types: ["card"],
-        payment_method_creation: "manual",
-      },
-    }
+    stripe_elements_mode =
+      if setup_for_future_charges_without_charging?(checkout_items)
+        STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+      else
+        STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
+      end
+    payment_element_props(stripe_elements_mode)
   end
 
   private
@@ -50,20 +52,39 @@ class Checkout::StripePaymentPresenter
       }
     end
 
+    def payment_element_props(stripe_elements_mode)
+      {
+        integration: STRIPE_PAYMENT_ELEMENT_INTEGRATION,
+        fallback_reason: nil,
+        elements_options: {
+          stripe_elements_mode:,
+          currency: "usd",
+          payment_method_types: ["card"],
+          payment_method_creation: "manual",
+        },
+      }
+    end
+
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
 
       sellers = items.map { _1[:seller] }.uniq
       return "unknown_seller" if sellers.any?(&:blank?)
       return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
-      return "setup_or_installment_flow" if items.any? { setup_or_installment_flow?(_1) }
+      return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
+      return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
+      return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
       return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
 
       nil
     end
 
-    def setup_or_installment_flow?(item)
-      item[:pay_in_installments] || item[:is_preorder] || item[:has_free_trial]
+    def setup_for_future_charges_without_charging?(items)
+      items.all? { future_charge_setup_item?(_1) } && items.sum { _1[:price_cents].to_i }.positive?
+    end
+
+    def future_charge_setup_item?(item)
+      item[:is_preorder] || item[:has_free_trial]
     end
 
     def cart_items
