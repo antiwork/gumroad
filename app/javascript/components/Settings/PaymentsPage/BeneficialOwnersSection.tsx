@@ -665,14 +665,7 @@ const BeneficialOwnersSection = ({
 
             {editState.mode === "edit" && editState.owner.relationship.representative ? null : (
               <>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "var(--spacer-5)",
-                    gridAutoFlow: "column",
-                    gridAutoColumns: "1fr",
-                  }}
-                >
+                <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                   <Fieldset>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-first-name`}>First name</Label>
@@ -703,14 +696,7 @@ const BeneficialOwnersSection = ({
 
                 {defaultCountry === "JP" ? (
                   <>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "var(--spacer-5)",
-                        gridAutoFlow: "column",
-                        gridAutoColumns: "1fr",
-                      }}
-                    >
+                    <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                       <Fieldset>
                         <FieldsetTitle>
                           <Label htmlFor={`${uid}-first-name-kanji`}>First name (Kanji)</Label>
@@ -738,14 +724,7 @@ const BeneficialOwnersSection = ({
                         />
                       </Fieldset>
                     </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "var(--spacer-5)",
-                        gridAutoFlow: "column",
-                        gridAutoColumns: "1fr",
-                      }}
-                    >
+                    <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                       <Fieldset>
                         <FieldsetTitle>
                           <Label htmlFor={`${uid}-first-name-kana`}>First name (Kana)</Label>
@@ -778,14 +757,7 @@ const BeneficialOwnersSection = ({
                   </>
                 ) : null}
 
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "var(--spacer-5)",
-                    gridAutoFlow: "column",
-                    gridAutoColumns: "1fr",
-                  }}
-                >
+                <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                   <Fieldset>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-email`}>Email</Label>
@@ -819,14 +791,7 @@ const BeneficialOwnersSection = ({
                   <FieldsetTitle>
                     <Label>Date of birth</Label>
                   </FieldsetTitle>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "var(--spacer-5)",
-                      gridAutoFlow: "column",
-                      gridAutoColumns: "1fr",
-                    }}
-                  >
+                  <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                     <Fieldset>
                       <Select
                         id={`${uid}-dob-month`}
@@ -889,15 +854,7 @@ const BeneficialOwnersSection = ({
 
                 {formState.address_country === "JP" ? (
                   <>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "var(--spacer-5)",
-                        gridAutoFlow: "column",
-                        gridAutoColumns: "1fr",
-                        alignItems: "end",
-                      }}
-                    >
+                    <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col md:items-end">
                       <Fieldset>
                         <FieldsetTitle>
                           <Label htmlFor={`${uid}-building-number`}>Block / Building number</Label>
@@ -927,14 +884,7 @@ const BeneficialOwnersSection = ({
                         />
                       </Fieldset>
                     </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "var(--spacer-5)",
-                        gridAutoFlow: "column",
-                        gridAutoColumns: "1fr",
-                      }}
-                    >
+                    <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                       <Fieldset>
                         <FieldsetTitle>
                           <Label htmlFor={`${uid}-street-address-kanji`}>Town/Cho-me (Kanji)</Label>
@@ -1221,14 +1171,7 @@ const BeneficialOwnersSection = ({
               </>
             )}
 
-            <div
-              style={{
-                display: "grid",
-                gap: "var(--spacer-5)",
-                gridAutoFlow: "column",
-                gridAutoColumns: "1fr",
-              }}
-            >
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-title`}>Job title</Label>
@@ -1267,14 +1210,7 @@ const BeneficialOwnersSection = ({
               <FieldsetTitle>
                 <Label>Relationship</Label>
               </FieldsetTitle>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "var(--spacer-5)",
-                  gridAutoFlow: "column",
-                  gridAutoColumns: "1fr",
-                }}
-              >
+              <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                 <Label className="flex items-center gap-2">
                   <Checkbox
                     checked={formState.director}

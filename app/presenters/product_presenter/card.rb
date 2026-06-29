@@ -13,6 +13,7 @@ class ProductPresenter::Card
       variant_categories_alive: :alive_variants,
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
       display_asset_previews: [:file_attachment, :file_blob],
+      bundle_products: [:variant, { product: [{ variant_categories_alive: :alive_variants }, :tiers] }],
     }
   ]
 

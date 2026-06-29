@@ -312,4 +312,48 @@ describe LinksController, :vcr, type: :controller do
       expect(product.custom_html).to eq("<section><h1>Live landing page</h1></section>")
     end
   end
+
+  describe "owner live-reload poll on the wrapper" do
+    it "injects the version poll for the signed-in owner" do
+      sign_in seller
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response.body).to include("/l/#{product.unique_permalink}/landing/version")
+    end
+
+    it "omits the poll for anonymous visitors" do
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response.body).not_to include("/landing/version")
+    end
+  end
+
+  describe "GET landing_version" do
+    it "reports the live page with a version token to the owner" do
+      sign_in seller
+
+      get :landing_version, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["present"]).to be(true)
+      expect(response.parsed_body["version"]).to be_a(Integer)
+    end
+
+    it "reports present:false once the custom_html is cleared" do
+      sign_in seller
+      product.update!(custom_html: "")
+
+      get :landing_version, params: { id: product.unique_permalink }
+
+      expect(response.parsed_body["present"]).to be(false)
+    end
+
+    it "reports present:false to an anonymous caller, never leaking the edit timestamp" do
+      get :landing_version, params: { id: product.unique_permalink }
+
+      expect(response.parsed_body["present"]).to be(false)
+      expect(response.parsed_body["version"]).to be_nil
+    end
+  end
 end

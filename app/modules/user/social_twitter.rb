@@ -66,7 +66,9 @@ module User::SocialTwitter
       user.twitter_handle = data["screen_name"]
 
       # don't set these properties if they already have values
-      user.name ||= data["name"]
+      if user.name.blank? && data["name"].present?
+        user.name = data["name"].gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
+      end
       data["entities"]["description"]["urls"].each do |url|
         data["description"].gsub!(url["url"], url["display_url"])
       end

@@ -2493,9 +2493,7 @@ const BankAccountSection = ({
             </div>
           ) : (
             <>
-              <section
-                style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
-              >
+              <section className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                 {bankAccountDetails.routing_number !== null && (
                   <Fieldset>
                     <FieldsetTitle>

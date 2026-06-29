@@ -32,6 +32,7 @@ import { computeInitialCheckout, type InitialCheckout } from "$app/components/Ch
 import {
   computeTip,
   computeTipForPrice,
+  type CheckoutPaymentConfig,
   createReducer,
   getCustomFieldKey,
   getTotalPriceFromProducts,
@@ -73,10 +74,12 @@ type CheckoutIndexPageProps = {
     max_allowed_cart_products: number;
     paypal_client_id: string;
     recaptcha_key: string | null;
+    recaptcha_score_based: boolean;
     saved_credit_card: SavedCreditCard | null;
     state: string | null;
     tip_options: number[];
     us_states: string[];
+    checkout_payment: CheckoutPaymentConfig;
   };
 };
 
@@ -109,11 +112,13 @@ const CheckoutIndexPage = () => {
       gift,
       saved_credit_card,
       recaptcha_key,
+      recaptcha_score_based,
       paypal_client_id,
       max_allowed_cart_products,
       cart_save_debounce_ms,
       tip_options,
       default_tip_option,
+      checkout_payment,
     },
     ...props
   } = typia.assert<CheckoutIndexPageProps>(usePage().props);
@@ -167,9 +172,11 @@ const CheckoutIndexPage = () => {
     state: addressState,
     products: getProducts(cartForm.data.cart),
     recaptchaKey: recaptcha_key,
+    recaptchaScoreBased: recaptcha_score_based,
     paypalClientId: paypal_client_id,
     gift,
     requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
+    checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
   const [results, setResults] = React.useState<Result[] | null>(null);
@@ -289,8 +296,10 @@ const CheckoutIndexPage = () => {
         quantity: item.quantity,
         hasFreeTrial: !!item.product.free_trial,
         hasTippingEnabled: item.product.has_tipping_enabled,
+        isPreorder: item.product.is_preorder,
         price: convertToUSD(item, price),
         payInInstallments: item.pay_in_installments,
+        recurrence: item.recurrence,
         recommended_by: item.recommended_by,
         shippableCountryCodes: item.product.shippable_country_codes,
         nativeType: item.product.native_type,

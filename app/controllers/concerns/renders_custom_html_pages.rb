@@ -80,6 +80,22 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  POLL_INTERVAL_MS = 2000
+
+  PROFILE_FIELDS_PREVIEW_SCRIPT = <<~HTML
+    <script data-cfasync="false">
+      window.addEventListener("message", function (e) {
+        var d = e.data;
+        if (!d || d.type !== "gumroad:profile-fields") return;
+        ["name", "bio"].forEach(function (field) {
+          var value = d[field] == null ? "" : String(d[field]);
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
+        });
+      });
+    </script>
+  HTML
+
   module ClassMethods
     # Memoized per process — the file ships with the deployed artifact and
     # only changes on deploy, which restarts the process.
@@ -92,6 +108,39 @@ module RendersCustomHtmlPages
   end
 
   private
+    def render_landing_version(visible:, page:)
+      render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
+    end
+
+    def custom_html_live_reload_script(version_src:, nonce:)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var versionUrl = #{ERB::Util.json_escape(version_src.to_json)};
+            var known = null;
+            function poll() {
+              if (document.hidden) return;
+              fetch(versionUrl, { headers: { "Accept": "application/json" }, cache: "no-store", credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                  if (!data) return;
+                  var current = data.present ? "v" + String(data.version) : "absent";
+                  if (known === null) { known = current; return; }
+                  if (current === known) return;
+                  if (current === "absent") { window.location.reload(); return; }
+                  known = current;
+                  if (frame) frame.src = frame.src.split("#")[0].split("?")[0] + "?" + encodeURIComponent(current);
+                })
+                .catch(function () {});
+            }
+            setInterval(poll, #{POLL_INTERVAL_MS});
+            poll();
+          })();
+        </script>
+      HTML
+    end
+
     # The landing iframe HTML must reflect a just-published edit, so read from the
     # primary rather than a possibly-lagging replica. Wired via a before_action in
     # each controller (the product and profile embed actions both need it).

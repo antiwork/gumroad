@@ -11,17 +11,75 @@ class ContentModeration::ContentExtractor
   def extract_from_product(product)
     description_text = Nokogiri::HTML(product.description.to_s).text
     text = "Name: #{product.name} Description: #{description_text} " + rich_content_text(product.alive_rich_contents)
+    text = strip_seller_first_party_urls(text, product.user)
     Result.new(text: text, image_urls: product_image_urls(product))
   end
 
   def extract_from_post(installment)
     parsed_message = Nokogiri::HTML(installment.message)
     text = "Name: #{installment.name} Message: #{parsed_message.text}"
+    text = strip_seller_first_party_urls(text, installment.user)
     image_urls = parsed_message.css("img").filter_map { |img| img["src"] }.reject(&:empty?)
     Result.new(text: text, image_urls: image_urls)
   end
 
   private
+    # A seller linking to their OWN storefront/profile (or one of their own
+    # product pages) is inherently first-party and must never be treated as
+    # policy-violating content. Domain labels are arbitrary identifiers
+    # (usernames, brand names) that can coincidentally contain a blocklisted
+    # word as a boundary-delimited token, producing false positives such as a
+    # bulk email being rejected for including the seller's own subdomain URL.
+    # We neutralize only the scheme+host (the arbitrary domain label) of the
+    # seller's own URLs, while PRESERVING any path/query text so user-controlled
+    # content in a permalink or query string is still moderated. Third-party
+    # URLs are left fully intact so genuine off-site abuse is still caught.
+    def strip_seller_first_party_urls(text, seller)
+      hosts = seller_first_party_hosts(seller)
+      return text if hosts.empty?
+
+      text.gsub(URI::DEFAULT_PARSER.make_regexp(%w[http https])) do |url|
+        uri = begin
+          URI.parse(url)
+        rescue URI::InvalidURIError
+          nil
+        end
+        next url unless uri&.host && hosts.include?(uri.host.downcase)
+
+        # Drop scheme+host (the false-positive domain label); keep path/query/
+        # fragment so any blocklisted term the seller put after the host is still
+        # seen by the keyword/AI strategies.
+        remainder = [uri.path.presence, uri.query.present? ? "?#{uri.query}" : nil,
+                     uri.fragment.present? ? "##{uri.fragment}" : nil].compact.join
+        remainder.presence || " "
+      end
+    end
+
+    def seller_first_party_hosts(seller)
+      return [] if seller.blank?
+
+      # Only treat a custom domain as first-party when it is ACTIVE (verified +
+      # valid cert) — matching UrlService#custom_domain_with_protocol. An alive
+      # but unverified custom domain can be an arbitrary off-site URL the seller
+      # set without proving ownership, so stripping it would let genuine off-site
+      # links bypass moderation.
+      custom_domain = seller.custom_domain&.active? ? seller.custom_domain.domain : nil
+
+      [seller.subdomain, custom_domain]
+        .compact_blank
+        .filter_map { |value| normalize_host(value) }
+        .uniq
+    end
+
+    # `subdomain` carries a `:port` in dev/test (e.g. "name.test.gumroad.com:31337")
+    # while `URI.parse(url).host` never does, so normalize both sides to a bare,
+    # port-less, scheme-less hostname before comparing.
+    def normalize_host(value)
+      URI.parse(value.include?("//") ? value : "//#{value}").host&.downcase
+    rescue URI::InvalidURIError
+      nil
+    end
+
     def product_image_urls(product)
       cover_image_urls = product.display_asset_previews.joins(file_attachment: :blob)
                                 .where(active_storage_blobs: { content_type: PERMITTED_IMAGE_TYPES })

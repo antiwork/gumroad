@@ -249,7 +249,12 @@ export default function PaymentsPage() {
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
-    return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
+    // Use isPossible() (length/structure) rather than isValid() (exact allocated-range
+    // membership). isValid() depends on bundled libphonenumber-js metadata that lags the
+    // real numbering plan, so legitimately-allocated numbers in newly-added ranges (e.g.
+    // AU 0494 6x) get wrongly rejected. Stripe performs the authoritative KYC validation
+    // downstream. See antiwork/gumroad-private#733.
+    return input && parsePhoneNumberFromString(input, countryCode)?.isPossible();
   };
 
   const validateKanaField = (
@@ -1117,9 +1122,7 @@ export default function PaymentsPage() {
                   </Button>
                 </Tab>
               ) : null}
-              {props.user.country_code === "BR" ||
-              props.user.can_connect_stripe ||
-              props.stripe_connect.has_connected_stripe ? (
+              {props.user.country_code === "BR" || props.stripe_connect.has_connected_stripe ? (
                 <Tab key="stripe" isSelected={selectedPayoutMethod === "stripe"} asChild>
                   <Button
                     role="radio"

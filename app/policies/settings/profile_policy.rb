@@ -22,7 +22,10 @@ class Settings::ProfilePolicy < ApplicationPolicy
   end
 
   def permitted_attributes
-    user_attributes = [:name, :bio]
+    # custom_html is intentionally clear-only from this surface: the editor never edits the HTML
+    # (the agent + `gumroad user page` CLI author it via the v2 API), it only sends "" to reset.
+    # The User#custom_html= setter treats blank as "remove the page".
+    user_attributes = [:name, :bio, :custom_html]
     [
       :profile_picture_blob_id,
       :profile_version,

@@ -7,13 +7,13 @@ class UsersController < ApplicationController
   include PageMeta::Favicon, PageMeta::User
   include RendersCustomHtmlPages
 
-  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content]
+  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version]
 
   after_action :verify_authorized, only: %i[deactivate edit]
 
-  before_action :stick_to_primary_for_landing_iframe, only: :landing_iframe_content
+  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :set_as_modal, only: %i[show]
-  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content]
+  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
@@ -41,7 +41,17 @@ class UsersController < ApplicationController
 
     apply_custom_html_response_headers
     interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user)
-    render html: profile_custom_html_document(interpolated).html_safe, layout: false
+    render html: profile_custom_html_document(
+      interpolated,
+      data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
+      live_fields: params[:preview].present? && current_seller_owns_profile?,
+    ).html_safe, layout: false
+  end
+
+  def landing_version
+    return render_landing_version(visible: false, page: nil) unless current_seller_owns_profile?
+    page = @user.page
+    render_landing_version(visible: Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?, page:)
   end
 
   def edit
@@ -182,6 +192,14 @@ class UsersController < ApplicationController
       render html: profile_custom_html_wrapper_document(@user).html_safe, layout: false
     end
 
+    # True for the seller and for any team member acting as the seller (admin/marketing can edit the
+    # profile per Settings::ProfilePolicy), so the live-fields preview and live reload reach every
+    # editor, not just the owner. current_seller is the account the viewer is acting as and is only
+    # set to a seller the viewer is a validated member of, so this never leaks to other visitors.
+    def current_seller_owns_profile?
+      current_seller.present? && current_seller == @user
+    end
+
     # set_user_and_custom_domain_config already 404s any non-active account
     # before these actions run (unlike products, which aren't gated on alive?
     # upstream), so there's no owner/team preview branch to add here.
@@ -189,11 +207,11 @@ class UsersController < ApplicationController
       Feature.active?(:custom_html_pages, @user) && @user.custom_html.present?
     end
 
-    def profile_landing_embed_src(user)
-      @is_user_custom_domain ? "/landing/embed" : "/#{user.username}/landing/embed"
+    def profile_landing_src(user, suffix)
+      @is_user_custom_domain ? "/landing/#{suffix}" : "/#{user.username}/landing/#{suffix}"
     end
 
-    def profile_custom_html_document(custom_html)
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -204,7 +222,9 @@ class UsersController < ApplicationController
             #{self.class.pages_tailwind_inline}
           </head>
           <body>
+            <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
+            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>
       HTML
@@ -216,12 +236,17 @@ class UsersController < ApplicationController
     # visitor's tab away from gumroad.com. Unlike the product wrapper there is no
     # checkout postMessage bridge: a profile has no native buy button.
     def profile_custom_html_wrapper_document(user)
-      iframe_src = ERB::Util.h(profile_landing_embed_src(user))
+      iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
+      live_reload = if current_seller_owns_profile?
+        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce: SecureHeaders.content_security_policy_script_nonce(request))
+      else
+        ""
+      end
       <<~HTML
         <!doctype html>
         <html lang="en">
@@ -243,6 +268,7 @@ class UsersController < ApplicationController
               title="#{title}"
               sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
+            #{live_reload}
           </body>
         </html>
       HTML

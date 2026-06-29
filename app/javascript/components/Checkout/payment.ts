@@ -9,6 +9,7 @@ import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
+import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Creator } from "$app/components/Checkout/cartState";
@@ -21,6 +22,23 @@ enableMapSet();
 
 export type PaymentMethodType = "paypal" | "stripePaymentRequest" | "card";
 export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement | null };
+export type PaymentElementConfig = {
+  mode: "payment";
+  currency: "usd";
+  payment_method_types: ["card"];
+  payment_method_creation: "manual";
+};
+export type CheckoutPaymentConfig =
+  | {
+      integration: "card_element";
+      fallback_reason: string;
+      elements_options: null;
+    }
+  | {
+      integration: "payment_element";
+      fallback_reason: null;
+      elements_options: PaymentElementConfig;
+    };
 
 export type Product = {
   permalink: string;
@@ -37,8 +55,10 @@ export type Product = {
   requirePayment: boolean;
   hasFreeTrial: boolean;
   hasTippingEnabled: boolean;
+  isPreorder: boolean;
   canGift: boolean;
   nativeType: ProductNativeType;
+  recurrence: RecurrenceId | null;
   subscription_id?: string;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
@@ -74,6 +94,7 @@ export type State = {
   availablePaymentMethods: PaymentMethod[];
   paymentMethod: PaymentMethodType;
   savedCreditCard: SavedCreditCard | null;
+  checkoutPayment: CheckoutPaymentConfig;
   status:
     | { type: "input"; errors: Set<string> }
     | { type: "offering" }
@@ -83,6 +104,7 @@ export type State = {
     | { type: "finished"; recaptchaResponse?: string; paymentMethod: PurchasePaymentMethod };
   payLabel?: string;
   recaptchaKey: string | null;
+  recaptchaScoreBased: boolean;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -138,12 +160,46 @@ export function requiresPayment(state: State) {
   return getTotalPrice(state) !== 0 || state.products.some((item) => item.requirePayment);
 }
 
+function hasMultipleSellers(state: State) {
+  return new Set(state.products.map((product) => product.creator.id)).size > 1;
+}
+
 export function requiresReusablePaymentMethod(state: State) {
   return (
-    new Set(state.products.map((product) => product.creator.id)).size > 1 ||
-    !!state.products[0]?.subscription_id ||
-    state.products[0]?.nativeType === "commission"
+    hasMultipleSellers(state) || !!state.products[0]?.subscription_id || state.products[0]?.nativeType === "commission"
   );
+}
+
+export function requiresPaymentElementReusablePaymentMethod(state: State) {
+  return (
+    requiresReusablePaymentMethod(state) ||
+    state.products.some(
+      (product) => !!product.recurrence || !!product.subscription_id || product.nativeType === "commission",
+    )
+  );
+}
+
+export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
+  return useStripePaymentElement
+    ? requiresPaymentElementReusablePaymentMethod(state)
+    : requiresReusablePaymentMethod(state);
+}
+
+export function canUseStripePaymentElement(state: State) {
+  if (state.products.length === 0) return false;
+  if (state.surcharges.type === "loaded" && !getTotalPrice(state)) return false;
+
+  return (
+    state.checkoutPayment.integration === "payment_element" &&
+    !hasMultipleSellers(state) &&
+    !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder)
+  );
+}
+
+export function getStripePaymentElementAmount(state: State) {
+  if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
+  const total = getTotalPrice(state);
+  return total && total > 0 ? total : null;
 }
 
 export function isProcessing(state: State) {
@@ -153,6 +209,19 @@ export function isProcessing(state: State) {
 export function isSubmitDisabled(state: State) {
   const emailTypoBlocking = state.requireEmailTypoAcknowledgment && state.emailTypoSuggestion !== null;
   return isProcessing(state) || state.surcharges.type !== "loaded" || emailTypoBlocking;
+}
+
+export function isCardReadyToPay({
+  useSavedCard,
+  useStripePaymentElement,
+  paymentElementReady,
+}: {
+  useSavedCard: boolean;
+  useStripePaymentElement: boolean;
+  paymentElementReady: boolean;
+}) {
+  if (useSavedCard || !useStripePaymentElement) return true;
+  return paymentElementReady;
 }
 
 export const getTotalPriceFromProducts = (state: State) => state.products.reduce((sum, item) => sum + item.price, 0);
@@ -260,9 +329,11 @@ export function createReducer(initial: {
   fullName?: string;
   payLabel?: string;
   recaptchaKey: string | null;
+  recaptchaScoreBased?: boolean;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
+  checkoutPayment?: CheckoutPaymentConfig;
 }): readonly [State, React.Dispatch<PublicAction>] {
   const url = new URL(useOriginalLocation());
   function validatePaymentMethodIndependentFields(state: State) {
@@ -390,6 +461,7 @@ export function createReducer(initial: {
       return {
         fullName: "",
         ...initial,
+        recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
         country: initial.country ?? "US",
         vatId: "",
         address: initial.address?.street ?? "",
@@ -401,6 +473,11 @@ export function createReducer(initial: {
         surcharges: { type: "pending" },
         saveAddress: !!initial.address,
         gift: initial.gift,
+        checkoutPayment: initial.checkoutPayment ?? {
+          integration: "card_element",
+          fallback_reason: "not_checkout",
+          elements_options: null,
+        },
         paymentMethod: "card",
         tip: { type: "percentage", percentage: initial.defaultTipOption },
         status: { type: "input", errors: new Set() },

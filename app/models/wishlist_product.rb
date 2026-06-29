@@ -20,7 +20,7 @@ class WishlistProduct < ApplicationRecord
   validates :rent, absence: true, unless: -> { product&.rentable? }
   validates :rent, presence: true, unless: -> { product&.buyable? }
 
-  validate :versioned_product_has_variant
+  validate :versioned_product_has_variant, unless: :being_marked_as_deleted?
   validate :variant_belongs_to_product
   validate :wishlist_product_limit, on: :create
 

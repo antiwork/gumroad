@@ -2,34 +2,32 @@ import * as React from "react";
 
 export class RecaptchaCancelledError extends Error {}
 
-const RECAPTCHA_SCRIPT_URL = "https://www.google.com/recaptcha/enterprise.js?render=explicit";
+const SCRIPT_BASE_URL = "https://www.google.com/recaptcha/enterprise.js";
+const CHALLENGE_SCRIPT_URL = `${SCRIPT_BASE_URL}?render=explicit`;
+const scoreScriptUrl = (siteKey: string) => `${SCRIPT_BASE_URL}?render=${encodeURIComponent(siteKey)}`;
 
-let loadPromise: Promise<void> | null = null;
+const loadPromises = new Map<string, Promise<void>>();
 
-const loadRecaptchaScript = (): Promise<void> => {
-  if ("grecaptcha" in window) {
-    return Promise.resolve();
-  }
+const loadRecaptchaScript = (url: string): Promise<void> => {
+  const existing = loadPromises.get(url);
+  if (existing) return existing;
 
-  if (loadPromise) {
-    return loadPromise;
-  }
-
-  loadPromise = new Promise((resolve, reject) => {
+  const promise = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = RECAPTCHA_SCRIPT_URL;
+    script.src = url;
     script.async = true;
     script.onload = () => {
       resolve();
     };
     script.onerror = () => {
-      loadPromise = null;
+      loadPromises.delete(url);
       reject(new Error("Failed to load reCAPTCHA script"));
     };
     document.head.appendChild(script);
   });
 
-  return loadPromise;
+  loadPromises.set(url, promise);
+  return promise;
 };
 
 const isRecaptchaIframe = (node: Node) =>
@@ -62,13 +60,35 @@ const listenForRecaptchaCancel = (widgetId: number, onCancel: () => void) => {
   observer.observe(document.body, { childList: true, subtree: true });
 };
 
-export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
+// `scoreBased` switches between the two reCAPTCHA Enterprise key types:
+//   - challenge keys (default): an invisible widget that Google may escalate to
+//     an interactive image challenge. Rendered via render() + execute(widgetId).
+//   - score keys: never render a challenge — they return a 0.0–1.0 risk score
+//     that the server gates on. Invoked programmatically via execute(siteKey,
+//     { action }); no widget, container, or cancel handling is involved.
+export function useRecaptcha({
+  siteKey,
+  scoreBased = false,
+  action = "checkout",
+}: {
+  siteKey: string | null;
+  scoreBased?: boolean;
+  action?: string;
+}) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const recaptchaId = React.useRef<number | null>(null);
   const resolveRef = React.useRef<((response: string) => void) | null>(null);
 
   React.useEffect(() => {
     if (!siteKey) return;
+
+    if (scoreBased) {
+      // No widget to render. Preload the script so the first execute() doesn't
+      // pay the load latency. The render=<siteKey> form is required for
+      // grecaptcha.enterprise.execute(siteKey, ...) to resolve a token.
+      loadRecaptchaScript(scoreScriptUrl(siteKey)).catch(() => {});
+      return;
+    }
 
     const initRecaptcha = () => {
       grecaptcha.enterprise.ready(() => {
@@ -84,12 +104,34 @@ export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
       });
     };
 
-    loadRecaptchaScript()
+    loadRecaptchaScript(CHALLENGE_SCRIPT_URL)
       .then(initRecaptcha)
       .catch(() => {});
-  }, [siteKey]);
+  }, [siteKey, scoreBased]);
 
   const execute = () => {
+    if (!siteKey) return Promise.reject(new RecaptchaCancelledError());
+
+    if (scoreBased) {
+      return (
+        loadRecaptchaScript(scoreScriptUrl(siteKey))
+          .then(
+            () =>
+              new Promise<string>((resolve, reject) => {
+                grecaptcha.enterprise.ready(() => {
+                  grecaptcha.enterprise.execute(siteKey, { action }).then(resolve, () => {
+                    reject(new RecaptchaCancelledError());
+                  });
+                });
+              }),
+          )
+          // Normalize any pre-token failure (e.g. the script being blocked or
+          // failing to load) to RecaptchaCancelledError so callers can treat it
+          // like a dismissed challenge and reset, rather than hanging.
+          .catch(() => Promise.reject(new RecaptchaCancelledError()))
+      );
+    }
+
     const widgetId = recaptchaId.current;
     if (widgetId === null) return Promise.reject(new RecaptchaCancelledError());
     grecaptcha.enterprise.reset(widgetId);
@@ -105,5 +147,8 @@ export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
     });
   };
 
-  return { container: <div ref={containerRef} style={{ display: "contents" }} />, execute };
+  return {
+    container: scoreBased ? null : <div ref={containerRef} style={{ display: "contents" }} />,
+    execute,
+  };
 }

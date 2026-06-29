@@ -26,6 +26,11 @@ describe CheckoutController, type: :controller, inertia: true do
                                                address: nil,
                                                ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
                                                cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
+                                               checkout_payment: {
+                                                 integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+                                                 fallback_reason: "stripe_payment_element_flag_disabled",
+                                                 elements_options: nil,
+                                               },
                                                clear_cart: false,
                                                countries: Compliance::Countries.for_select.to_h,
                                                country: nil,
@@ -35,6 +40,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
                                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
                                                recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
+                                               recaptcha_score_based: false,
                                                saved_credit_card: nil,
                                                state: nil,
                                                tip_options: [0, 15, 20, 25],
@@ -486,6 +492,163 @@ describe CheckoutController, type: :controller, inertia: true do
         )
       end
 
+      it "removes an existing cart product when its quantity is zero" do
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product1 = create(:cart_product, cart:, product: product1)
+        create(:cart_product, cart:, product: product2)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product1.external_id },
+                price: product1.price_cents,
+                quantity: 0,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              },
+              {
+                product: { id: product2.external_id },
+                price: product2.price_cents,
+                quantity: 1,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+
+        cart.reload
+        expect(cart_product1.reload).to be_deleted
+        expect(cart.alive_cart_products.sole.product).to eq(product2)
+      end
+
+      it "soft-deletes a stale cart product with an invalid quantity left over from legacy data" do
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+
+        cart = create(:cart, user: controller.logged_in_user)
+        legacy_cart_product = create(:cart_product, cart:, product: product1)
+        # Simulate a legacy/corrupt record that predates the `quantity > 0` validation.
+        legacy_cart_product.update_column(:quantity, 0)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product2.external_id },
+                price: product2.price_cents,
+                quantity: 1,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_nil
+
+        cart.reload
+        expect(legacy_cart_product.reload).to be_deleted
+        expect(cart.alive_cart_products.sole.product).to eq(product2)
+      end
+
+      it "does not create a cart product when its quantity is zero" do
+        product = create(:product, user: seller)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: product.external_id },
+                  price: product.price_cents,
+                  quantity: 0,
+                  rent: false,
+                  referrer: "direct",
+                  url_parameters: {}
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change(CartProduct, :count)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(controller.logged_in_user.alive_cart.alive_cart_products).to be_empty
+      end
+
+      it "does not treat a present-but-nonnumeric quantity as a removal" do
+        product = create(:product, user: seller)
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product = create(:cart_product, cart:, product:)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product.external_id },
+                price: product.price_cents,
+                quantity: "abc",
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        # "abc" is not a numeric zero, so it must NOT silently delete the existing item via the
+        # removal path. It falls through and fails the quantity validation, so the transaction
+        # rolls back and the existing item is preserved.
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_present
+        expect(cart_product.reload).not_to be_deleted
+      end
+
+      it "does not treat a fractional quantity as a removal" do
+        product = create(:product, user: seller)
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product = create(:cart_product, cart:, product:)
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product.external_id },
+                price: product.price_cents,
+                quantity: 0.5,
+                rent: false,
+                referrer: "direct",
+                url_parameters: {}
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        # 0.5 must NOT be treated as a numeric-zero removal (Integer() would truncate it to 0).
+        # It falls through, fails the integer/quantity validation, and the existing item is kept.
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_present
+        expect(cart_product.reload).not_to be_deleted
+      end
+
       it "returns an error when params are invalid" do
         expect do
           patch :update, params: {
@@ -494,6 +657,28 @@ describe CheckoutController, type: :controller, inertia: true do
                 {
                   product: { id: create(:product).external_id },
                   price: nil
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change(Cart, :count)
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+      end
+
+      it "returns an error when an item quantity exceeds the integer column limit" do
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: create(:product).external_id },
+                  price: 100,
+                  quantity: CartProduct::MAX_QUANTITY + 1,
+                  referrer: "direct"
                 }
               ],
               discountCodes: []

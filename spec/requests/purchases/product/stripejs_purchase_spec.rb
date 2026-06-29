@@ -40,6 +40,158 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(new_purchase.successful?).to be(true)
   end
 
+  it "allows the buyer to pay with a new credit card using the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    # The Payment Element tokenizes the typed-in card into a connected-account payment method that can't be charged
+    # against the platform in test mode, so we swap it for a known platform payment method while recording the real
+    # id the frontend produced. The card-detail assertions below therefore reflect platform_payment_method.
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    check_out(product, payment_element: true)
+
+    new_purchase = Purchase.last
+    expect(new_purchase.stripe_transaction_id).to match(/\Ach_/)
+    expect(new_purchase.stripe_fingerprint).to_not be(nil)
+    expect(new_purchase.card_type).to eq "visa"
+    expect(new_purchase.card_country).to eq "US"
+    expect(new_purchase.card_country_source).to eq Purchase::CardCountrySource::STRIPE
+    expect(new_purchase.card_visual).to eq "**** **** **** 4242"
+    expect(new_purchase.card_expiry_month).to eq platform_payment_method.card.exp_month
+    expect(new_purchase.card_expiry_year).to eq platform_payment_method.card.exp_year
+    expect(new_purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:membership_product_with_preset_tiered_pricing, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+
+    tier = product.variant_categories.alive.first.variants.alive.find_by!(name: "First Tier")
+
+    visit("/checkout?product=#{product.unique_permalink}&option=#{tier.external_id}")
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+
+    setup_intent_ids = []
+    allow(ChargeProcessor).to receive(:setup_future_charges!).and_wrap_original do |original, *args, **kwargs|
+      setup_intent = original.call(*args, **kwargs)
+      setup_intent_ids << setup_intent.id if setup_intent.present?
+      setup_intent
+    end
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    check_out(product, payment_element: true)
+
+    purchase = Purchase.last
+    expect(purchase.successful?).to be(true)
+    expect(purchase.subscription).to be_alive
+    expect(purchase.credit_card).to be_present
+    expect(purchase.credit_card.stripe_customer_id).to be_present
+    expect(setup_intent_ids).to all(match(/\Aseti_/))
+    expect(setup_intent_ids).not_to be_empty
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "lets a buyer with a saved card pay with it while the Payment Element is enabled" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    buyer = create(:user)
+    saved_card = create(:credit_card)
+    saved_card.users << buyer
+    login_as(buyer)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    expect(page).to have_selector("[aria-label='Saved credit card']", text: saved_card.visual)
+
+    check_out(product, logged_in_user: buyer)
+
+    new_purchase = Purchase.last
+    expect(new_purchase.successful?).to be(true)
+    expect(new_purchase.card_visual).to eq(saved_card.visual)
+  end
+
+  it "lets a buyer with a saved card enter a new card via the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    buyer = create(:user)
+    saved_card = create(:credit_card)
+    saved_card.users << buyer
+    login_as(buyer)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    expect(page).to have_selector("[aria-label='Saved credit card']", text: saved_card.visual)
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    check_out(product, logged_in_user: buyer) do
+      click_on "Use a different card?"
+      fill_in_payment_element
+    end
+
+    new_purchase = Purchase.last
+    expect(new_purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
   describe "save credit card payment" do
     before :each do
       @buyer = create(:user)

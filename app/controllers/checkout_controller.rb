@@ -6,9 +6,12 @@ class CheckoutController < ApplicationController
   before_action :process_cart_id_param, only: [:show]
 
   def show
+    cart_presenter = CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid])
+    checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
+
     render inertia: "Checkout/Show", props: {
-      cart: -> { CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props },
-      checkout: -> { CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip).checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid]) },
+      cart: -> { cart_presenter.cart_props },
+      checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
     }
   end
@@ -37,7 +40,16 @@ class CheckoutController < ApplicationController
       cart.save!
       cart.lock!
 
-      updated_cart_products = items.map do |item|
+      updated_cart_products = items.filter_map do |item|
+        # The frontend sends quantity 0 to signal removal (ConfigurationSelector falls back to
+        # `quantity ?? 0`). Skip those so they aren't persisted (quantity must be > 0) and let the
+        # deletion step below clean up any existing matching record. Match a real numeric zero only:
+        # a present-but-nonnumeric quantity ("abc") or a fractional one (0.5, which Integer() would
+        # truncate to 0) is NOT a removal signal and must fall through to validation instead of
+        # silently deleting the item.
+        quantity = Integer(item[:quantity], exception: false) if item[:quantity].present?
+        next if quantity&.zero? && item[:quantity].to_f.zero?
+
         product = Link.find_by_external_id!(item[:product][:id])
         option = item[:option_id].present? ? BaseVariant.find_by_external_id(item[:option_id]) : nil
 
@@ -65,7 +77,10 @@ class CheckoutController < ApplicationController
         cart_product
       end
 
-      cart.alive_cart_products.where.not(id: updated_cart_products.map(&:id)).find_each(&:mark_deleted!)
+      # Soft-deleting a stale cart product must not require it to be otherwise valid. Legacy/corrupt
+      # records can have `quantity <= 0`, which would fail validation and abort the whole update, so
+      # skip validations when removing them.
+      cart.alive_cart_products.where.not(id: updated_cart_products.map(&:id)).find_each { _1.mark_deleted(validate: false) }
     end
 
     redirect_to checkout_path, status: :see_other

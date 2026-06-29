@@ -4045,6 +4045,23 @@ describe Link, :vcr do
         product.alive_variants.second.to_option
       )
     end
+
+    it "does not raise when a variant has a nil created_at and sorts it first" do
+      product = create(:product)
+      category = create(:variant_category, link: product)
+      variant_with_timestamp = create(:variant, variant_category: category, name: "Has timestamp")
+      variant_without_timestamp = create(:variant, variant_category: category, name: "No timestamp")
+
+      [variant_with_timestamp, variant_without_timestamp].each { |variant| variant.update_column(:position_in_category, nil) }
+      variant_without_timestamp.update_column(:created_at, nil)
+
+      product.reload
+      product.alive_variants.load
+
+      options = nil
+      expect { options = product.options }.not_to raise_error
+      expect(options.map { |option| option[:name] }).to eq(["No timestamp", "Has timestamp"])
+    end
   end
 
   describe "#enable_transcode_videos_on_purchase!" do

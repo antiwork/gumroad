@@ -275,21 +275,13 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_button("Disconnect")
     end
 
-    it "allows the creator to connect their Stripe account if they have can_connect_stripe flag enabled" do
+    it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do
       visit settings_payments_path
       expect(page).not_to have_field("Stripe")
 
       @user.update!(can_connect_stripe: true)
       refresh
-      choose "Stripe"
-      expect(page).to have_content("This feature is available in all countries where Stripe operates, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.")
-      expect(page).to have_link("all countries where Stripe operates", href: "https://stripe.com/en-in/global")
-      OmniAuth.config.test_mode = true
-      OmniAuth.config.mock_auth[:stripe_connect] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/stripe_connect_omniauth.json").read)
-      click_on "Connect with Stripe"
-
-      expect(page).to have_alert(text: "You have successfully connected your Stripe account!")
-      expect(page).to have_button("Disconnect")
+      expect(page).not_to have_field("Stripe")
     end
 
     it "allows the creator to disconnect their Stripe account" do

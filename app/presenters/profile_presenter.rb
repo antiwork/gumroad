@@ -48,6 +48,14 @@ class ProfilePresenter
         # can reject a stale pages/sections write. Nil for a not-yet-saved profile.
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
+        # Custom-HTML profile landing page (#5553). Authored solely via the seller's agent + the
+        # `gumroad user page` CLI (no inline editor) - these props drive the "Build with your agent"
+        # affordance: the live-status banner, the copy-prompt block, and the reset button. The
+        # username feeds the agent prompt. The HTML itself is never sent here - the form never edits
+        # it, it only sends "" to reset, so has_custom_landing_page is all the UI needs.
+        custom_html_pages_enabled: Feature.active?(:custom_html_pages, seller),
+        has_custom_landing_page: seller.has_custom_landing_page?,
+        username: seller.username,
       }
     )
   end

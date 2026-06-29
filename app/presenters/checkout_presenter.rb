@@ -18,15 +18,19 @@ class CheckoutPresenter
     @ip = ip
   end
 
-  def checkout_props(params:, browser_guid:)
+  def checkout_props(params:, browser_guid:, cart: nil)
     geo = GeoIp.lookup(@ip)
     detected_country = geo.try(:country_name)
     country = logged_in_user&.country || detected_country
     detected_state = geo.try(:region_name) if [Compliance::Countries::USA, Compliance::Countries::CAN].any? { |country| country.common_name == detected_country }
     credit_card = logged_in_user&.credit_card
+    saved_credit_card = CheckoutPresenter.saved_card(credit_card)
     user = params[:username] && User.find_by_username(params[:username])
-    {
+
+    props = {
       **checkout_common,
+      recaptcha_key: CheckoutRecaptcha.site_key(logged_in_user),
+      recaptcha_score_based: CheckoutRecaptcha.score_based?(logged_in_user),
       country: Compliance::Countries.find_by_name(country)&.alpha2,
       state: logged_in_user&.state || detected_state,
       address: logged_in_user ? {
@@ -34,7 +38,7 @@ class CheckoutPresenter
         zip: logged_in_user.zip_code,
         city: logged_in_user.city,
       } : nil,
-      saved_credit_card: CheckoutPresenter.saved_card(credit_card),
+      saved_credit_card:,
       gift: nil,
       clear_cart: false,
       **add_single_product_props(params:, user:),
@@ -45,6 +49,15 @@ class CheckoutPresenter
       tip_options: TipOptionsService.get_tip_options,
       default_tip_option: TipOptionsService.get_default_tip_option,
     }
+
+    props[:checkout_payment] = Checkout::StripePaymentPresenter.new(
+      cart:,
+      add_products: props[:add_products],
+      clear_cart: props[:clear_cart],
+      saved_credit_card:
+    ).props
+
+    props
   end
 
   def checkout_product(product, cart_item, params, include_cross_sells: true)

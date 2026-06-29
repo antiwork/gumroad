@@ -662,7 +662,7 @@ class Link < ApplicationRecord
       if alive_variants.loaded?
         alive_variants
           .select { |v| v.variant_category_id == first_category.id }
-          .sort_by { |v| [v.position_in_category.nil? ? 0 : 1, v.position_in_category.to_i, v.created_at] }
+          .sort_by { |v| [v.position_in_category.nil? ? 0 : 1, v.position_in_category.to_i, v.created_at || Time.at(0)] }
           .map(&:to_option)
       else
         variants.where(variant_category: first_category).in_order.alive.map(&:to_option)

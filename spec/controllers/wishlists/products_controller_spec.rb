@@ -195,5 +195,18 @@ describe Wishlists::ProductsController do
       expect(response).to be_successful
       expect(wishlist_product.reload).to be_deleted
     end
+
+    it "marks the wishlist product as deleted when the product became versioned after it was added" do
+      product = create(:product)
+      wishlist_product = create(:wishlist_product, wishlist:, product:)
+
+      category = create(:variant_category, title: "Category", link: product)
+      create(:variant, variant_category: category, name: "Untitled 1")
+
+      delete :destroy, params: { wishlist_id: wishlist.external_id, id: wishlist_product.external_id }
+
+      expect(response).to be_successful
+      expect(wishlist_product.reload).to be_deleted
+    end
   end
 end

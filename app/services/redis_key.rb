@@ -26,6 +26,7 @@ class RedisKey
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
+    def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"
     def recommended_products_associated_product_ids_limit = "recommended_products_associated_product_ids_limit"
     def blast_recipients_slice_size = "blast:recipients_slice_size"
