@@ -213,6 +213,7 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
+  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total before Elements updates.
   if (state.surcharges.type === "loaded") {
     const total = getTotalPrice(state);
     if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;

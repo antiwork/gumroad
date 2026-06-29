@@ -14,6 +14,8 @@ import {
   type State,
 } from "$app/components/Checkout/payment";
 
+const stripePaymentElementMinimumCharge = 50;
+
 const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
@@ -244,11 +246,31 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(false);
   });
 
+  it("falls back when loaded checkout total is below Stripe's USD minimum charge amount", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: 49,
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("keeps the Payment Element path selected while the final total is pending", () => {
     expect(canUseStripePaymentElement(state({ surcharges: { type: "pending" } }))).toBe(true);
   });
 
-  it("allows a positive loaded checkout total when the server selected Payment Element", () => {
+  it("allows a loaded checkout total below Gumroad's USD minimum when Stripe can charge it", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -379,7 +401,7 @@ describe("getStripePaymentElementAmount", () => {
     ).toBeNull();
   });
 
-  it("returns null when the loaded checkout total is below the Stripe USD minimum charge amount", () => {
+  it("returns null when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
     expect(
       getStripePaymentElementAmount(
         state({

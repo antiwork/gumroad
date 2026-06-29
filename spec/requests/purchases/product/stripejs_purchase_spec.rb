@@ -132,6 +132,43 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
+  it "allows the buyer to pay for a checkout below Gumroad's minimum but chargeable by Stripe using the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    near_zero_price_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS + 10
+    product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", price_cents: near_zero_price_cents)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Near-zero guide")
+    expect(page).to have_text("Total US$0.60", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    expect do
+      check_out(product, payment_element: true)
+    end.to change { product.sales.successful.count }.by(1)
+
+    purchase = product.sales.successful.last
+    expect(purchase.price_cents).to eq(near_zero_price_cents)
+    expect(purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
   it "renders Payment Element for a checkout total below Gumroad's minimum but chargeable by Stripe" do
     seller = create(:user)
     gumroad_minimum_amount_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
