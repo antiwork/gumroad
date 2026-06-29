@@ -54,6 +54,13 @@ describe AssetPreviewsController do
       expect(response.parsed_body["error"]).to eq("Could not process your preview, please try again.")
     end
 
+    it "returns a graceful error when asset_preview param is absent" do
+      post(:create, params: { link_id: product.unique_permalink, format: :json })
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error"]).to eq("Could not process your preview, please try again.")
+    end
+
     it "doesn't add a preview if there are too many previews" do
       stub_const("Link::MAX_PREVIEW_COUNT", 1)
       allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)
