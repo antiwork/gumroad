@@ -52,7 +52,6 @@ class Checkout::StripePaymentPresenter
 
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
-      return "saved_credit_card" if saved_credit_card.present?
 
       sellers = items.map { _1[:seller] }.uniq
       return "unknown_seller" if sellers.any?(&:blank?)

@@ -214,7 +214,7 @@ describe CheckoutPresenter do
         default_tip_option: 15,
         checkout_payment: {
           integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
-          fallback_reason: "saved_credit_card",
+          fallback_reason: "stripe_payment_element_flag_disabled",
           elements_options: nil,
         },
       )

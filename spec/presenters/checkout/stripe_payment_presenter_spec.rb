@@ -62,6 +62,24 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
   end
 
+  it "selects Stripe Payment Element even when the buyer has a saved card" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    saved_credit_card = { type: "visa", number: "**** **** **** 4242", expiration_date: "12/30", requires_mandate: false }
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)], saved_credit_card:)).to eq(
+      integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
+      fallback_reason: nil,
+      elements_options: {
+        mode: "payment",
+        currency: "usd",
+        payment_method_types: ["card"],
+        payment_method_creation: "manual",
+      },
+    )
+  end
+
   it "falls back to CardElement when the Stripe Payment Element seller flag is disabled" do
     product = create(:product, price_cents: 1234)
 
@@ -97,11 +115,6 @@ describe Checkout::StripePaymentPresenter do
 
   it "falls back to CardElement for an empty checkout" do
     expect(stripe_payment_props).to eq(card_element_fallback("empty_cart"))
-  end
-
-  it "falls back to CardElement when the buyer has a saved credit card" do
-    expect(stripe_payment_props(add_products: [flagged_seller_product], saved_credit_card: { type: "visa" }))
-      .to eq(card_element_fallback("saved_credit_card"))
   end
 
   it "falls back to CardElement when a checkout product's seller cannot be resolved" do
