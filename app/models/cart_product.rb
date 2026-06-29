@@ -4,6 +4,8 @@ class CartProduct < ApplicationRecord
   include ExternalId
   include Deletable
 
+  MAX_QUANTITY = 2_147_483_647
+
   URL_PARAMETERS_JSON_SCHEMA = { type: "object", additionalProperties: { type: "string" } }.freeze
   ACCEPTED_OFFER_DETAILS_JSON_SCHEMA = {
     type: "object",
@@ -23,6 +25,7 @@ class CartProduct < ApplicationRecord
   after_initialize :assign_default_values
 
   validates :price, :quantity, :referrer, presence: true
+  validates :quantity, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: MAX_QUANTITY }, allow_nil: true
 
   validate :ensure_url_parameters_conform_to_schema
   validate :ensure_accepted_offer_details_conform_to_schema

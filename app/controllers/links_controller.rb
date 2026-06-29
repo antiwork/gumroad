@@ -404,7 +404,12 @@ class LinksController < ApplicationController
         end
 
         if @product.native_type === Link::NATIVE_TYPE_COFFEE
-          @product.suggested_price_cents = product_permitted_params[:variants].map { _1[:price_difference_cents] }.max
+          # Drop suggested amounts whose price was cleared (nil price_difference_cents):
+          # an empty amount input reaches the backend as nil, coerces to 0, and would fail
+          # the coffee variant's "greater than 0" validation. Ignore them entirely.
+          coffee_variants = product_permitted_params[:variants]&.reject { _1[:price_difference_cents].nil? } || []
+          product_permitted_params[:variants] = coffee_variants
+          @product.suggested_price_cents = coffee_variants.filter_map { _1[:price_difference_cents] }.max
         end
 
         # TODO clean this up

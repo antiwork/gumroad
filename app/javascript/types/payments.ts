@@ -13,7 +13,6 @@ export type User = {
   business_tax_id_entered: boolean;
   business_tax_id_last_four: string | null;
   requires_credit_card: boolean;
-  can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
   joined_at: string;
 };

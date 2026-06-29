@@ -539,7 +539,7 @@ const AccountDetailsSection = ({
             </Fieldset>
           </div>
           {complianceInfo.business_country === "JP" ? (
-            <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("business_name_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-business-name-kanji`}>Business Name (Kanji)</Label>
@@ -573,15 +573,7 @@ const AccountDetailsSection = ({
           ) : null}
           {complianceInfo.business_country === "JP" ? (
             <>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "var(--spacer-5)",
-                  gridAutoFlow: "column",
-                  gridAutoColumns: "1fr",
-                  alignItems: "end",
-                }}
-              >
+              <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col md:items-end">
                 <Fieldset state={errorFieldNames.has("business_building_number") ? "danger" : undefined}>
                   <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-building-number`}>Block / Building number</Label>
@@ -613,7 +605,7 @@ const AccountDetailsSection = ({
                   />
                 </Fieldset>
               </div>
-              <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+              <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                 <Fieldset state={errorFieldNames.has("business_street_address_kanji") ? "danger" : undefined}>
                   <FieldsetTitle>
                     <Label htmlFor={`${uid}-business-street-address-kanji`}>Business town/Cho-me (Kanji)</Label>
@@ -827,7 +819,7 @@ const AccountDetailsSection = ({
         </section>
       ) : null}
       <section className="grid gap-8">
-        <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
           <Fieldset state={errorFieldNames.has("first_name") ? "danger" : undefined}>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-creator-first-name`}>First name</Label>
@@ -860,7 +852,7 @@ const AccountDetailsSection = ({
         </div>
         {complianceInfo.country === "JP" ? (
           <>
-            <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("first_name_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-first-name-kanji`}>First name (Kanji)</Label>
@@ -890,7 +882,7 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
             </div>
-            <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("first_name_kana") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-first-name-kana`}>First name (Kana)</Label>
@@ -926,15 +918,7 @@ const AccountDetailsSection = ({
         ) : null}
         {complianceInfo.country === "JP" ? (
           <>
-            <div
-              style={{
-                display: "grid",
-                gap: "var(--spacer-5)",
-                gridAutoFlow: "column",
-                gridAutoColumns: "1fr",
-                alignItems: "end",
-              }}
-            >
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col md:items-end">
               <Fieldset state={errorFieldNames.has("building_number") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-building-number`}>Block / Building number</Label>
@@ -966,7 +950,7 @@ const AccountDetailsSection = ({
                 />
               </Fieldset>
             </div>
-            <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("street_address_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}-creator-street-address-kanji`}>Town/Cho-me (Kanji)</Label>
@@ -1154,7 +1138,7 @@ const AccountDetailsSection = ({
             Why does Gumroad need this information?
           </a>
         </FieldsetTitle>
-        <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
           <Fieldset state={errorFieldNames.has("dob_month") ? "danger" : undefined}>
             <Select
               id={`${uid}-creator-dob-month`}

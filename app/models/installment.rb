@@ -713,6 +713,23 @@ class Installment < ApplicationRecord
     false
   end
 
+  # A seller-wide post (installment_type "seller") with NO product/variant
+  # targeting is addressed to every one of the seller's customers, so it is not
+  # "targeted at a purchased item" (targeted_at_purchased_item? is false for it
+  # by design). For a product whose buyers are entitled to the full post history
+  # (`should_show_all_posts?`, e.g. memberships), such a post should still be part
+  # of the buyer's library even if they were never individually emailed it.
+  # Audience filters (created_after, paid_more_than, active_customers_only, etc.)
+  # are still enforced separately via `purchase_passes_filters`.
+  #
+  # `single_recipient_email?` one-off emails are EXCLUDED: they are seller-type
+  # with no targeting but are private to a single purchase (single_recipient_purchase_id)
+  # and must never be surfaced seller-wide — they are guarded by the same flag in
+  # eligible_purchase?/the emailable-posts scopes, and must be guarded here too.
+  def targeted_at_all_seller_customers?
+    seller_type? && bought_products.blank? && bought_variants.blank? && !single_recipient_email?
+  end
+
   def passes_member_cancellation_checks?(purchase)
     return true unless member_cancellation_trigger?
     return false if purchase.nil?

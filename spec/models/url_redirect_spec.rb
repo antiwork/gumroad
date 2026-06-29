@@ -282,6 +282,43 @@ describe UrlRedirect do
 
         expect(url_redirect.product_json_data).to include(custom_delivery_url: nil)
       end
+
+      it "bulk-loads the latest media locations with a single query instead of one per file" do
+        product = create(:product)
+        files = create_list(:readable_document, 5, link: product)
+        product.product_files = files
+        purchase = create(:purchase, link: product, purchaser: create(:user))
+        url_redirect = create(:url_redirect, link: product, purchase:)
+
+        consumed_at = Time.current.change(usec: 0)
+        files.first(3).each_with_index do |file, index|
+          create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                  product_file_id: file.id, product_id: product.id, location: index + 1, consumed_at:)
+        end
+
+        media_location_queries = []
+        counter = lambda do |*, payload|
+          sql = payload[:sql].to_s
+          media_location_queries << sql if sql.start_with?("SELECT") && sql.include?("media_locations")
+        end
+
+        file_data = nil
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          file_data = url_redirect.product_file_json_data_for_mobile
+        end
+
+        expect(media_location_queries.size).to eq(1)
+
+        locations_by_file_id = file_data.index_by { |data| data[:id] }
+        files.first(3).each_with_index do |file, index|
+          expect(locations_by_file_id[file.external_id][:latest_media_location]).to eq(
+            location: index + 1, unit: MediaLocation::Unit::PAGE_NUMBER, timestamp: consumed_at
+          )
+        end
+        files.last(2).each do |file|
+          expect(locations_by_file_id[file.external_id][:latest_media_location]).to be_nil
+        end
+      end
     end
   end
 

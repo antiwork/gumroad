@@ -2469,7 +2469,20 @@ class Purchase < ApplicationRecord
 
           next false unless purchase.link.should_show_all_posts?
           next false unless post.purchase_passes_filters(purchase)
-          next false unless post.targeted_at_purchased_item?(purchase)
+          # A seller-wide post (no product/variant targeting) is not "targeted at
+          # the purchased item", but a should_show_all_posts buyer (e.g. a member)
+          # is entitled to the full post history regardless of individual email
+          # delivery, so accept it here too. Without this, such posts only ever
+          # surface via an email_info row, so partial delivery produced
+          # per-subscriber visibility gaps (gumroad-private#749). The seller-wide
+          # branch must re-assert the seller boundary (post.seller_id ==
+          # purchase.seller_id): unlike targeted_at_purchased_item?, which is
+          # implicitly seller-scoped via the product/variant match, neither
+          # targeted_at_all_seller_customers? nor purchase_passes_filters checks
+          # seller ownership, so a mixed-seller purchase batch could otherwise leak
+          # one seller's post to another seller's buyer.
+          next false unless post.targeted_at_purchased_item?(purchase) ||
+                            (post.targeted_at_all_seller_customers? && post.seller_id == purchase.seller_id)
           next false unless post.passes_member_cancellation_checks?(purchase)
 
           post.delivery_due?(purchase)

@@ -159,5 +159,62 @@ RSpec.describe ContentModeration::ContentExtractor do
 
       expect(result.image_urls).to eq(["https://cdn.example.com/post.png"])
     end
+
+    context "when the message links to the seller's own first-party storefront" do
+      let(:seller) { create(:user, username: "xinnxsya") }
+      let(:post) do
+        build(
+          :post,
+          seller:,
+          name: "Weekly update",
+          message: %(<p>New drop here: #{seller.subdomain_with_protocol}</p>)
+        )
+      end
+
+      it "strips the seller's own subdomain URL from the moderated text" do
+        # Regression for antiwork/gumroad-private#727: a seller's own first-party
+        # storefront URL must never be judged as policy-violating content.
+        result = extractor.extract_from_post(post)
+
+        expect(result.text).not_to include(seller.subdomain)
+        expect(result.text).to include("New drop here:")
+      end
+
+      it "leaves third-party URLs intact so off-site abuse is still moderated" do
+        post.message = %(<p>Mine: #{seller.subdomain_with_protocol} and theirs: https://evil.example.com/scam</p>)
+
+        result = extractor.extract_from_post(post)
+
+        expect(result.text).not_to include(seller.subdomain)
+        expect(result.text).to include("https://evil.example.com/scam")
+      end
+
+      it "does not strip an unverified custom domain (only active ones are first-party)" do
+        # Guard against a moderation bypass: an alive-but-unverified custom domain
+        # is an arbitrary off-site URL the seller never proved they own, so it must
+        # still be moderated. Mirrors UrlService#custom_domain_with_protocol.
+        allow(seller).to receive(:custom_domain).and_return(
+          double(active?: false, domain: "unverified-offsite.example.com")
+        )
+        post.message = %(<p>Check https://unverified-offsite.example.com/x</p>)
+
+        result = extractor.extract_from_post(post)
+
+        expect(result.text).to include("https://unverified-offsite.example.com/x")
+      end
+
+      it "preserves path/query text on the seller's own URL so it is still moderated" do
+        # Only the gibberish domain label is the false positive; user-controlled
+        # path/query text must still reach moderation so a seller can't hide a
+        # blocked term inside their own URL.
+        post.message = %(<p>See #{seller.subdomain_with_protocol}/forbidden-term?q=alsoflagged</p>)
+
+        result = extractor.extract_from_post(post)
+
+        expect(result.text).not_to include(seller.subdomain)
+        expect(result.text).to include("forbidden-term")
+        expect(result.text).to include("alsoflagged")
+      end
+    end
   end
 end

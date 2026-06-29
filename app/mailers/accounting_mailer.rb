@@ -120,6 +120,16 @@ class AccountingMailer < ApplicationMailer
          cc: %w[steven.olson@gumroad.com]
   end
 
+  def global_sales_tax_summary_report_failed(month, year, error_class, error_message)
+    @month = month
+    @year = year
+    @error_class = error_class
+    @error_message = error_message
+
+    mail subject: "#{SUBJECT_PREFIX}Global Sales Tax Summary Report failed - #{month}/#{year}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def ytd_sales_report(csv_data, recipient_email)
     attachments["ytd_sales_by_country_state.csv"] = {
       data: ::Base64.encode64(csv_data),

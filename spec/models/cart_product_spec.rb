@@ -16,6 +16,47 @@ describe CartProduct do
   end
 
   describe "validations" do
+    describe "quantity" do
+      context "when quantity is a positive integer within the column range" do
+        it "marks the cart product as valid" do
+          cart_product = build(:cart_product, quantity: 1)
+          expect(cart_product).to be_valid
+        end
+      end
+
+      context "when quantity is zero" do
+        it "marks the cart product as invalid" do
+          cart_product = build(:cart_product, quantity: 0)
+          expect(cart_product).to be_invalid
+          expect(cart_product.errors.full_messages.join).to include("Quantity must be greater than 0")
+        end
+      end
+
+      context "when quantity is negative" do
+        it "marks the cart product as invalid" do
+          cart_product = build(:cart_product, quantity: -1)
+          expect(cart_product).to be_invalid
+          expect(cart_product.errors.full_messages.join).to include("Quantity must be greater than 0")
+        end
+      end
+
+      context "when quantity exceeds the 4-byte integer column limit" do
+        it "marks the cart product as invalid instead of raising a range error on save" do
+          cart_product = build(:cart_product, quantity: CartProduct::MAX_QUANTITY + 1)
+          expect(cart_product).to be_invalid
+          expect(cart_product.errors.full_messages.join).to include("Quantity must be less than or equal to #{CartProduct::MAX_QUANTITY}")
+          expect { cart_product.save! }.to raise_error(ActiveRecord::RecordInvalid)
+        end
+      end
+
+      context "when quantity is at the 4-byte integer column limit" do
+        it "marks the cart product as valid" do
+          cart_product = build(:cart_product, quantity: CartProduct::MAX_QUANTITY)
+          expect(cart_product).to be_valid
+        end
+      end
+    end
+
     describe "url parameters" do
       context "when url parameters are empty" do
         it "marks the cart product as valid" do

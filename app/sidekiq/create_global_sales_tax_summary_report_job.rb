@@ -4,6 +4,13 @@ class CreateGlobalSalesTaxSummaryReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
+  sidekiq_retries_exhausted do |job, exception|
+    month, year = job["args"]
+    AccountingMailer.global_sales_tax_summary_report_failed(
+      month, year, exception.class.name, exception.message
+    ).deliver_later
+  end
+
   # GROUP BY uses HEX(CAST(... AS BINARY)) to prevent MySQL's case-insensitive collation
   # from silently merging rows like "USA" and "usa" — Ruby handles normalization instead.
   BINARY_SAFE_KEY_COLUMNS = {

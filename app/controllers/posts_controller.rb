@@ -68,7 +68,7 @@ class PostsController < ApplicationController
           {
             email: purchase.email,
             purchase:,
-            url_redirect: @post.single_recipient_email? ? @post.delivery_url_redirect_for(purchase) : purchase.url_redirect,
+            url_redirect: @post.delivery_url_redirect_for(purchase),
             subscription: purchase.subscription,
           }.compact_blank
         ])
