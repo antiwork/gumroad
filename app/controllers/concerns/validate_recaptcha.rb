@@ -102,7 +102,11 @@ module ValidateRecaptcha
     end
 
     def hostname_allowed?(hostname)
-      return true unless Rails.env.production?
+      # TEST-ONLY (recaptcha-score-staging-parity branch): also enforce the
+      # hostname check on staging so it mirrors production for an end-to-end
+      # rehearsal of the score-based flow. DO NOT MERGE — production must keep
+      # skipping this for non-prod environments.
+      return true unless Rails.env.production? || Rails.env.staging?
       return false if hostname.blank?
 
       # TODO: Refactor subdomain check. Use Subdomain module if possible
