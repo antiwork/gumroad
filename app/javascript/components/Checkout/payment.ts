@@ -7,7 +7,6 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
-import { getMinPriceCents } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
@@ -33,8 +32,7 @@ type StripeElementsModeForCheckout =
   | typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
   | typeof STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT;
 
-const STRIPE_PAYMENT_ELEMENT_CURRENCY = "usd";
-const STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS = getMinPriceCents(STRIPE_PAYMENT_ELEMENT_CURRENCY);
+const STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50;
 
 export type PaymentElementConfig = {
   stripe_elements_mode: StripeElementsModeForCheckout;
@@ -238,7 +236,7 @@ export function getStripePaymentElementAmount(state: State) {
 }
 
 function isStripePaymentElementAmountAllowed(amount: number | null) {
-  return amount !== null && amount >= STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS;
+  return amount !== null && amount >= STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS;
 }
 
 export function isProcessing(state: State) {

@@ -13,8 +13,10 @@ class Checkout::StripePaymentPresenter
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup"
-  STRIPE_PAYMENT_ELEMENT_CURRENCY = Currency::USD
-  STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS = CURRENCY_CHOICES[STRIPE_PAYMENT_ELEMENT_CURRENCY][:min_price]
+  # Payment Element mounts with a charge amount up front, unlike CardElement, so keep carts
+  # below Stripe's USD charge floor on CardElement. This is intentionally lower than
+  # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
+  STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -80,7 +82,7 @@ class Checkout::StripePaymentPresenter
       # Initial eligibility uses pre-tax item prices; the browser re-gates the final loaded total.
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
-      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS
+      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
 
       nil
     end

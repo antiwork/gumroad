@@ -16,7 +16,8 @@ import {
   type State,
 } from "$app/components/Checkout/payment";
 
-const paymentElementMinimumPrice = getMinPriceCents("usd");
+const stripePaymentElementMinimumCharge = 50;
+const belowGumroadUsdMinimumPrice = getMinPriceCents("usd") - 1;
 
 const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
@@ -248,7 +249,7 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(false);
   });
 
-  it("falls back when loaded checkout total is below the Gumroad USD minimum", () => {
+  it("falls back when loaded checkout total is below the Stripe USD minimum charge amount", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -260,7 +261,7 @@ describe("canUseStripePaymentElement", () => {
               shipping_rate_cents: 0,
               tax_cents: 0,
               tax_included_cents: 0,
-              subtotal: paymentElementMinimumPrice - 1,
+              subtotal: stripePaymentElementMinimumCharge - 1,
             },
           },
         }),
@@ -272,7 +273,7 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ surcharges: { type: "pending" } }))).toBe(true);
   });
 
-  it("allows a loaded checkout total at the Gumroad USD minimum", () => {
+  it("allows a loaded checkout total below Gumroad's USD minimum when it meets Stripe's minimum charge amount", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -284,7 +285,7 @@ describe("canUseStripePaymentElement", () => {
               shipping_rate_cents: 0,
               tax_cents: 0,
               tax_included_cents: 0,
-              subtotal: paymentElementMinimumPrice,
+              subtotal: belowGumroadUsdMinimumPrice,
             },
           },
         }),
@@ -292,7 +293,27 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(true);
   });
 
-  it("recomputes eligibility when the loaded checkout total crosses below the Gumroad USD minimum", () => {
+  it("allows a loaded checkout total at the Stripe USD minimum charge amount", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: stripePaymentElementMinimumCharge,
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("recomputes eligibility when the loaded checkout total crosses below the Stripe USD minimum charge amount", () => {
     const atMinimum = state({
       surcharges: {
         type: "loaded",
@@ -302,7 +323,7 @@ describe("canUseStripePaymentElement", () => {
           shipping_rate_cents: 0,
           tax_cents: 0,
           tax_included_cents: 0,
-          subtotal: paymentElementMinimumPrice,
+          subtotal: stripePaymentElementMinimumCharge,
         },
       },
     });
@@ -315,13 +336,13 @@ describe("canUseStripePaymentElement", () => {
           shipping_rate_cents: 0,
           tax_cents: 0,
           tax_included_cents: 0,
-          subtotal: paymentElementMinimumPrice - 1,
+          subtotal: stripePaymentElementMinimumCharge - 1,
         },
       },
     });
 
     expect(canUseStripePaymentElement(atMinimum)).toBe(true);
-    expect(getStripePaymentElementAmount(atMinimum)).toBe(paymentElementMinimumPrice);
+    expect(getStripePaymentElementAmount(atMinimum)).toBe(stripePaymentElementMinimumCharge);
     expect(canUseStripePaymentElement(belowMinimum)).toBe(false);
     expect(getStripePaymentElementAmount(belowMinimum)).toBeNull();
   });
@@ -417,7 +438,7 @@ describe("getStripePaymentElementAmount", () => {
     ).toBeNull();
   });
 
-  it("returns null when the loaded checkout total is below the Gumroad USD minimum", () => {
+  it("returns null when the loaded checkout total is below the Stripe USD minimum charge amount", () => {
     expect(
       getStripePaymentElementAmount(
         state({
@@ -429,7 +450,7 @@ describe("getStripePaymentElementAmount", () => {
               shipping_rate_cents: 0,
               tax_cents: 0,
               tax_included_cents: 0,
-              subtotal: paymentElementMinimumPrice - 1,
+              subtotal: stripePaymentElementMinimumCharge - 1,
             },
           },
         }),
@@ -437,7 +458,7 @@ describe("getStripePaymentElementAmount", () => {
     ).toBeNull();
   });
 
-  it("returns the loaded total when it meets the Gumroad USD minimum", () => {
+  it("returns a loaded total below Gumroad's USD minimum when it meets Stripe's minimum charge amount", () => {
     expect(
       getStripePaymentElementAmount(
         state({
@@ -449,12 +470,32 @@ describe("getStripePaymentElementAmount", () => {
               shipping_rate_cents: 0,
               tax_cents: 0,
               tax_included_cents: 0,
-              subtotal: paymentElementMinimumPrice,
+              subtotal: belowGumroadUsdMinimumPrice,
             },
           },
         }),
       ),
-    ).toBe(paymentElementMinimumPrice);
+    ).toBe(belowGumroadUsdMinimumPrice);
+  });
+
+  it("returns the loaded total when it meets the Stripe USD minimum charge amount", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: stripePaymentElementMinimumCharge,
+            },
+          },
+        }),
+      ),
+    ).toBe(stripePaymentElementMinimumCharge);
   });
 });
 

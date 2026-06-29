@@ -91,13 +91,13 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
-    payment_element_minimum_amount_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS
+    paid_product_price_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
     free_product = create(:product_with_pdf_file, user: seller, name: "Free bonus", price_cents: 0)
-    paid_product = create(:product_with_pdf_file, user: seller, name: "Paid guide", price_cents: payment_element_minimum_amount_cents)
+    paid_product = create(:product_with_pdf_file, user: seller, name: "Paid guide", price_cents: paid_product_price_cents)
     Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product: free_product, price: 0)
-    create(:cart_product, cart:, product: paid_product, price: payment_element_minimum_amount_cents)
+    create(:cart_product, cart:, product: paid_product, price: paid_product_price_cents)
 
     visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
 
@@ -124,7 +124,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
 
     paid_purchase = paid_product.sales.successful.last
     free_purchase = free_product.sales.successful.last
-    expect(paid_purchase.price_cents).to eq(payment_element_minimum_amount_cents)
+    expect(paid_purchase.price_cents).to eq(paid_product_price_cents)
     expect(paid_purchase.successful?).to be(true)
     expect(free_purchase.price_cents).to eq(0)
     expect(free_purchase.successful?).to be(true)
@@ -132,9 +132,28 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
+  it "renders Payment Element for a checkout total below Gumroad's minimum but chargeable by Stripe" do
+    seller = create(:user)
+    gumroad_minimum_amount_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
+    product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    cart = create(:cart, :guest)
+    create(:cart_product, cart:, product:, price: gumroad_minimum_amount_cents - 1)
+
+    visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Near-zero guide")
+    expect(page).to have_text("Total US$0.98", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(page).to have_selector("iframe[src*='elements-inner-payment']")
+  end
+
   it "renders CardElement fallback for a positive checkout total below the Payment Element minimum" do
     seller = create(:user)
-    payment_element_minimum_amount_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS
+    payment_element_minimum_amount_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
     product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
     Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     cart = create(:cart, :guest)
@@ -144,7 +163,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
 
     expect(page).to have_current_path(checkout_path)
     expect(page).to have_text("Near-zero guide")
-    expect(page).to have_text("Total US$0.98", normalize_ws: true)
+    expect(page).to have_text("Total US$0.49", normalize_ws: true)
     checkout_payment = checkout_payment_props
     expect(checkout_payment["integration"]).to eq("card_element")
     expect(checkout_payment["fallback_reason"]).to eq("stripe_payment_element_amount_below_minimum")
