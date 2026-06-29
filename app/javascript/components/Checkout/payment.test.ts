@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canUseStripePaymentElement,
   getStripePaymentElementAmount,
+  isCardReadyToPay,
   type CheckoutPaymentConfig,
   type Product,
   type State,
@@ -179,5 +180,28 @@ describe("getStripePaymentElementAmount", () => {
 
   it("returns null until surcharges load", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
+  });
+});
+
+describe("isCardReadyToPay", () => {
+  it("is ready on the saved card even though the Payment Element never mounts", () => {
+    expect(isCardReadyToPay({ useSavedCard: true, useStripePaymentElement: true, paymentElementReady: false })).toBe(
+      true,
+    );
+  });
+
+  it("waits for the Payment Element to mount when entering a new card", () => {
+    expect(isCardReadyToPay({ useSavedCard: false, useStripePaymentElement: true, paymentElementReady: false })).toBe(
+      false,
+    );
+    expect(isCardReadyToPay({ useSavedCard: false, useStripePaymentElement: true, paymentElementReady: true })).toBe(
+      true,
+    );
+  });
+
+  it("is ready when the Payment Element is not in use (Card Element fallback)", () => {
+    expect(isCardReadyToPay({ useSavedCard: false, useStripePaymentElement: false, paymentElementReady: false })).toBe(
+      true,
+    );
   });
 });

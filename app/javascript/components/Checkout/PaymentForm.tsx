@@ -41,6 +41,7 @@ import {
   getStripePaymentElementAmount,
   getTotalPrice,
   hasShipping,
+  isCardReadyToPay,
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
@@ -678,18 +679,18 @@ const CreditCardContent = ({
       ? state.checkoutPayment.elements_options
       : null;
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
-  const handlePaymentElementReady = React.useCallback(
-    (controller: PaymentElementController | null) => {
-      paymentElementRef.current = controller;
-      setPaymentElementReady(controller !== null);
-      onPaymentElementReadyChange?.(controller !== null);
-    },
-    [onPaymentElementReadyChange],
-  );
+  const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
+    paymentElementRef.current = controller;
+    setPaymentElementReady(controller !== null);
+  }, []);
 
   React.useEffect(() => {
     if (!useStripePaymentElement) handlePaymentElementReady(null);
   }, [handlePaymentElementReady, useStripePaymentElement]);
+
+  React.useEffect(() => {
+    onPaymentElementReadyChange?.(isCardReadyToPay({ useSavedCard, useStripePaymentElement, paymentElementReady }));
+  }, [onPaymentElementReadyChange, useSavedCard, useStripePaymentElement, paymentElementReady]);
 
   React.useEffect(() => {
     dispatch({
