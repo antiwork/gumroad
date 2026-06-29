@@ -159,12 +159,29 @@ export function requiresPayment(state: State) {
   return getTotalPrice(state) !== 0 || state.products.some((item) => item.requirePayment);
 }
 
+function hasMultipleSellers(state: State) {
+  return new Set(state.products.map((product) => product.creator.id)).size > 1;
+}
+
 export function requiresReusablePaymentMethod(state: State) {
   return (
-    new Set(state.products.map((product) => product.creator.id)).size > 1 ||
-    !!state.products[0]?.subscription_id ||
-    state.products[0]?.nativeType === "commission"
+    hasMultipleSellers(state) || !!state.products[0]?.subscription_id || state.products[0]?.nativeType === "commission"
   );
+}
+
+export function requiresPaymentElementReusablePaymentMethod(state: State) {
+  return (
+    requiresReusablePaymentMethod(state) ||
+    state.products.some(
+      (product) => !!product.recurrence || !!product.subscription_id || product.nativeType === "commission",
+    )
+  );
+}
+
+export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
+  return useStripePaymentElement
+    ? requiresPaymentElementReusablePaymentMethod(state)
+    : requiresReusablePaymentMethod(state);
 }
 
 export function canUseStripePaymentElement(state: State) {
@@ -174,16 +191,8 @@ export function canUseStripePaymentElement(state: State) {
   return (
     state.checkoutPayment.integration === "payment_element" &&
     !state.savedCreditCard &&
-    !requiresReusablePaymentMethod(state) &&
-    !state.products.some(
-      (product) =>
-        product.payInInstallments ||
-        product.hasFreeTrial ||
-        product.isPreorder ||
-        !!product.recurrence ||
-        !!product.subscription_id ||
-        product.nativeType === "commission",
-    )
+    !hasMultipleSellers(state) &&
+    !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder)
   );
 }
 

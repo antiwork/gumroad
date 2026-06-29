@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   canUseStripePaymentElement,
   getStripePaymentElementAmount,
+  requiresPaymentElementReusablePaymentMethod,
+  requiresReusablePaymentMethodForCardCollection,
+  requiresReusablePaymentMethod,
   type CheckoutPaymentConfig,
   type Product,
   type State,
@@ -113,7 +116,7 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(false);
   });
 
-  it("falls back for reusable payment method flows", () => {
+  it("falls back for multi-seller carts", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -124,9 +127,12 @@ describe("canUseStripePaymentElement", () => {
         }),
       ),
     ).toBe(false);
-    expect(canUseStripePaymentElement(state({ products: [product({ subscription_id: "sub_123" })] }))).toBe(false);
-    expect(canUseStripePaymentElement(state({ products: [product({ recurrence: "monthly" })] }))).toBe(false);
-    expect(canUseStripePaymentElement(state({ products: [product({ nativeType: "commission" })] }))).toBe(false);
+  });
+
+  it("allows reusable card flows that keep the stripe payment method contract", () => {
+    expect(canUseStripePaymentElement(state({ products: [product({ subscription_id: "sub_123" })] }))).toBe(true);
+    expect(canUseStripePaymentElement(state({ products: [product({ recurrence: "monthly" })] }))).toBe(true);
+    expect(canUseStripePaymentElement(state({ products: [product({ nativeType: "commission" })] }))).toBe(true);
   });
 
   it("falls back for setup, installment, preorder, and free-trial flows", () => {
@@ -153,6 +159,54 @@ describe("canUseStripePaymentElement", () => {
         }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("requiresReusablePaymentMethod", () => {
+  it("keeps the existing reusable setup contract for non-Payment Element paths", () => {
+    expect(requiresReusablePaymentMethod(state())).toBe(false);
+    expect(requiresReusablePaymentMethod(state({ products: [product({ subscription_id: "sub_123" })] }))).toBe(true);
+    expect(requiresReusablePaymentMethod(state({ products: [product({ recurrence: "monthly" })] }))).toBe(false);
+    expect(requiresReusablePaymentMethod(state({ products: [product({ nativeType: "commission" })] }))).toBe(true);
+  });
+});
+
+describe("requiresPaymentElementReusablePaymentMethod", () => {
+  it("requires reusable setup for Payment Element future-charge card flows", () => {
+    expect(requiresPaymentElementReusablePaymentMethod(state())).toBe(false);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(state({ products: [product({ subscription_id: "sub_123" })] })),
+    ).toBe(true);
+    expect(requiresPaymentElementReusablePaymentMethod(state({ products: [product({ recurrence: "monthly" })] }))).toBe(
+      true,
+    );
+    expect(
+      requiresPaymentElementReusablePaymentMethod(state({ products: [product({ nativeType: "commission" })] })),
+    ).toBe(true);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(
+        state({ products: [product(), product({ permalink: "membership", recurrence: "monthly" })] }),
+      ),
+    ).toBe(true);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(
+        state({ products: [product(), product({ permalink: "subscription", subscription_id: "sub_123" })] }),
+      ),
+    ).toBe(true);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(
+        state({ products: [product(), product({ permalink: "commission", nativeType: "commission" })] }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("requiresReusablePaymentMethodForCardCollection", () => {
+  it("routes recurring products through reusable setup only for Payment Element card collection", () => {
+    const recurringState = state({ products: [product({ recurrence: "monthly" })] });
+
+    expect(requiresReusablePaymentMethodForCardCollection(recurringState, true)).toBe(true);
+    expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
   });
 });
 
