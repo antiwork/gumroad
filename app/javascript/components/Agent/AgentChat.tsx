@@ -9,6 +9,7 @@ import {
   executeAgentAction,
   streamAgentMessage,
 } from "$app/data/agent";
+import { classNames } from "$app/utils/classNames";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -262,6 +263,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionStatus: "dismissed" } : msg)));
   };
 
+  const hasText = input.trim().length > 0;
+
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col gap-4 p-4 md:p-8">
       <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-y-auto" aria-label="Conversation" role="log">
@@ -324,7 +327,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       ) : null}
 
       <form
-        className="flex items-end gap-2"
+        className="flex flex-col gap-1 rounded border border-border bg-background p-2 focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
         onSubmit={(e) => {
           e.preventDefault();
           void send(input);
@@ -343,16 +346,28 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           rows={2}
           aria-label="Message"
           disabled={isSending}
-          className="flex-1"
+          className="resize-none border-none bg-transparent p-2 focus:outline-none"
         />
-        <Button
-          type="submit"
-          color="accent"
-          className="shrink-0 whitespace-nowrap"
-          disabled={isSending || input.trim().length === 0}
-        >
-          Send
-        </Button>
+        <div className="flex justify-end">
+          <Button
+            type="submit"
+            color={hasText ? "accent" : "filled"}
+            size="icon"
+            aria-label="Send"
+            className={classNames("size-10 rounded-full opacity-100", !hasText && "text-muted")}
+            disabled={isSending || !hasText}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path
+                d="M7 12V2M7 2L2.5 6.5M7 2L11.5 6.5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Button>
+        </div>
       </form>
     </div>
   );
