@@ -11,12 +11,13 @@ module ValidateRecaptcha
     login: false,
     signup: false,
   }.freeze
-  # Default score thresholds used when the per-surface env var is unset. Surfaces
-  # not listed here default to nil (no score gating — token validity alone). The
-  # score-based checkout key returns a score for ~every valid token, so it gates
-  # at 0.5 out of the box; raise/lower via RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE.
-  # Trusted buyers (see CheckoutRecaptcha) get a more lenient 0.3 bar via
-  # RECAPTCHA_SCORE_THRESHOLD_CHECKOUT_SCORE_TRUSTED.
+  # Default score thresholds used when the per-surface Redis key is unset.
+  # Surfaces not listed here default to nil (no score gating — token validity
+  # alone). The score-based checkout key returns a score for ~every valid token,
+  # so it gates at 0.5 out of the box; trusted buyers (see CheckoutRecaptcha) get
+  # a more lenient 0.3 bar. Override at runtime per surface by setting
+  # RedisKey.recaptcha_score_threshold(surface), e.g.
+  # $redis.set(RedisKey.recaptcha_score_threshold(:checkout_score), "0.4").
   RECAPTCHA_SCORE_THRESHOLD_DEFAULTS = {
     checkout_score: 0.5,
     checkout_score_trusted: 0.3,
@@ -83,10 +84,9 @@ module ValidateRecaptcha
     end
 
     def recaptcha_score_threshold(surface)
-      env_name = "RECAPTCHA_SCORE_THRESHOLD_#{surface.to_s.upcase}"
-      default = RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
-      value = default.nil? ? GlobalConfig.get(env_name) : GlobalConfig.get(env_name, default)
-      return nil if value.to_s.strip.blank?
+      value = $redis.get(RedisKey.recaptcha_score_threshold(surface)).presence ||
+        RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
+      return nil if value.nil?
 
       Float(value)
     rescue ArgumentError, TypeError
