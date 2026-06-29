@@ -66,6 +66,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(checkout_payment["elements_options"]["link_enabled"]).to eq(false)
 
     check_out(product, payment_element: true)
 
@@ -123,6 +124,43 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(purchase.credit_card.stripe_customer_id).to be_present
     expect(setup_intent_ids).to all(match(/\Aseti_/))
     expect(setup_intent_ids).not_to be_empty
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "renders the Payment Element with Stripe Link enabled and completes a card purchase" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, product.user)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(checkout_payment["elements_options"]["link_enabled"]).to eq(true)
+
+    check_out(product, payment_element: true)
+
+    new_purchase = Purchase.last
+    expect(new_purchase.stripe_transaction_id).to match(/\Ach_/)
+    expect(new_purchase.card_type).to eq "visa"
+    expect(new_purchase.card_visual).to eq "**** **** **** 4242"
+    expect(new_purchase.successful?).to be(true)
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
