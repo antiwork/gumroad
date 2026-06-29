@@ -95,6 +95,14 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state())).toBe(true);
   });
 
+  it("allows a mixed free-and-paid single-seller cart with a positive total", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({ products: [product({ price: 0 }), product({ permalink: "product-b", price: 1_000 })] }),
+      ),
+    ).toBe(true);
+  });
+
   it("falls back when the server selected the Card Element integration", () => {
     expect(canUseStripePaymentElement(state({ checkoutPayment: cardElementConfig }))).toBe(false);
   });
@@ -179,5 +187,9 @@ describe("getStripePaymentElementAmount", () => {
 
   it("returns null until surcharges load", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
+  });
+
+  it("returns null for an ineligible checkout even when surcharges are loaded", () => {
+    expect(getStripePaymentElementAmount(state({ checkoutPayment: cardElementConfig }))).toBeNull();
   });
 });

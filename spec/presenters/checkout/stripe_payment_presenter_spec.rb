@@ -128,6 +128,16 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("not_charged"))
   end
 
+  it "selects Stripe Payment Element for a mixed free-and-paid single-seller cart" do
+    seller = create(:user)
+    free_product = create(:product, user: seller, price_cents: 0)
+    paid_product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    add_products = [checkout_product_for(free_product, price: 0), checkout_product_for(paid_product)]
+    expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
+  end
+
   it "ignores cart products when clear_cart is set" do
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product: create(:product, user: create(:user)))
