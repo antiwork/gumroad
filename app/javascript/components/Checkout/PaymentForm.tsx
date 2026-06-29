@@ -760,7 +760,7 @@ const CreditCardContent = ({
   return (
     <div className="flex flex-col gap-4">
       {stripePaymentElementConfig && !useSavedCard ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4">
           {state.savedCreditCard && paymentElementReady ? (
             <button
               type="button"
