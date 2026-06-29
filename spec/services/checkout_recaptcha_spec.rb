@@ -97,8 +97,25 @@ describe CheckoutRecaptcha do
       end
     end
 
-    it "does not treat an anonymous buyer as trusted" do
+    it "is :checkout for an anonymous buyer when the cohort is only enabled per-user" do
+      Feature.activate_user(:recaptcha_score_checkout, user)
+
       expect(described_class.surface(nil)).to eq(:checkout)
+    end
+
+    context "when the cohort feature is enabled globally" do
+      before { Feature.activate(:recaptcha_score_checkout) }
+
+      it "puts an anonymous buyer on the untrusted score surface without raising" do
+        expect(described_class.score_based?(nil)).to be(true)
+        expect(described_class.surface(nil)).to eq(:checkout_score)
+      end
+
+      it "still routes a trusted logged-in buyer to the trusted surface" do
+        user.update!(user_risk_state: "compliant")
+
+        expect(described_class.surface(user)).to eq(:checkout_score_trusted)
+      end
     end
   end
 end

@@ -53,8 +53,13 @@ module CheckoutRecaptcha
       # paid purchase from a currently-compliant seller made at least
       # MIN_TRUSTED_PURCHASE_AGE ago. Both signal a real, established account
       # rather than a throwaway used for fraud, so we can afford a more lenient
-      # score bar for them.
+      # score bar for them. Anonymous buyers (nil — possible when the cohort
+      # feature is enabled globally rather than per-user) have no account to
+      # vouch for them, so they're never trusted and fall to the standard score
+      # surface.
       def trusted_buyer?(user)
+        return false if user.nil?
+
         user.compliant? || established_buyer_of_compliant_seller?(user)
       end
 
