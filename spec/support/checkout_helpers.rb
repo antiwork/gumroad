@@ -211,31 +211,18 @@ def within_credit_card_frame(&block)
   within_frame(stripe_frame, &block)
 end
 
-def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123", attempts: 6)
+def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123")
   within_payment_element_frame do
-    attempts.times do
-      begin
-        fill_in_stripe_field ["Card number"], with: number
-        fill_in_stripe_field ["Expiration date", "Expiration", "MM / YY"], with: expiry
-        fill_in_stripe_field ["Security code", "CVC", "CVV"], with: cvc
-      rescue Capybara::ElementNotFound, Capybara::ExpectationNotMet
-        sleep 0.4
-        next
-      end
-
-      break unless has_text?(/incomplete|invalid/i, wait: 2)
-
-      sleep 0.4
-    end
+    fill_in_stripe_field ["Card number"], with: number
+    fill_in_stripe_field ["Expiration date", "Expiration", "MM / YY"], with: expiry
+    fill_in_stripe_field ["Security code", "CVC", "CVV"], with: cvc
   end
 end
 
 def within_payment_element_frame(&block)
-  stripe_frame = find(
-    :xpath,
-    "//iframe[contains(@src, 'elements-inner-payment') or contains(@title, 'payment input')]",
-    wait: 20
-  )
+  stripe_frame = all("iframe", wait: 10).find { |f| f["src"]&.include?("elements-inner-payment") || f["title"]&.include?("payment input") }
+  raise Capybara::ElementNotFound, "Unable to find Stripe Payment Element frame" if stripe_frame.nil?
+
   within_frame(stripe_frame, &block)
 end
 
