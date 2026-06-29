@@ -80,11 +80,12 @@ const PaymentElementControllerInput = ({
 }) => {
   const stripe = useStripe();
   const elements = useElements();
+  const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
-    onReady(stripe && elements ? { stripe, elements } : null);
+    onReady(stripe && elements && ready ? { stripe, elements } : null);
     return () => onReady(null);
-  }, [stripe, elements, onReady]);
+  }, [stripe, elements, ready, onReady]);
 
   React.useEffect(() => {
     elements?.update({ amount });
@@ -112,6 +113,7 @@ const PaymentElementControllerInput = ({
         },
         wallets: PAYMENT_ELEMENT_WALLETS,
       }}
+      onReady={() => setReady(true)}
       {...(onChange ? { onChange } : {})}
     />
   );

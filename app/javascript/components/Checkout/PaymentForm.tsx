@@ -759,10 +759,10 @@ const CreditCardContent = ({
     <div className="flex flex-col gap-4">
       {stripePaymentElementConfig && !useSavedCard ? (
         <div className="flex flex-col gap-2">
-          {state.savedCreditCard ? (
+          {state.savedCreditCard && paymentElementReady ? (
             <button
               type="button"
-              className="cursor-pointer self-start font-normal underline all-unset"
+              className="relative z-10 -mb-7 cursor-pointer self-end pr-3 font-normal underline all-unset"
               disabled={isProcessing(state)}
               onClick={() => setUseSavedCard(true)}
             >
