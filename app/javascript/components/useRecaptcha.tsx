@@ -113,15 +113,22 @@ export function useRecaptcha({
     if (!siteKey) return Promise.reject(new RecaptchaCancelledError());
 
     if (scoreBased) {
-      return loadRecaptchaScript(scoreScriptUrl(siteKey)).then(
-        () =>
-          new Promise<string>((resolve, reject) => {
-            grecaptcha.enterprise.ready(() => {
-              grecaptcha.enterprise.execute(siteKey, { action }).then(resolve, () => {
-                reject(new RecaptchaCancelledError());
-              });
-            });
-          }),
+      return (
+        loadRecaptchaScript(scoreScriptUrl(siteKey))
+          .then(
+            () =>
+              new Promise<string>((resolve, reject) => {
+                grecaptcha.enterprise.ready(() => {
+                  grecaptcha.enterprise.execute(siteKey, { action }).then(resolve, () => {
+                    reject(new RecaptchaCancelledError());
+                  });
+                });
+              }),
+          )
+          // Normalize any pre-token failure (e.g. the script being blocked or
+          // failing to load) to RecaptchaCancelledError so callers can treat it
+          // like a dismissed challenge and reset, rather than hanging.
+          .catch(() => Promise.reject(new RecaptchaCancelledError()))
       );
     }
 
