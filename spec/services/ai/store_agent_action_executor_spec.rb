@@ -178,6 +178,30 @@ describe Ai::StoreAgentActionExecutor do
           expect(result[:message]).to match(/permission/i)
         end.not_to change { seller.resource_subscriptions.count }
       end
+
+      it "refuses license management (admin-only) for a marketing member" do
+        # License management is admin/support-only in the dashboard (manage_license?), and support
+        # can't reach the Agent tab, so a marketing member must not rotate/disable license keys.
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "disable_license", params: { "product_id" => "p1", "license_key" => "KEY-1" }),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to match(/permission/i)
+      end
+
+      it "refuses changing the account-level refund policy (admin-only) for a marketing member" do
+        # The account-level refund policy is owner-only in the dashboard (Settings::Main), so a
+        # marketing member must not change refund terms through the agent.
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "update_refund_policy", params: { "refund_period" => "30" }),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to match(/permission/i)
+      end
     end
   end
 end

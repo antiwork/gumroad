@@ -66,7 +66,10 @@ module Ai::StoreAgentApiCatalog
     ep("update_user_custom_html", :patch, "/user/custom_html", "Update the creator's profile custom HTML.", scope: "edit_profile", params: %w[custom_html]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
     ep("get_refund_policy", :get, "/refund_policy", "Get the creator's account-level refund policy.", read: true, scope: "view_profile"),
-    ep("update_refund_policy", :put, "/refund_policy", "Update the creator's account-level refund policy.", scope: "edit_products",
+    # Account-level refund policy is changed via Settings in the dashboard, which is owner-only
+    # (Settings::Main::UserPolicy#update?). Gate admin_only so a marketing member can't change refund
+    # terms through the agent that they can't change in the dashboard.
+    ep("update_refund_policy", :put, "/refund_policy", "Update the creator's account-level refund policy.", scope: "edit_products", admin_only: true,
                                                                                                             params: %w[refund_period fine_print]),
 
     # ---- Products ----
@@ -170,10 +173,13 @@ module Ai::StoreAgentApiCatalog
     ep("get_earnings", :get, "/earnings", "Get the creator's earnings figures.", read: true, scope: "view_sales"),
 
     # ---- License management (creator-side) ----
-    ep("enable_license", :put, "/licenses/enable", "Enable a license key.", scope: "edit_products", params: %w[product_id license_key]),
-    ep("disable_license", :put, "/licenses/disable", "Disable a license key.", scope: "edit_products", params: %w[product_id license_key]),
-    ep("decrement_license_uses", :put, "/licenses/decrement_uses_count", "Decrement a license key's uses count.", scope: "edit_products", params: %w[product_id license_key]),
-    ep("rotate_license", :put, "/licenses/rotate", "Rotate (reissue) a license key.", scope: "edit_products", params: %w[product_id license_key]),
+    # The dashboard gates license management on Audience::PurchasePolicy#manage_license? (admin/
+    # support only — NOT marketing). Support can't reach the Agent tab, so gate these admin_only so a
+    # marketing member can't enable/disable/rotate customer license keys through the agent.
+    ep("enable_license", :put, "/licenses/enable", "Enable a license key.", scope: "edit_products", admin_only: true, params: %w[product_id license_key]),
+    ep("disable_license", :put, "/licenses/disable", "Disable a license key.", scope: "edit_products", admin_only: true, params: %w[product_id license_key]),
+    ep("decrement_license_uses", :put, "/licenses/decrement_uses_count", "Decrement a license key's uses count.", scope: "edit_products", admin_only: true, params: %w[product_id license_key]),
+    ep("rotate_license", :put, "/licenses/rotate", "Rotate (reissue) a license key.", scope: "edit_products", admin_only: true, params: %w[product_id license_key]),
   ].freeze
 
   BY_ID = ENDPOINTS.index_by(&:id).freeze
