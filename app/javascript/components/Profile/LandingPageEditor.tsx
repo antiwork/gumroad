@@ -55,7 +55,7 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
       const removed = await onRemove();
       if (removed) {
         setIsRemoveOpen(false);
-        showAlert("Custom profile page removed.", "success");
+        showAlert("Your custom profile page is removed.", "success");
       }
     } catch (e) {
       assertResponseError(e);
@@ -70,15 +70,15 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
       <header className="flex items-center justify-between">
         <h2>Custom profile page</h2>
         <a href="/api#custom-html" target="_blank" rel="noreferrer">
-          Learn more
+          Learn more about custom pages
         </a>
       </header>
       {hasLandingPage ? (
         <Alert role="status" variant="success">
           <div className="flex flex-col justify-between sm:flex-row">
-            A custom profile page is live.
+            Your custom profile page is live.
             <a href={profileUrl} target="_blank" rel="noreferrer">
-              View
+              View page
             </a>
           </div>
         </Alert>
@@ -89,8 +89,8 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
           prompt and hand it to your AI agent (Claude, Cursor, etc.) — it builds and publishes the page for you.
         </p>
         <p className="text-sm text-muted">
-          For safety, your profile page is sandboxed: animations and interactive effects work, but it can't reach your
-          Gumroad account or send data to other sites.
+          Your page runs safely on its own: animations and interactive effects work, but it can't reach your Gumroad
+          account or send your data to other sites.
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
@@ -120,8 +120,8 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
             </>
           }
         >
-          This removes your live custom page, so visitors will see your default profile again. You can't undo it — if
-          you might want the page back, save its HTML first.
+          This removes your custom page, so visitors will see your default profile again. You can't undo it — if you
+          might want the page back, save its HTML first.
         </Modal>
       ) : null}
     </section>
