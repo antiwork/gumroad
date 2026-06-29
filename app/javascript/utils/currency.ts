@@ -52,7 +52,7 @@ export const getShortCurrencySymbol = (code: CurrencyCode): string => {
   return currency.shortSymbol;
 };
 
-// Stripe will not accept payments below certain limits (e.g. $0.50 for USD), this is a way to query these minimum amounts
+// Gumroad's configured minimum sale amounts; these are kept at or above Stripe's processing floors.
 export const getMinPriceCents = (code: CurrencyCode): number => {
   const currency = findCurrencyByCode(code);
   return currency.minPriceCents;

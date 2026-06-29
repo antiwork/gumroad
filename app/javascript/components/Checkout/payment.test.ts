@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { getMinPriceCents } from "$app/utils/currency";
+
 import {
   canUseStripePaymentElement,
   getStripePaymentElementAmount,
@@ -13,6 +15,8 @@ import {
   type Product,
   type State,
 } from "$app/components/Checkout/payment";
+
+const paymentElementMinimumPrice = getMinPriceCents("usd");
 
 const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
@@ -243,6 +247,84 @@ describe("canUseStripePaymentElement", () => {
       ),
     ).toBe(false);
   });
+
+  it("falls back when loaded checkout total is below the Gumroad USD minimum", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: paymentElementMinimumPrice - 1,
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the Payment Element path selected while the final total is pending", () => {
+    expect(canUseStripePaymentElement(state({ surcharges: { type: "pending" } }))).toBe(true);
+  });
+
+  it("allows a loaded checkout total at the Gumroad USD minimum", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: paymentElementMinimumPrice,
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("recomputes eligibility when the loaded checkout total crosses below the Gumroad USD minimum", () => {
+    const atMinimum = state({
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: paymentElementMinimumPrice,
+        },
+      },
+    });
+    const belowMinimum = state({
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: paymentElementMinimumPrice - 1,
+        },
+      },
+    });
+
+    expect(canUseStripePaymentElement(atMinimum)).toBe(true);
+    expect(getStripePaymentElementAmount(atMinimum)).toBe(paymentElementMinimumPrice);
+    expect(canUseStripePaymentElement(belowMinimum)).toBe(false);
+    expect(getStripePaymentElementAmount(belowMinimum)).toBeNull();
+  });
 });
 
 describe("requiresReusablePaymentMethod", () => {
@@ -333,6 +415,46 @@ describe("getStripePaymentElementAmount", () => {
         state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ isPreorder: true })] }),
       ),
     ).toBeNull();
+  });
+
+  it("returns null when the loaded checkout total is below the Gumroad USD minimum", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: paymentElementMinimumPrice - 1,
+            },
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns the loaded total when it meets the Gumroad USD minimum", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: paymentElementMinimumPrice,
+            },
+          },
+        }),
+      ),
+    ).toBe(paymentElementMinimumPrice);
   });
 });
 

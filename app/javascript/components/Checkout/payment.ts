@@ -7,6 +7,7 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
+import { getMinPriceCents } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
@@ -31,6 +32,9 @@ export const STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup";
 type StripeElementsModeForCheckout =
   | typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
   | typeof STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT;
+
+const STRIPE_PAYMENT_ELEMENT_CURRENCY = "usd";
+const STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS = getMinPriceCents(STRIPE_PAYMENT_ELEMENT_CURRENCY);
 
 export type PaymentElementConfig = {
   stripe_elements_mode: StripeElementsModeForCheckout;
@@ -211,7 +215,7 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  if (state.surcharges.type === "loaded" && !getTotalPrice(state)) return false;
+  if (state.surcharges.type === "loaded" && !isStripePaymentElementAmountAllowed(getTotalPrice(state))) return false;
 
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
@@ -230,7 +234,11 @@ export function getStripePaymentElementAmount(state: State) {
   if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     return null;
   const total = getTotalPrice(state);
-  return total && total > 0 ? total : null;
+  return isStripePaymentElementAmountAllowed(total) ? total : null;
+}
+
+function isStripePaymentElementAmountAllowed(amount: number | null) {
+  return amount !== null && amount >= STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS;
 }
 
 export function isProcessing(state: State) {

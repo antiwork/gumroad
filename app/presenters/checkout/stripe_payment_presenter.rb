@@ -13,6 +13,8 @@ class Checkout::StripePaymentPresenter
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup"
+  STRIPE_PAYMENT_ELEMENT_CURRENCY = Currency::USD
+  STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS = CURRENCY_CHOICES[STRIPE_PAYMENT_ELEMENT_CURRENCY][:min_price]
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -74,7 +76,11 @@ class Checkout::StripePaymentPresenter
       return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
-      return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
+
+      # Initial eligibility uses pre-tax item prices; the browser re-gates the final loaded total.
+      total_price_cents = items.sum { _1[:price_cents].to_i }
+      return "not_charged" unless total_price_cents.positive?
+      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_GUMROAD_PRICE_CENTS
 
       nil
     end
