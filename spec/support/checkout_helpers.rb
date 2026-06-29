@@ -220,9 +220,11 @@ def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMet
 end
 
 def within_payment_element_frame(&block)
-  stripe_frame = all("iframe", wait: 10).find { |f| f["src"]&.include?("elements-inner-payment") || f["title"]&.include?("payment input") }
-  raise Capybara::ElementNotFound, "Unable to find Stripe Payment Element frame" if stripe_frame.nil?
-
+  stripe_frame = find(
+    :xpath,
+    "//iframe[contains(@src, 'elements-inner-payment') or contains(@title, 'payment input')]",
+    wait: 20
+  )
   within_frame(stripe_frame, &block)
 end
 
