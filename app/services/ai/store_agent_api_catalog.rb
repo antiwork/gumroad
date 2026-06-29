@@ -29,15 +29,24 @@ module Ai::StoreAgentApiCatalog
     # subscription management, which is OAuth-app management and admin-only in the dashboard.
     def admin_only? = admin_only == true
 
-    # Expand the path template against a hash of path params, percent-decoding nothing (ids are safe
-    # external ids). Raises if a required placeholder is missing so a malformed call fails loudly
-    # rather than hitting the wrong URL.
+    # Expand the path template against a hash of path params. Ids are opaque external ids that never
+    # legitimately contain a slash or dot-segment, so we REJECT any value with a path separator or
+    # traversal segment. This is a security boundary, not cosmetics: the value is interpolated into
+    # the routed v2 path AFTER the catalog/scope authorization check, so an unescaped "/" or ".."
+    # could re-route a call authorized as (say) an edit_products product write to a different, more
+    # weakly-scoped endpoint. Raise on a missing or path-bearing value so a malformed/abusive call
+    # fails loudly rather than hitting the wrong URL.
     def expand_path(path_params)
       pp = (path_params || {}).transform_keys(&:to_s)
       path.gsub(/:([a-z_]+)/) do
         key = Regexp.last_match(1)
         value = pp[key].to_s.strip
         raise ArgumentError, "Missing path parameter :#{key}" if value.blank?
+        # Disallow anything that could alter the routed path: separators, traversal, or percent/
+        # backslash escapes that could decode to them. External ids are [A-Za-z0-9_-] in practice.
+        if value.match?(%r{[/\\]}) || value.include?("..") || value.include?("%")
+          raise ArgumentError, "Invalid path parameter :#{key}"
+        end
         value
       end
     end
@@ -57,8 +66,8 @@ module Ai::StoreAgentApiCatalog
     ep("update_user_custom_html", :patch, "/user/custom_html", "Update the creator's profile custom HTML.", scope: "edit_profile", params: %w[custom_html]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
     ep("get_refund_policy", :get, "/refund_policy", "Get the creator's account-level refund policy.", read: true, scope: "view_profile"),
-    ep("update_refund_policy", :put, "/refund_policy", "Update the creator's account-level refund policy.", scope: "edit_profile",
-                                                                                                            params: %w[allowed_refund_periods_in_days fine_print]),
+    ep("update_refund_policy", :put, "/refund_policy", "Update the creator's account-level refund policy.", scope: "edit_products",
+                                                                                                            params: %w[refund_period fine_print]),
 
     # ---- Products ----
     ep("list_products", :get, "/products", "List the creator's products with price, status, and stats.", read: true, scope: "view_sales"),
