@@ -35,7 +35,15 @@ module IbanBankAccount
 
     def validate_account_number
       iban = Ibandit::IBAN.new(account_number_decrypted)
-      unless iban.valid?
+      # Validate IBAN STRUCTURE (country code, length, characters, format) and the
+      # mod-97 CHECK DIGITS, but NOT Ibandit's bundled bank-code registry. The full
+      # `iban.valid?` additionally asserts the bank/clearing code exists in Ibandit's
+      # pinned `structures.yml` registry, which lags real-world banks: it false-rejects
+      # valid IBANs from newer institutions our payout rail (Stripe) accepts fine —
+      # e.g. Lunar Bank's Swedish clearing range `9710` (gumroad-private#775), and the
+      # same class as the Côte d'Ivoire registry gap (#471). The bank-code existence
+      # check is Stripe's job at external-account creation, not our pre-validation.
+      unless iban.valid_format? && iban.valid_check_digits?
         errors.add(:base, "The account number is invalid.")
         return
       end

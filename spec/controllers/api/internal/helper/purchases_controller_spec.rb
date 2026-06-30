@@ -66,6 +66,51 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         expect(response.parsed_body["message"]).to include("Receipt sent to #{to_email}")
       end
 
+      it "records an admin audit log when confirmed_override bypasses the fingerprint anomaly guard" do
+        legacy_admin_token = create(:admin_api_token, actor_user: admin_user)
+        stub_const("GUMROAD_ADMIN_ID", admin_user.id)
+        extra_purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account: merchant_account)
+        [purchase1, purchase2, purchase3, extra_purchase].zip(["**** **** **** 1111", "**** **** **** 2222", "**** **** **** 3333", "**** **** **** 4444"]).each do |purchase, card_visual|
+          purchase.update_column(:card_visual, card_visual)
+        end
+
+        request.headers["X-Helper-Actor"] = "helper-operator@example.com"
+
+        expect do
+          post :reassign_purchases, params: { from: from_email, to: to_email, confirmed_override: "true" }
+        end.to change { AdminApiAuditLog.count }.by(1)
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(AdminApiAuditLog.last).to have_attributes(
+          action: "purchases.reassign",
+          target_type: nil,
+          target_id: nil,
+          actor_user_id: admin_user.id,
+          admin_api_token_id: legacy_admin_token.id,
+          route: request.path,
+          http_method: "POST",
+          response_status: 200,
+          error_class: nil
+        )
+        audit_log = AdminApiAuditLog.last
+        expect(audit_log.params_snapshot).to include(
+          "from" => "[REDACTED]",
+          "to" => "[REDACTED]",
+          "confirmed_override" => "true"
+        )
+        expect(audit_log.params_snapshot["helper_reassign_result"]).to include(
+          "helper_actor" => "helper-operator@example.com",
+          "from_email" => "[REDACTED]",
+          "to_email" => "[REDACTED]",
+          "confirmed_override" => true,
+          "success" => true,
+          "result_reason" => nil,
+          "reassigned_count" => 4,
+          "reassigned_purchase_ids" => match_array([purchase1.id, purchase2.id, purchase3.id, extra_purchase.id])
+        )
+      end
+
       it "updates original_purchase email for subscription purchases" do
         subscription = create(:subscription, user: buyer)
         original_purchase = create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription, merchant_account: merchant_account)

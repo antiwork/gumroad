@@ -28,12 +28,12 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
   end
 
-  def payment_element_props
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       elements_options: {
-        mode: "payment",
+        stripe_elements_mode:,
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
@@ -72,7 +72,7 @@ describe Checkout::StripePaymentPresenter do
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       elements_options: {
-        mode: "payment",
+        stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
@@ -138,24 +138,55 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
-  it "falls back to CardElement for a preorder product" do
+  it "selects Stripe Payment Element SetupIntent mode for a preorder product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(is_preorder: true)]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
+  end
+
+  it "selects Stripe Payment Element SetupIntent mode for a free-trial product" do
+    expect(stripe_payment_props(add_products: [flagged_seller_product(free_trial: true, recurrence: "monthly")]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
+  end
+
+  it "falls back to CardElement when future-charge products are mixed with charged products" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    future_charge_product = create(:product, user: seller, price_cents: 1234)
+    charged_product = create(:product, user: seller, price_cents: 5678)
+
+    expect(stripe_payment_props(add_products: [
+                                  checkout_product_for(future_charge_product, is_preorder: true),
+                                  checkout_product_for(charged_product),
+                                ]))
       .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
-  it "falls back to CardElement for a free-trial product" do
-    expect(stripe_payment_props(add_products: [flagged_seller_product(free_trial: true)]))
-      .to eq(card_element_fallback("setup_or_installment_flow"))
-  end
-
-  it "falls back to CardElement for a recurring free-trial product" do
+  it "selects Stripe Payment Element SetupIntent mode for a recurring free-trial product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(recurrence: "monthly", free_trial: true)]))
-      .to eq(card_element_fallback("setup_or_installment_flow"))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
+  end
+
+  it "selects Stripe Payment Element SetupIntent mode for mixed future-charge products" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    preorder_product = create(:product, user: seller, price_cents: 1234)
+    free_trial_product = create(:product, user: seller, price_cents: 5678)
+
+    expect(stripe_payment_props(add_products: [
+                                  checkout_product_for(preorder_product, is_preorder: true),
+                                  checkout_product_for(free_trial_product, free_trial: true, recurrence: "monthly"),
+                                ]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
   it "falls back to CardElement when the checkout total is not positive" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(price: 0)]))
       .to eq(card_element_fallback("not_charged"))
+  end
+
+  it "falls back to CardElement for a future-charge product with no future charge amount" do
+    expect(stripe_payment_props(add_products: [flagged_seller_product(is_preorder: true, price: 0)]))
+      .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
   it "ignores cart products when clear_cart is set" do

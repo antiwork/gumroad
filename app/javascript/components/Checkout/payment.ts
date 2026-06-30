@@ -22,8 +22,18 @@ enableMapSet();
 
 export type PaymentMethodType = "paypal" | "stripePaymentRequest" | "card";
 export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement | null };
+
+// Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
+// not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
+export const STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment";
+export const STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup";
+
+type StripeElementsModeForCheckout =
+  | typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
+  | typeof STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT;
+
 export type PaymentElementConfig = {
-  mode: "payment";
+  stripe_elements_mode: StripeElementsModeForCheckout;
   currency: "usd";
   payment_method_types: ["card"];
   payment_method_creation: "manual";
@@ -113,6 +123,10 @@ export type State = {
   requireEmailTypoAcknowledgment: boolean;
 };
 
+type StateWithPaymentElementCheckout = State & {
+  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element" }>;
+};
+
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
 
 type SimpleValue =
@@ -180,23 +194,41 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
 }
 
 export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
-  return useStripePaymentElement
-    ? requiresPaymentElementReusablePaymentMethod(state)
-    : requiresReusablePaymentMethod(state);
+  if (!useStripePaymentElement) return requiresReusablePaymentMethod(state);
+  if (
+    state.checkoutPayment.integration === "payment_element" &&
+    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+  )
+    return false;
+  return requiresPaymentElementReusablePaymentMethod(state);
 }
 
-export function canUseStripePaymentElement(state: State) {
+export function canUseStripePaymentElement(state: State): state is StateWithPaymentElementCheckout {
   if (state.products.length === 0) return false;
+  if (state.checkoutPayment.integration !== "payment_element") return false;
+
+  if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT) {
+    return canUseStripePaymentElementForFutureChargeSetup(state);
+  }
+
   if (state.surcharges.type === "loaded" && !getTotalPrice(state)) return false;
 
+  return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
+}
+
+function canUseStripePaymentElementForFutureChargeSetup(state: State) {
   return (
-    state.checkoutPayment.integration === "payment_element" &&
-    !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder)
+    !hasMultipleSellers(state) &&
+    !state.products.some((product) => product.payInInstallments) &&
+    state.products.every((product) => product.isPreorder || product.hasFreeTrial) &&
+    getTotalPriceFromProducts(state) > 0
   );
 }
 
 export function getStripePaymentElementAmount(state: State) {
   if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
+  if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
+    return null;
   const total = getTotalPrice(state);
   return total && total > 0 ? total : null;
 }

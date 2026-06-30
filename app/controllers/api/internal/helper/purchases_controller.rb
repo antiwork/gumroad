@@ -81,19 +81,32 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   def reassign_purchases
     from_email = params[:from]
     to_email = params[:to]
+    confirmed_override = ActiveModel::Type::Boolean.new.cast(params[:confirmed_override])
 
-    result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
+    record_helper_admin_write(action: "purchases.reassign") do
+      result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
+      @helper_admin_audit_context = {
+        helper_actor: request.headers["X-Helper-Actor"].presence || "helper_tools",
+        from_email:,
+        to_email:,
+        confirmed_override:,
+        success: result.success?,
+        result_reason: result.reason,
+        reassigned_count: result.count,
+        reassigned_purchase_ids: result.reassigned_purchase_ids,
+      }
 
-    unless result.success?
-      return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+      unless result.success?
+        return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+      end
+
+      render json: {
+        success: true,
+        message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+        count: result.count,
+        reassigned_purchase_ids: result.reassigned_purchase_ids
+      }
     end
-
-    render json: {
-      success: true,
-      message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
-      count: result.count,
-      reassigned_purchase_ids: result.reassigned_purchase_ids
-    }
   end
 
   def auto_refund_purchase
@@ -152,6 +165,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       when :missing_params then :bad_request
       when :not_found then :not_found
       when :no_changes then :unprocessable_entity
+      when :locked then :unprocessable_entity
+      when :fingerprint_anomaly then :unprocessable_entity
       end
     end
 end

@@ -34,5 +34,15 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.build(seller.reload)[:pages]).to eq([{ name: "Shop" }])
       end
     end
+
+    it "does not expose draft products in the public profile data payload" do
+      published_product = create(:product, user: seller, name: "Published product", draft: false)
+      draft_product = create(:product, user: seller, name: "Draft product", draft: true)
+
+      products = Pages::ProfileData.build(seller)[:products]
+
+      expect(products.pluck(:name)).to include(published_product.name)
+      expect(products.pluck(:name)).not_to include(draft_product.name)
+    end
   end
 end

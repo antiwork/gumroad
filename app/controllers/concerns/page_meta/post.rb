@@ -9,22 +9,22 @@ module PageMeta::Post
     def set_post_page_meta(post, presenter)
       set_meta_tag(name: "description", content: presenter.snippet)
 
-      set_meta_tag(property: "og:title", value: post.name)
-      set_meta_tag(property: "og:description", value: presenter.snippet)
+      set_meta_tag(property: "og:title", content: post.name)
+      set_meta_tag(property: "og:description", content: presenter.snippet)
       if presenter.social_image.present?
-        set_meta_tag(property: "og:image", value: presenter.social_image.url)
-        set_meta_tag(property: "og:image:alt", value: presenter.social_image.caption)
+        set_meta_tag(property: "og:image", content: presenter.social_image.url)
+        set_meta_tag(property: "og:image:alt", content: presenter.social_image.caption)
       end
 
-      set_meta_tag(property: "twitter:title", value: post.name)
-      set_meta_tag(property: "twitter:description", value: presenter.snippet)
-      set_meta_tag(property: "twitter:domain", value: "Gumroad")
+      set_meta_tag(property: "twitter:title", content: post.name)
+      set_meta_tag(property: "twitter:description", content: presenter.snippet)
+      set_meta_tag(property: "twitter:domain", content: "Gumroad")
       if presenter.social_image.present?
-        set_meta_tag(property: "twitter:card", value: "summary_large_image")
-        set_meta_tag(property: "twitter:image", value: presenter.social_image.url)
-        set_meta_tag(property: "twitter:image:alt", value: presenter.social_image.caption)
+        set_meta_tag(property: "twitter:card", content: "summary_large_image")
+        set_meta_tag(property: "twitter:image", content: presenter.social_image.url)
+        set_meta_tag(property: "twitter:image:alt", content: presenter.social_image.caption)
       else
-        set_meta_tag(property: "twitter:card", value: "summary")
+        set_meta_tag(property: "twitter:card", content: "summary")
       end
     end
 end

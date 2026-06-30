@@ -254,6 +254,106 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids.uniq.size).to eq(1)
   end
 
+  it "allows the buyer to authorize a preorder using the Payment Element SetupIntent mode" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller, is_in_preorder_state: true)
+    create(:preorder_link, link: product, release_at: 25.hours.from_now)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    # See the one-off Payment Element spec above: use the frontend-created Payment Method only to prove the
+    # Payment Element path ran, then swap in a known platform Payment Method for the backend Stripe call.
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::SetupIntent).to receive(:create).and_call_original
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(checkout_payment.dig("elements_options", "stripe_elements_mode")).to eq("setup")
+    expect(checkout_payment.dig("elements_options", "payment_method_creation")).to eq("manual")
+
+    check_out(product, payment_element: true)
+
+    new_purchase = Purchase.last
+    expect(new_purchase.preorder_authorization_successful?).to be(true)
+    expect(new_purchase.stripe_transaction_id).not_to be_present
+    expect(new_purchase.processor_setup_intent_id).to be_present
+    expect(new_purchase.charge.stripe_setup_intent_id).to eq(new_purchase.processor_setup_intent_id)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "allows the buyer to start a free-trial membership using the Payment Element SetupIntent mode" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(
+      :membership_product_with_preset_tiered_pricing,
+      user: seller,
+      unique_permalink: "spefuturechargesetup#{SecureRandom.alphanumeric(12, chars: ("a".."z").to_a)}",
+      free_trial_enabled: true,
+      free_trial_duration_amount: 1,
+      free_trial_duration_unit: :week
+    )
+    tier = product.tiers.find_by!(name: "First Tier")
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+
+    visit("/checkout?product=#{product.unique_permalink}&option=#{Rack::Utils.escape(tier.external_id)}")
+    within_cart_item(product.name) do
+      expect(page).to have_text("Tier: #{tier.name}")
+    end
+    expect(page).to have_text("one week free")
+    expect(page).to have_text("$3 monthly after")
+    expect(page).to have_text("Total US$0", normalize_ws: true)
+
+    # See the one-off Payment Element spec above: use the frontend-created Payment Method only to prove the
+    # Payment Element path ran, then swap in a known platform Payment Method for the backend Stripe call.
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::SetupIntent).to receive(:create).and_call_original
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(checkout_payment.dig("elements_options", "stripe_elements_mode")).to eq("setup")
+    expect(checkout_payment.dig("elements_options", "payment_method_creation")).to eq("manual")
+
+    check_out(product, payment_element: true)
+
+    original_purchase = Purchase.last
+    expect(original_purchase.not_charged?).to be(true)
+    expect(original_purchase.stripe_transaction_id).not_to be_present
+    expect(original_purchase.processor_setup_intent_id).to be_present
+    expect(original_purchase.subscription).to be_alive
+    expect(original_purchase.subscription.credit_card).to eq(original_purchase.credit_card)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+
+    travel_to(original_purchase.subscription.free_trial_ends_at + 1.day) do
+      expect do
+        original_purchase.subscription.charge!
+      end.to change { product.sales.successful.count }.by(1)
+    end
+  end
+
   describe "save credit card payment" do
     before :each do
       @buyer = create(:user)
