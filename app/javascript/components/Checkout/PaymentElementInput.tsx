@@ -19,6 +19,7 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
+type LinkPrefillContact = { email: string; name: string };
 
 const paymentElementWallets = (stripeLinkEnabled: boolean): PaymentElementWallets => ({
   applePay: "never",
@@ -53,30 +54,34 @@ export const PaymentElementInput = ({
     if (amount !== null) setMountedAmount(amount);
   }, [amount]);
 
-  const [prefillKey, setPrefillKey] = React.useState(() => `${defaultEmail} ${defaultName}`);
+  const [linkPrefillContact, setLinkPrefillContact] = React.useState<LinkPrefillContact>(() => ({
+    email: defaultEmail,
+    name: defaultName,
+  }));
   const paymentElementTouchedRef = React.useRef(false);
   const handlePaymentElementTouched = React.useCallback(() => {
     paymentElementTouchedRef.current = true;
   }, []);
   React.useEffect(() => {
+    if (!elementsOptions.stripe_link_enabled) return;
     if (paymentElementTouchedRef.current) return;
     const handle = setTimeout(() => {
       if (paymentElementTouchedRef.current) return;
-      setPrefillKey(`${defaultEmail} ${defaultName}`);
+      setLinkPrefillContact({ email: defaultEmail, name: defaultName });
     }, CONTACT_PREFILL_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [defaultEmail, defaultName]);
+  }, [defaultEmail, defaultName, elementsOptions.stripe_link_enabled]);
 
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
-        <StripePaymentElementProvider key={prefillKey} amount={mountedAmount} elementsOptions={elementsOptions}>
+        <StripePaymentElementProvider amount={mountedAmount} elementsOptions={elementsOptions}>
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
-            defaultEmail={defaultEmail}
-            defaultName={defaultName}
+            defaultEmail={linkPrefillContact.email}
+            defaultName={linkPrefillContact.name}
             onReady={onReady}
             onChange={onChange}
             onTouched={handlePaymentElementTouched}
@@ -123,14 +128,15 @@ const PaymentElementControllerInput = ({
     if (amount !== null) elements?.update({ amount });
   }, [amount, elements]);
 
-  const linkBillingDetails = {
-    ...(defaultEmail ? { email: defaultEmail } : {}),
-    ...(defaultName ? { name: defaultName } : {}),
-  };
-  const linkDefaultValues =
-    stripeLinkEnabled && Object.keys(linkBillingDetails).length > 0
-      ? { billingDetails: linkBillingDetails }
-      : undefined;
+  const linkDefaultValues = React.useMemo<StripePaymentElementOptions["defaultValues"] | undefined>(() => {
+    if (!stripeLinkEnabled) return undefined;
+
+    const billingDetails = {
+      ...(defaultEmail ? { email: defaultEmail } : {}),
+      ...(defaultName ? { name: defaultName } : {}),
+    };
+    return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
+  }, [defaultEmail, defaultName, stripeLinkEnabled]);
 
   return (
     <PaymentElement
