@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class PurchasePaymentFlow < ApplicationRecord
-  belongs_to :purchase, optional: true
+  belongs_to :purchase
 
   CARD_ELEMENT = "card_element"
   PAYMENT_ELEMENT = "payment_element"

@@ -158,6 +158,20 @@ describe Order::CreateService, :vcr do
         expect(order.reload.purchases.map(&:purchase_payment_flow)).to all(be_nil)
       end
 
+      it "does not abort the purchase when recording the payment flow raises a DB error" do
+        params[:payment_details_source] = "payment_element"
+        allow_any_instance_of(Purchase).to receive(:create_purchase_payment_flow).and_raise(ActiveRecord::RecordNotUnique)
+        allow(Rails.logger).to receive(:error).and_call_original
+
+        order = nil
+        expect do
+          order, _ = Order::CreateService.new(params:).perform
+        end.to change { Purchase.count }.by(5)
+
+        expect(order.reload.purchases.in_progress.count).to eq(5)
+        expect(Rails.logger).to have_received(:error).with(/Error recording purchase payment flow/).at_least(:once)
+      end
+
       it "records the paid purchases but not a free purchase in the same cart" do
         free_product = create(:product, user: seller_1, price_cents: 0)
         params[:payment_details_source] = "payment_element"
