@@ -3,7 +3,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
-import { startOrderCreation } from "$app/data/order";
+import { startConfirmOrderCreation, startOrderCreation } from "$app/data/order";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
@@ -427,7 +427,10 @@ const CheckoutIndexPage = () => {
           };
         }),
       };
-      const result = await startOrderCreation(requestData);
+      const result =
+        requestData.paymentMethod.type === "payment-element-confirm"
+          ? await startConfirmOrderCreation(requestData, requestData.paymentMethod.confirmationTokenId)
+          : await startOrderCreation(requestData);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(

@@ -9,7 +9,11 @@ import { getConnectedAccountStripeInstance, getStripeInstance } from "$app/utils
 
 import { ProductToAdd } from "$app/components/Checkout/cartState";
 
-export type PurchasePaymentMethod = AnyPaymentMethodResult | { type: "not-applicable" };
+export type PurchasePaymentMethod =
+  | AnyPaymentMethodResult
+  | { type: "not-applicable" }
+  // Lane B (client-confirm): the card lives in the ConfirmationToken, sent to #prepare separately.
+  | { type: "payment-element-confirm"; confirmationTokenId: string; cardCountry: string | null };
 
 export type SuccessfulLineItemResult = {
   success: true;
@@ -273,7 +277,11 @@ export const createPurchasesRequestData = (
     data.gift_note = payload.giftInfo.giftNote;
   }
 
-  if (payload.paymentMethod.type !== "saved" && payload.paymentMethod.type !== "not-applicable") {
+  if (
+    payload.paymentMethod.type !== "saved" &&
+    payload.paymentMethod.type !== "not-applicable" &&
+    payload.paymentMethod.type !== "payment-element-confirm"
+  ) {
     const { cardParamsResult } = payload.paymentMethod;
 
     const paymentParams = cardParamsResult.cardParams;

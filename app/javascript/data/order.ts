@@ -216,3 +216,123 @@ const confirmOrderAfterAction = async ({
   if (!response.ok) throw new ResponseError();
   return typia.assert<ConfirmOrderResponse>(await response.json());
 };
+
+type OrderRequiresPaymentConfirmationResponse = {
+  success: true;
+  requires_payment_confirmation: true;
+  client_secret: string;
+  order: { id: string; stripe_connect_account_id: string | null };
+};
+type PrepareOrderResponse = {
+  success: true;
+  line_items: Record<
+    LineItemUid,
+    OrderRequiresPaymentConfirmationResponse | ConfirmedPurchaseResponse | PurchaseErrorResponse
+  >;
+  can_buyer_sign_up: boolean;
+  offer_codes: OfferCodes;
+};
+
+// Lane B (client-confirm): build the order + an unconfirmed PaymentIntent (#prepare), confirm it
+// client-side with the ConfirmationToken, then finalize (#finalize). Mirrors startOrderCreation's
+// CartPurchaseResult contract so the cart-submit consumer is unchanged.
+export const startConfirmOrderCreation = async (
+  requestData: StartCartPurchaseRequestPayload,
+  confirmationTokenId: string,
+): Promise<CartPurchaseResult> => {
+  try {
+    const prepareResponse = await prepareConfirmOrder(requestData, confirmationTokenId);
+    if (!prepareResponse.success) {
+      return translateOrderFailureResponseIntoLineItemFailures(requestData, prepareResponse);
+    }
+
+    const confirmationLineItem =
+      Object.values(prepareResponse.line_items).find(
+        (lineItem): lineItem is OrderRequiresPaymentConfirmationResponse =>
+          lineItem.success && "requires_payment_confirmation" in lineItem,
+      ) ?? null;
+
+    if (!confirmationLineItem) {
+      // No charge required (e.g. an all-free cart): the prepare responses are already final.
+      const finalized = Object.values(prepareResponse.line_items).filter(
+        (lineItem): lineItem is ConfirmedPurchaseResponse | PurchaseErrorResponse =>
+          !("requires_payment_confirmation" in lineItem),
+      );
+      return mapResultsByPermalink(
+        requestData,
+        finalized,
+        prepareResponse.can_buyer_sign_up,
+        prepareResponse.offer_codes,
+      );
+    }
+
+    const { client_secret: clientSecret, order } = confirmationLineItem;
+    const stripe = order.stripe_connect_account_id
+      ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)
+      : await getStripeInstance();
+
+    // Never pass `elements` alongside `confirmation_token` — they are mutually exclusive in Stripe.js.
+    const confirmResult = await stripe.confirmPayment({
+      clientSecret,
+      confirmParams: { confirmation_token: confirmationTokenId },
+      redirect: "if_required",
+    });
+
+    if (confirmResult.error) {
+      return translateOrderFailureResponseIntoLineItemFailures(requestData, {
+        success: false,
+        error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
+      });
+    }
+
+    // Inline method (card/wallet/Link) resolved in-page → finalize via the AJAX endpoint.
+    const finalizeResponse = await finalizeConfirmOrder(order.id);
+    return mapResultsByPermalink(
+      requestData,
+      Object.values(finalizeResponse.line_items),
+      finalizeResponse.can_buyer_sign_up,
+      finalizeResponse.offer_codes,
+    );
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Error occurred processing client-confirm order", error);
+    return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: [] });
+  }
+};
+
+const prepareConfirmOrder = async (
+  payload: StartCartPurchaseRequestPayload,
+  confirmationTokenId: string,
+): Promise<PrepareOrderResponse | OrderErrorResponse> => {
+  const data = { ...createPurchasesRequestData(payload, {}), confirmation_token: confirmationTokenId };
+  const response = await request({ method: "POST", url: Routes.prepare_orders_path(), accept: "json", data });
+  if (!response.ok) throw new ResponseError();
+  return typia.assert<PrepareOrderResponse | OrderErrorResponse>(await response.json());
+};
+
+const finalizeConfirmOrder = async (orderId: string): Promise<ConfirmOrderResponse> => {
+  const response = await request({
+    method: "POST",
+    url: Routes.finalize_order_path(orderId),
+    accept: "json",
+    data: {},
+  });
+  if (!response.ok) throw new ResponseError();
+  return typia.assert<ConfirmOrderResponse>(await response.json());
+};
+
+const mapResultsByPermalink = (
+  requestData: StartCartPurchaseRequestPayload,
+  results: (ConfirmedPurchaseResponse | PurchaseErrorResponse)[],
+  canBuyerSignUp: boolean,
+  offerCodes: OfferCodes,
+): CartPurchaseResult =>
+  ensureValidCartResult(requestData, {
+    lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
+      const resultItem = results.find((item) => item.permalink === lineItem.permalink);
+      if (resultItem) lineItems[lineItem.uid] = resultItem;
+      return lineItems;
+    }, {}),
+    canBuyerSignUp,
+    offerCodes,
+  });
