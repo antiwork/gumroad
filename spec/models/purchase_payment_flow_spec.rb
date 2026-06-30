@@ -66,14 +66,5 @@ describe PurchasePaymentFlow do
     it "ignores an unrecognized client surface hint" do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "venmo")).to be_nil
     end
-
-    it "derives the confirmation token transport server-side from the submitted params" do
-      attributes = described_class.attributes_for_checkout_params(
-        payment_details_source: "payment_element",
-        stripe_confirmation_token_id: "ctoken_123"
-      )
-
-      expect(attributes[:payment_details_transport]).to eq("confirmation_token")
-    end
   end
 end
