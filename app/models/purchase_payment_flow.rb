@@ -15,6 +15,9 @@ class PurchasePaymentFlow < ApplicationRecord
 
   CARD = "card"
 
+  STRIPE_PAYMENT_PARAM_KEYS = %i[stripe_payment_method_id stripe_setup_intent_id stripe_error].freeze
+  NON_STRIPE_PAYMENT_PARAM_KEYS = %i[paypal_order_id billing_agreement_id braintree_transient_customer_store_key braintree_device_data].freeze
+
   enum :payment_details_source, {
     card_element: CARD_ELEMENT,
     payment_element: PAYMENT_ELEMENT,
@@ -29,6 +32,7 @@ class PurchasePaymentFlow < ApplicationRecord
   def self.attributes_for_checkout_params(params)
     source = payment_details_source_for(params)
     return if source.nil?
+    return unless stripe_payment_submission?(source, params)
 
     {
       payment_details_source: source,
@@ -44,4 +48,16 @@ class PurchasePaymentFlow < ApplicationRecord
     source if payment_details_sources.value?(source)
   end
   private_class_method :payment_details_source_for
+
+  # Only record a Stripe payment-flow row when the submission actually carries Stripe payment
+  # inputs. PayPal/Braintree submissions can carry a client `payment_details_source` hint but must
+  # never be recorded as a Stripe flow. The saved-card path sends no card param (Rails charges the
+  # stored Stripe card), so the source itself is the signal there.
+  def self.stripe_payment_submission?(source, params)
+    return false if NON_STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
+    return true if source == SAVED_PAYMENT_METHOD
+
+    STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
+  end
+  private_class_method :stripe_payment_submission?
 end

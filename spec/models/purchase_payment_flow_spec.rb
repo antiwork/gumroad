@@ -25,7 +25,7 @@ describe PurchasePaymentFlow do
 
   describe ".attributes_for_checkout_params" do
     it "records a Payment Element card from the client surface hint" do
-      attributes = described_class.attributes_for_checkout_params(payment_details_source: "payment_element")
+      attributes = described_class.attributes_for_checkout_params(payment_details_source: "payment_element", stripe_payment_method_id: "pm_123")
 
       expect(attributes).to eq(
         payment_details_source: "payment_element",
@@ -35,7 +35,7 @@ describe PurchasePaymentFlow do
     end
 
     it "records a CardElement card from the client surface hint" do
-      attributes = described_class.attributes_for_checkout_params(payment_details_source: "card_element")
+      attributes = described_class.attributes_for_checkout_params(payment_details_source: "card_element", stripe_payment_method_id: "pm_123")
 
       expect(attributes[:payment_details_source]).to eq("card_element")
     end
@@ -49,7 +49,8 @@ describe PurchasePaymentFlow do
     it "treats a wallet payment as a payment request regardless of the client hint" do
       attributes = described_class.attributes_for_checkout_params(
         wallet_type: "apple_pay",
-        payment_details_source: "card_element"
+        payment_details_source: "card_element",
+        stripe_payment_method_id: "pm_123"
       )
 
       expect(attributes[:payment_details_source]).to eq("payment_request")
@@ -65,6 +66,25 @@ describe PurchasePaymentFlow do
 
     it "ignores an unrecognized client surface hint" do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "venmo")).to be_nil
+    end
+
+    it "does not record a Stripe flow for a PayPal submission even with a forged source hint" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "payment_element", paypal_order_id: "PAY-123")).to be_nil
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "card_element", billing_agreement_id: "BA-123")).to be_nil
+    end
+
+    it "does not record a Stripe flow for a Braintree submission even with a forged source hint" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "payment_element", braintree_transient_customer_store_key: "store_key")).to be_nil
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "card_element", braintree_device_data: "{}")).to be_nil
+    end
+
+    it "does not record when a Stripe source is reported without any Stripe payment input" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "payment_element")).to be_nil
+      expect(described_class.attributes_for_checkout_params(wallet_type: "apple_pay", payment_details_source: "payment_element")).to be_nil
+    end
+
+    it "records a saved-card flow without a card param, since Rails charges the stored Stripe card" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method")[:payment_details_source]).to eq("saved_payment_method")
     end
   end
 end

@@ -122,8 +122,13 @@ describe Order::CreateService, :vcr do
     end
 
     describe "recording the payment flow" do
+      # The flow is recorded before the charge, so stub charging to keep these recording-focused
+      # specs off Stripe while still exercising real submitted payment params.
+      before { allow_any_instance_of(Purchase).to receive(:charge!) }
+
       it "records the Payment Element surface on every purchase in the order" do
         params[:payment_details_source] = "payment_element"
+        params[:stripe_payment_method_id] = "pm_123"
 
         order, _ = Order::CreateService.new(params:).perform
 
@@ -137,6 +142,7 @@ describe Order::CreateService, :vcr do
 
       it "records the CardElement surface when the client reports it" do
         params[:payment_details_source] = "card_element"
+        params[:stripe_payment_method_id] = "pm_123"
 
         order, _ = Order::CreateService.new(params:).perform
 
@@ -146,6 +152,7 @@ describe Order::CreateService, :vcr do
       it "records a wallet payment as a payment request" do
         params[:wallet_type] = "apple_pay"
         params[:payment_details_source] = "payment_element"
+        params[:stripe_payment_method_id] = "pm_123"
 
         order, _ = Order::CreateService.new(params:).perform
 
@@ -158,8 +165,18 @@ describe Order::CreateService, :vcr do
         expect(order.reload.purchases.map(&:purchase_payment_flow)).to all(be_nil)
       end
 
+      it "does not record a Stripe flow for a non-Stripe (PayPal) submission even with a forged source hint" do
+        params[:payment_details_source] = "payment_element"
+        params[:paypal_order_id] = "PAY-123"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.reload.purchases.map(&:purchase_payment_flow)).to all(be_nil)
+      end
+
       it "does not abort the purchase when recording the payment flow raises a DB error" do
         params[:payment_details_source] = "payment_element"
+        params[:stripe_payment_method_id] = "pm_123"
         allow_any_instance_of(Purchase).to receive(:create_purchase_payment_flow).and_raise(ActiveRecord::RecordNotUnique)
         allow(Rails.logger).to receive(:error).and_call_original
 
@@ -175,6 +192,7 @@ describe Order::CreateService, :vcr do
       it "records the paid purchases but not a free purchase in the same cart" do
         free_product = create(:product, user: seller_1, price_cents: 0)
         params[:payment_details_source] = "payment_element"
+        params[:stripe_payment_method_id] = "pm_123"
         params[:line_items] << {
           uid: "unique-id-free",
           permalink: free_product.unique_permalink,
