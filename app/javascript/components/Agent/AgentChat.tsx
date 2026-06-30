@@ -111,28 +111,45 @@ const ProposedActionCard = ({
   onConfirm: () => void;
   onDismiss: () => void;
 }) => (
-  <div className="flex flex-col gap-2 rounded-2xl border border-dashed p-4">
-    <strong>Proposed change</strong>
-    <span className="break-words">{action.summary}</span>
-    {status === "applied" ? (
-      <span role="status" className="text-green">
-        Applied
-      </span>
-    ) : status === "dismissed" ? (
-      <span role="status" className="text-muted">
-        Dismissed
-      </span>
-    ) : (
-      <div className="flex gap-2">
-        <Button color="accent" disabled={isPending} onClick={onConfirm}>
-          {isApplying ? "Applying…" : "Confirm"}
-        </Button>
-        <Button disabled={isPending} onClick={onDismiss}>
-          Dismiss
-        </Button>
-      </div>
-    )}
-  </div>
+  // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
+  // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
+  <Card>
+    <CardContent className="flex-col items-stretch gap-2">
+      <strong>{action.title ?? "Proposed change"}</strong>
+      {action.fields && action.fields.length > 0 ? (
+        <DefinitionList className="text-sm">
+          {action.fields.map((field) => (
+            <React.Fragment key={field.label}>
+              <dt className="text-muted">{field.label}</dt>
+              <dd className="break-words">{field.value}</dd>
+            </React.Fragment>
+          ))}
+        </DefinitionList>
+      ) : (
+        <span className="break-words">{action.summary}</span>
+      )}
+    </CardContent>
+    <CardContent className="justify-end gap-2">
+      {status === "applied" ? (
+        <span role="status" className="mr-auto text-green">
+          Applied
+        </span>
+      ) : status === "dismissed" ? (
+        <span role="status" className="mr-auto text-muted">
+          Dismissed
+        </span>
+      ) : (
+        <>
+          <Button disabled={isPending} onClick={onDismiss}>
+            Dismiss
+          </Button>
+          <Button color="accent" disabled={isPending} onClick={onConfirm}>
+            {isApplying ? "Applying…" : "Confirm"}
+          </Button>
+        </>
+      )}
+    </CardContent>
+  </Card>
 );
 
 export const AgentChat = ({ greeting, suggestions }: Props) => {
@@ -303,9 +320,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         aria-label="Conversation"
         role="log"
       >
-        {/* mt-auto fills the chat from the bottom (like a messenger): a short conversation sits just
-            above the composer, and the margin collapses once the content is tall enough to scroll. */}
-        <div className="mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 p-4 md:p-8">
+        {/* Content starts at the top and grows downward; the effect below keeps the newest line in
+            view as the conversation gets long enough to scroll. */}
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 md:p-8">
           {messages.map((message, index) => {
             const isUser = message.role === "user";
             // A pending proposed change reads as the confirmation card alone — suppress the objects the
