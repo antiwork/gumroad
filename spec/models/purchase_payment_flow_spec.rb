@@ -86,5 +86,9 @@ describe PurchasePaymentFlow do
     it "records a saved-card flow without a card param, since Rails charges the stored Stripe card" do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method")[:payment_details_source]).to eq("saved_payment_method")
     end
+
+    it "does not record a saved-card flow when a new Stripe PaymentMethod is also submitted" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method", stripe_payment_method_id: "pm_123")).to be_nil
+    end
   end
 end
