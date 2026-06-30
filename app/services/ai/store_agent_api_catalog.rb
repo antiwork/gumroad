@@ -194,12 +194,15 @@ module Ai::StoreAgentApiCatalog
   def self.write_ids = writes.map(&:id)
 
   # A compact human-readable manifest injected into the system prompt so the model knows what each
-  # endpoint id does and which path params it needs — without bloating the tool JSON schema.
+  # endpoint id does, which path params it needs, and which body/query params it accepts — without
+  # bloating the tool JSON schema. Surfacing the param names is what stops the model from inventing
+  # plausible-but-wrong keys (e.g. `percent_off` instead of the API's `amount_off` + `offer_type`).
   def self.manifest(kind)
     list = kind == :read ? reads : writes
     list.map do |e|
       pp = e.path_params.any? ? " (path: #{e.path_params.join(', ')})" : ""
-      "- #{e.id}#{pp}: #{e.summary}"
+      bp = e.params.any? ? " (params: #{e.params.join(', ')})" : ""
+      "- #{e.id}#{pp}#{bp}: #{e.summary}"
     end.join("\n")
   end
 end

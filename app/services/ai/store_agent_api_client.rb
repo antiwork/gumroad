@@ -51,6 +51,12 @@ class Ai::StoreAgentApiClient
     attr_reader :seller, :pundit_user
 
     def request(method, path, params)
+      # The dispatch below runs a real, full-stack request in-process on the CURRENT thread, which
+      # re-enters rack-mini-profiler. Mini-profiler keeps its per-request context in a thread-local and
+      # nils it at the end of every request — including this nested one — which would wipe the OUTER
+      # (real) request's context and crash it on teardown ("undefined method 'discard' for nil").
+      # Snapshot and restore that thread-local around the nested call so the outer request is untouched.
+      mini_profiler_context = defined?(Rack::MiniProfiler) ? Rack::MiniProfiler.current : nil
       token = mint_token
       session = ActionDispatch::Integration::Session.new(Rails.application)
       session.host! api_host
@@ -60,18 +66,27 @@ class Ai::StoreAgentApiClient
       full_path = "/v2/#{normalized}"
       headers = { "Authorization" => "Bearer #{token.token}", "Accept" => "application/json" }
 
-      case method
-      when :get then session.get(full_path, params:, headers:)
-      when :post then session.post(full_path, params:, headers:)
-      when :put then session.put(full_path, params:, headers:)
-      when :patch then session.patch(full_path, params:, headers:)
-      when :delete then session.delete(full_path, params:, headers:)
-      else
-        return { "success" => false, "message" => "Unsupported method #{method}." }
+      # This dispatches a full in-process request while the OUTER request already holds the Rails load
+      # interlock (a shared lock). In development the nested request can need to autoload code, which
+      # requires the interlock exclusively — and the reloader can't get it while we hold it shared,
+      # so the two deadlock until Rack::Timeout fires. permit_concurrent_loads lets us yield the shared
+      # hold for the duration of the nested request so its autoloads resolve. (No-op in production,
+      # where code is eager-loaded and the interlock never blocks.)
+      ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+        case method
+        when :get then session.get(full_path, params:, headers:)
+        when :post then session.post(full_path, params:, headers:)
+        when :put then session.put(full_path, params:, headers:)
+        when :patch then session.patch(full_path, params:, headers:)
+        when :delete then session.delete(full_path, params:, headers:)
+        else
+          return { "success" => false, "message" => "Unsupported method #{method}." }
+        end
       end
 
       parse(session.response)
     ensure
+      Rack::MiniProfiler.current = mini_profiler_context if defined?(Rack::MiniProfiler)
       token&.revoke
     end
 

@@ -124,7 +124,6 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: MAX_REPLY_TOKENS,
-        temperature: 0.3,
       )
 
       if result.tool_uses.blank?
@@ -163,7 +162,6 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: MAX_REPLY_TOKENS,
-        temperature: 0.3,
       ) do |text|
         streamed_any = true
         emit.call(:token, { text: })
@@ -256,7 +254,6 @@ class Ai::StoreAgentService
           { role: "user", content: "The creator said: #{last_user_message}\n\nYou answered: #{reply}\n\nSuggest up to three follow-up prompts." },
         ],
         max_tokens: MAX_SUGGESTION_TOKENS,
-        temperature: 0.5,
       )
       parse_suggestions(result.text)
     rescue => e

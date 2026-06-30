@@ -36,10 +36,10 @@ class Ai::AnthropicClient
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
   # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
   # @return [Result]
-  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, temperature: nil)
-    body = request_body(system:, messages:, tools:, max_tokens:, temperature:, stream: false)
+  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
+    body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
     response = http.post(API_URL, json: body)
-    raise Error, "Anthropic request failed: #{response.status}" unless response.status.success?
+    raise Error, "Anthropic request failed: #{response.status} — #{error_detail(response)}" unless response.status.success?
 
     parse_message(response.parse)
   rescue HTTP::Error => e
@@ -51,8 +51,8 @@ class Ai::AnthropicClient
   # (carrying id + name) followed by `input_json_delta` fragments we concatenate and JSON-parse.
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, temperature: nil, &on_text)
-    body = request_body(system:, messages:, tools:, max_tokens:, temperature:, stream: true)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, &on_text)
+    body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     text = +""
     # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
     # we parse when the block closes.
@@ -60,7 +60,7 @@ class Ai::AnthropicClient
     stop_reason = nil
 
     response = http.post(API_URL, json: body)
-    raise Error, "Anthropic stream failed: #{response.status}" unless response.status.success?
+    raise Error, "Anthropic stream failed: #{response.status} — #{error_detail(response)}" unless response.status.success?
 
     each_sse_event(response.body) do |event, data|
       case event
@@ -99,7 +99,21 @@ class Ai::AnthropicClient
   private
     attr_reader :timeout, :model
 
-    def request_body(system:, messages:, tools:, max_tokens:, temperature:, stream:)
+    # A concise failure detail for an error response. Anthropic returns { "error": { "message": ... } };
+    # surface just that message rather than dumping the raw body (which can be large and may echo
+    # request content). Falls back to a short slice of the body when it isn't the expected JSON.
+    def error_detail(response)
+      body = response.body.to_s
+      parsed = begin
+        JSON.parse(body)
+      rescue JSON::ParserError
+        nil
+      end
+      message = parsed.is_a?(Hash) ? parsed.dig("error", "message") : nil
+      message.presence || body[0, 200]
+    end
+
+    def request_body(system:, messages:, tools:, max_tokens:, stream:)
       body = {
         model:,
         max_tokens:,
@@ -108,7 +122,6 @@ class Ai::AnthropicClient
         stream:,
       }
       body[:tools] = tools if tools.present?
-      body[:temperature] = temperature unless temperature.nil?
       body
     end
 
