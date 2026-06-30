@@ -10,7 +10,7 @@ module PageMeta::Product
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
 
       set_meta_tag(name: "description", content: product_description)
-      set_meta_tag(property: "gr:page:type", value: "product")
+      set_meta_tag(property: "gr:page:type", content: "product")
       set_meta_tag(property: "product:retailer_item_id", content: product.unique_permalink)
       set_meta_tag(property: "product:price:amount", content: (product.price_cents / 100.0).round(2))
       set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
@@ -31,53 +31,53 @@ module PageMeta::Product
     end
 
     def set_open_graph_meta(product, product_description:)
-      set_meta_tag(property: "og:title", value: product.name)
-      set_meta_tag(property: "og:description", value: product_description)
+      set_meta_tag(property: "og:title", content: product.name)
+      set_meta_tag(property: "og:description", content: product_description)
       set_meta_tag(property: "og:url", content: product.long_url)
 
       set_open_graph_image_meta(product)
 
-      set_meta_tag(property: "og:type", value: "#{FACEBOOK_OG_NAMESPACE}:product")
+      set_meta_tag(property: "og:type", content: "#{FACEBOOK_OG_NAMESPACE}:product")
     end
 
     def set_open_graph_image_meta(product)
       if product.preview_image_path?
         set_meta_tag(property: "og:image", content: product.preview_url)
-        set_meta_tag(property: "og:image:alt", value: "")
+        set_meta_tag(property: "og:image:alt", content: "")
       elsif product.preview_oembed_thumbnail_url
         set_meta_tag(
           property: "og:image",
-          value: Addressable::URI.escape(product.preview_oembed_thumbnail_url).html_safe,
+          content: Addressable::URI.escape(product.preview_oembed_thumbnail_url).html_safe,
         )
-        set_meta_tag(property: "og:image:alt", value: "")
+        set_meta_tag(property: "og:image:alt", content: "")
       end
     end
 
     # Equivalent to `twitter_product_card(product, product_description:).html_safe`
     def set_twitter_meta(product, product_description:)
-      set_meta_tag(property: "twitter:title", value: product.name)
+      set_meta_tag(property: "twitter:title", content: product.name)
 
       if product.preview_image_path?
-        set_meta_tag(property: "twitter:card", value: "summary_large_image")
-        set_meta_tag(property: "twitter:image", value: product.preview_url)
-        set_meta_tag(property: "twitter:image:alt", value: "")
+        set_meta_tag(property: "twitter:card", content: "summary_large_image")
+        set_meta_tag(property: "twitter:image", content: product.preview_url)
+        set_meta_tag(property: "twitter:image:alt", content: "")
       elsif product.preview_oembed.present?
-        set_meta_tag(property: "twitter:card", value: "player")
-        set_meta_tag(property: "twitter:image", value: product.preview_oembed_thumbnail_url)
-        set_meta_tag(property: "twitter:player", value: product.preview_oembed_url)
-        set_meta_tag(property: "twitter:player:width", value: product.preview_oembed_width)
-        set_meta_tag(property: "twitter:player:height", value: product.preview_oembed_height)
+        set_meta_tag(property: "twitter:card", content: "player")
+        set_meta_tag(property: "twitter:image", content: product.preview_oembed_thumbnail_url)
+        set_meta_tag(property: "twitter:player", content: product.preview_oembed_url)
+        set_meta_tag(property: "twitter:player:width", content: product.preview_oembed_width)
+        set_meta_tag(property: "twitter:player:height", content: product.preview_oembed_height)
       elsif product.preview_video_path?
-        set_meta_tag(property: "twitter:card", value: "player")
-        set_meta_tag(property: "twitter:image", value: "https://gumroad.com/assets/icon.png")
-        set_meta_tag(property: "twitter:player", value: product.preview_url)
-        set_meta_tag(property: "twitter:player:width", value: product.preview_width)
-        set_meta_tag(property: "twitter:player:height", value: product.preview_height)
+        set_meta_tag(property: "twitter:card", content: "player")
+        set_meta_tag(property: "twitter:image", content: "https://gumroad.com/assets/icon.png")
+        set_meta_tag(property: "twitter:player", content: product.preview_url)
+        set_meta_tag(property: "twitter:player:width", content: product.preview_width)
+        set_meta_tag(property: "twitter:player:height", content: product.preview_height)
       else
-        set_meta_tag(property: "twitter:card", value: "summary")
+        set_meta_tag(property: "twitter:card", content: "summary")
       end
 
-      set_meta_tag(property: "twitter:domain", value: "Gumroad")
+      set_meta_tag(property: "twitter:domain", content: "Gumroad")
 
       description = if product_description.present?
         product_description
@@ -87,10 +87,10 @@ module PageMeta::Product
         "Available on Gumroad"
       end
       description = description.length > 200 ? "#{description[0, 197]}..." : description
-      set_meta_tag(property: "twitter:description", value: description)
+      set_meta_tag(property: "twitter:description", content: description)
 
       if product.user&.twitter_handle?
-        set_meta_tag(property: "twitter:creator", value: "@#{product.user.twitter_handle}")
+        set_meta_tag(property: "twitter:creator", content: "@#{product.user.twitter_handle}")
       end
     end
 end

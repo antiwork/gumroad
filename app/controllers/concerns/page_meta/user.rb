@@ -7,8 +7,8 @@ module PageMeta::User
 
   private
     def set_user_page_meta(user)
-      set_meta_tag(property: "og:site_name", value: "Gumroad")
-      set_meta_tag(property: "og:type", value: "website")
+      set_meta_tag(property: "og:site_name", content: "Gumroad")
+      set_meta_tag(property: "og:type", content: "website")
 
       if user.bio.present?
         title = "Subscribe to #{user.name_or_username} on Gumroad"
@@ -17,21 +17,21 @@ module PageMeta::User
         title = "Subscribe to #{user.name_or_username}"
         description = "On Gumroad"
       end
-      set_meta_tag(property: "og:title", value: title)
+      set_meta_tag(property: "og:title", content: title)
       set_meta_tag(name: "description", content: description)
-      set_meta_tag(property: "og:description", value: description)
+      set_meta_tag(property: "og:description", content: description)
 
       if user.subscribe_preview_url.present?
-        set_meta_tag(property: "twitter:card", value: "summary_large_image")
-        set_meta_tag(property: "twitter:image", value: user.subscribe_preview_url)
-        set_meta_tag(property: "twitter:image:alt", value: user.name_or_username)
+        set_meta_tag(property: "twitter:card", content: "summary_large_image")
+        set_meta_tag(property: "twitter:image", content: user.subscribe_preview_url)
+        set_meta_tag(property: "twitter:image:alt", content: user.name_or_username)
       else
         if user.name.present?
-          set_meta_tag(property: "og:title", value: user.name)
+          set_meta_tag(property: "og:title", content: user.name)
         end
         if user.avatar_url.present?
-          set_meta_tag(property: "og:image", value: user.avatar_url)
-          set_meta_tag(property: "og:image:alt", value: "#{user.name_or_username}'s profile picture")
+          set_meta_tag(property: "og:image", content: user.avatar_url)
+          set_meta_tag(property: "og:image:alt", content: "#{user.name_or_username}'s profile picture")
         end
       end
 
