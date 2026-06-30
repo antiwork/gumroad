@@ -7,13 +7,12 @@ class NigerBankAccount < BankAccount
   # (same XOF/BCEAO structure as Côte d'Ivoire). Note a Niger IBAN contains "NE" twice — once
   # as the country code and once inside the bank code.
   #
-  # We validate the NE-specific BBAN structure ourselves because Ibandit 1.26.1 has no
-  # `:NE` structure entry (`Ibandit.structures[:NE]` is nil). Without that entry,
-  # `Ibandit::IBAN#valid?` cannot run the per-field format checks and rejects every
-  # structurally-valid NE IBAN as "format is invalid". The regex supplies those missing
-  # Niger field checks; the standalone Ibandit predicates below still cover the standard
-  # country-code, mod-97 check-digit, length, and allowed-character checks. Same approach as
-  # CoteDIvoireBankAccount (#471).
+  # We validate the structure ourselves instead of delegating to Ibandit's full `valid?`:
+  # Ibandit 1.26.1 has an NE entry (`Ibandit.structures["NE"]`) with length metadata, but
+  # it is missing the per-field format regexes that `valid?` requires. Those nil formats
+  # compile to `/\A\z/`, so valid NE IBANs are rejected as "format is invalid". Ibandit's
+  # country-code, check-digit, length, and character checks still validate correctly here.
+  # Same family of Ibandit bundled-data workaround as Côte d'Ivoire (#471) and Sweden (#775).
   IBAN_FORMAT_REGEX = /\ANE[0-9]{2}[A-Z0-9]{5}[0-9]{19}\z/
   private_constant :IBAN_FORMAT_REGEX
 
