@@ -116,6 +116,46 @@ describe Purchase::ReassignByEmailService do
         expect(subscription.reload.user).to eq(target_user)
       end
 
+      it "checks a shared unmatched original purchase once for multiple recurring charges" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+        create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
+        create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
+
+        service = described_class.new(from_email:, to_email:)
+        allow(service).to receive(:payment_fingerprint).and_call_original
+
+        service.perform
+
+        expect(service).to have_received(:payment_fingerprint).with(original_purchase).once
+      end
+
+      it "preloads subscriptions and original purchases before the guard checks recurring charges" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:, reassignment_locked_at: Time.current)
+        3.times { create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:) }
+
+        subscription_selects = []
+        original_purchase_selects = []
+        counter = lambda do |_name, _started, _finished, _unique_id, payload|
+          sql = payload[:sql]
+          next unless sql.start_with?("SELECT")
+
+          subscription_selects << sql if sql.match?(/FROM [`"]subscriptions[`"]/)
+          original_purchase_selects << sql if sql.match?(/FROM [`"]purchases[`"]/) && sql.match?(/[`"]purchases[`"]\.[`"]subscription_id[`"]/)
+        end
+
+        result = nil
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          result = described_class.new(from_email:, to_email:).perform
+        end
+
+        expect(result.reason).to eq(:locked)
+        expect(original_purchase.reload.email).to eq("old_original@example.com")
+        expect(subscription_selects.size).to eq(1)
+        expect(original_purchase_selects.size).to eq(1)
+      end
+
       it "does not modify subscription.user when the original_purchase update fails" do
         subscription = create(:subscription, user: buyer)
         original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
@@ -285,6 +325,24 @@ describe Purchase::ReassignByEmailService do
       end
 
       it "does not collapse numeric PayPal emails into a single card fingerprint" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:fingerprint_anomaly)
+      end
+    end
+
+    context "when non-card payment visuals contain a card-like line" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      before do
+        ["paypal-a@example.com", "paypal-b@example.com", "paypal-c@example.com", "paypal-d@example.com"].each do |visual|
+          purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:)
+          purchase.update_column(:card_visual, "#{visual}\n**** **** **** 1234")
+        end
+      end
+
+      it "does not collapse the multi-line visuals into the same card fingerprint" do
         result = described_class.new(from_email:, to_email:).perform
 
         expect(result.success?).to be(false)

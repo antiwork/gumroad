@@ -26,7 +26,7 @@ class Purchase::ReassignByEmailService
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :no_changes, error_message: "from and to emails are the same")
     end
 
-    purchases = Purchase.where(email: @from_email).to_a
+    purchases = Purchase.where(email: @from_email).includes(subscription: :original_purchase).to_a
     if purchases.empty?
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :not_found, error_message: "No purchases found for email: #{@from_email}")
     end
@@ -37,11 +37,15 @@ class Purchase::ReassignByEmailService
     # purchases that are not themselves matched by from_email but get reassigned
     # alongside a recurring charge.
     mutable_purchases = purchases.dup
+    mutable_purchase_id_set = purchase_id_set.dup
     purchases.each do |purchase|
       next unless purchase.subscription.present? && !purchase.is_original_subscription_purchase?
 
       original_purchase = purchase.original_purchase
-      mutable_purchases << original_purchase if original_purchase.present? && !purchase_id_set.include?(original_purchase.id)
+      if original_purchase.present? && !mutable_purchase_id_set.include?(original_purchase.id)
+        mutable_purchases << original_purchase
+        mutable_purchase_id_set.add(original_purchase.id)
+      end
     end
 
     if mutable_purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
@@ -95,6 +99,7 @@ class Purchase::ReassignByEmailService
     def payment_fingerprint(purchase)
       visual = purchase.card_visual.to_s.strip
       return nil if visual.blank?
+      return "other:#{visual.downcase}" if visual.match?(/[\r\n]/)
 
       if ChargeableVisual.is_cc_visual(visual)
         last_four = visual.gsub(/[^0-9]/, "")[-4..]

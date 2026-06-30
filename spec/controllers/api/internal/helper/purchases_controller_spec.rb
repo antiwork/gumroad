@@ -66,6 +66,30 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         expect(response.parsed_body["message"]).to include("Receipt sent to #{to_email}")
       end
 
+      it "writes a helper audit log when confirmed_override bypasses the fingerprint anomaly guard" do
+        extra_purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account: merchant_account)
+        [purchase1, purchase2, purchase3, extra_purchase].zip(["**** **** **** 1111", "**** **** **** 2222", "**** **** **** 3333", "**** **** **** 4444"]).each do |purchase, card_visual|
+          purchase.update_column(:card_visual, card_visual)
+        end
+        allow(Rails.logger).to receive(:info).and_call_original
+
+        post :reassign_purchases, params: { from: from_email, to: to_email, confirmed_override: "true" }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(Rails.logger).to have_received(:info).with(
+          a_string_including(
+            '"event":"helper_api_audit"',
+            '"action":"purchases.reassign"',
+            '"from":"[REDACTED]"',
+            '"to":"[REDACTED]"',
+            '"confirmed_override":true',
+            '"result_reason":null',
+            '"response_status":200'
+          )
+        )
+      end
+
       it "updates original_purchase email for subscription purchases" do
         subscription = create(:subscription, user: buyer)
         original_purchase = create(:purchase, email: "old_original_purchase@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription: subscription, merchant_account: merchant_account)

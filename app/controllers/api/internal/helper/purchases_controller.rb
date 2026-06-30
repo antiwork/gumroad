@@ -86,7 +86,9 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
 
     unless result.success?
-      return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+      render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+      record_helper_audit_log(action: "purchases.reassign", confirmed_override:, result_reason: result.reason) if confirmed_override
+      return
     end
 
     render json: {
@@ -95,6 +97,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       count: result.count,
       reassigned_purchase_ids: result.reassigned_purchase_ids
     }
+    record_helper_audit_log(action: "purchases.reassign", confirmed_override:, result_reason: result.reason) if confirmed_override
   end
 
   def auto_refund_purchase
