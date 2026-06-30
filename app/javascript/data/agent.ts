@@ -18,6 +18,11 @@ export type ProposedAction = {
   type: "api_write";
   params: Record<string, unknown>;
   summary: string;
+  // The operation being proposed (e.g. "Delete a discount code."), shown as the card heading.
+  title?: string;
+  // Humanized label/value rows for the confirmation card. Optional so older/streamed payloads without
+  // them still validate; the card falls back to `summary` when absent.
+  fields?: { label: string; value: string }[];
 };
 
 type SendMessageResponse =

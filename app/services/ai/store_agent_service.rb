@@ -101,8 +101,11 @@ class Ai::StoreAgentService
     %<writes>s
   PROMPT
 
-  ProposedAction = Struct.new(:type, :params, :summary, keyword_init: true) do
-    def as_json(*) = { type:, params:, summary: }
+  ProposedAction = Struct.new(:type, :params, :summary, :title, :fields, keyword_init: true) do
+    # `title` names the operation (the endpoint's own summary) so the card always states what will
+    # happen — important for destructive writes. `fields` are humanized detail rows; `summary` is the
+    # one-line fallback the card shows when there are no fields.
+    def as_json(*) = { type:, params:, summary:, title:, fields: fields || [] }
   end
 
   def initialize(seller:, pundit_user:)
@@ -393,6 +396,9 @@ class Ai::StoreAgentService
         # Everything the executor needs to replay the exact same call after the creator confirms.
         params: { "endpoint" => endpoint.id, "path_params" => path_params, "params" => body },
         summary:,
+        # The operation itself (e.g. "Delete a discount code."), shown as the card's heading.
+        title: endpoint.summary,
+        fields: write_fields(endpoint, path_params, body),
       )
       [{ proposed: true, summary: }, action]
     end
@@ -404,6 +410,118 @@ class Ai::StoreAgentService
       detail = path_params.merge(body).map { |k, v| "#{k}: #{v}" }.join(", ")
       parts << "(#{detail})" if detail.present?
       parts.join(" ")
+    end
+
+    # Friendlier labels for a couple of offer-code body keys; everything else is humanized generically.
+    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses" }.freeze
+    # Shown for a body key the model set to blank/null, so a "clear this field" mutation stays visible
+    # rather than silently dropping off the card while still executing.
+    BLANK_VALUE = "(blank)"
+
+    # Humanized label/value rows for the confirmation card. EVERY path param and body key is
+    # represented, so the card never hides a proposed mutation or the record it targets. A few are
+    # rendered nicely — the discount amount + type as one row, cents as currency, and product ids as
+    # names — but nothing is dropped. Values are coerced to strings (non-scalar tool output is
+    # JSON-encoded rather than formatted), so a hallucinated array/object can't raise here.
+    def write_fields(endpoint, path_params, body)
+      body = body.dup
+      offer_code = endpoint.id.include?("offer_code")
+      product = target_product(endpoint, path_params)
+      # Amounts apply in the target resource's currency. Use the product's; for a new product fall back
+      # to the requested or seller currency; leave it unknown elsewhere (e.g. a sale's currency on a
+      # refund) so we never stamp a wrong symbol on the card.
+      # The currency amounts will actually save in. Only product create/update persist a requested
+      # price_currency_type, so only honor it there (a discount/refund ignores it and uses the product
+      # or sale currency); then the existing product's, the seller's for a brand-new product, else
+      # unknown (e.g. a sale on a refund) so we don't stamp a wrong symbol.
+      honors_requested_currency = endpoint.id.in?(%w[create_product update_product])
+      currency = (honors_requested_currency ? requested_currency(body) : nil) ||
+                 product&.price_currency_type ||
+                 (seller.currency_type if endpoint.id == "create_product")
+
+      # Target identity (path params are validated non-blank) — names the record being changed.
+      rows = path_params.filter_map { |key, value| preview_field(path_label(endpoint, key), path_value(endpoint, key, value, product)) }
+
+      # Body keys are intentional mutations, so each gets a row even when blank (a blank renders as
+      # "(blank)") — otherwise a destructive clear like description: "" would execute invisibly. The
+      # discount amount + type collapse into one readable row; both are still represented.
+      if body.key?("amount_off") || body.key?("offer_type")
+        rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), body.delete("offer_type"), currency).presence || BLANK_VALUE }
+      end
+      body.each { |key, value| rows << { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE } }
+      rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
+
+      rows
+    end
+
+    def path_label(endpoint, key)
+      return "Applies to" if key.to_s == "link_id"
+      return "Product" if key.to_s == "id" && endpoint.id.include?("product")
+      return "Discount code" if key.to_s == "id" && endpoint.id.include?("offer_code")
+      key.to_s.humanize
+    end
+
+    # A path id displays as "name (id)" when it points at a resolvable product — the name for the
+    # seller to recognize, the raw id (which is what's replayed) so a destructive write still names the
+    # exact record even when two products share a name. Otherwise it's just the id.
+    def path_value(endpoint, key, value, product)
+      points_at_product = key.to_s == "link_id" || (key.to_s == "id" && endpoint.id.include?("product"))
+      name = product&.name if points_at_product
+      name.present? ? "#{name} (#{value})" : display_value(key, value)
+    end
+
+    def field_label(key, offer_code:)
+      (offer_code && OFFER_CODE_LABELS[key.to_s]) || key.to_s.humanize
+    end
+
+    # Cents keys -> currency when known (else the raw integer, so we never imply the wrong currency);
+    # description -> truncated; non-scalar (untrusted) -> JSON; else a string.
+    def display_value(key, value, currency = nil)
+      return nil if value.nil?
+      return value.to_json unless value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false
+      case key.to_s
+      when "price", "amount_cents", "minimum_amount_cents"
+        # Format real numbers (and numeric strings) in the currency's own subunit (JPY has none, so
+        # 1000 -> ¥1,000, not ¥10). A blank value falls through to "(blank)" via the caller rather than
+        # formatting as $0; booleans / unknown currency show raw — so we never imply a wrong amount.
+        formattable = value.is_a?(Numeric) || (value.is_a?(String) && value.strip.present?)
+        currency && formattable ? MoneyFormatter.format(value.to_i, currency, no_cents_if_whole: true) : value.to_s
+      else
+        # Show the full value — this is the safety boundary, so never truncate what will be applied.
+        value.to_s
+      end
+    end
+
+    # "20% off" for a percentage code; for a fixed-amount one the value is cents in the target's
+    # currency. Non-scalar (untrusted) input is JSON-encoded rather than formatted, so a hallucinated
+    # object can't raise; an unknown currency shows the raw cents rather than a wrong symbol.
+    def discount_amount(amount, offer_type, currency)
+      return nil if amount.nil?
+      return amount.to_json unless amount.is_a?(String) || amount.is_a?(Numeric)
+      return nil if amount.to_s.strip.blank?
+      return "#{amount}% off" if offer_type.to_s == "percent"
+      formatted = currency ? MoneyFormatter.format(amount.to_i, currency, no_cents_if_whole: true) : amount.to_s
+      "#{formatted} off" if formatted.present?
+    end
+
+    # The seller's product for the write's path id (external id or permalink), or nil. Names the target
+    # and supplies the currency the confirmed amounts will use. One cheap lookup, only when proposing.
+    def target_product(endpoint, path_params)
+      external_id = path_params["link_id"] || (endpoint.id.include?("product") ? path_params["id"] : nil)
+      return nil if external_id.to_s.strip.blank?
+      seller.links.find_by_external_id(external_id) || seller.links.find_by(unique_permalink: external_id)
+    end
+
+    # A valid currency this write itself sets (product writes accept price_currency_type), or nil.
+    # Guards an invalid/untrusted value from reaching the formatter.
+    def requested_currency(body)
+      requested = body["price_currency_type"].to_s.downcase.presence
+      requested if CURRENCY_CHOICES.key?(requested)
+    end
+
+    def preview_field(label, value)
+      stringified = value.to_s.strip
+      { label:, value: stringified } if stringified.present?
     end
 
     # Tool-call inputs are supposed to be JSON objects; a hallucinating model can emit an array or

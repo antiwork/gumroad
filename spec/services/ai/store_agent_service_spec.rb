@@ -195,6 +195,97 @@ describe Ai::StoreAgentService do
           ),
         )
         expect(result[:proposed_action][:summary]).to be_present
+        expect(result[:proposed_action][:fields]).to include(
+          { label: "Code", value: "LAUNCH" },
+          { label: "Discount", value: "20% off" },
+        )
+      end
+
+      it "builds preview fields from untrusted tool values without raising on a non-scalar" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "update_product",
+                        "path_params" => { "id" => "prod_1" },
+                        "params" => { "price" => { "unexpected" => "object" } },
+                      }),
+          text_result("Prepared the change."),
+        )
+
+        result = nil
+        expect { result = service.respond(messages: [{ role: "user", content: "update it" }]) }.not_to raise_error
+        # The malformed value is shown (JSON-encoded), never dropped or crashed on.
+        expect(result[:proposed_action][:fields]).to include({ label: "Price", value: "{\"unexpected\":\"object\"}" })
+      end
+
+      it "shows a long field value in full rather than truncating what will be applied" do
+        long_description = "a" * 200
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "update_product",
+                        "path_params" => { "id" => "prod_1" },
+                        "params" => { "description" => long_description },
+                      }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "update the description" }])
+        expect(result[:proposed_action][:fields]).to include({ label: "Description", value: long_description })
+      end
+
+      it "previews a blank money value as (blank), not $0" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_product",
+                        "path_params" => {},
+                        "params" => { "name" => "P", "price" => "" },
+                      }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "make a product with no price yet" }])
+        expect(result[:proposed_action][:fields]).to include({ label: "Price", value: "(blank)" })
+      end
+
+      it "does not crash when a money param is a boolean" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_product",
+                        "path_params" => {},
+                        "params" => { "name" => "P", "price" => true },
+                      }),
+          text_result("Prepared."),
+        )
+
+        result = nil
+        expect { result = service.respond(messages: [{ role: "user", content: "make a product" }]) }.not_to raise_error
+        expect(result[:proposed_action][:fields]).to include({ label: "Price", value: "true" })
+      end
+
+      it "does not crash formatting a fixed discount whose amount is a non-scalar" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "X", "amount_off" => { "unexpected" => "object" } },
+                      }),
+          text_result("Prepared."),
+        )
+
+        expect { service.respond(messages: [{ role: "user", content: "make a code" }]) }.not_to raise_error
+      end
+
+      it "keeps a body field the model set to blank visible (so a clear isn't hidden)" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "update_product",
+                        "path_params" => { "id" => "prod_1" },
+                        "params" => { "description" => "" },
+                      }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "clear the description" }])
+        expect(result[:proposed_action][:fields]).to include({ label: "Description", value: "(blank)" })
       end
 
       it "rejects a READ endpoint sent to api_write (nudges to api_read)" do
