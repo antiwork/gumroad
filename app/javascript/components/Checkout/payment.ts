@@ -32,11 +32,14 @@ type StripeElementsModeForCheckout =
   | typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
   | typeof STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT;
 
+const STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50;
+
 export type PaymentElementConfig = {
   stripe_elements_mode: StripeElementsModeForCheckout;
   currency: "usd";
   payment_method_types: ["card"];
   payment_method_creation: "manual";
+  stripe_link_enabled: boolean;
 };
 export type CheckoutPaymentConfig =
   | {
@@ -211,7 +214,11 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  if (state.surcharges.type === "loaded" && !getTotalPrice(state)) return false;
+  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total before Elements updates.
+  if (state.surcharges.type === "loaded") {
+    const total = getTotalPrice(state);
+    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
+  }
 
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
@@ -229,8 +236,7 @@ export function getStripePaymentElementAmount(state: State) {
   if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
   if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     return null;
-  const total = getTotalPrice(state);
-  return total && total > 0 ? total : null;
+  return getTotalPrice(state);
 }
 
 export function isProcessing(state: State) {

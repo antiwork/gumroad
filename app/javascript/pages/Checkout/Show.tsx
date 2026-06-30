@@ -126,6 +126,7 @@ const CheckoutIndexPage = () => {
 
   const user = useLoggedInUser();
   const email = user?.email ?? props.cart?.email ?? "";
+  const fullName = user?.name ?? "";
 
   // Build the initial cart exactly once.
   //
@@ -163,6 +164,7 @@ const CheckoutIndexPage = () => {
   const reducer = createReducer({
     country,
     email,
+    fullName,
     address,
     countries,
     caProvinces: ca_provinces,
