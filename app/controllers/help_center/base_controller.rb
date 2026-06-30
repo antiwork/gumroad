@@ -6,7 +6,7 @@ class HelpCenter::BaseController < ApplicationController
   rescue_from ActiveHash::RecordNotFound, with: :redirect_to_help_center_root
 
   before_action do
-    set_meta_tag(property: "og:type", value: "website")
+    set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(name: "twitter:card", content: "summary")
   end
 
