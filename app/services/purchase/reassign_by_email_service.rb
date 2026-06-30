@@ -48,7 +48,7 @@ class Purchase::ReassignByEmailService
       end
     end
 
-    if mutable_purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
+    if reassignment_locked?(mutable_purchases)
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :locked, error_message: "One or more purchases are under review and cannot be reassigned")
     end
 
@@ -92,6 +92,19 @@ class Purchase::ReassignByEmailService
   end
 
   private
+    # A purchase is locked if it has a row in purchase_reassignment_locks. While the
+    # legacy purchases.reassignment_locked_at column is still being retired (removed
+    # from the schema, dropped out-of-band), also honor a lock left on that column so
+    # an already-locked purchase can't slip through before the data is moved over by
+    # Onetime::BackfillPurchaseReassignmentLocks. has_attribute? makes the legacy
+    # check a no-op wherever the column never existed, and it self-removes once the
+    # column is gone.
+    def reassignment_locked?(purchases)
+      return true if PurchaseReassignmentLock.where(purchase_id: purchases.map(&:id)).exists?
+
+      purchases.any? { |purchase| purchase.has_attribute?(:reassignment_locked_at) && purchase[:reassignment_locked_at].present? }
+    end
+
     # Returns a normalized, distinct payment-method signal for a purchase.
     # Card purchases collapse to the card's last 4 digits; non-card processors
     # (e.g. PayPal) store an email or other token in card_visual, so fall back to

@@ -132,7 +132,8 @@ describe Purchase::ReassignByEmailService do
 
       it "preloads subscriptions and original purchases before the guard checks recurring charges" do
         subscription = create(:subscription, user: buyer)
-        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:, reassignment_locked_at: Time.current)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+        create(:purchase_reassignment_lock, purchase: original_purchase)
         3.times { create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:) }
 
         subscription_selects = []
@@ -231,7 +232,11 @@ describe Purchase::ReassignByEmailService do
     context "when a matched purchase is reassignment-locked" do
       let!(:target_user) { create(:user, email: to_email) }
       let!(:unlocked_purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
-      let!(:locked_purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:, reassignment_locked_at: Time.current) }
+      let!(:locked_purchase) do
+        create(:purchase, email: from_email, purchaser: buyer, merchant_account:).tap do |purchase|
+          create(:purchase_reassignment_lock, purchase:)
+        end
+      end
 
       it "refuses the whole batch without mutating any purchase" do
         expect(CustomerMailer).not_to receive(:grouped_receipt)
@@ -355,7 +360,8 @@ describe Purchase::ReassignByEmailService do
 
       it "refuses the batch because a mutable purchase is locked" do
         subscription = create(:subscription, user: buyer)
-        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:, reassignment_locked_at: Time.current)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+        create(:purchase_reassignment_lock, purchase: original_purchase)
         recurring = create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
 
         result = described_class.new(from_email:, to_email:).perform
