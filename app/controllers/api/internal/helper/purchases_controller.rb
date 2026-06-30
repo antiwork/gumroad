@@ -83,21 +83,20 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     to_email = params[:to]
     confirmed_override = ActiveModel::Type::Boolean.new.cast(params[:confirmed_override])
 
-    result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
+    record_helper_admin_write(action: "purchases.reassign") do
+      result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
 
-    unless result.success?
-      render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
-      record_helper_audit_log(action: "purchases.reassign", confirmed_override:, result_reason: result.reason) if confirmed_override
-      return
+      unless result.success?
+        return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
+      end
+
+      render json: {
+        success: true,
+        message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
+        count: result.count,
+        reassigned_purchase_ids: result.reassigned_purchase_ids
+      }
     end
-
-    render json: {
-      success: true,
-      message: "Successfully reassigned #{result.count} purchases from #{from_email} to #{to_email}. Receipt sent to #{to_email}.",
-      count: result.count,
-      reassigned_purchase_ids: result.reassigned_purchase_ids
-    }
-    record_helper_audit_log(action: "purchases.reassign", confirmed_override:, result_reason: result.reason) if confirmed_override
   end
 
   def auto_refund_purchase

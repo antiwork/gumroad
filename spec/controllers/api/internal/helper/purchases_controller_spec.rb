@@ -66,27 +66,35 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         expect(response.parsed_body["message"]).to include("Receipt sent to #{to_email}")
       end
 
-      it "writes a helper audit log when confirmed_override bypasses the fingerprint anomaly guard" do
+      it "records an admin audit log when confirmed_override bypasses the fingerprint anomaly guard" do
+        legacy_admin_token = create(:admin_api_token, actor_user: admin_user)
+        stub_const("GUMROAD_ADMIN_ID", admin_user.id)
         extra_purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account: merchant_account)
         [purchase1, purchase2, purchase3, extra_purchase].zip(["**** **** **** 1111", "**** **** **** 2222", "**** **** **** 3333", "**** **** **** 4444"]).each do |purchase, card_visual|
           purchase.update_column(:card_visual, card_visual)
         end
-        allow(Rails.logger).to receive(:info).and_call_original
 
-        post :reassign_purchases, params: { from: from_email, to: to_email, confirmed_override: "true" }
+        expect do
+          post :reassign_purchases, params: { from: from_email, to: to_email, confirmed_override: "true" }
+        end.to change { AdminApiAuditLog.count }.by(1)
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to eq(true)
-        expect(Rails.logger).to have_received(:info).with(
-          a_string_including(
-            '"event":"helper_api_audit"',
-            '"action":"purchases.reassign"',
-            '"from":"[REDACTED]"',
-            '"to":"[REDACTED]"',
-            '"confirmed_override":true',
-            '"result_reason":null',
-            '"response_status":200'
-          )
+        expect(AdminApiAuditLog.last).to have_attributes(
+          action: "purchases.reassign",
+          target_type: nil,
+          target_id: nil,
+          actor_user_id: admin_user.id,
+          admin_api_token_id: legacy_admin_token.id,
+          route: request.path,
+          http_method: "POST",
+          response_status: 200,
+          error_class: nil
+        )
+        expect(AdminApiAuditLog.last.params_snapshot).to include(
+          "from" => "[REDACTED]",
+          "to" => "[REDACTED]",
+          "confirmed_override" => "true"
         )
       end
 
