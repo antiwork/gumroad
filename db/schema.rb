@@ -1902,7 +1902,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_01_000006) do
     t.bigint "price_id"
     t.string "recommended_by"
     t.datetime "deleted_at", precision: nil
-    t.datetime "reassignment_locked_at"
     t.index ["affiliate_id", "created_at"], name: "index_purchases_on_affiliate_id_and_created_at"
     t.index ["browser_guid"], name: "index_purchases_on_browser_guid"
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"

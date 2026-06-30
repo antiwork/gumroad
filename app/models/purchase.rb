@@ -570,6 +570,10 @@ class Purchase < ApplicationRecord
             29 => :is_commission_deposit_purchase,
             30 => :is_commission_completion_purchase,
             31 => :is_installment_payment,
+            # Temporary, per-purchase lock set by Trust & Safety during fraud review;
+            # blocks Purchase::ReassignByEmailService from moving the purchase between
+            # accounts. Not a buyer-level block (see is_buyer_blocked_by_admin).
+            32 => :is_reassignment_locked,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
