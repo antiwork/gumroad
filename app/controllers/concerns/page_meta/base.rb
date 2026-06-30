@@ -48,8 +48,11 @@ module PageMeta::Base
       set_meta_tag(property: "og:title", content: "Gumroad")
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(name: "viewport", content: "initial-scale = 1.0, width = device-width")
-      set_meta_tag(property: "stripe:pk", content: STRIPE_PUBLIC_KEY)
-      set_meta_tag(property: "stripe:api_version", content: Stripe.api_version)
+      # NOTE: stripe:pk / stripe:api_version are NOT Open Graph tags — they are read by our OWN
+      # frontend (app/javascript/utils/stripe_loader.ts) via getAttribute("value"), so they must
+      # keep the `value:` key. Scrapers never read them, so the OG content= fix does not apply here.
+      set_meta_tag(property: "stripe:pk", value: STRIPE_PUBLIC_KEY)
+      set_meta_tag(property: "stripe:api_version", value: Stripe.api_version)
       set_meta_tag(property: "twitter:site", content: "@gumroad")
       set_meta_tag(tag_name: "link", rel: "search", href: "/opensearch.xml", type: "application/opensearchdescription+xml", title: "Gumroad")
       set_meta_tag(tag_name: "link", rel: "shortcut icon", href: image_path("pink-icon.png"))

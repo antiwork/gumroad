@@ -3996,10 +3996,18 @@ describe LinksController, :vcr, inertia: true do
           expect(html_doc.css("meta[property='og:description']").map { |t| t["content"] }.compact).to be_present
           expect(html_doc.css("meta[property='twitter:title'][content='#{product.name}']")).to be_present
 
-          # Regression guard: NONE of the OG/Twitter/fb/stripe/gr property tags may render `value=`.
-          value_keyed = html_doc.css("meta[property^='og:'], meta[property^='twitter:'], meta[property^='fb:'], meta[property^='stripe:'], meta[property^='gr:']")
+          # Regression guard: the SCRAPER-facing OG/Twitter/fb/gr property tags must render `content=`,
+          # never `value=`. (stripe:* is deliberately EXCLUDED — see the stripe guard below.)
+          value_keyed = html_doc.css("meta[property^='og:'], meta[property^='twitter:'], meta[property^='fb:'], meta[property^='gr:']")
             .filter_map { |t| t["property"] if t["value"].present? }
           expect(value_keyed).to be_empty, "These meta tags still render value= instead of content=: #{value_keyed.inspect}"
+
+          # ⚠️ stripe:pk / stripe:api_version are NOT scraper tags — the frontend
+          # (app/javascript/utils/stripe_loader.ts) reads them via getAttribute("value").
+          # They MUST keep value= or Stripe.js never initializes and checkout breaks site-wide.
+          expect(html_doc.css("meta[property='stripe:pk']").first&.[]("value")).to be_present
+          expect(html_doc.css("meta[property='stripe:pk']").first&.[]("content")).to be_nil
+          expect(html_doc.css("meta[property='stripe:api_version']").first&.[]("value")).to be_present
         end
 
         it "sets server-side meta tags for product over $1000" do
