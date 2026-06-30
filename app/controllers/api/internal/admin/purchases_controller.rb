@@ -119,9 +119,10 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   def reassign
     from_email = params[:from].to_s.strip.presence
     to_email = params[:to].to_s.strip.presence
+    confirmed_override = ActiveModel::Type::Boolean.new.cast(params[:confirmed_override])
 
     record_admin_write(action: "purchases.reassign") do
-      result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
+      result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
 
       unless result.success?
         return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
@@ -407,6 +408,8 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       when :missing_params then :bad_request
       when :not_found then :not_found
       when :no_changes then :unprocessable_entity
+      when :locked then :unprocessable_entity
+      when :fingerprint_anomaly then :unprocessable_entity
       end
     end
 end

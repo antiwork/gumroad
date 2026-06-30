@@ -187,5 +187,73 @@ describe Purchase::ReassignByEmailService do
         expect(purchase.purchaser_id).to be_nil
       end
     end
+
+    context "when a matched purchase is reassignment-locked" do
+      let!(:target_user) { create(:user, email: to_email) }
+      let!(:unlocked_purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
+      let!(:locked_purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:, reassignment_locked_at: Time.current) }
+
+      it "refuses the whole batch without mutating any purchase" do
+        expect(CustomerMailer).not_to receive(:grouped_receipt)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:locked)
+        expect(result.error_message).to eq("One or more purchases are under review and cannot be reassigned")
+        expect(result.reassigned_purchase_ids).to eq([])
+        expect(unlocked_purchase.reload.email).to eq(from_email)
+        expect(locked_purchase.reload.email).to eq(from_email)
+      end
+    end
+
+    context "when purchases span too many distinct cards" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      before do
+        ["**** **** **** 1111", "**** **** **** 2222", "**** **** **** 3333", "**** **** **** 4444"].each do |card_visual|
+          purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:)
+          purchase.update_column(:card_visual, card_visual)
+        end
+      end
+
+      it "refuses with reason :fingerprint_anomaly and does not mutate purchases" do
+        expect(CustomerMailer).not_to receive(:grouped_receipt)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:fingerprint_anomaly)
+        expect(result.error_message).to eq("This reassignment spans an unusual number of distinct payment methods and requires manual review")
+        expect(result.reassigned_purchase_ids).to eq([])
+        expect(Purchase.where(email: from_email).count).to eq(4)
+      end
+
+      it "allows the high-card-diversity move when confirmed_override is true" do
+        result = described_class.new(from_email:, to_email:, confirmed_override: true).perform
+
+        expect(result.success?).to be(true)
+        expect(result.count).to eq(4)
+        expect(Purchase.where(email: from_email).count).to eq(0)
+      end
+    end
+
+    context "when purchases use a normal one-to-two card library" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      before do
+        ["**** **** **** 1111", "**** **** **** 1111", "**** **** **** 2222"].each do |card_visual|
+          purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:)
+          purchase.update_column(:card_visual, card_visual)
+        end
+      end
+
+      it "does not trip the fingerprint guard" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(result.count).to eq(3)
+      end
+    end
   end
 end

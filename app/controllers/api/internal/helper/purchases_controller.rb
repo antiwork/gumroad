@@ -81,8 +81,9 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   def reassign_purchases
     from_email = params[:from]
     to_email = params[:to]
+    confirmed_override = ActiveModel::Type::Boolean.new.cast(params[:confirmed_override])
 
-    result = Purchase::ReassignByEmailService.new(from_email:, to_email:).perform
+    result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
 
     unless result.success?
       return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)
@@ -152,6 +153,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       when :missing_params then :bad_request
       when :not_found then :not_found
       when :no_changes then :unprocessable_entity
+      when :locked then :unprocessable_entity
+      when :fingerprint_anomaly then :unprocessable_entity
       end
     end
 end

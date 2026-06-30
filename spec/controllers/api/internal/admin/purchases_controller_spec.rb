@@ -1235,6 +1235,16 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to eq({ success: false, message: "from and to emails are the same" }.as_json)
     end
+
+    it "threads confirmed_override through to the service" do
+      expect(Purchase::ReassignByEmailService).to receive(:new)
+        .with(from_email:, to_email:, confirmed_override: true)
+        .and_call_original
+
+      post :reassign, params: { from: from_email, to: to_email, confirmed_override: "true" }
+
+      expect(response).to have_http_status(:ok)
+    end
   end
 
   describe "POST cancel_subscription" do

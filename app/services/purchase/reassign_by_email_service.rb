@@ -1,14 +1,20 @@
 # frozen_string_literal: true
 
 class Purchase::ReassignByEmailService
+  # Maximum number of distinct payment cards (by last-4) a single from_email batch
+  # may span before the reassignment is treated as a possible harvesting attempt
+  # and routed to manual review. 4+ distinct cards trips the guard.
+  MAX_DISTINCT_CARDS = 3
+
   Result = Struct.new(:success, :reassigned_purchase_ids, :error_message, :reason, keyword_init: true) do
     def success? = success
     def count = reassigned_purchase_ids.size
   end
 
-  def initialize(from_email:, to_email:)
+  def initialize(from_email:, to_email:, confirmed_override: false)
     @from_email = from_email
     @to_email = to_email
+    @confirmed_override = confirmed_override
   end
 
   def perform
@@ -23,6 +29,17 @@ class Purchase::ReassignByEmailService
     purchases = Purchase.where(email: @from_email).to_a
     if purchases.empty?
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :not_found, error_message: "No purchases found for email: #{@from_email}")
+    end
+
+    if purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
+      return Result.new(success: false, reassigned_purchase_ids: [], reason: :locked, error_message: "One or more purchases are under review and cannot be reassigned")
+    end
+
+    unless @confirmed_override
+      distinct_cards = purchases.map { |purchase| purchase.card_visual.to_s.gsub(/[^0-9]/, "")[-4..] }.compact.reject(&:blank?).uniq
+      if distinct_cards.size > MAX_DISTINCT_CARDS
+        return Result.new(success: false, reassigned_purchase_ids: [], reason: :fingerprint_anomaly, error_message: "This reassignment spans an unusual number of distinct payment methods and requires manual review")
+      end
     end
 
     purchase_id_set = purchases.map(&:id).to_set
