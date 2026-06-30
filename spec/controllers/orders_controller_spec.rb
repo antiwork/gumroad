@@ -2480,6 +2480,17 @@ describe OrdersController, :vcr do
       expect(Purchase.last).to be_in_progress
       expect(Charge.last.stripe_payment_intent_id).to be_present
     end
+
+    it "enforces reCAPTCHA before building the order or issuing a client_secret" do
+      allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
+      allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+
+      expect do
+        post :prepare, params: { line_items:, confirmation_token: "ctoken-unused" }.merge(common_params)
+      end.not_to change(Order, :count)
+
+      expect(response.parsed_body["success"]).to be(false)
+    end
   end
 
   describe "POST finalize" do
@@ -2509,8 +2520,9 @@ describe OrdersController, :vcr do
 
       post :finalize, params: { id: order.secure_external_id(scope: "confirm") }
 
+      uid = "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
       expect(response.parsed_body["success"]).to be(true)
-      expect(response.parsed_body["line_items"][purchase.id.to_s]["success"]).to be(true)
+      expect(response.parsed_body["line_items"][uid]["success"]).to be(true)
       expect(purchase.reload).to be_successful
       expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
     end

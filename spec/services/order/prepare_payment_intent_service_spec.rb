@@ -44,6 +44,7 @@ describe Order::PreparePaymentIntentService, :vcr do
       it "creates an unconfirmed PaymentIntent, persists the mapping, and returns a confirmation envelope without charging" do
         order, params = build_order
         token = confirmation_token_id
+        create_time_fee_cents = order.purchases.first.fee_cents
         expect(Order::ChargeService).not_to receive(:new)
 
         responses = nil
@@ -63,6 +64,11 @@ describe Order::PreparePaymentIntentService, :vcr do
         charge = order.charges.last
         expect(charge.stripe_payment_intent_id).to be_present
         expect(charge.amount_cents).to eq(order.purchases.sum(&:total_transaction_cents))
+
+        # Fee recomputation: resolving the Gumroad-managed merchant account adds the Stripe processor
+        # fee that combined-charge purchases exclude at create time, so gumroad_amount_cents is correct.
+        expect(order.purchases.first.reload.fee_cents).to be > create_time_fee_cents
+        expect(charge.gumroad_amount_cents).to eq(order.purchases.sum(&:total_transaction_amount_for_gumroad_cents))
 
         purchase = order.purchases.first
         expect(purchase.processor_payment_intent.intent_id).to eq(charge.stripe_payment_intent_id)

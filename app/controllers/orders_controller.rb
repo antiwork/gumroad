@@ -97,12 +97,7 @@ class OrdersController < ApplicationController
 
     finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
 
-    finalize_responses.each do |purchase_id, response|
-      next unless response[:success] && !response[:processing]
-
-      purchase = Purchase.find(purchase_id)
-      create_purchase_event_and_recommendation_info(purchase)
-    end
+    order.purchases.select(&:successful?).each { create_purchase_event_and_recommendation_info(_1) }
     order.send_charge_receipts
 
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }

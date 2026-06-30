@@ -88,6 +88,7 @@ class Order::PreparePaymentIntentService
     end
 
     def prepare_unconfirmed_charge
+      resolve_merchant_account_and_fees
       charge = build_charge
       charge_intent = create_unconfirmed_intent(charge)
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if charge_intent.nil?
@@ -97,12 +98,19 @@ class Order::PreparePaymentIntentService
       build_confirmation_responses(charge_intent)
     end
 
+    # Must run before amount_cents/gumroad_amount_cents are summed: it resolves the seller's merchant
+    # account and recomputes fees so the Stripe processor fee (excluded at create time) is included.
+    def resolve_merchant_account_and_fees
+      purchases_to_charge.each do |purchase|
+        purchase.resolve_merchant_account_and_recompute_fees!(StripeChargeProcessor.charge_processor_id)
+      end
+    end
+
     def build_charge
       charge = order.charges.create!(seller:)
       charge.update!(merchant_account:, processor: merchant_account.charge_processor_id,
                      amount_cents:, gumroad_amount_cents:)
       purchases_to_charge.each do |purchase|
-        purchase.merchant_account = merchant_account
         purchase.charge = charge
         purchase.save!
       end
@@ -162,11 +170,9 @@ class Order::PreparePaymentIntentService
       end
     end
 
-    # Lane B has no chargeable to resolve the account from, so derive it from the seller the same
-    # way the charging path does (purchase.rb), falling back to the Gumroad platform account.
+    # Resolved on each purchase by resolve_merchant_account_and_fees (single-seller, so they share one).
     def merchant_account
-      @merchant_account ||= seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
-                            MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      @merchant_account ||= purchases_to_charge.first.merchant_account
     end
 
     def seller

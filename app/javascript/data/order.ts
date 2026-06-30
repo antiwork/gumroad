@@ -254,13 +254,9 @@ export const startConfirmOrderCreation = async (
 
     if (!confirmationLineItem) {
       // No charge required (e.g. an all-free cart): the prepare responses are already final.
-      const finalized = Object.values(prepareResponse.line_items).filter(
-        (lineItem): lineItem is ConfirmedPurchaseResponse | PurchaseErrorResponse =>
-          !("requires_payment_confirmation" in lineItem),
-      );
-      return mapResultsByPermalink(
+      return mapResultsByUid(
         requestData,
-        finalized,
+        prepareResponse.line_items,
         prepareResponse.can_buyer_sign_up,
         prepareResponse.offer_codes,
       );
@@ -287,9 +283,9 @@ export const startConfirmOrderCreation = async (
 
     // Inline method (card/wallet/Link) resolved in-page → finalize via the AJAX endpoint.
     const finalizeResponse = await finalizeConfirmOrder(order.id);
-    return mapResultsByPermalink(
+    return mapResultsByUid(
       requestData,
-      Object.values(finalizeResponse.line_items),
+      finalizeResponse.line_items,
       finalizeResponse.can_buyer_sign_up,
       finalizeResponse.offer_codes,
     );
@@ -321,17 +317,22 @@ const finalizeConfirmOrder = async (orderId: string): Promise<ConfirmOrderRespon
   return typia.assert<ConfirmOrderResponse>(await response.json());
 };
 
-const mapResultsByPermalink = (
+// Both #prepare and #finalize key their line items by the cart-item uid, so map straight across by
+// uid (like the Lane A success path) rather than re-matching by permalink, which collides when the
+// cart holds the same product under two variants. The prepare confirmation envelope is skipped.
+const mapResultsByUid = (
   requestData: StartCartPurchaseRequestPayload,
-  results: (ConfirmedPurchaseResponse | PurchaseErrorResponse)[],
+  lineItems: Record<
+    LineItemUid,
+    OrderRequiresPaymentConfirmationResponse | ConfirmedPurchaseResponse | PurchaseErrorResponse
+  >,
   canBuyerSignUp: boolean,
   offerCodes: OfferCodes,
 ): CartPurchaseResult =>
   ensureValidCartResult(requestData, {
-    lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
-      const resultItem = results.find((item) => item.permalink === lineItem.permalink);
-      if (resultItem) lineItems[lineItem.uid] = resultItem;
-      return lineItems;
+    lineItems: Object.entries(lineItems).reduce<CartPurchaseResult["lineItems"]>((acc, [uid, result]) => {
+      if (!("requires_payment_confirmation" in result)) acc[uid] = result;
+      return acc;
     }, {}),
     canBuyerSignUp,
     offerCodes,

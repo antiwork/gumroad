@@ -3032,6 +3032,16 @@ class Purchase < ApplicationRecord
     card_country_alpha2 == Compliance::Countries.find_by_name(ip_country)&.alpha2
   end
 
+  # Lane B (client-confirm) has no chargeable to drive the charge-time merchant-account + fee setup
+  # that Order::ChargeService performs via load_and_prepare_chargeable. Combined-charge purchases
+  # have their fees computed at create time with no charge_processor_id, so the Stripe processor fee
+  # is excluded. Resolve the seller's merchant account and recompute fees so gumroad_amount_cents
+  # (and the resulting transfer/balance) include the processor fee, matching the server-confirm path.
+  def resolve_merchant_account_and_recompute_fees!(charge_processor_id)
+    self.charge_processor_id ||= charge_processor_id
+    prepare_merchant_account(charge_processor_id)
+  end
+
   def total_price_before_installments
     return nil unless is_installment_payment
 

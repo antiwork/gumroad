@@ -21,13 +21,20 @@ class Order::FinalizeConfirmedChargeService
 
     order.purchases.each do |purchase|
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
-      responses[purchase.id] = response_for(purchase, result)
+      responses[cart_item_uid(purchase)] = response_for(purchase, result)
     end
     responses
   end
 
   private
     attr_reader :order, :responses
+
+    # Key by the frontend's cart-item uid ("<permalink> <variant_external_id>") rather than the
+    # purchase id, so the browser maps results back to line items unambiguously even when the cart
+    # holds the same product under two variants (permalink alone collides).
+    def cart_item_uid(purchase)
+      "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
+    end
 
     def response_for(purchase, result)
       case result

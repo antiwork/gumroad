@@ -45,6 +45,10 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
     order.charges.find { _1.stripe_payment_intent_id.present? }.stripe_payment_intent_id
   end
 
+  def cart_uid(purchase)
+    "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
+  end
+
   context "when the browser has confirmed the intent" do
     it "finalizes the order without re-charging and is idempotent across repeated calls" do
       order = prepared_order
@@ -56,7 +60,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
         responses = described_class.new(order:).perform
       end.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
 
-      expect(responses[purchase.id][:success]).to be(true)
+      expect(responses[cart_uid(purchase)][:success]).to be(true)
       expect(purchase.reload).to be_successful
       expect(purchase.stripe_transaction_id).to be_present
       expect(order.charges.last.reload.processor_transaction_id).to be_present
@@ -68,7 +72,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
         second_responses = described_class.new(order:).perform
       end.not_to change { ActivateIntegrationsWorker.jobs.size }
 
-      expect(second_responses[purchase.id][:success]).to be(true)
+      expect(second_responses[cart_uid(purchase)][:success]).to be(true)
       expect(purchase.reload).to be_successful
       expect(purchase.succeeded_at).to eq(succeeded_at)
     end
@@ -81,7 +85,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
 
       responses = described_class.new(order:).perform
 
-      expect(responses[purchase.id][:success]).to be(false)
+      expect(responses[cart_uid(purchase)][:success]).to be(false)
       expect(purchase.reload).to be_failed
     end
   end
@@ -97,7 +101,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
 
       responses = described_class.new(order:).perform
 
-      expect(responses[purchase.id][:processing]).to be(true)
+      expect(responses[cart_uid(purchase)][:processing]).to be(true)
       expect(purchase.reload).to be_in_progress
       expect(purchase.stripe_status).to eq("processing")
       expect(purchase.successful?).to be(false)
