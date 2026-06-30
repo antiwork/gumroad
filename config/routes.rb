@@ -204,6 +204,9 @@ Rails.application.routes.draw do
       member do
         post :confirm
       end
+      collection do
+        post :prepare
+      end
     end
 
     namespace :stripe do
@@ -723,6 +726,9 @@ Rails.application.routes.draw do
     resources :orders, only: [:create] do
       member do
         post :confirm
+      end
+      collection do
+        post :prepare
       end
     end
 

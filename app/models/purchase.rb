@@ -3019,11 +3019,17 @@ class Purchase < ApplicationRecord
   end
 
   def validate_purchasing_power_parity
-    return if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
-    if card_country != Compliance::Countries.find_by_name(ip_country)&.alpha2
-      errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
-      self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
-    end
+    return if purchasing_power_parity_card_country_verified?(card_country)
+    errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
+    self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
+  end
+
+  # Shared by the server-confirm chargeable path (card_country resolved from the chargeable) and the
+  # client-confirm preview path (card_country read from the ConfirmationToken's payment_method_preview).
+  # True when PPP verification does not apply, or the card's country matches the buyer's IP country.
+  def purchasing_power_parity_card_country_verified?(card_country_alpha2)
+    return true if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
+    card_country_alpha2 == Compliance::Countries.find_by_name(ip_country)&.alpha2
   end
 
   def total_price_before_installments

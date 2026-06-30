@@ -2443,4 +2443,42 @@ describe OrdersController, :vcr do
       end
     end
   end
+
+  describe "POST prepare" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:line_items) { [{ uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }] }
+    let(:common_params) do
+      {
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Edgar Gumstein", street_address: "123 Gum Road", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" }
+      }
+    end
+
+    def confirmation_token_id
+      response = Stripe.raw_request(:post, "/v1/test_helpers/confirmation_tokens", { payment_method: "pm_card_visa" })
+      Stripe.deserialize(response.http_body).id
+    end
+
+    it "builds the order and returns a client_secret for the browser to confirm, without charging" do
+      expect(Order::ChargeService).not_to receive(:new)
+
+      expect do
+        post :prepare, params: { line_items:, confirmation_token: confirmation_token_id }.merge(common_params)
+      end.to change(Order, :count).by(1)
+        .and change(Charge, :count).by(1)
+        .and change(ProcessorPaymentIntent, :count).by(1)
+
+      expect(response.parsed_body["success"]).to be(true)
+      line_item = response.parsed_body["line_items"]["unique-id-0"]
+      expect(line_item["requires_payment_confirmation"]).to be(true)
+      expect(line_item["client_secret"]).to be_present
+      expect(line_item["order"]["id"]).to be_present
+
+      expect(Purchase.successful.count).to eq(0)
+      expect(Purchase.last).to be_in_progress
+      expect(Charge.last.stripe_payment_intent_id).to be_present
+    end
+  end
 end

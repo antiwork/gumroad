@@ -3,9 +3,9 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers
 
-  before_action :normalize_line_items, only: :create
-  before_action :validate_order_request, only: :create
-  before_action :fetch_affiliates, only: :create
+  before_action :normalize_line_items, only: [:create, :prepare]
+  before_action :validate_order_request, only: [:create, :prepare]
+  before_action :fetch_affiliates, only: [:create, :prepare]
 
   def create
     order_params = permitted_order_params.merge!(
@@ -55,6 +55,37 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
   end
 
+  # Lane B (client-confirm) initiation. Builds the order, inspects the browser's ConfirmationToken,
+  # creates an unconfirmed PaymentIntent, and returns its client_secret so the browser can confirm.
+  # Receipts are deferred to #finalize, mirroring how #create defers them to #confirm for SCA.
+  def prepare
+    order_params = permitted_order_params.merge!(
+      {
+        browser_guid: cookies[:_gumroad_guid],
+        session_id: session.id,
+        ip_address: request.remote_ip,
+        is_mobile: is_mobile?
+      }
+    ).to_h
+
+    order, purchase_responses, offer_codes = Order::CreateService.new(
+      buyer: logged_in_user,
+      params: order_params
+    ).perform
+
+    prepare_responses = Order::PreparePaymentIntentService.new(
+      order:,
+      params: order_params,
+      confirmation_token: params[:confirmation_token]
+    ).perform
+
+    purchase_responses.merge!(prepare_responses)
+
+    order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
+
+    render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
+  end
+
   private
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
@@ -84,7 +115,7 @@ class OrdersController < ApplicationController
     def skip_recaptcha?
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
-      return true if action_name == "create" && all_free_products_without_captcha?
+      return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
       return true if valid_wallet_payment?
 
       false
