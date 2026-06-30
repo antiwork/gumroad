@@ -28,7 +28,7 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
   end
 
-  def payment_element_props(link_enabled: false)
+  def payment_element_props(stripe_link_enabled: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
@@ -37,7 +37,7 @@ describe Checkout::StripePaymentPresenter do
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
-        link_enabled:,
+        stripe_link_enabled:,
       },
     }
   end
@@ -158,7 +158,7 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "keeps Link disabled in the Payment Element when only the Payment Element flag is enabled" do
-    expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props(link_enabled: false))
+    expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props(stripe_link_enabled: false))
   end
 
   it "enables Link in the Payment Element when the seller has the Link flag enabled" do
@@ -167,7 +167,7 @@ describe Checkout::StripePaymentPresenter do
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props(link_enabled: true))
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props(stripe_link_enabled: true))
   end
 
   it "does not render the Payment Element when the Link flag is enabled but the Payment Element flag is not" do

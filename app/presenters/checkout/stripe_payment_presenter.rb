@@ -32,7 +32,7 @@ class Checkout::StripePaymentPresenter
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
-        link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+        stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
       },
     }
   end

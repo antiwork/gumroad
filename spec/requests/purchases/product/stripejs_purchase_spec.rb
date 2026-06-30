@@ -216,7 +216,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
-    expect(checkout_payment["elements_options"]["link_enabled"]).to eq(true)
+    expect(checkout_payment["elements_options"]["stripe_link_enabled"]).to eq(true)
 
     check_out(product, payment_element: true)
 
