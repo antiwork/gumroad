@@ -93,6 +93,16 @@ describe IbanBankAccount do
       expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
 
+    it "accepts a structurally-valid IBAN whose bank/clearing code is absent from Ibandit's bundled registry (gumroad-private#775: Lunar Bank SE clearing range 9710)" do
+      # Synthetic SE IBAN in Lunar Bank's clearing range 9710 (NOT a real account number).
+      # It has the same property as the reported case: Ibandit::IBAN#valid? is false (the
+      # clearing code is absent from the bundled SE registry) while valid_format? and
+      # valid_check_digits? (mod-97) both pass. Stripe accepts such IBANs; the local
+      # registry gap should not block the seller.
+      bank_account = build(:sweden_bank_account, account_number: "SE1297100000000000000001")
+      expect(bank_account).to be_valid
+    end
+
     it "rejects a non-SEPA IBAN on EuropeanBankAccount, whose country derives from the IBAN prefix" do
       bank_account = build(:european_bank_account, account_number: "SA0380000000608010167519")
       expect(bank_account).not_to be_valid
