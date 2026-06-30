@@ -12,9 +12,9 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
     set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
     set_meta_tag(name: "description", content: description)
 
-    set_meta_tag(property: "og:title", value: title)
-    set_meta_tag(property: "og:description", value: description)
-    set_meta_tag(property: "og:url", value: canonical_url)
+    set_meta_tag(property: "og:title", content: title)
+    set_meta_tag(property: "og:description", content: description)
+    set_meta_tag(property: "og:url", content: canonical_url)
 
     set_meta_tag(name: "twitter:title", content: title)
     set_meta_tag(name: "twitter:description", content: description)
@@ -33,9 +33,9 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
     set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
     set_meta_tag(name: "description", content: description)
 
-    set_meta_tag(property: "og:title", value: title)
-    set_meta_tag(property: "og:description", value: description)
-    set_meta_tag(property: "og:url", value: canonical_url)
+    set_meta_tag(property: "og:title", content: title)
+    set_meta_tag(property: "og:description", content: description)
+    set_meta_tag(property: "og:url", content: canonical_url)
 
     set_meta_tag(name: "twitter:title", content: title)
     set_meta_tag(name: "twitter:description", content: description)

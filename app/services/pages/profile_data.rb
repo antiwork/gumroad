@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  CACHE_VERSION = "v1"
+  CACHE_VERSION = "v2"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -30,7 +30,7 @@ class Pages::ProfileData
   end
 
   def self.products(seller)
-    seller.products.alive.not_archived.includes(:thumbnail_alive).order(created_at: :desc).limit(MAX_ITEMS).map do |product|
+    seller.products.alive.not_archived.not_draft.includes(:thumbnail_alive).order(created_at: :desc).limit(MAX_ITEMS).map do |product|
       {
         name: product.name,
         url: product.long_url,

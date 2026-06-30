@@ -289,7 +289,7 @@ describe("ProductShowScenario", type: :system, js: true) do
         description: @product.description
       }
       twitter_properties.each_pair do |property, value|
-        expect(page.find("meta[property='twitter:#{property}']", visible: false).value).to eq value
+        expect(page.find("meta[property='twitter:#{property}']", visible: false)[:content]).to eq value
       end
     end
   end
