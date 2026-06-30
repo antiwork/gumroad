@@ -4135,6 +4135,37 @@ describe StripePayoutProcessor, :vcr do
       end
     end
 
+    context "when Stripe rejects the payout because the destination bank account supports a different currency" do
+      let(:stripe_error_message) do
+        "Attempting to create a transfer of ron to a destination that supports eur."
+      end
+
+      before do
+        allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new(stripe_error_message, "currency"))
+      end
+
+      it "marks the payment with failure_reason DESTINATION_CURRENCY_MISMATCH" do
+        described_class.perform_payment(payment)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH)
+      end
+
+      it "stores the Stripe error message on the payment" do
+        described_class.perform_payment(payment)
+        expect(payment.reload.error_message).to eq(stripe_error_message)
+      end
+
+      it "does not notify the error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.perform_payment(payment)
+      end
+
+      it "adds a payout note describing the currency mismatch" do
+        expect { described_class.perform_payment(payment) }
+          .to change { user.comments.with_type_payout_note.count }.by(1)
+        expect(user.comments.with_type_payout_note.last.content).to include("does not match any bank account configured to receive it")
+      end
+    end
+
     context "when Stripe raises an unmatched Stripe::InvalidRequestError" do
       before do
         allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Something unexpected.", "param"))
