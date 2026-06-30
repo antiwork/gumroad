@@ -58,7 +58,9 @@ describe "Agent tab", type: :system, js: true do
 
   def send_message(text)
     fill_in "Message", with: text
-    find("button[type=submit]", text: "Send").click
+    # The composer's Send control is an icon-only submit button (aria-label "Send",
+    # no visible text), so match it by submit type + accessible name, not visible text.
+    find("button[type=submit][aria-label='Send']").click
   end
 
   def screenshot(name)
