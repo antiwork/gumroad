@@ -146,8 +146,6 @@ class Purchase::CreateService < Purchase::BaseService
           purchase.create_purchase_payment_flow(payment_flow_attributes)
         rescue => e
           Rails.logger.error("Error recording purchase payment flow (purchase #{purchase.id}): #{e.class} => #{e.message}")
-          # A unique-index violation just means the flow is already recorded (e.g. a retried order
-          # submission), so only report genuinely unexpected failures.
           ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) } unless e.is_a?(ActiveRecord::RecordNotUnique)
         end
       end

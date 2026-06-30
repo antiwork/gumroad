@@ -3,9 +3,6 @@
 class PurchasePaymentFlow < ApplicationRecord
   belongs_to :purchase
 
-  # Durable, persisted analytics values. They are owned here and deliberately kept independent of
-  # the checkout integration strings in Checkout::StripePaymentPresenter, which can change without
-  # rewriting historical rows.
   CARD_ELEMENT = "card_element"
   PAYMENT_ELEMENT = "payment_element"
   PAYMENT_REQUEST = "payment_request"
@@ -49,10 +46,6 @@ class PurchasePaymentFlow < ApplicationRecord
   end
   private_class_method :payment_details_source_for
 
-  # Only record a Stripe payment-flow row when the submission actually carries Stripe payment
-  # inputs. PayPal/Braintree submissions can carry a client `payment_details_source` hint but must
-  # never be recorded as a Stripe flow. The saved-card path sends no card param (Rails charges the
-  # stored Stripe card), so it records only when no new PaymentMethod is also submitted.
   def self.stripe_payment_submission?(source, params)
     return false if NON_STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
     return params[:stripe_payment_method_id].blank? if source == SAVED_PAYMENT_METHOD
