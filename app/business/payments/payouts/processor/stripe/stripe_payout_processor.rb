@@ -417,6 +417,8 @@ class StripePayoutProcessor
       Payment::FailureReason::INSUFFICIENT_FUNDS
     when /has been deleted and can no longer be used/
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
+    when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}\.\z/
+      Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH
     end
   end
   private_class_method :stripe_invalid_request_error_failure_reason

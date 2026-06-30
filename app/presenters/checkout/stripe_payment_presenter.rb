@@ -55,10 +55,7 @@ class Checkout::StripePaymentPresenter
 
       sellers = items.map { _1[:seller] }.uniq
       return "unknown_seller" if sellers.any?(&:blank?)
-      return "multi_seller_cart" if sellers.length > 1
-
-      seller = sellers.first
-      return "stripe_payment_element_flag_disabled" unless Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
       return "setup_or_installment_flow" if items.any? { setup_or_installment_flow?(_1) }
       return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
 

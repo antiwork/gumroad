@@ -87,7 +87,7 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
-  it "falls back to CardElement for multi-seller carts" do
+  it "selects Stripe Payment Element for a multi-seller cart when every seller is flagged" do
     cart = create(:cart, :guest)
     products = [
       create(:product, user: create(:user), price_cents: 100),
@@ -98,7 +98,19 @@ describe Checkout::StripePaymentPresenter do
       create(:cart_product, cart:, product:)
     end
 
-    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("multi_seller_cart"))
+    expect(stripe_payment_props(cart:)).to eq(payment_element_props)
+  end
+
+  it "falls back to CardElement for a multi-seller cart when any seller is not flagged" do
+    cart = create(:cart, :guest)
+    products = [
+      create(:product, user: create(:user), price_cents: 100),
+      create(:product, user: create(:user), price_cents: 200),
+    ]
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, products.first.user)
+    products.each { |product| create(:cart_product, cart:, product:) }
+
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
   it "falls back to CardElement for an empty checkout" do

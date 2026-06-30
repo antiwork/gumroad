@@ -8,6 +8,7 @@ module Payment::FailureReason
   INSUFFICIENT_FUNDS = "insufficient_funds"
   BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
   CURRENCY_MISMATCH = "currency_mismatch"
+  DESTINATION_CURRENCY_MISMATCH = "destination_currency_mismatch"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   PAYPAL_MASS_PAY = {
@@ -101,6 +102,10 @@ module Payment::FailureReason
     "currency_mismatch" => {
       reason: "a leftover balance held in a currency that no longer matches the payout account is blocking this payout",
       solution: "Gumroad needs to reconcile a residual balance from a previous payout currency before payouts can resume. Contact Gumroad Support",
+    },
+    "destination_currency_mismatch" => {
+      reason: "the payout currency does not match any bank account configured to receive it on the connected Stripe account",
+      solution: "Confirm a bank account that accepts this currency is set up in payout settings. If the issue persists, contact Gumroad Support",
     },
     "could_not_process" => {
       reason: "the bank could not process this payout",
