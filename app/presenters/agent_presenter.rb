@@ -6,8 +6,7 @@
 # (Api::Mobile::AgentController#meta) can serve the exact same copy without duplicating it.
 class AgentPresenter
   # A short, friendly first message so the empty chat isn't a blank box.
-  GREETING = "Hi! I'm your Gumroad store assistant. Ask me about your products, sales, or payouts, " \
-             "or tell me a change to make and I'll prepare it for your confirmation."
+  GREETING = "Hi! Ask about your store, or tell me a change to make — I'll always check with you first."
 
   # Surfaced so the UI can suggest concrete starting prompts.
   SUGGESTIONS = [

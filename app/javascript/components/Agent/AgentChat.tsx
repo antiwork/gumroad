@@ -120,7 +120,7 @@ const ProposedActionCard = ({
     ) : (
       <div className="flex gap-2">
         <Button color="accent" disabled={isPending} onClick={onConfirm}>
-          {isApplying ? "Applying..." : "Confirm"}
+          {isApplying ? "Applying…" : "Confirm"}
         </Button>
         <Button disabled={isPending} onClick={onDismiss}>
           Dismiss
@@ -142,10 +142,17 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [followUps, setFollowUps] = React.useState<string[]>([]);
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isSending, followUps]);
+
+  // Keep the composer ready to type: focus on load and again whenever a turn finishes. The textarea
+  // is disabled while a reply streams, which drops focus, so re-focus once it re-enables.
+  React.useEffect(() => {
+    if (!isSending) inputRef.current?.focus({ preventScroll: true });
+  }, [isSending]);
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -268,37 +275,45 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col gap-4 p-4 md:p-8">
       <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-y-auto" aria-label="Conversation" role="log">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
-            aria-label={message.role === "user" ? "You" : "Assistant"}
-          >
-            <div className="flex max-w-[85%] flex-col gap-2">
-              <div
-                className={`rounded-2xl px-4 py-2 ${
-                  message.role === "user" ? "bg-accent text-accent-foreground" : "bg-filled border"
-                }`}
-              >
-                <p className="break-words whitespace-pre-wrap">{message.content}</p>
+        {messages.map((message, index) => {
+          const isUser = message.role === "user";
+          return (
+            <div
+              key={index}
+              className={isUser ? "flex justify-end" : "flex justify-start"}
+              aria-label={isUser ? "You" : "Assistant"}
+            >
+              <div className={`flex flex-col gap-2 ${isUser ? "max-w-[85%] items-end" : "w-full"}`}>
+                {message.content ? (
+                  isUser ? (
+                    // Square off the sender-side corner (bottom-right) into a subtle tail.
+                    <div className="rounded-2xl rounded-br-md bg-accent px-4 py-2 text-accent-foreground">
+                      <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                  ) : (
+                    // Assistant turns read as plain prose, not chat bubbles.
+                    <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                  )
+                ) : null}
+                {message.proposedAction ? (
+                  <ProposedActionCard
+                    action={message.proposedAction}
+                    status={message.actionStatus}
+                    isPending={pendingActionIndex !== null}
+                    isApplying={pendingActionIndex === index}
+                    onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
+                    onDismiss={() => dismissAction(index)}
+                  />
+                ) : null}
+                {message.objects && message.objects.length > 0 ? <ObjectList objects={message.objects} /> : null}
               </div>
-              {message.proposedAction ? (
-                <ProposedActionCard
-                  action={message.proposedAction}
-                  status={message.actionStatus}
-                  isPending={pendingActionIndex !== null}
-                  isApplying={pendingActionIndex === index}
-                  onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
-                  onDismiss={() => dismissAction(index)}
-                />
-              ) : null}
-              {message.objects && message.objects.length > 0 ? <ObjectList objects={message.objects} /> : null}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {isSending && !isStreaming ? (
-          <div className="flex justify-start" aria-label="Assistant">
-            <div className="bg-filled rounded-2xl border px-4 py-2 text-muted">Thinking...</div>
+          <div className="flex items-center gap-2 text-muted" role="status" aria-label="Working on it">
+            <span className="size-3 shrink-0 animate-pulse rounded-full border-2 border-accent" aria-hidden="true" />
+            <span className="text-sm">Working on it…</span>
           </div>
         ) : null}
       </div>
@@ -306,7 +321,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       {messages.length <= 1 ? (
         <div className="flex flex-wrap gap-2">
           {suggestions.map((suggestion) => (
-            <Button key={suggestion} size="sm" onClick={() => void send(suggestion)} disabled={isSending}>
+            <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
               {suggestion}
             </Button>
           ))}
@@ -314,63 +329,67 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       ) : followUps.length > 0 ? (
         // Follow-up prompts suggested after the latest reply, so the conversation has an obvious next
         // step. Hidden while a turn is in flight so they don't compete with the streaming answer.
-        <div className="flex flex-col gap-2" aria-label="Suggested follow-ups">
-          <span className="text-sm text-muted">Keep going</span>
-          <div className="flex flex-wrap gap-2">
-            {followUps.map((suggestion) => (
-              <Button key={suggestion} size="sm" onClick={() => void send(suggestion)} disabled={isSending}>
-                {suggestion}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2" aria-label="Suggested follow-ups">
+          {followUps.map((suggestion) => (
+            <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
+              {suggestion}
+            </Button>
+          ))}
         </div>
       ) : null}
 
-      <form
-        className="flex flex-col gap-1 rounded border border-border bg-background p-2 focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send(input);
-        }}
-      >
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send(input);
-            }
+      <div className="flex flex-col gap-4">
+        <form
+          className="flex flex-col gap-1 rounded border border-border bg-background p-2 focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send(input);
           }}
-          placeholder="Ask about your store or describe a change..."
-          rows={2}
-          aria-label="Message"
-          // Focus the composer on load so the seller can start typing immediately.
-          autoFocus
-          disabled={isSending}
-          className="resize-none border-none bg-transparent p-2 focus:outline-none"
-        />
-        <div className="flex justify-end">
-          <Button
-            type="submit"
-            color={hasText ? "accent" : "filled"}
-            size="icon"
-            aria-label="Send"
-            className={classNames("size-10 rounded-full opacity-100", !hasText && "text-muted")}
-            disabled={isSending || !hasText}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path
-                d="M7 12V2M7 2L2.5 6.5M7 2L11.5 6.5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </Button>
-        </div>
-      </form>
+        >
+          <Textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send(input);
+              }
+            }}
+            placeholder="Ask about your store or describe a change…"
+            rows={2}
+            aria-label="Message"
+            disabled={isSending}
+            className="resize-none border-none bg-transparent p-2 focus:outline-none"
+          />
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              color={hasText ? "accent" : "filled"}
+              size="icon"
+              aria-label="Send"
+              className={classNames("size-10 rounded-full opacity-100", !hasText && "text-muted")}
+              disabled={isSending || !hasText}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path
+                  d="M7 12V2M7 2L2.5 6.5M7 2L11.5 6.5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Button>
+          </div>
+        </form>
+        <small className="flex flex-wrap items-center justify-center gap-2 text-muted">
+          <span>Same toolset powers our CLI · Try</span>
+          <code className="rounded border border-border px-1.5 py-0.5 font-[inherit]">
+            brew install antiwork/cli/gumroad
+          </code>
+        </small>
+      </div>
     </div>
   );
 };
