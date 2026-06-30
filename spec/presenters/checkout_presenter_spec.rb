@@ -101,6 +101,29 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:cross_sells]).to be_empty
     end
 
+    it "returns an empty description for cross-sells without a description" do
+      product = create(:product, user: create(:named_user))
+      offered_product = create(:product, user: product.user)
+      cross_sell = create(:upsell, selected_products: [product], seller: product.user, product: offered_product, cross_sell: true, description: nil)
+      params = { product: product.unique_permalink }
+
+      cross_sells = nil
+      expect { cross_sells = @instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:cross_sells] }.not_to raise_error
+      expect(cross_sells.first[:id]).to eq(cross_sell.external_id)
+      expect(cross_sells.first[:description]).to eq("")
+    end
+
+    it "returns an empty description for upsells without a description" do
+      product = create(:product_with_digital_versions, user: create(:named_user))
+      upsell = create(:upsell, seller: product.user, product:, description: nil)
+      params = { product: product.unique_permalink }
+
+      upsell_props = nil
+      expect { upsell_props = @instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:upsell] }.not_to raise_error
+      expect(upsell_props[:id]).to eq(upsell.external_id)
+      expect(upsell_props[:description]).to eq("")
+    end
+
     it "does not accept paused upsells as accepted offers" do
       product = create(:product_with_digital_versions, user: create(:named_user))
       upsell = create(:upsell, seller: product.user, product:)

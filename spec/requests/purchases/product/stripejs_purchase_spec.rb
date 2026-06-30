@@ -192,6 +192,68 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
+  it "charges every seller in a multi-seller cart with one card collected through the Payment Element" do
+    buyer = create(:user)
+    seller_1 = create(:user)
+    seller_2 = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product_1 = create(:product, user: seller_1, price_cents: 1000)
+    product_2 = create(:product, user: seller_2, price_cents: 1500)
+    [seller_1, seller_2].each do |seller|
+      Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    end
+
+    login_as buyer
+    visit(product_1.long_url)
+    add_to_cart(product_1)
+    visit(product_2.long_url)
+    add_to_cart(product_2)
+
+    # A multi-seller cart is charged once per seller, so the Payment Element card must be collected as a reusable
+    # payment method. The Payment Element tokenizes into a connected-account payment method that can't be charged
+    # against the platform in test mode, so swap it for a known platform payment method while recording the real id.
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+
+    setup_intent_ids = []
+    allow(ChargeProcessor).to receive(:setup_future_charges!).and_wrap_original do |original, *args, **kwargs|
+      setup_intent = original.call(*args, **kwargs)
+      setup_intent_ids << setup_intent.id if setup_intent.present?
+      setup_intent
+    end
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    expect do
+      fill_checkout_form(product_1, logged_in_user: buyer, payment_element: true)
+      click_on "Pay", exact: true
+      expect(page).to have_alert(text: "Your purchase was successful!", wait: 60)
+    end.to change { Purchase.successful.count }.by(2)
+
+    purchase_1 = product_1.sales.successful.sole
+    purchase_2 = product_2.sales.successful.sole
+    expect(purchase_1.seller).to eq(seller_1)
+    expect(purchase_2.seller).to eq(seller_2)
+
+    # One reusable card, collected once through the Payment Element, drives the charge for each seller (asserted
+    # via the shared Payment Element payment method id below; each seller's charge gets its own CreditCard record).
+    expect(purchase_1.credit_card.stripe_customer_id).to be_present
+    expect(purchase_2.credit_card.stripe_customer_id).to be_present
+    expect(setup_intent_ids).to all(match(/\Aseti_/))
+    expect(setup_intent_ids).not_to be_empty
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids.uniq.size).to eq(1)
+  end
+
   describe "save credit card payment" do
     before :each do
       @buyer = create(:user)

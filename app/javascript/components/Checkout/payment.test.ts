@@ -117,7 +117,7 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(true);
   });
 
-  it("falls back for multi-seller carts", () => {
+  it("allows multi-seller carts", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -127,7 +127,17 @@ describe("canUseStripePaymentElement", () => {
           ],
         }),
       ),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it("collects a reusable card for multi-seller Payment Element carts", () => {
+    const multiSeller = state({
+      products: [
+        product({ creator: { id: "seller-a", name: "Seller A", profile_url: "", avatar_url: "" } }),
+        product({ creator: { id: "seller-b", name: "Seller B", profile_url: "", avatar_url: "" } }),
+      ],
+    });
+    expect(requiresReusablePaymentMethodForCardCollection(multiSeller, true)).toBe(true);
   });
 
   it("allows reusable card flows that keep the stripe payment method contract", () => {

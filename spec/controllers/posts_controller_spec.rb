@@ -188,13 +188,13 @@ describe PostsController, type: :controller, inertia: true do
         html = Nokogiri::HTML.parse(response.body)
         post_presenter = PostPresenter.new(pundit_user: SellerContext.new(user: @user, seller:), post: installment, purchase_id_param: nil)
         expect(html.xpath("//meta[@name='description']/@content").text).to eq(post_presenter.snippet)
-        expect(html.xpath("//meta[@property='og:title']/@value").text).to eq(installment.name)
-        expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(post_presenter.snippet)
-        expect(html.xpath("//meta[@property='og:image']/@value").text).to eq ActionController::Base.helpers.image_path("opengraph_image.png")
-        expect(html.xpath("//meta[@property='twitter:title']/@value").text).to eq(installment.name)
-        expect(html.xpath("//meta[@property='twitter:description']/@value").text).to eq(post_presenter.snippet)
-        expect(html.xpath("//meta[@property='twitter:domain']/@value").text).to eq("Gumroad")
-        expect(html.xpath("//meta[@property='twitter:card']/@value").text).to eq("summary")
+        expect(html.xpath("//meta[@property='og:title']/@content").text).to eq(installment.name)
+        expect(html.xpath("//meta[@property='og:description']/@content").text).to eq(post_presenter.snippet)
+        expect(html.xpath("//meta[@property='og:image']/@content").text).to eq ActionController::Base.helpers.image_path("opengraph_image.png")
+        expect(html.xpath("//meta[@property='twitter:title']/@content").text).to eq(installment.name)
+        expect(html.xpath("//meta[@property='twitter:description']/@content").text).to eq(post_presenter.snippet)
+        expect(html.xpath("//meta[@property='twitter:domain']/@content").text).to eq("Gumroad")
+        expect(html.xpath("//meta[@property='twitter:card']/@content").text).to eq("summary")
       end
 
       it "sets @user instance variable to load third-party analytics config" do

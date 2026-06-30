@@ -112,7 +112,7 @@ class CheckoutPresenter
         upsell: product.available_upsell.present? ? {
           id: product.available_upsell.external_id,
           text: product.available_upsell.text,
-          description: Rinku.auto_link(sanitize(product.available_upsell.description), :all, 'target="_blank" rel="noopener"'),
+          description: Rinku.auto_link(sanitize(product.available_upsell.description).to_s, :all, 'target="_blank" rel="noopener"'),
         } : nil,
         archived: product.archived?,
         bundle_products: bundle_products.map do |bundle_product|
@@ -162,7 +162,7 @@ class CheckoutPresenter
           id: cross_sell.external_id,
           replace_selected_products: cross_sell.replace_selected_products,
           text: cross_sell.text,
-          description: Rinku.auto_link(sanitize(cross_sell.description), :all, 'target="_blank" rel="noopener"'),
+          description: Rinku.auto_link(sanitize(cross_sell.description).to_s, :all, 'target="_blank" rel="noopener"'),
           offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false),
           discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user, product: cross_sell.product),
           ratings: offered_product.display_product_reviews? ? {
