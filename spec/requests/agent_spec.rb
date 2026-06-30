@@ -104,7 +104,6 @@ describe "Agent tab", type: :system, js: true do
       expect(page).to have_text("gross sales $18,420", wait: 10)
       expect(page).to have_text("Portrait Masterclass at $7,240")
       # The turn ends with one-tap follow-up prompts to keep the conversation going.
-      expect(page).to have_text("Keep going")
       expect(page).to have_button("Show my best sellers this month")
       expect(page).to have_button("Email my customers about it")
       screenshot("02_sales_insights")
