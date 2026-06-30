@@ -56,5 +56,15 @@ describe SwedenBankAccount do
       expect(se_bank_account).to_not be_valid
       expect(se_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
+
+    it "accepts a structurally-valid SE IBAN whose clearing code is absent from Ibandit's bundled registry (gumroad-private#775: Lunar Bank clearing range 9710)" do
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      # Synthetic SE IBAN in Lunar Bank's clearing range 9710 (NOT a real account number).
+      # Ibandit::IBAN#valid? is false (clearing code 9710 / Lunar Bank is not in the bundled
+      # SE registry), but the IBAN is structurally valid and the mod-97 check digits pass.
+      # Stripe accepts it, so our pre-validation must not block it.
+      expect(build(:sweden_bank_account, account_number: "SE1297100000000000000001")).to be_valid
+    end
   end
 end
