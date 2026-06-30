@@ -101,8 +101,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         )
         expect(audit_log.params_snapshot["helper_reassign_result"]).to include(
           "helper_actor" => "helper-operator@example.com",
-          "from_email" => from_email,
-          "to_email" => to_email,
+          "from_email" => "[REDACTED]",
+          "to_email" => "[REDACTED]",
           "confirmed_override" => true,
           "success" => true,
           "result_reason" => nil,

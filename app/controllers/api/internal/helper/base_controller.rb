@@ -5,7 +5,7 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
 
   HELPER_ADMIN_AUDIT_REDACTED_PARAM_PATTERN = /password|secret|token|two_factor|otp|webhook_url|license_key|email/i
   HELPER_ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS = {
-    "purchases.reassign" => %w[from to]
+    "purchases.reassign" => %w[from to from_email to_email]
   }.freeze
   HELPER_ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
     purchases.reassign
@@ -73,7 +73,9 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
 
       params_snapshot = helper_admin_audit_params_snapshot(action)
       helper_context = helper_admin_audit_context
-      params_snapshot["helper_reassign_result"] = helper_context if helper_context.present?
+      if helper_context.present?
+        params_snapshot["helper_reassign_result"] = redacted_helper_admin_audit_value(helper_context, action:)
+      end
 
       attributes = {
         actor_user_id: actor.id,
