@@ -481,11 +481,11 @@ class Ai::StoreAgentService
       return value.to_json unless value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false
       case key.to_s
       when "price", "amount_cents", "minimum_amount_cents"
-        # Format real numbers (and numeric strings) in the currency's own subunit (JPY has none, so
-        # 1000 -> ¥1,000, not ¥10). A blank value falls through to "(blank)" via the caller rather than
-        # formatting as $0; booleans / unknown currency show raw — so we never imply a wrong amount.
-        formattable = value.is_a?(Numeric) || (value.is_a?(String) && value.strip.present?)
-        currency && formattable ? MoneyFormatter.format(value.to_i, currency, no_cents_if_whole: true) : value.to_s
+        # Format real cents in the currency's own subunit (JPY has none, so 1000 -> ¥1,000, not ¥10).
+        # Anything that isn't a number/digit-string — a blank, a boolean, or a hallucinated "free" —
+        # shows raw (and blanks become "(blank)" via the caller), so the card never coerces a non-amount
+        # into $0 or implies a wrong amount.
+        currency && numeric_cents?(value) ? MoneyFormatter.format(value.to_i, currency, no_cents_if_whole: true) : value.to_s
       else
         # Show the full value — this is the safety boundary, so never truncate what will be applied.
         value.to_s
@@ -494,14 +494,21 @@ class Ai::StoreAgentService
 
     # "20% off" for a percentage code; for a fixed-amount one the value is cents in the target's
     # currency. Non-scalar (untrusted) input is JSON-encoded rather than formatted, so a hallucinated
-    # object can't raise; an unknown currency shows the raw cents rather than a wrong symbol.
+    # object can't raise; a non-numeric or unknown-currency amount shows raw rather than a wrong symbol.
     def discount_amount(amount, offer_type, currency)
       return nil if amount.nil?
       return amount.to_json unless amount.is_a?(String) || amount.is_a?(Numeric)
       return nil if amount.to_s.strip.blank?
       return "#{amount}% off" if offer_type.to_s == "percent"
+      return amount.to_s unless numeric_cents?(amount)
       formatted = currency ? MoneyFormatter.format(amount.to_i, currency, no_cents_if_whole: true) : amount.to_s
       "#{formatted} off" if formatted.present?
+    end
+
+    # A value we can safely render as money: a number, or a string of digits (cents). Anything else
+    # (a blank, a hallucinated "free") is shown raw instead of coercing to $0.
+    def numeric_cents?(value)
+      value.is_a?(Numeric) || (value.is_a?(String) && value.match?(/\A-?\d+\z/))
     end
 
     # The seller's product for the write's path id (external id or permalink), or nil. Names the target

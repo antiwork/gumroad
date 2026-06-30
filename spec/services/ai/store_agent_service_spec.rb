@@ -246,6 +246,20 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action][:fields]).to include({ label: "Price", value: "(blank)" })
       end
 
+      it "shows a non-numeric money value raw instead of coercing it to $0" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_product",
+                        "path_params" => {},
+                        "params" => { "name" => "P", "price" => "free" },
+                      }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "make it free" }])
+        expect(result[:proposed_action][:fields]).to include({ label: "Price", value: "free" })
+      end
+
       it "does not crash when a money param is a boolean" do
         allow(client).to receive(:messages).and_return(
           tool_result("api_write", {
