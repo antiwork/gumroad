@@ -61,7 +61,7 @@ describe HelpCenter::ArticlesController, inertia: true do
       get :show, params: { slug: article.slug }
       html = Nokogiri::HTML.parse(response.body)
       expect(html.xpath("//meta[@name='description']/@content").text).to eq(article.description)
-      expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(article.description)
+      expect(html.xpath("//meta[@property='og:description']/@content").text).to eq(article.description)
       expect(html.xpath("//meta[@name='twitter:description']/@content").text).to eq(article.description)
     end
 
