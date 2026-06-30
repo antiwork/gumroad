@@ -255,5 +255,40 @@ describe Purchase::ReassignByEmailService do
         expect(result.count).to eq(3)
       end
     end
+
+    context "when purchases span too many distinct non-card payment methods" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      before do
+        ["paypal-a@example.com", "paypal-b@example.com", "paypal-c@example.com", "paypal-d@example.com"].each do |visual|
+          purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:)
+          purchase.update_column(:card_visual, visual)
+        end
+      end
+
+      it "refuses with reason :fingerprint_anomaly for distinct non-card visuals" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:fingerprint_anomaly)
+      end
+    end
+
+    context "when a locked original subscription purchase is not in the matched set" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      it "refuses the batch because a mutable purchase is locked" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:, reassignment_locked_at: Time.current)
+        recurring = create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:locked)
+        expect(recurring.reload.email).to eq(from_email)
+        expect(original_purchase.reload.email).to eq("old_original@example.com")
+      end
+    end
   end
 end

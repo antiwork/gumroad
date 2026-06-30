@@ -31,18 +31,30 @@ class Purchase::ReassignByEmailService
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :not_found, error_message: "No purchases found for email: #{@from_email}")
     end
 
-    if purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
+    purchase_id_set = purchases.map(&:id).to_set
+
+    # Every purchase this service may mutate, including original subscription
+    # purchases that are not themselves matched by from_email but get reassigned
+    # alongside a recurring charge.
+    mutable_purchases = purchases.dup
+    purchases.each do |purchase|
+      next unless purchase.subscription.present? && !purchase.is_original_subscription_purchase?
+
+      original_purchase = purchase.original_purchase
+      mutable_purchases << original_purchase if original_purchase.present? && !purchase_id_set.include?(original_purchase.id)
+    end
+
+    if mutable_purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :locked, error_message: "One or more purchases are under review and cannot be reassigned")
     end
 
     unless @confirmed_override
-      distinct_cards = purchases.map { |purchase| purchase.card_visual.to_s.gsub(/[^0-9]/, "")[-4..] }.compact.reject(&:blank?).uniq
-      if distinct_cards.size > MAX_DISTINCT_CARDS
+      distinct_fingerprints = mutable_purchases.map { |purchase| payment_fingerprint(purchase) }.compact.uniq
+      if distinct_fingerprints.size > MAX_DISTINCT_CARDS
         return Result.new(success: false, reassigned_purchase_ids: [], reason: :fingerprint_anomaly, error_message: "This reassignment spans an unusual number of distinct payment methods and requires manual review")
       end
     end
 
-    purchase_id_set = purchases.map(&:id).to_set
     target_user = User.alive.by_email(@to_email).first
     reassigned_purchase_ids = []
 
@@ -74,4 +86,19 @@ class Purchase::ReassignByEmailService
 
     Result.new(success: true, reassigned_purchase_ids: reassigned_purchase_ids, reason: nil, error_message: nil)
   end
+
+  private
+    # Returns a normalized, distinct payment-method signal for a purchase.
+    # Card purchases collapse to the card's last 4 digits; non-card processors
+    # (e.g. PayPal) store an email or other token in card_visual, so fall back to
+    # the normalized full visual rather than silently dropping it.
+    def payment_fingerprint(purchase)
+      visual = purchase.card_visual.to_s.strip
+      return nil if visual.blank?
+
+      last_four = visual.gsub(/[^0-9]/, "")[-4..]
+      return "card:#{last_four}" if last_four.present?
+
+      "other:#{visual.downcase}"
+    end
 end
