@@ -71,6 +71,10 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
       actor = admin_api_token&.actor_user
       return if actor.blank? || admin_api_token.blank?
 
+      params_snapshot = helper_admin_audit_params_snapshot(action)
+      helper_context = helper_admin_audit_context
+      params_snapshot["helper_reassign_result"] = helper_context if helper_context.present?
+
       attributes = {
         actor_user_id: actor.id,
         admin_api_token_id: admin_api_token.id,
@@ -80,7 +84,7 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
         target_external_id: helper_admin_audit_target_external_id(target),
         route: request.path,
         http_method: request.request_method,
-        params_snapshot: helper_admin_audit_params_snapshot(action),
+        params_snapshot:,
         request_id: request.request_id,
         response_status: error.present? ? Rack::Utils.status_code(:internal_server_error) : response.status,
         error_class: error&.class&.name,
@@ -114,6 +118,10 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
 
     def helper_admin_audit_params_snapshot(action)
       redacted_helper_admin_audit_value(params.to_unsafe_h.except("controller", "action", "format"), action:)
+    end
+
+    def helper_admin_audit_context
+      @helper_admin_audit_context || {}
     end
 
     def redacted_helper_admin_audit_value(value, key: nil, action:)

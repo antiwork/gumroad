@@ -85,6 +85,16 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
     record_helper_admin_write(action: "purchases.reassign") do
       result = Purchase::ReassignByEmailService.new(from_email:, to_email:, confirmed_override:).perform
+      @helper_admin_audit_context = {
+        helper_actor: request.headers["X-Helper-Actor"].presence || "helper_tools",
+        from_email:,
+        to_email:,
+        confirmed_override:,
+        success: result.success?,
+        result_reason: result.reason,
+        reassigned_count: result.count,
+        reassigned_purchase_ids: result.reassigned_purchase_ids,
+      }
 
       unless result.success?
         return render json: { success: false, message: result.error_message }, status: status_for_reason(result.reason)

@@ -74,6 +74,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
           purchase.update_column(:card_visual, card_visual)
         end
 
+        request.headers["X-Helper-Actor"] = "helper-operator@example.com"
+
         expect do
           post :reassign_purchases, params: { from: from_email, to: to_email, confirmed_override: "true" }
         end.to change { AdminApiAuditLog.count }.by(1)
@@ -91,10 +93,21 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
           response_status: 200,
           error_class: nil
         )
-        expect(AdminApiAuditLog.last.params_snapshot).to include(
+        audit_log = AdminApiAuditLog.last
+        expect(audit_log.params_snapshot).to include(
           "from" => "[REDACTED]",
           "to" => "[REDACTED]",
           "confirmed_override" => "true"
+        )
+        expect(audit_log.params_snapshot["helper_reassign_result"]).to include(
+          "helper_actor" => "helper-operator@example.com",
+          "from_email" => from_email,
+          "to_email" => to_email,
+          "confirmed_override" => true,
+          "success" => true,
+          "result_reason" => nil,
+          "reassigned_count" => 4,
+          "reassigned_purchase_ids" => match_array([purchase1.id, purchase2.id, purchase3.id, extra_purchase.id])
         )
       end
 
