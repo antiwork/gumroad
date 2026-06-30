@@ -192,7 +192,6 @@ export function canUseStripePaymentElement(state: State) {
 
   return (
     state.checkoutPayment.integration === "payment_element" &&
-    !hasMultipleSellers(state) &&
     !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder)
   );
 }

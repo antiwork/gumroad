@@ -32,7 +32,7 @@ class Checkout::StripePaymentPresenter
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
-        link_enabled: Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller),
+        link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
       },
     }
   end
@@ -50,10 +50,6 @@ class Checkout::StripePaymentPresenter
       @sellers ||= items.map { _1[:seller] }.uniq
     end
 
-    def seller
-      sellers.first
-    end
-
     def card_element_props(fallback_reason)
       {
         integration: STRIPE_CARD_ELEMENT_INTEGRATION,
@@ -65,8 +61,7 @@ class Checkout::StripePaymentPresenter
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
       return "unknown_seller" if sellers.any?(&:blank?)
-      return "multi_seller_cart" if sellers.length > 1
-      return "stripe_payment_element_flag_disabled" unless Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
       return "setup_or_installment_flow" if items.any? { setup_or_installment_flow?(_1) }
       return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
 

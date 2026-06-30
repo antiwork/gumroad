@@ -17,6 +17,29 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
   include_context "with switching account to user as admin for seller"
 
+  def stub_iframely_oembed
+    cors_headers = {
+      "Access-Control-Allow-Origin" => "*",
+      "Access-Control-Allow-Methods" => "GET, OPTIONS",
+      "Access-Control-Allow-Headers" => "Accept, Content-Type, X-CSRF-Token, X-Requested-With",
+    }
+
+    proxy.stub(%r{\Ahttps://iframe\.ly:443/api/oembed\?}, method: :options).and_return(code: 204, headers: cors_headers)
+    proxy.stub(%r{\Ahttps://iframe\.ly:443/api/oembed\?}).and_return(lambda do |params, _headers, _body, _url, _method|
+      url = params.fetch("url").first
+      escaped_url = CGI.escape(url)
+      {
+        json: {
+          html: %(<iframe src="https://iframely.net/api/iframe?app=1&url=#{escaped_url}"></iframe>),
+          title: "Gumroad on X",
+          url:,
+          provider_name: "X",
+        },
+        headers: cors_headers,
+      }
+    end)
+  end
+
   it "instantly preview changes to product description" do
     visit("/products/#{@product.unique_permalink}/edit")
 
@@ -382,21 +405,24 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     expect(@product.reload.description).to include("https://example.com/2?q=hello")
   end
 
-  it "supports twitter embeds" do
+  it "supports twitter embeds", billy: true do
+    tweet_url = "https://twitter.com/gumroad/status/1380521414818557955"
+    stub_iframely_oembed
+
     visit("/products/#{@product.unique_permalink}/edit")
     rich_text_editor_input = find("[aria-label='Description']")
     select_disclosure "Insert" do
       click_on "X post"
     end
     within_modal do
-      fill_in "URL", with: "https://twitter.com/gumroad/status/1380521414818557955"
+      fill_in "URL", with: tweet_url
       click_on "Insert"
     end
     wait_for_ajax
     sleep 1
     expect(rich_text_editor_input.find("iframe")[:src]).to include "1380521414818557955"
     save_change
-    expect(@product.reload.description).to include "iframely.net/api/iframe?app=1&amp;url=#{CGI.escape("https://twitter.com/gumroad/status/1380521414818557955")}"
+    expect(@product.reload.description).to include "iframely.net/api/iframe?app=1&amp;url=#{CGI.escape(tweet_url)}"
   end
 
   it "supports button embeds" do
@@ -519,8 +545,10 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).not_to have_button("Upload your files")
     end
 
-    it "supports embedding tweets" do
+    it "supports embedding tweets", billy: true do
       tweet_url = "https://x.com/gumroad/status/1743053631640006693"
+      stub_iframely_oembed
+
       product = create(:product, user: seller)
       visit edit_link_path(product) + "/content"
       rich_text_editor_input = find("[aria-label='Content editor']")
