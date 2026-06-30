@@ -123,6 +123,10 @@ export type State = {
   requireEmailTypoAcknowledgment: boolean;
 };
 
+type StateWithPaymentElementCheckout = State & {
+  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element" }>;
+};
+
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
 
 type SimpleValue =
@@ -199,7 +203,7 @@ export function requiresReusablePaymentMethodForCardCollection(state: State, use
   return requiresPaymentElementReusablePaymentMethod(state);
 }
 
-export function canUseStripePaymentElement(state: State) {
+export function canUseStripePaymentElement(state: State): state is StateWithPaymentElementCheckout {
   if (state.products.length === 0) return false;
   if (state.checkoutPayment.integration !== "payment_element") return false;
 
@@ -223,10 +227,7 @@ function canUseStripePaymentElementForFutureChargeSetup(state: State) {
 
 export function getStripePaymentElementAmount(state: State) {
   if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
-  if (
-    state.checkoutPayment.integration === "payment_element" &&
-    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
-  )
+  if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     return null;
   const total = getTotalPrice(state);
   return total && total > 0 ? total : null;
