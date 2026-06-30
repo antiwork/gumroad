@@ -96,8 +96,10 @@ class Purchase::ReassignByEmailService
       visual = purchase.card_visual.to_s.strip
       return nil if visual.blank?
 
-      last_four = visual.gsub(/[^0-9]/, "")[-4..]
-      return "card:#{last_four}" if last_four.present?
+      if ChargeableVisual.is_cc_visual(visual)
+        last_four = visual.gsub(/[^0-9]/, "")[-4..]
+        return "card:#{last_four}" if last_four.present?
+      end
 
       "other:#{visual.downcase}"
     end

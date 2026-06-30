@@ -274,6 +274,24 @@ describe Purchase::ReassignByEmailService do
       end
     end
 
+    context "when purchases span distinct non-card visuals containing digits" do
+      let!(:target_user) { create(:user, email: to_email) }
+
+      before do
+        ["buyer2024-a@example.com", "buyer2024-b@example.com", "buyer2024-c@example.com", "buyer2024-d@example.com"].each do |visual|
+          purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:)
+          purchase.update_column(:card_visual, visual)
+        end
+      end
+
+      it "does not collapse numeric PayPal emails into a single card fingerprint" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:fingerprint_anomaly)
+      end
+    end
+
     context "when a locked original subscription purchase is not in the matched set" do
       let!(:target_user) { create(:user, email: to_email) }
 
