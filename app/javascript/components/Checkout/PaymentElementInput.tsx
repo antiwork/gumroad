@@ -19,17 +19,22 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
+type LinkPrefillContact = { email: string; name: string };
 
-const PAYMENT_ELEMENT_WALLETS: PaymentElementWallets = {
+const paymentElementWallets = (stripeLinkEnabled: boolean): PaymentElementWallets => ({
   applePay: "never",
   googlePay: "never",
-  link: "never",
-};
+  link: stripeLinkEnabled ? "auto" : "never",
+});
+
+const CONTACT_PREFILL_DEBOUNCE_MS = 800;
 
 export const PaymentElementInput = ({
   amount,
   elementsOptions,
   disabled,
+  defaultEmail,
+  defaultName,
   invalid,
   onReady,
   onChange,
@@ -37,6 +42,8 @@ export const PaymentElementInput = ({
   amount: number | null;
   elementsOptions: PaymentElementConfig;
   disabled?: boolean | undefined;
+  defaultEmail: string;
+  defaultName: string;
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -47,6 +54,24 @@ export const PaymentElementInput = ({
     if (amount !== null) setMountedAmount(amount);
   }, [amount]);
 
+  const [linkPrefillContact, setLinkPrefillContact] = React.useState<LinkPrefillContact>(() => ({
+    email: defaultEmail,
+    name: defaultName,
+  }));
+  const paymentElementTouchedRef = React.useRef(false);
+  const handlePaymentElementTouched = React.useCallback(() => {
+    paymentElementTouchedRef.current = true;
+  }, []);
+  React.useEffect(() => {
+    if (!elementsOptions.stripe_link_enabled) return;
+    if (paymentElementTouchedRef.current) return;
+    const handle = setTimeout(() => {
+      if (paymentElementTouchedRef.current) return;
+      setLinkPrefillContact({ email: defaultEmail, name: defaultName });
+    }, CONTACT_PREFILL_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [defaultEmail, defaultName, elementsOptions.stripe_link_enabled]);
+
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
@@ -54,8 +79,12 @@ export const PaymentElementInput = ({
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
+            stripeLinkEnabled={elementsOptions.stripe_link_enabled}
+            defaultEmail={linkPrefillContact.email}
+            defaultName={linkPrefillContact.name}
             onReady={onReady}
             onChange={onChange}
+            onTouched={handlePaymentElementTouched}
           />
         </StripePaymentElementProvider>
       ) : (
@@ -70,13 +99,21 @@ export const PaymentElementInput = ({
 const PaymentElementControllerInput = ({
   amount,
   disabled,
+  stripeLinkEnabled,
+  defaultEmail,
+  defaultName,
   onReady,
   onChange,
+  onTouched,
 }: {
   amount: number | null;
   disabled?: boolean | undefined;
+  stripeLinkEnabled: boolean;
+  defaultEmail: string;
+  defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  onTouched: () => void;
 }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -91,11 +128,22 @@ const PaymentElementControllerInput = ({
     if (amount !== null) elements?.update({ amount });
   }, [amount, elements]);
 
+  const linkDefaultValues = React.useMemo<StripePaymentElementOptions["defaultValues"] | undefined>(() => {
+    if (!stripeLinkEnabled) return undefined;
+
+    const billingDetails = {
+      ...(defaultEmail ? { email: defaultEmail } : {}),
+      ...(defaultName ? { name: defaultName } : {}),
+    };
+    return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
+  }, [defaultEmail, defaultName, stripeLinkEnabled]);
+
   return (
     <PaymentElement
       options={{
         readOnly: disabled ?? false,
         layout: { type: "tabs" },
+        ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
         fields: {
           billingDetails: {
             name: "never",
@@ -111,9 +159,10 @@ const PaymentElementControllerInput = ({
             },
           },
         },
-        wallets: PAYMENT_ELEMENT_WALLETS,
+        wallets: paymentElementWallets(stripeLinkEnabled),
       }}
       onReady={() => setReady(true)}
+      onFocus={onTouched}
       {...(onChange ? { onChange } : {})}
     />
   );

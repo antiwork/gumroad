@@ -4,6 +4,12 @@ require("spec_helper")
 require "timeout"
 
 describe("PurchaseScenario using StripeJs", type: :system, js: true) do
+  def checkout_payment_props
+    page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+  end
+
   it "uses a users saved cc if they have one" do
     previous_successful_sales_count = Purchase.successful.count
     link = create(:product, price_cents: 200)
@@ -61,9 +67,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
     expect(Stripe::PaymentIntent).to receive(:create).and_call_original
 
-    checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
-    JS
+    checkout_payment = checkout_payment_props
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
 
@@ -81,6 +85,130 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(new_purchase.successful?).to be(true)
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "allows the buyer to pay for a mixed free and paid cart using the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    paid_product_price_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
+    free_product = create(:product_with_pdf_file, user: seller, name: "Free bonus", price_cents: 0)
+    paid_product = create(:product_with_pdf_file, user: seller, name: "Paid guide", price_cents: paid_product_price_cents)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    cart = create(:cart, :guest)
+    create(:cart_product, cart:, product: free_product, price: 0)
+    create(:cart_product, cart:, product: paid_product, price: paid_product_price_cents)
+
+    visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Free bonus")
+    expect(page).to have_text("Paid guide")
+    expect(page).to have_text("Total US$0.99", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    expect do
+      check_out(paid_product, payment_element: true)
+    end.to change { free_product.sales.successful.count }.by(1)
+
+    paid_purchase = paid_product.sales.successful.last
+    free_purchase = free_product.sales.successful.last
+    expect(paid_purchase.price_cents).to eq(paid_product_price_cents)
+    expect(paid_purchase.successful?).to be(true)
+    expect(free_purchase.price_cents).to eq(0)
+    expect(free_purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "allows the buyer to pay for a checkout below Gumroad's minimum but chargeable by Stripe using the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    near_zero_price_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS + 10
+    product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide")
+    # Product creation enforces Gumroad's minimum; this synthetic checkout verifies Stripe's lower charge floor.
+    product.default_price.update_column(:price_cents, near_zero_price_cents)
+    product.reload
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Near-zero guide")
+    expect(page).to have_text("Total US$0.60", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    expect do
+      check_out(product, payment_element: true)
+    end.to change { product.sales.successful.count }.by(1)
+
+    purchase = product.sales.successful.last
+    expect(purchase.price_cents).to eq(near_zero_price_cents)
+    expect(purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "renders Payment Element for a checkout total below Gumroad's minimum but chargeable by Stripe" do
+    seller = create(:user)
+    gumroad_minimum_amount_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
+    product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    cart = create(:cart, :guest)
+    create(:cart_product, cart:, product:, price: gumroad_minimum_amount_cents - 1)
+
+    visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Near-zero guide")
+    expect(page).to have_text("Total US$0.98", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(page).to have_selector("iframe[src*='elements-inner-payment']")
+  end
+
+  it "renders CardElement fallback for a positive checkout total below the Payment Element minimum" do
+    seller = create(:user)
+    payment_element_minimum_amount_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+    product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    cart = create(:cart, :guest)
+    create(:cart_product, cart:, product:, price: payment_element_minimum_amount_cents - 1)
+
+    visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
+
+    expect(page).to have_current_path(checkout_path)
+    expect(page).to have_text("Near-zero guide")
+    expect(page).to have_text("Total US$0.49", normalize_ws: true)
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("stripe_payment_element_amount_below_minimum")
+    expect(page).to have_selector(:fieldset, "Card information")
+    expect(page).not_to have_selector("iframe[src*='elements-inner-payment']", wait: 0)
   end
 
   it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
@@ -108,9 +236,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       setup_intent
     end
 
-    checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
-    JS
+    checkout_payment = checkout_payment_props
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
 
@@ -187,6 +313,43 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     new_purchase = Purchase.last
+    expect(new_purchase.successful?).to be(true)
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
+  it "renders the Payment Element with Stripe Link enabled and completes a card purchase" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, product.user)
+
+    visit("/checkout?product=#{product.unique_permalink}")
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+    expect(Stripe::PaymentMethod).to receive(:retrieve).with(platform_payment_method.id).and_call_original
+    expect(Stripe::PaymentIntent).to receive(:create).and_call_original
+
+    checkout_payment = page.evaluate_script(<<~JS)
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+    JS
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+    expect(checkout_payment["elements_options"]["stripe_link_enabled"]).to eq(true)
+
+    check_out(product, payment_element: true)
+
+    new_purchase = Purchase.last
+    expect(new_purchase.stripe_transaction_id).to match(/\Ach_/)
+    expect(new_purchase.card_type).to eq "visa"
+    expect(new_purchase.card_visual).to eq "**** **** **** 4242"
     expect(new_purchase.successful?).to be(true)
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty

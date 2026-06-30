@@ -28,7 +28,7 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
@@ -37,6 +37,7 @@ describe Checkout::StripePaymentPresenter do
         currency: "usd",
         payment_method_types: ["card"],
         payment_method_creation: "manual",
+        stripe_link_enabled:,
       },
     }
   end
@@ -68,16 +69,7 @@ describe Checkout::StripePaymentPresenter do
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     saved_credit_card = { type: "visa", number: "**** **** **** 4242", expiration_date: "12/30", requires_mandate: false }
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(product)], saved_credit_card:)).to eq(
-      integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-      fallback_reason: nil,
-      elements_options: {
-        stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
-        currency: "usd",
-        payment_method_types: ["card"],
-        payment_method_creation: "manual",
-      },
-    )
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)], saved_credit_card:)).to eq(payment_element_props)
   end
 
   it "falls back to CardElement when the Stripe Payment Element seller flag is disabled" do
@@ -189,10 +181,85 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
+  it "falls back to CardElement when the charged checkout total is below the Payment Element minimum" do
+    expect(
+      stripe_payment_props(
+        add_products: [flagged_seller_product(price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]
+      )
+    )
+      .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
+  end
+
+  it "selects Stripe Payment Element when the charged checkout total is below Gumroad's USD minimum but chargeable by Stripe" do
+    gumroad_minimum_price_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
+
+    expect(
+      stripe_payment_props(
+        add_products: [flagged_seller_product(price: gumroad_minimum_price_cents - 1)]
+      )
+    ).to eq(payment_element_props)
+  end
+
+  it "selects Stripe Payment Element for mixed free and paid products when the charged total meets the minimum" do
+    seller = create(:user)
+    minimum_charge_cents = described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+    free_product = create(:product, user: seller, price_cents: 0)
+    paid_product = create(:product, user: seller, price_cents: CURRENCY_CHOICES[Currency::USD][:min_price])
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    expect(
+      stripe_payment_props(
+        add_products: [
+          checkout_product_for(free_product, price: 0),
+          checkout_product_for(paid_product, price: minimum_charge_cents),
+        ]
+      )
+    ).to eq(payment_element_props)
+  end
+
+  it "falls back to CardElement for mixed free and paid products when the charged total is below the minimum" do
+    seller = create(:user)
+    minimum_price_cents = described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+    free_product = create(:product, user: seller, price_cents: 0)
+    paid_product = create(:product, user: seller, price_cents: CURRENCY_CHOICES[Currency::USD][:min_price])
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    expect(
+      stripe_payment_props(
+        add_products: [
+          checkout_product_for(free_product, price: 0),
+          checkout_product_for(paid_product, price: minimum_price_cents - 1),
+        ]
+      )
+    ).to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
+  end
+
   it "ignores cart products when clear_cart is set" do
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product: create(:product, user: create(:user)))
 
     expect(stripe_payment_props(cart:, add_products: [flagged_seller_product], clear_cart: true)).to eq(payment_element_props)
+  end
+
+  it "keeps Link disabled in the Payment Element when only the Payment Element flag is enabled" do
+    expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props(stripe_link_enabled: false))
+  end
+
+  it "enables Link in the Payment Element when the seller has the Link flag enabled" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props(stripe_link_enabled: true))
+  end
+
+  it "does not render the Payment Element when the Link flag is enabled but the Payment Element flag is not" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+      .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 end

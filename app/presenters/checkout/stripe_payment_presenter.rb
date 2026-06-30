@@ -7,12 +7,17 @@
 # checkout may render Payment Element or must fall back to CardElement.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
+  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT = "setup"
+  # Payment Element mounts with a charge amount up front, unlike CardElement, so keep carts
+  # below Stripe's USD charge floor on CardElement. This is intentionally lower than
+  # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
+  STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -39,9 +44,15 @@ class Checkout::StripePaymentPresenter
 
   private
     def items
-      checkout_items = []
-      checkout_items.concat(cart_items) unless clear_cart
-      checkout_items.concat(add_product_items)
+      @items ||= begin
+        checkout_items = []
+        checkout_items.concat(cart_items) unless clear_cart
+        checkout_items.concat(add_product_items)
+      end
+    end
+
+    def sellers
+      @sellers ||= items.map { _1[:seller] }.uniq
     end
 
     def card_element_props(fallback_reason)
@@ -61,20 +72,23 @@ class Checkout::StripePaymentPresenter
           currency: "usd",
           payment_method_types: ["card"],
           payment_method_creation: "manual",
+          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
         },
       }
     end
 
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
-
-      sellers = items.map { _1[:seller] }.uniq
       return "unknown_seller" if sellers.any?(&:blank?)
       return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
       return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
-      return "not_charged" unless items.sum { _1[:price_cents].to_i }.positive?
+
+      # Initial eligibility uses pre-tax item prices; the browser waits for the final loaded total.
+      total_price_cents = items.sum { _1[:price_cents].to_i }
+      return "not_charged" unless total_price_cents.positive?
+      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
 
       nil
     end
