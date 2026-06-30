@@ -6,8 +6,19 @@ require "shared_examples/authorize_called"
 
 describe Api::Internal::AgentMessagesController do
   let(:seller) { create(:named_seller) }
+  let(:throttle_key) { RedisKey.agent_request_throttle(seller.id) }
 
   include_context "with user signed in as admin for seller"
+
+  after { $redis.del(throttle_key) }
+
+  def exhaust_agent_request_throttle(key)
+    $redis.setex(
+      key,
+      described_class.const_get(:AGENT_REQUESTS_PERIOD_WINDOW).to_i,
+      described_class.const_get(:AGENT_REQUESTS_PER_PERIOD),
+    )
+  end
 
   describe "POST create" do
     let(:valid_params) { { messages: [{ role: "user", content: "How are my sales?" }] } }
@@ -43,6 +54,16 @@ describe Api::Internal::AgentMessagesController do
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "halts on throttle without invoking the agent service" do
+        exhaust_agent_request_throttle(throttle_key)
+        expect(Ai::StoreAgentService).not_to receive(:new)
+
+        post :create, params: valid_params, format: :json
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.headers["Retry-After"]).to be_present
       end
     end
   end
@@ -89,6 +110,16 @@ describe Api::Internal::AgentMessagesController do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "halts on throttle without invoking the action executor" do
+        exhaust_agent_request_throttle(throttle_key)
+        expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+        post :execute, params: valid_params, format: :json
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.headers["Retry-After"]).to be_present
       end
     end
   end

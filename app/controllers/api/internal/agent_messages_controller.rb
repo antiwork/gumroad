@@ -94,6 +94,8 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       return unless current_user
 
       key = RedisKey.agent_request_throttle(current_seller.id)
+      # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
+      # response is performed.
       throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
     end
 end

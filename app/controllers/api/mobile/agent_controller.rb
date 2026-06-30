@@ -112,6 +112,8 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
 
     def throttle_agent_requests
       key = RedisKey.agent_request_throttle(seller.id)
+      # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
+      # response is performed.
       throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
     end
 end

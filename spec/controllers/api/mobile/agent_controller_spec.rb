@@ -10,6 +10,16 @@ describe Api::Mobile::AgentController do
     @auth_params = { mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, access_token: @token.token }
   end
 
+  after { $redis.del(RedisKey.agent_request_throttle(@seller.id)) }
+
+  def exhaust_agent_request_throttle(seller)
+    $redis.setex(
+      RedisKey.agent_request_throttle(seller.id),
+      described_class.const_get(:AGENT_REQUESTS_PERIOD_WINDOW).to_i,
+      described_class.const_get(:AGENT_REQUESTS_PER_PERIOD),
+    )
+  end
+
   describe "GET meta" do
     it "returns the greeting and starter suggestions" do
       get :meta, params: @auth_params
@@ -85,17 +95,13 @@ describe Api::Mobile::AgentController do
     end
 
     it "halts on throttle without invoking the agent (429 stops the action)" do
-      # Pre-fill the seller-scoped throttle counter past its limit so this request is rejected. The
-      # throttle runs as a before_action, so a 429 must HALT — the LLM service must never be called.
-      key = RedisKey.agent_request_throttle(@seller.id)
-      $redis.set(key, 999)
+      exhaust_agent_request_throttle(@seller)
       expect(Ai::StoreAgentService).not_to receive(:new)
 
       post :create, params: valid_params
 
       expect(response).to have_http_status(:too_many_requests)
-    ensure
-      $redis.del(RedisKey.agent_request_throttle(@seller.id))
+      expect(response.headers["Retry-After"]).to be_present
     end
   end
 
@@ -142,6 +148,16 @@ describe Api::Mobile::AgentController do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "halts on throttle without invoking the action executor" do
+      exhaust_agent_request_throttle(@seller)
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(response.headers["Retry-After"]).to be_present
     end
   end
 end
