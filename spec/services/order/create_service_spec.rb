@@ -127,7 +127,7 @@ describe Order::CreateService, :vcr do
 
         order, _ = Order::CreateService.new(params:).perform
 
-        flows = order.purchases.map(&:purchase_payment_flow)
+        flows = order.reload.purchases.map(&:purchase_payment_flow)
         expect(flows.size).to eq(5)
         expect(flows).to all(be_present)
         expect(flows.map(&:payment_details_source).uniq).to eq(["payment_element"])
@@ -140,7 +140,7 @@ describe Order::CreateService, :vcr do
 
         order, _ = Order::CreateService.new(params:).perform
 
-        expect(order.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["card_element"])
+        expect(order.reload.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["card_element"])
       end
 
       it "records a wallet payment as a payment request" do
@@ -149,13 +149,32 @@ describe Order::CreateService, :vcr do
 
         order, _ = Order::CreateService.new(params:).perform
 
-        expect(order.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["payment_request"])
+        expect(order.reload.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["payment_request"])
       end
 
       it "does not record a payment flow when no Stripe surface is reported" do
         order, _ = Order::CreateService.new(params:).perform
 
-        expect(order.purchases.map(&:purchase_payment_flow)).to all(be_nil)
+        expect(order.reload.purchases.map(&:purchase_payment_flow)).to all(be_nil)
+      end
+
+      it "records the paid purchases but not a free purchase in the same cart" do
+        free_product = create(:product, user: seller_1, price_cents: 0)
+        params[:payment_details_source] = "payment_element"
+        params[:line_items] << {
+          uid: "unique-id-free",
+          permalink: free_product.unique_permalink,
+          perceived_price_cents: 0,
+          quantity: 1
+        }
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        order.reload
+        free_purchase = order.purchases.find_by(link_id: free_product.id)
+        paid_purchases = order.purchases.where.not(link_id: free_product.id)
+        expect(free_purchase.purchase_payment_flow).to be_nil
+        expect(paid_purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["payment_element"])
       end
     end
 
