@@ -345,6 +345,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           placeholder="Ask about your store or describe a change..."
           rows={2}
           aria-label="Message"
+          // Focus the composer on load so the seller can start typing immediately.
+          autoFocus
           disabled={isSending}
           className="resize-none border-none bg-transparent p-2 focus:outline-none"
         />
