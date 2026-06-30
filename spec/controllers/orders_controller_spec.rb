@@ -2481,4 +2481,44 @@ describe OrdersController, :vcr do
       expect(Charge.last.stripe_payment_intent_id).to be_present
     end
   end
+
+  describe "POST finalize" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:line_items) { [{ uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }] }
+    let(:common_params) do
+      {
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Edgar Gumstein", street_address: "123 Gum Road", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" }
+      }
+    end
+
+    def confirmation_token_id
+      response = Stripe.raw_request(:post, "/v1/test_helpers/confirmation_tokens", { payment_method: "pm_card_visa" })
+      Stripe.deserialize(response.http_body).id
+    end
+
+    it "finalizes the confirmed order, marks the purchase successful, and sends the receipt" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      Order::PreparePaymentIntentService.new(order:, params:, confirmation_token: confirmation_token_id).perform
+      charge = order.charges.find { _1.stripe_payment_intent_id.present? }
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+
+      post :finalize, params: { id: order.secure_external_id(scope: "confirm") }
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["line_items"][purchase.id.to_s]["success"]).to be(true)
+      expect(purchase.reload).to be_successful
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
+    end
+
+    it "raises not-found for an unknown order token" do
+      expect do
+        post :finalize, params: { id: "invalid-token" }
+      end.to raise_error(ActionController::RoutingError)
+    end
+  end
 end

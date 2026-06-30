@@ -1,0 +1,54 @@
+# frozen_string_literal: true
+
+# Finalizes a single client-confirmed (Lane B) purchase from an already-retrieved PaymentIntent.
+#
+# Unlike Purchase::ConfirmService, it does NOT confirm the intent — the browser already did. It is
+# handed a retrieve-only charge intent so a `processing` intent is never re-confirmed (which Stripe
+# rejects). Idempotent: a purchase that another trigger (AJAX, return page, or webhook) already
+# finalized is a no-op, so fulfillment happens exactly once.
+class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
+  def initialize(purchase:, charge_intent:)
+    @purchase = purchase
+    @preorder = purchase.preorder
+    @charge_intent = charge_intent
+  end
+
+  # Returns :pending (intent still processing), an error message string (failed), or nil (success
+  # or already-finalized no-op).
+  def perform
+    return if purchase.successful?
+    return "There is a temporary problem, please try again (your card was not charged)." unless purchase.in_progress?
+
+    if charge_intent.succeeded?
+      finalize_successful_charge
+    elsif charge_intent.processing?
+      purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
+      :pending
+    else
+      fail_purchase
+    end
+  end
+
+  private
+    attr_reader :charge_intent
+
+    def finalize_successful_charge
+      purchase.charge_intent = charge_intent
+      purchase.save_charge_data(charge_intent.charge)
+
+      if purchase.errors.present?
+        handle_purchase_failure
+        return purchase.errors.full_messages[0]
+      end
+
+      handle_purchase_success
+      nil
+    end
+
+    def fail_purchase
+      purchase.errors.add(:base, "Sorry, something went wrong.") if purchase.errors.empty?
+      error_message = purchase.errors.full_messages[0]
+      handle_purchase_failure
+      error_message
+    end
+end

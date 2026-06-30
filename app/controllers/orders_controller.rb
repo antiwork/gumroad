@@ -86,6 +86,28 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
   end
 
+  # Lane B (client-confirm) finalization. Idempotent: reached by the inline AJAX call (Phase 1) and
+  # later the redirect return page and webhook. Retrieves the confirmed PaymentIntent and finalizes
+  # the order without re-charging, exactly once.
+  def finalize
+    ActiveRecord::Base.connection.stick_to_primary!
+
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
+
+    finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
+
+    finalize_responses.each do |purchase_id, response|
+      next unless response[:success] && !response[:processing]
+
+      purchase = Purchase.find(purchase_id)
+      create_purchase_event_and_recommendation_info(purchase)
+    end
+    order.send_charge_receipts
+
+    render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
+  end
+
   private
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
