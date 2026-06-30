@@ -26,10 +26,14 @@ const paymentElementWallets = (stripeLinkEnabled: boolean): PaymentElementWallet
   link: stripeLinkEnabled ? "auto" : "never",
 });
 
+const CONTACT_PREFILL_DEBOUNCE_MS = 800;
+
 export const PaymentElementInput = ({
   amount,
   elementsOptions,
   disabled,
+  defaultEmail,
+  defaultName,
   invalid,
   onReady,
   onChange,
@@ -37,6 +41,8 @@ export const PaymentElementInput = ({
   amount: number | null;
   elementsOptions: PaymentElementConfig;
   disabled?: boolean | undefined;
+  defaultEmail: string;
+  defaultName: string;
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -47,16 +53,33 @@ export const PaymentElementInput = ({
     if (amount !== null) setMountedAmount(amount);
   }, [amount]);
 
+  const [prefillKey, setPrefillKey] = React.useState(() => `${defaultEmail} ${defaultName}`);
+  const paymentElementTouchedRef = React.useRef(false);
+  const handlePaymentElementTouched = React.useCallback(() => {
+    paymentElementTouchedRef.current = true;
+  }, []);
+  React.useEffect(() => {
+    if (paymentElementTouchedRef.current) return;
+    const handle = setTimeout(() => {
+      if (paymentElementTouchedRef.current) return;
+      setPrefillKey(`${defaultEmail} ${defaultName}`);
+    }, CONTACT_PREFILL_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [defaultEmail, defaultName]);
+
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
-        <StripePaymentElementProvider amount={mountedAmount} elementsOptions={elementsOptions}>
+        <StripePaymentElementProvider key={prefillKey} amount={mountedAmount} elementsOptions={elementsOptions}>
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
+            defaultEmail={defaultEmail}
+            defaultName={defaultName}
             onReady={onReady}
             onChange={onChange}
+            onTouched={handlePaymentElementTouched}
           />
         </StripePaymentElementProvider>
       ) : (
@@ -72,14 +95,20 @@ const PaymentElementControllerInput = ({
   amount,
   disabled,
   stripeLinkEnabled,
+  defaultEmail,
+  defaultName,
   onReady,
   onChange,
+  onTouched,
 }: {
   amount: number | null;
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
+  defaultEmail: string;
+  defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  onTouched: () => void;
 }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -94,11 +123,21 @@ const PaymentElementControllerInput = ({
     if (amount !== null) elements?.update({ amount });
   }, [amount, elements]);
 
+  const linkBillingDetails = {
+    ...(defaultEmail ? { email: defaultEmail } : {}),
+    ...(defaultName ? { name: defaultName } : {}),
+  };
+  const linkDefaultValues =
+    stripeLinkEnabled && Object.keys(linkBillingDetails).length > 0
+      ? { billingDetails: linkBillingDetails }
+      : undefined;
+
   return (
     <PaymentElement
       options={{
         readOnly: disabled ?? false,
         layout: { type: "tabs" },
+        ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
         fields: {
           billingDetails: {
             name: "never",
@@ -117,6 +156,7 @@ const PaymentElementControllerInput = ({
         wallets: paymentElementWallets(stripeLinkEnabled),
       }}
       onReady={() => setReady(true)}
+      onFocus={onTouched}
       {...(onChange ? { onChange } : {})}
     />
   );

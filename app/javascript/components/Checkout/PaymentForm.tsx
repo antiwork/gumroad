@@ -775,6 +775,8 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             elementsOptions={stripePaymentElementConfig}
             disabled={isProcessing(state)}
+            defaultEmail={state.email}
+            defaultName={state.fullName}
             onReady={handlePaymentElementReady}
             invalid={cardError}
             onChange={(evt) => {
