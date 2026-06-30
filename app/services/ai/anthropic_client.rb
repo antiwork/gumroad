@@ -148,22 +148,28 @@ class Ai::AnthropicClient
       Result.new(text:, tool_uses:, stop_reason: body["stop_reason"])
     end
 
-    # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. An
-    # empty/blank JSON fragment string parses to {} so a tool call with no args still dispatches.
+    # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A
+    # tool_use block with no input fragments is a no-arg call; malformed non-empty input must fail the
+    # turn instead of dispatching a lossy {} tool call.
     def assemble_tool_uses(blocks)
       blocks.keys.sort.filter_map do |index|
         block = blocks[index]
         next unless block[:type] == "tool_use"
 
-        input =
-          begin
-            parsed = JSON.parse(block[:json].presence || "{}")
-            parsed.is_a?(Hash) ? parsed : {}
-          rescue JSON::ParserError
-            {}
-          end
-        { id: block[:id], name: block[:name], input: }
+        { id: block[:id], name: block[:name], input: parse_tool_use_input(block) }
       end
+    end
+
+    def parse_tool_use_input(block)
+      raw = block[:json].to_s
+      return {} if raw.blank?
+
+      parsed = JSON.parse(raw)
+      return parsed if parsed.is_a?(Hash)
+
+      raise Error, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
+    rescue JSON::ParserError
+      raise Error, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
     end
 
     # Parse an Anthropic SSE body line-by-line, yielding [event_name, parsed_data_hash] per event.

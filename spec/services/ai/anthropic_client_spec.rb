@@ -99,7 +99,7 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("tool_use")
     end
 
-    it "coerces a malformed tool_use input to an empty hash" do
+    it "raises an error for malformed streamed tool_use input" do
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_read" } }],
         ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{not json" } }],
@@ -107,9 +107,8 @@ describe Ai::AnthropicClient do
       )
       stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
 
-      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(result.tool_uses).to eq([{ id: "toolu_x", name: "api_read", input: {} }])
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::Error, /unreadable tool call/i)
     end
 
     it "raises Error on a stream-level error event" do
