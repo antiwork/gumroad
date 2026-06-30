@@ -116,6 +116,7 @@ class Purchase < ApplicationRecord
   has_one :purchase_taxjar_info
   has_one :recommended_purchase_info, dependent: :destroy
   has_one :purchase_wallet_type
+  has_one :purchase_payment_flow, validate: false
   has_one :purchase_offer_code_discount
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy

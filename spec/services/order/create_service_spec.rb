@@ -121,6 +121,44 @@ describe Order::CreateService, :vcr do
       expect(order.purchaser).to eq buyer
     end
 
+    describe "recording the payment flow" do
+      it "records the Payment Element surface on every purchase in the order" do
+        params[:payment_details_source] = "payment_element"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        flows = order.purchases.map(&:purchase_payment_flow)
+        expect(flows.size).to eq(5)
+        expect(flows).to all(be_present)
+        expect(flows.map(&:payment_details_source).uniq).to eq(["payment_element"])
+        expect(flows.map(&:payment_details_transport).uniq).to eq(["payment_method"])
+        expect(flows.map(&:stripe_payment_method_type).uniq).to eq(["card"])
+      end
+
+      it "records the CardElement surface when the client reports it" do
+        params[:payment_details_source] = "card_element"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["card_element"])
+      end
+
+      it "records a wallet payment as a payment request" do
+        params[:wallet_type] = "apple_pay"
+        params[:payment_details_source] = "payment_element"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["payment_request"])
+      end
+
+      it "does not record a payment flow when no Stripe surface is reported" do
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.map(&:purchase_payment_flow)).to all(be_nil)
+      end
+    end
+
     it_behaves_like "order association with cart post checkout" do
       let(:user) { create(:buyer_user) }
       let(:sign_in_user_action) { @signed_in = true }

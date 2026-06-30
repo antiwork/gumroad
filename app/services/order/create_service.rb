@@ -175,7 +175,7 @@ class Order::CreateService
       force_new_subscription = purchase_params.delete(:force_new_subscription)
       gift_params = purchase_params.extract!(:giftee_email, :giftee_id, :gift_note)
       additional_params = purchase_params.extract!(
-        :is_gift, :price_id, :wallet_type, :perceived_free_trial_duration, :accepted_offer,
+        :is_gift, :price_id, :wallet_type, :payment_details_source, :perceived_free_trial_duration, :accepted_offer,
         :cart_items, :variants, :bundle_products, :custom_fields, :tip_cents, :call_start_time,
         :pay_in_installments
       )
