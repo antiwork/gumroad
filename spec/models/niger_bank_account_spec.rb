@@ -33,35 +33,35 @@ describe NigerBankAccount do
 
   describe "#validate_account_number" do
     it "allows a valid 28-character NE IBAN" do
-      ba = build(:niger_bank_account, account_number: "NE58NE0380100100130305000268")
+      ba = build(:niger_bank_account, account_number: "NE08NE0001234567890123456789")
       expect(ba).to be_valid
     end
 
     it "allows a valid NE IBAN entered with spaces and lowercase" do
-      ba = build(:niger_bank_account, account_number: "ne58 ne03 8010 0100 1303 0500 0268")
+      ba = build(:niger_bank_account, account_number: "ne08 ne00 0123 4567 8901 2345 6789")
       expect(ba).to be_valid
     end
 
     it "rejects an IBAN with invalid check digits" do
-      ba = build(:niger_bank_account, account_number: "NE00NE0380100100130305000268")
+      ba = build(:niger_bank_account, account_number: "NE00NE0001234567890123456789")
       expect(ba).not_to be_valid
       expect(ba.errors.full_messages).to include("The account number is invalid.")
     end
 
     it "rejects an IBAN with the wrong country code" do
-      ba = build(:niger_bank_account, account_number: "GB58NE0380100100130305000268")
+      ba = build(:niger_bank_account, account_number: "GB08NE0001234567890123456789")
       expect(ba).not_to be_valid
       expect(ba.errors.full_messages).to include("The account number is invalid.")
     end
 
     it "rejects an IBAN that is too short" do
-      ba = build(:niger_bank_account, account_number: "NE58NE038010010013030500026")
+      ba = build(:niger_bank_account, account_number: "NE08NE000123456789012345678")
       expect(ba).not_to be_valid
       expect(ba.errors.full_messages).to include("The account number is invalid.")
     end
 
     it "rejects an account number with a non-digit in the account portion" do
-      ba = build(:niger_bank_account, account_number: "NE58NE038010010013030500026X")
+      ba = build(:niger_bank_account, account_number: "NE08NE000123456789012345678X")
       expect(ba).not_to be_valid
       expect(ba.errors.full_messages).to include("The account number is invalid.")
     end

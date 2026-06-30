@@ -12,8 +12,8 @@ class NigerBankAccount < BankAccount
   # `Ibandit::IBAN#valid?` cannot run the per-field format checks and rejects every
   # structurally-valid NE IBAN as "format is invalid". The regex supplies those missing
   # Niger field checks; the standalone Ibandit predicates below still cover the standard
-  # country-code, mod-97 check-digit, length, and allowed-character checks. Same fix as
-  # Côte d'Ivoire (#471) and Sweden (#775).
+  # country-code, mod-97 check-digit, length, and allowed-character checks. Same approach as
+  # CoteDIvoireBankAccount (#471).
   IBAN_FORMAT_REGEX = /\ANE[0-9]{2}[A-Z0-9]{5}[0-9]{19}\z/
   private_constant :IBAN_FORMAT_REGEX
 
