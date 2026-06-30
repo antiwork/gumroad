@@ -417,11 +417,7 @@ class StripePayoutProcessor
       Payment::FailureReason::INSUFFICIENT_FUNDS
     when /has been deleted and can no longer be used/
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
-    when /Attempting to create a transfer of .* to a destination that supports/i
-      # Raised when the connected account has bank accounts in multiple currencies and the payout
-      # currency doesn't match the destination Stripe picks for the transfer (e.g. paying out RON to
-      # an account whose destination supports EUR). It's an expected, actionable failure, so map it to
-      # a known reason instead of letting it fall through and re-notify as an unhandled error.
+    when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}\.\z/
       Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH
     end
   end
