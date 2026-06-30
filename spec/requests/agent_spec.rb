@@ -48,7 +48,7 @@ describe "Agent tab", type: :system, js: true do
   # in the sidebar nav, which is what makes the tab reachable from anywhere in the dashboard.
   def open_agent
     visit agent_path
-    expect(page).to have_text("Gumroad store assistant", wait: 10)
+    expect(page).to have_text(AgentPresenter::GREETING, wait: 10)
     # The sidebar nav link uses an absolute URL (Routes.agent_url), so match by its label rather than
     # an exact path; its presence here is what makes the tab reachable from anywhere in the dashboard.
     within "nav" do
@@ -88,7 +88,7 @@ describe "Agent tab", type: :system, js: true do
     find("nav a", text: "Agent").click
 
     expect(page).to have_current_path(agent_path)
-    expect(page).to have_text("Gumroad store assistant", wait: 10)
+    expect(page).to have_text(AgentPresenter::GREETING, wait: 10)
   end
 
   describe "use cases" do
