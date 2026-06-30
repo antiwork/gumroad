@@ -20,6 +20,7 @@ const stripePaymentElementMinimumCharge = 50;
 const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
+  disable_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -31,6 +32,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
 const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
+  disable_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
@@ -43,6 +45,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
   fallback_reason: "stripe_payment_element_flag_disabled",
+  disable_wallets: false,
   elements_options: null,
 };
 
@@ -178,6 +181,30 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
+  });
+
+  it("allows setup-mode checkout for preorder and free-trial flows", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ isPreorder: true })] }),
+      ),
+    ).toBe(true);
+    expect(
+      canUseStripePaymentElement(
+        state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ hasFreeTrial: true })] }),
+      ),
+    ).toBe(true);
+  });
+
+  it("falls back for setup-mode checkout when mixed with a charged product", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: futureChargePaymentElementConfig,
+          products: [product({ isPreorder: true }), product({ permalink: "charged-product" })],
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("allows SetupIntent mode when every product is charged in the future", () => {
@@ -437,7 +464,7 @@ describe("requiresReusablePaymentMethodForCardCollection", () => {
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
   });
 
-  it("collects a one-off PaymentMethod in Payment Element SetupIntent mode", () => {
+  it("does not create a reusable card before setup-mode Payment Element collection", () => {
     const setupState = state({
       checkoutPayment: futureChargePaymentElementConfig,
       products: [product({ hasFreeTrial: true, recurrence: "monthly" })],
@@ -493,7 +520,7 @@ describe("getStripePaymentElementAmount", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
   });
 
-  it("returns null for SetupIntent mode", () => {
+  it("returns null for setup-mode checkout", () => {
     expect(
       getStripePaymentElementAmount(
         state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ isPreorder: true })] }),

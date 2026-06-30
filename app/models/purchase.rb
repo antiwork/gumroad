@@ -125,6 +125,7 @@ class Purchase < ApplicationRecord
   has_one :order, through: :order_purchase, dependent: :destroy
   has_one :charge_purchase, dependent: :destroy
   has_one :charge, through: :charge_purchase, dependent: :destroy
+  has_one :purchase_presentment, dependent: :destroy
   has_one :early_fraud_warning, dependent: :destroy
   has_one :tip, dependent: :destroy
 
@@ -1160,7 +1161,7 @@ class Purchase < ApplicationRecord
       content_url: purchase.has_content? ? url_redirect.try(:download_page_url) : nil,
       redirect_token: url_redirect.try(:token),
       url_redirect_external_id: url_redirect.try(:external_id),
-      price: purchase.formatted_display_price,
+      price: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_price : purchase.formatted_display_price,
       id: ObfuscateIds.encrypt(purchase.id),
       email: purchase.try(:email),
       email_digest: purchase.try(:email_digest),
@@ -1169,7 +1170,7 @@ class Purchase < ApplicationRecord
       is_following: purchase.try(:is_following?),
       currency_type: link.price_currency_type,
       has_third_party_analytics: link.has_third_party_analytics?("receipt"),
-      non_formatted_price: Money.new(purchase.displayed_price_cents, purchase.displayed_price_currency_type).cents,
+      non_formatted_price: purchase.buyer_presentment? ? purchase.buyer_presentment_price_cents : Money.new(purchase.displayed_price_cents, purchase.displayed_price_currency_type).cents,
       subscription_has_lapsed: link.is_recurring_billing? && !purchase.subscription&.alive?,
       domain: DOMAIN,
       protocol: PROTOCOL,
@@ -1184,16 +1185,28 @@ class Purchase < ApplicationRecord
       json[:product_rating] = review.rating if review.present?
       json[:review] = ProductReviewPresenter.new(review).review_form_props if review.present?
       json[:has_shipping_to_show] = purchase.shipping_cents > 0
-      json[:shipping_amount] = purchase.formatted_shipping_amount
+      json[:shipping_amount] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_shipping : purchase.formatted_shipping_amount
       json[:has_sales_tax_to_show] = purchase.was_purchase_taxable && purchase.price_cents > 0
-      json[:sales_tax_amount] = Money.new(purchase.tax_in_purchase_currency,
-                                          purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-      json[:non_formatted_seller_tax_amount] = Money.new(purchase.seller_taxes_in_purchase_currency,
-                                                         purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: false)
+      json[:sales_tax_amount] = if purchase.buyer_presentment?
+        purchase.formatted_buyer_presentment_tax
+      else
+        Money.new(purchase.tax_in_purchase_currency,
+                  purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+      end
+      json[:non_formatted_seller_tax_amount] = if purchase.buyer_presentment?
+        purchase.formatted_buyer_presentment_seller_tax(symbol: false)
+      else
+        Money.new(purchase.seller_taxes_in_purchase_currency,
+                  purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: false)
+      end
       json[:was_tax_excluded_from_price] = purchase.was_tax_excluded_from_price
       json[:sales_tax_label] = purchase.tax_label
       json[:has_sales_tax_or_shipping_to_show] = (purchase.was_purchase_taxable && purchase.price_cents > 0) || purchase.shipping_cents > 0
-      json[:total_price_including_tax_and_shipping] = purchase.formatted_total_transaction_amount
+      json[:total_price_including_tax_and_shipping] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_total : purchase.formatted_total_transaction_amount
+      if purchase.buyer_presentment?
+        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency
+        json[:buyer_presentment_total_cents] = purchase.buyer_presentment_total_cents
+      end
       json[:quantity] = purchase.quantity
       json[:show_quantity] = purchase.quantity > 1
       json[:license_key] = purchase.license_key if purchase.license.present?
@@ -1371,6 +1384,50 @@ class Purchase < ApplicationRecord
     format_price_in_cents(amount_in_purchase_currency)
   end
 
+  def buyer_presentment?
+    purchase_presentment.present?
+  end
+
+  def buyer_presentment_currency
+    purchase_presentment&.presentment_currency
+  end
+
+  def buyer_presentment_price_cents
+    return unless buyer_presentment?
+
+    purchase_presentment.presentment_price_cents
+  end
+
+  def buyer_presentment_tax_cents
+    return unless buyer_presentment?
+
+    purchase_presentment.presentment_seller_tax_cents + purchase_presentment.presentment_gumroad_tax_cents
+  end
+
+  def buyer_presentment_total_cents
+    purchase_presentment&.presentment_total_cents
+  end
+
+  def formatted_buyer_presentment_price
+    format_buyer_presentment_amount(purchase_presentment.presentment_price_cents)
+  end
+
+  def formatted_buyer_presentment_tax
+    format_buyer_presentment_amount(buyer_presentment_tax_cents)
+  end
+
+  def formatted_buyer_presentment_seller_tax(symbol: true)
+    format_buyer_presentment_amount(purchase_presentment.presentment_seller_tax_cents, symbol:)
+  end
+
+  def formatted_buyer_presentment_shipping
+    format_buyer_presentment_amount(purchase_presentment.presentment_shipping_cents)
+  end
+
+  def formatted_buyer_presentment_total
+    format_buyer_presentment_amount(purchase_presentment.presentment_total_cents)
+  end
+
   def formatted_tax_amount
     format_price_in_cents(tax_in_purchase_currency)
   end
@@ -1424,6 +1481,10 @@ class Purchase < ApplicationRecord
   def format_price_in_currency(price_cents)
     price_cents_in_currency = usd_cents_to_currency(displayed_price_currency_type, price_cents, rate_converted_to_usd)
     format_price_in_cents(price_cents_in_currency)
+  end
+
+  def format_buyer_presentment_amount(amount_cents, symbol: true)
+    MoneyFormatter.format(amount_cents, buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol:)
   end
 
   def find_enabled_integration(integration_name)
@@ -1535,12 +1596,14 @@ class Purchase < ApplicationRecord
   def create_affiliate_balances!
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents
+      issued_affiliate_cents: affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents
+      issued_affiliate_cents: affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     affiliate_balance_transaction = BalanceTransaction.create!(
@@ -1580,12 +1643,14 @@ class Purchase < ApplicationRecord
 
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: payment_cents - affiliate_credit_cents
+      issued_net_cents: payment_cents - affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: payment_cents - affiliate_credit_cents
+      issued_net_cents: payment_cents - affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     seller_balance_transaction = BalanceTransaction.create!(
@@ -3055,6 +3120,12 @@ class Purchase < ApplicationRecord
   end
 
   private
+    def presentment_canonical_issued_amount
+      return if purchase_presentment.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
     def web_csv_parity_fields
       {
         utm_source: utm_link&.utm_source,

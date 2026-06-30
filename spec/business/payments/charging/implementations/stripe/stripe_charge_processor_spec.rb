@@ -638,6 +638,47 @@ describe StripeChargeProcessor, :vcr do
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
     end
 
+    it "uses buyer-presentment params for direct connected-account charges" do
+      stripe_account_id = "acct_presentment"
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: stripe_account_id)
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(
+          amount: 12_50,
+          currency: Currency::CAD,
+          application_fee_amount: 3_75,
+          fx_quote: "fxq_test"
+        ),
+        {
+          stripe_account: stripe_account_id,
+          stripe_version: StripeFxQuote::API_VERSION,
+          idempotency_key: "buyer-currency-charge-test-fxq_test",
+        }
+      ).and_return(payment_intent)
+
+      charge_intent = subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        stripe_fx_quote_id: "fxq_test",
+        idempotency_key: "buyer-currency-charge-test-fxq_test"
+      )
+
+      expect(charge_intent).to be_a(StripeChargeIntent)
+      expect(charge_intent.processing?).to eq(true)
+    end
+
     context "for a card without SCA support" do
       let(:payment_method_id) { StripePaymentMethodHelper.success.to_stripejs_payment_method_id }
 

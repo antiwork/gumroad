@@ -53,11 +53,13 @@ export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
+      disable_wallets: boolean;
       elements_options: null;
     }
   | {
       integration: "payment_element";
       fallback_reason: null;
+      disable_wallets: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
@@ -559,6 +561,7 @@ export function createReducer(initial: {
         checkoutPayment: initial.checkoutPayment ?? {
           integration: "card_element",
           fallback_reason: "not_checkout",
+          disable_wallets: false,
           elements_options: null,
         },
         paymentMethod: "card",

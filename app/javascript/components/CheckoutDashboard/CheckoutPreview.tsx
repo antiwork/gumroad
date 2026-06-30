@@ -42,6 +42,7 @@ export const CheckoutPreview = ({
         checkoutPayment: {
           integration: "card_element",
           fallback_reason: "checkout_preview",
+          disable_wallets: false,
           elements_options: null,
         },
         availablePaymentMethods: [],

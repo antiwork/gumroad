@@ -134,9 +134,25 @@ module ChargeProcessor
   def self.create_payment_intent_or_charge!(merchant_account, chargeable, amount_cents, amount_for_gumroad_cents,
                                             reference, description,
                                             metadata: nil, statement_description: nil, transfer_group: nil,
-                                            off_session: true, setup_future_charges: false, mandate_options: nil)
+                                            off_session: true, setup_future_charges: false, mandate_options: nil,
+                                            processor_amount_cents: nil, processor_currency: nil,
+                                            processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil,
+                                            idempotency_key: nil)
     charge_processor = get_charge_processor(merchant_account.charge_processor_id)
     chargeable_for_charge_processor = chargeable.get_chargeable_for(merchant_account.charge_processor_id)
+    charge_options = {
+      metadata:,
+      statement_description:,
+      transfer_group:,
+      off_session:,
+      setup_future_charges:,
+      mandate_options:,
+    }
+    charge_options[:processor_amount_cents] = processor_amount_cents unless processor_amount_cents.nil?
+    charge_options[:processor_currency] = processor_currency unless processor_currency.nil?
+    charge_options[:processor_gumroad_amount_cents] = processor_gumroad_amount_cents unless processor_gumroad_amount_cents.nil?
+    charge_options[:stripe_fx_quote_id] = stripe_fx_quote_id if stripe_fx_quote_id.present?
+    charge_options[:idempotency_key] = idempotency_key if idempotency_key.present?
 
     charge_processor.create_payment_intent_or_charge!(merchant_account,
                                                       chargeable_for_charge_processor,
@@ -144,12 +160,7 @@ module ChargeProcessor
                                                       amount_for_gumroad_cents,
                                                       reference,
                                                       description,
-                                                      metadata:,
-                                                      statement_description:,
-                                                      transfer_group:,
-                                                      off_session:,
-                                                      setup_future_charges:,
-                                                      mandate_options:)
+                                                      **charge_options)
   end
 
   def self.confirm_payment_intent!(merchant_account, charge_intent_id)

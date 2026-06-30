@@ -2,12 +2,12 @@
 
 class Charge::CreateService
   attr_accessor :order, :seller, :merchant_account, :chargeable, :purchases, :amount_cents, :gumroad_amount_cents,
-                :setup_future_charges, :off_session, :statement_description, :charge, :mandate_options
+                :setup_future_charges, :off_session, :statement_description, :charge, :mandate_options, :params
 
   def initialize(order:, seller:, merchant_account:, chargeable:,
                  purchases:, amount_cents:, gumroad_amount_cents:,
                  setup_future_charges:, off_session:,
-                 statement_description:, mandate_options: nil)
+                 statement_description:, mandate_options: nil, params: {})
     @order = order
     @seller = seller
     @merchant_account = merchant_account
@@ -19,6 +19,7 @@ class Charge::CreateService
     @off_session = off_session
     @statement_description = statement_description
     @mandate_options = mandate_options
+    @params = params || {}
   end
 
   def perform
@@ -36,6 +37,8 @@ class Charge::CreateService
     end
 
     charge_intent = with_charge_processor_error_handler do
+      presentment_args = buyer_currency_presentment_processor_args
+
       ChargeProcessor.create_payment_intent_or_charge!(merchant_account,
                                                        chargeable,
                                                        amount_cents,
@@ -47,8 +50,11 @@ class Charge::CreateService
                                                        off_session:,
                                                        setup_future_charges:,
                                                        metadata: StripeMetadata.build_metadata_large_list(purchases.map(&:external_id), key: :purchases, separator: ","),
-                                                       mandate_options:)
+                                                       mandate_options:,
+                                                       idempotency_key: payment_intent_idempotency_key(presentment_args),
+                                                       **presentment_args)
     end
+    clear_buyer_currency_presentments if charge_intent.blank?
 
     if charge_intent.present?
       charge.charge_intent = charge_intent
@@ -144,5 +150,83 @@ class Charge::CreateService
     else
       PurchaseErrorCode::PAYPAL_UNAVAILABLE
     end
+  end
+
+  def buyer_currency_presentment_processor_args
+    eligibility_decision = Checkout::BuyerCurrencyEligibility.new(
+      order:,
+      seller:,
+      merchant_account:,
+      chargeable:,
+      purchases:,
+      params:,
+      setup_future_charges:,
+      off_session:
+    ).decision
+
+    unless eligibility_decision.eligible?
+      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: #{eligibility_decision.fallback_reason}")
+      return {}
+    end
+
+    locked_quote = locked_buyer_currency_quote!(eligibility_decision)
+    return {} if locked_quote.blank?
+
+    presentment_result = Charge::PresentmentOrchestrator.new(
+      charge:,
+      merchant_account:,
+      purchases:,
+      amount_cents:,
+      gumroad_amount_cents:,
+      eligibility_decision:,
+      locked_quote:
+    ).perform
+    return {} if presentment_result.blank?
+
+    {
+      processor_amount_cents: presentment_result.processor_amount_cents,
+      processor_currency: presentment_result.processor_currency,
+      processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
+      stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
+    }
+  end
+
+  def locked_buyer_currency_quote!(eligibility_decision)
+    quote_token = params[:buyer_currency_quote].presence
+    unless quote_token
+      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
+      return nil
+    end
+
+    Checkout::BuyerCurrencyQuote.verify!(
+      token: quote_token,
+      seller:,
+      merchant_account:,
+      currency: eligibility_decision.currency,
+      canonical_total_cents: amount_cents
+    )
+  rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+    ErrorNotifier.notify(e, context: {
+                           charge_id: charge.id,
+                           charge_external_id: charge.external_id,
+                           seller_id: seller.id,
+                           merchant_account_id: merchant_account.id,
+                           presentment_currency: eligibility_decision.currency,
+                         })
+    raise ChargeProcessorInvalidRequestError, "Buyer currency quote is invalid"
+  end
+
+  def clear_buyer_currency_presentments
+    ActiveRecord::Base.transaction do
+      purchases.each { _1.purchase_presentment&.destroy! }
+      charge.charge_presentment&.destroy!
+    end
+  end
+
+  def payment_intent_idempotency_key(presentment_args)
+    stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
+    return if stripe_fx_quote_id.blank?
+
+    "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}"
   end
 end

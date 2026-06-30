@@ -22,6 +22,7 @@ describe CheckoutPresenter do
       {
         integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
         fallback_reason: "empty_cart",
+        disable_wallets: false,
         elements_options: nil,
       }
     end
@@ -255,6 +256,7 @@ describe CheckoutPresenter do
         checkout_payment: {
           integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
           fallback_reason: "stripe_payment_element_flag_disabled",
+          disable_wallets: false,
           elements_options: nil,
         },
       )

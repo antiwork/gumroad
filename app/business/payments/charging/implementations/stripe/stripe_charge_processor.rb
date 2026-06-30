@@ -211,12 +211,17 @@ class StripeChargeProcessor
 
   def create_payment_intent_or_charge!(merchant_account, chargeable, amount_cents, amount_for_gumroad_cents, reference,
                                        description, metadata: nil, statement_description: nil,
-                                       transfer_group: nil, off_session: true, setup_future_charges: false, mandate_options: nil)
+                                       transfer_group: nil, off_session: true, setup_future_charges: false, mandate_options: nil,
+                                       processor_amount_cents: nil, processor_currency: nil,
+                                       processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil, idempotency_key: nil)
     should_setup_future_usage = setup_future_charges && !off_session # attempting to set up future usage during an off-session charge will result in an invalid request
+    charge_amount_cents = processor_amount_cents || amount_cents
+    charge_currency = processor_currency || Currency::USD
+    charge_gumroad_amount_cents = processor_gumroad_amount_cents || amount_for_gumroad_cents
 
     params = {
-      amount: amount_cents,
-      currency: "usd",
+      amount: charge_amount_cents,
+      currency: charge_currency,
       description:,
       metadata: metadata || {
         purchase: reference
@@ -227,6 +232,7 @@ class StripeChargeProcessor
       setup_future_usage: ("off_session" if should_setup_future_usage)
     }
 
+    params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
     params.merge!(confirm: true) if off_session
 
     params.merge!(mandate_options) if mandate_options.present?
@@ -249,13 +255,17 @@ class StripeChargeProcessor
     end
 
     with_stripe_error_handler do
+      stripe_options = {}
+      stripe_options[:stripe_version] = StripeFxQuote::API_VERSION if stripe_fx_quote_id.present?
+      stripe_options[:idempotency_key] = idempotency_key if idempotency_key.present?
+
       if merchant_migrated? merchant_account
         if merchant_account.charge_processor_merchant_id.blank?
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
-        params[:application_fee_amount] = amount_for_gumroad_cents
-        payment_intent = Stripe::PaymentIntent.create(params, { stripe_account: merchant_account.charge_processor_merchant_id })
+        params[:application_fee_amount] = charge_gumroad_amount_cents
+        payment_intent = Stripe::PaymentIntent.create(params, stripe_options.merge(stripe_account: merchant_account.charge_processor_merchant_id))
       elsif merchant_account.user
         if merchant_account.charge_processor_merchant_id.blank?
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
@@ -263,11 +273,11 @@ class StripeChargeProcessor
         end
         params[:transfer_data] = {
           destination: merchant_account.charge_processor_merchant_id,
-          amount: amount_cents - amount_for_gumroad_cents
+          amount: charge_amount_cents - charge_gumroad_amount_cents
         }
-        payment_intent = Stripe::PaymentIntent.create(params)
+        payment_intent = stripe_options.present? ? Stripe::PaymentIntent.create(params, stripe_options) : Stripe::PaymentIntent.create(params)
       else
-        payment_intent = Stripe::PaymentIntent.create(params)
+        payment_intent = stripe_options.present? ? Stripe::PaymentIntent.create(params, stripe_options) : Stripe::PaymentIntent.create(params)
       end
 
       payment_intent.confirm if payment_intent.status == StripeIntentStatus::REQUIRES_CONFIRMATION

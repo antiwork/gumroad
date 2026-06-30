@@ -9,7 +9,7 @@ import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
-import { CurrencyCode, formatPriceCentsWithCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
+import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
@@ -17,6 +17,7 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
+import { formatCheckoutPrice, getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   type CartItem,
   type CartState,
@@ -182,6 +183,9 @@ const CheckoutIndexPage = () => {
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
+  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
+    state.surcharges.type === "loaded" ? state.surcharges.result : null,
+  );
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -366,6 +370,8 @@ const CheckoutIndexPage = () => {
           locale: navigator.language,
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
+        buyerCurrencyQuote:
+          state.surcharges.type === "loaded" ? (state.surcharges.result.buyer_currency_quote?.token ?? null) : null,
         lineItems: cartForm.data.cart.items.map((item) => {
           const discounted = getDiscountedPrice(cartForm.data.cart, item);
 
@@ -694,13 +700,13 @@ const CheckoutIndexPage = () => {
       >
         <p>
           You're about to leave a tip of{" "}
-          {formatPriceCentsWithCurrencySymbol("usd", computeTip(state), {
-            symbolFormat: "short",
+          {formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
+            usdSymbolFormat: "short",
             noCentsIfWhole: true,
           })}{" "}
           on a{" "}
-          {formatPriceCentsWithCurrencySymbol("usd", getTotalPriceFromProducts(state), {
-            symbolFormat: "short",
+          {formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
+            usdSymbolFormat: "short",
             noCentsIfWhole: true,
           })}{" "}
           purchase. Are you sure?

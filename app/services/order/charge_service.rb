@@ -209,6 +209,7 @@ class Order::ChargeService
         off_session:,
         statement_description:,
         mandate_options: setup_future_charges ? mandate_options : nil,
+        params:,
       ).perform
 
       self.charge_intent = charge.charge_intent

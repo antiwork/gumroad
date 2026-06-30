@@ -1107,7 +1107,7 @@ const useIsPayPalAvailable = () => {
   return !!implementation;
 };
 
-const useStripePaymentRequest = () => {
+const useStripePaymentRequest = (disabled: boolean) => {
   const [state, dispatch] = useState();
   const stripe = useStripe();
   const fail = useFail();
@@ -1121,7 +1121,7 @@ const useStripePaymentRequest = () => {
   const stateRef = useRefToLatest(state);
 
   const paymentRequest = React.useMemo(() => {
-    if (!stripe) return null;
+    if (!stripe || disabled) return null;
     const paymentRequest = stripe.paymentRequest({
       country: "US",
       currency: "usd",
@@ -1164,7 +1164,7 @@ const useStripePaymentRequest = () => {
       })().catch(fail),
     );
     return paymentRequest;
-  }, [stripe]);
+  }, [stripe, disabled]);
 
   // Use a layout effect because `paymentRequest.show` needs to be called synchronously
   useOnChangeSync(() => {
@@ -1276,7 +1276,7 @@ const PaymentMethodsSection = ({
   isTestPurchase: boolean;
 }) => {
   const [state] = useState();
-  const { canPay, isGooglePay } = useStripePaymentRequest();
+  const { canPay, isGooglePay } = useStripePaymentRequest(state.checkoutPayment.disable_wallets);
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
 
