@@ -18,6 +18,11 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Textarea } from "$app/components/ui/Textarea";
 
+// While the seller is within this many px of the bottom we keep auto-scrolling as new content
+// arrives; if they scroll further up to read earlier messages we leave them there. (Mirrors the
+// near-bottom threshold the Communities chat uses.)
+const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
+
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
@@ -143,9 +148,21 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  // Whether to follow new content to the bottom. Stays true while the seller is near the bottom and
+  // flips off if they scroll up to read earlier messages, so streaming/suggestions don't yank them back.
+  const stickToBottom = React.useRef(true);
 
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
+  };
+
+  // Keep the latest content pinned to the bottom as the conversation grows (including each streamed
+  // token), unless the seller has scrolled up. A direct scrollTop assignment is instant, so the newest
+  // line never sits below the fold.
   React.useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const el = scrollRef.current;
+    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages, isSending, followUps]);
 
   // Keep the composer ready to type: focus on load and again whenever a turn finishes. The textarea
@@ -157,6 +174,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending) return;
+
+    // Sending re-engages auto-scroll so the seller's own message and the reply come into view.
+    stickToBottom.current = true;
 
     // Only the plain role/content pairs go to the server; UI-only fields stay local.
     const history: ChatMessage[] = [...messages, { role: "user", content: trimmed }].map(({ role, content }) => ({
@@ -273,72 +293,88 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const hasText = input.trim().length > 0;
 
   return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col gap-4 p-4 md:p-8">
-      <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-y-auto" aria-label="Conversation" role="log">
-        {messages.map((message, index) => {
-          const isUser = message.role === "user";
-          return (
-            <div
-              key={index}
-              className={isUser ? "flex justify-end" : "flex justify-start"}
-              aria-label={isUser ? "You" : "Assistant"}
-            >
-              <div className={`flex flex-col gap-2 ${isUser ? "max-w-[85%] items-end" : "w-full"}`}>
-                {message.content ? (
-                  isUser ? (
-                    // Square off the sender-side corner (bottom-right) into a subtle tail.
-                    <div className="rounded-2xl rounded-br-md bg-accent px-4 py-2 text-accent-foreground">
+    <div className="flex h-full flex-col">
+      {/* The scroll container spans the full width so its scrollbar sits at the far right; the chat
+          content inside stays narrow and centered (max-w-2xl). */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex flex-1 flex-col overflow-y-auto"
+        aria-label="Conversation"
+        role="log"
+      >
+        {/* mt-auto fills the chat from the bottom (like a messenger): a short conversation sits just
+            above the composer, and the margin collapses once the content is tall enough to scroll. */}
+        <div className="mx-auto mt-auto flex w-full max-w-2xl flex-col gap-4 p-4 md:p-8">
+          {messages.map((message, index) => {
+            const isUser = message.role === "user";
+            // A pending proposed change reads as the confirmation card alone — suppress the objects the
+            // agent looked up this turn (e.g. the whole product list) as noise. The applied result
+            // object still shows once the change goes through.
+            const showObjects =
+              !!message.objects?.length && (!message.proposedAction || message.actionStatus === "applied");
+            return (
+              <div
+                key={index}
+                className={isUser ? "flex justify-end" : "flex justify-start"}
+                aria-label={isUser ? "You" : "Assistant"}
+              >
+                <div className={`flex flex-col gap-2 ${isUser ? "max-w-[85%] items-end" : "w-full"}`}>
+                  {message.content ? (
+                    isUser ? (
+                      // Square off the sender-side corner (bottom-right) into a subtle tail.
+                      <div className="rounded-2xl rounded-br-md bg-accent px-4 py-2 text-accent-foreground">
+                        <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                      </div>
+                    ) : (
+                      // Assistant turns read as plain prose, not chat bubbles.
                       <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                    </div>
-                  ) : (
-                    // Assistant turns read as plain prose, not chat bubbles.
-                    <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                  )
-                ) : null}
-                {message.proposedAction ? (
-                  <ProposedActionCard
-                    action={message.proposedAction}
-                    status={message.actionStatus}
-                    isPending={pendingActionIndex !== null}
-                    isApplying={pendingActionIndex === index}
-                    onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
-                    onDismiss={() => dismissAction(index)}
-                  />
-                ) : null}
-                {message.objects && message.objects.length > 0 ? <ObjectList objects={message.objects} /> : null}
+                    )
+                  ) : null}
+                  {message.proposedAction ? (
+                    <ProposedActionCard
+                      action={message.proposedAction}
+                      status={message.actionStatus}
+                      isPending={pendingActionIndex !== null}
+                      isApplying={pendingActionIndex === index}
+                      onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
+                      onDismiss={() => dismissAction(index)}
+                    />
+                  ) : null}
+                  {showObjects ? <ObjectList objects={message.objects ?? []} /> : null}
+                </div>
               </div>
+            );
+          })}
+          {isSending && !isStreaming ? (
+            <div className="flex items-center gap-2 text-muted" role="status" aria-label="Working on it">
+              <span className="size-3 shrink-0 animate-pulse rounded-full border-2 border-accent" aria-hidden="true" />
+              <span className="text-sm">Working on it…</span>
             </div>
-          );
-        })}
-        {isSending && !isStreaming ? (
-          <div className="flex items-center gap-2 text-muted" role="status" aria-label="Working on it">
-            <span className="size-3 shrink-0 animate-pulse rounded-full border-2 border-accent" aria-hidden="true" />
-            <span className="text-sm">Working on it…</span>
-          </div>
-        ) : null}
+          ) : null}
+          {/* Suggested prompts sit at the end of the conversation (not pinned above the composer) so
+              they read as the chat's next step and scroll with it. */}
+          {messages.length <= 1 ? (
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((suggestion) => (
+                <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          ) : followUps.length > 0 ? (
+            <div className="flex flex-wrap gap-2" aria-label="Suggested follow-ups">
+              {followUps.map((suggestion) => (
+                <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {messages.length <= 1 ? (
-        <div className="flex flex-wrap gap-2">
-          {suggestions.map((suggestion) => (
-            <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
-              {suggestion}
-            </Button>
-          ))}
-        </div>
-      ) : followUps.length > 0 ? (
-        // Follow-up prompts suggested after the latest reply, so the conversation has an obvious next
-        // step. Hidden while a turn is in flight so they don't compete with the streaming answer.
-        <div className="flex flex-wrap gap-2" aria-label="Suggested follow-ups">
-          {followUps.map((suggestion) => (
-            <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
-              {suggestion}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-4 md:px-8 md:pb-8">
         <form
           className="flex flex-col gap-1 rounded border border-border bg-background p-2 focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
           onSubmit={(e) => {
