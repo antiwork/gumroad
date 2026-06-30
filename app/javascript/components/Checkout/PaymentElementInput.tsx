@@ -11,12 +11,20 @@ import * as React from "react";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
-import { STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
+import {
+  STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
+  type PaymentElementConfig,
+  type PaymentElementConfirmConfig,
+} from "$app/components/Checkout/payment";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
+
+// Lane A (server-confirm) and Lane B (client-confirm) mount the same deferred Payment Element;
+// they differ only in whether payment_method_creation: "manual" is present.
+type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 type LinkPrefillContact = { email: string; name: string };
@@ -40,7 +48,7 @@ export const PaymentElementInput = ({
   onChange,
 }: {
   amount: number | null;
-  elementsOptions: PaymentElementConfig;
+  elementsOptions: CheckoutPaymentElementOptions;
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
@@ -174,7 +182,7 @@ const StripePaymentElementProvider = ({
   children,
 }: {
   amount: number | null;
-  elementsOptions: PaymentElementConfig;
+  elementsOptions: CheckoutPaymentElementOptions;
   children: React.ReactNode;
 }) => {
   const [stripePromise] = React.useState(getStripeInstance);
@@ -193,7 +201,11 @@ const StripePaymentElementProvider = ({
       currency: elementsOptions.currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
-      paymentMethodCreation: elementsOptions.payment_method_creation,
+      // Lane B omits payment_method_creation: ConfirmationTokens are minted from the elements
+      // directly, so "manual" must not be set or createConfirmationToken({ elements }) is rejected.
+      ...("payment_method_creation" in elementsOptions
+        ? { paymentMethodCreation: elementsOptions.payment_method_creation }
+        : {}),
       fonts: [{ family: font.name, src: `url(${font.url})` }],
       appearance: {
         variables: {

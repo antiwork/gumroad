@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canUseStripePaymentElement,
+  canUseStripePaymentElementConfirm,
   getStripePaymentElementAmount,
   isCardReadyToPay,
   requiresPaymentElementReusablePaymentMethod,
@@ -43,6 +44,17 @@ const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
   fallback_reason: "stripe_payment_element_flag_disabled",
   elements_options: null,
+};
+
+const paymentElementConfirmConfig: CheckoutPaymentConfig = {
+  integration: "payment_element_confirm",
+  fallback_reason: null,
+  elements_options: {
+    stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+    currency: "usd",
+    payment_method_types: ["card"],
+    stripe_link_enabled: false,
+  },
 };
 
 const product = (overrides: Partial<Product> = {}): Product => ({
@@ -292,6 +304,86 @@ describe("canUseStripePaymentElement", () => {
   });
 });
 
+describe("canUseStripePaymentElementConfirm", () => {
+  const confirmState = (overrides: Partial<State> = {}) =>
+    state({ checkoutPayment: paymentElementConfirmConfig, ...overrides });
+
+  it("allows a single-seller one-off card checkout when the server selected the confirm integration", () => {
+    expect(canUseStripePaymentElementConfirm(confirmState())).toBe(true);
+  });
+
+  it("falls back when the server selected the Lane A Payment Element integration", () => {
+    expect(canUseStripePaymentElementConfirm(state())).toBe(false);
+  });
+
+  it("falls back when the server selected the Card Element integration", () => {
+    expect(canUseStripePaymentElementConfirm(state({ checkoutPayment: cardElementConfig }))).toBe(false);
+  });
+
+  it("falls back when the cart is empty", () => {
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [] }))).toBe(false);
+  });
+
+  it("falls back for multi-seller carts (Lane B funds one PaymentIntent)", () => {
+    expect(
+      canUseStripePaymentElementConfirm(
+        confirmState({
+          products: [
+            product({ creator: { id: "seller-a", name: "Seller A", profile_url: "", avatar_url: "" } }),
+            product({ creator: { id: "seller-b", name: "Seller B", profile_url: "", avatar_url: "" } }),
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("falls back for reusable-payment-method flows (Phase 1 is one-time only)", () => {
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ recurrence: "monthly" })] }))).toBe(
+      false,
+    );
+    expect(
+      canUseStripePaymentElementConfirm(confirmState({ products: [product({ subscription_id: "sub_123" })] })),
+    ).toBe(false);
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ nativeType: "commission" })] }))).toBe(
+      false,
+    );
+  });
+
+  it("falls back for future-charge and installment flows", () => {
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ payInInstallments: true })] }))).toBe(
+      false,
+    );
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ isPreorder: true })] }))).toBe(false);
+    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ hasFreeTrial: true })] }))).toBe(
+      false,
+    );
+  });
+
+  it("keeps the confirm path selected while the final total is pending", () => {
+    expect(canUseStripePaymentElementConfirm(confirmState({ surcharges: { type: "pending" } }))).toBe(true);
+  });
+
+  it("falls back when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
+    expect(
+      canUseStripePaymentElementConfirm(
+        confirmState({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: stripePaymentElementMinimumCharge - 1,
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("requiresReusablePaymentMethod", () => {
   it("keeps the existing reusable setup contract for non-Payment Element paths", () => {
     expect(requiresReusablePaymentMethod(state())).toBe(false);
@@ -354,6 +446,27 @@ describe("getStripePaymentElementAmount", () => {
     expect(
       getStripePaymentElementAmount(
         state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 200,
+              tax_cents: 100,
+              tax_included_cents: 0,
+              subtotal: 1_000,
+            },
+          },
+        }),
+      ),
+    ).toBe(1_300);
+  });
+
+  it("returns the loaded checkout total for the client-confirm integration", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          checkoutPayment: paymentElementConfirmConfig,
           surcharges: {
             type: "loaded",
             result: {

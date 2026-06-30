@@ -41,6 +41,16 @@ export type PaymentElementConfig = {
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
+// Lane B (client-confirm) collects with the same deferred Payment Element but, instead of
+// manually creating a PaymentMethod server-side, mints a ConfirmationToken on the client. It
+// therefore drops payment_method_creation ("manual" is the Lane A signal) and is always in
+// payment (charge) mode in Phase 1 — future-charge setup stays on Lane A.
+export type PaymentElementConfirmConfig = {
+  stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
+  currency: "usd";
+  payment_method_types: ["card"];
+  stripe_link_enabled: boolean;
+};
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
@@ -51,6 +61,11 @@ export type CheckoutPaymentConfig =
       integration: "payment_element";
       fallback_reason: null;
       elements_options: PaymentElementConfig;
+    }
+  | {
+      integration: "payment_element_confirm";
+      fallback_reason: null;
+      elements_options: PaymentElementConfirmConfig;
     };
 
 export type Product = {
@@ -128,6 +143,10 @@ export type State = {
 
 type StateWithPaymentElementCheckout = State & {
   checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element" }>;
+};
+
+type StateWithPaymentElementConfirmCheckout = State & {
+  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element_confirm" }>;
 };
 
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
@@ -223,6 +242,30 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
+// Lane B safety net. The server only emits the confirm integration for eligible carts and the
+// browser must never widen that, so this mirrors the server gate: single-seller, one-time card
+// only (no future-charge or reusable-payment-method flows in Phase 1).
+export function canUseStripePaymentElementConfirm(state: State): state is StateWithPaymentElementConfirmCheckout {
+  if (state.products.length === 0) return false;
+  if (state.checkoutPayment.integration !== "payment_element_confirm") return false;
+  if (hasMultipleSellers(state)) return false;
+
+  if (state.surcharges.type === "loaded") {
+    const total = getTotalPrice(state);
+    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
+  }
+
+  return !state.products.some(
+    (product) =>
+      product.payInInstallments ||
+      product.hasFreeTrial ||
+      product.isPreorder ||
+      !!product.recurrence ||
+      !!product.subscription_id ||
+      product.nativeType === "commission",
+  );
+}
+
 function canUseStripePaymentElementForFutureChargeSetup(state: State) {
   return (
     !hasMultipleSellers(state) &&
@@ -233,8 +276,12 @@ function canUseStripePaymentElementForFutureChargeSetup(state: State) {
 }
 
 export function getStripePaymentElementAmount(state: State) {
-  if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
-  if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
+  if (state.surcharges.type !== "loaded") return null;
+  if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementConfirm(state)) return null;
+  if (
+    state.checkoutPayment.integration === "payment_element" &&
+    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+  )
     return null;
   return getTotalPrice(state);
 }

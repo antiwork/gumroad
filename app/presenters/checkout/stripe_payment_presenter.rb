@@ -2,14 +2,19 @@
 
 # Chooses the Stripe checkout payment integration for the current checkout props.
 #
-# The first Stripe Payment Element rollout keeps Rails on the existing
-# stripe_payment_method_id charge path, so this presenter only decides whether
-# checkout may render Payment Element or must fall back to CardElement.
+# Two Payment Element lanes coexist. Lane A ("payment_element") keeps Rails on the
+# existing stripe_payment_method_id server-confirm charge path. Lane B
+# ("payment_element_confirm") inverts control: the browser confirms the PaymentIntent
+# client-side, two-step, via a ConfirmationToken. Lane B is additive and only selected
+# behind both Payment Element flags, and only for a single-seller, one-time,
+# non-direct-charge cart; everything else stays on Lane A or falls back to CardElement.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
+  STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
+  STRIPE_PAYMENT_ELEMENT_CONFIRM_INTEGRATION = "payment_element_confirm"
   # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
@@ -32,6 +37,10 @@ class Checkout::StripePaymentPresenter
     checkout_items = items
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason) if fallback_reason.present?
+
+    # The Lane B confirm gate sits above the Lane A setup/payment-mode pick: a confirm-eligible
+    # cart is always a one-time charge, so it never reaches the setup branch below.
+    return confirm_mode_props if confirm_mode_eligible?(checkout_items)
 
     stripe_elements_mode =
       if setup_for_future_charges_without_charging?(checkout_items)
@@ -72,6 +81,35 @@ class Checkout::StripePaymentPresenter
           currency: "usd",
           payment_method_types: ["card"],
           payment_method_creation: "manual",
+          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+        },
+      }
+    end
+
+    # Lane B is only offered when both flags are active for the (single) seller and the cart is a
+    # plain one-time charge on a non-direct-charge account. Multi-seller stays on Lane A (one
+    # confirmation funds one PaymentIntent), future-charge/reusable carts need setup_future_usage
+    # that the Phase 1 deferred intent does not set, and connected-account scoping is not built yet.
+    def confirm_mode_eligible?(items)
+      sellers.one? &&
+        sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
+        sellers.none?(&:stripe_connect_account) &&
+        !setup_for_future_charges_without_charging?(items) &&
+        items.none? { confirm_mode_unsupported_item?(_1) }
+    end
+
+    def confirm_mode_unsupported_item?(item)
+      item[:recurrence].present? || item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+    end
+
+    def confirm_mode_props
+      {
+        integration: STRIPE_PAYMENT_ELEMENT_CONFIRM_INTEGRATION,
+        fallback_reason: nil,
+        elements_options: {
+          stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+          currency: "usd",
+          payment_method_types: ["card"],
           stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
         },
       }
