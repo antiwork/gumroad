@@ -48,8 +48,9 @@ class FailAbandonedPurchaseWorker
       charge_intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
 
       # If a client-confirm charge succeeded but the buyer left before finalize, recover the captured
-      # charge here instead of leaving the purchase in_progress.
-      return Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform if charge_intent&.succeeded? && confirmed_charge?
+      # charge here instead of leaving the purchase in_progress. Finalizing at the order level covers
+      # sibling purchases of a combined charge and sends the charge receipt.
+      return Order::FinalizeConfirmedChargeService.new(order: purchase.charge.order).perform if charge_intent&.succeeded? && confirmed_charge?
 
       # Ignore the error if:
       # - charge intent succeeded (user completed SCA in the meanwhile)

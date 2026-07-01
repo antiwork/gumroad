@@ -165,10 +165,10 @@ describe FailAbandonedPurchaseWorker, :vcr do
           allow(ChargeProcessor).to receive(:get_charge_intent).and_return(succeeded_intent)
         end
 
-        it "finalizes the captured charge instead of leaving it stuck in_progress" do
-          finalize = instance_double(Purchase::FinalizeConfirmedChargeService)
-          expect(Purchase::FinalizeConfirmedChargeService).to receive(:new)
-            .with(purchase: an_instance_of(Purchase), charge_intent: succeeded_intent).and_return(finalize)
+        it "finalizes the captured charge's whole order instead of leaving it stuck in_progress" do
+          finalize = instance_double(Order::FinalizeConfirmedChargeService)
+          expect(Order::FinalizeConfirmedChargeService).to receive(:new)
+            .with(order: charge.order).and_return(finalize)
           expect(finalize).to receive(:perform)
 
           described_class.new.perform(purchase.id)
