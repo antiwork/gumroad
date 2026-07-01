@@ -87,6 +87,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       expect do
         deliver_webhook(event)
       end.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
+        .and change { SendChargeReceiptJob.jobs.size }.by(1)
 
       expect(purchase.reload).to be_successful
       expect(purchase.stripe_transaction_id).to be_present
@@ -96,7 +97,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
 
       expect do
         deliver_webhook(event)
-      end.not_to change { ActivateIntegrationsWorker.jobs.size }
+      end.not_to change { [ActivateIntegrationsWorker.jobs.size, SendChargeReceiptJob.jobs.size] }
 
       expect(purchase.reload.succeeded_at).to eq(succeeded_at)
     end
