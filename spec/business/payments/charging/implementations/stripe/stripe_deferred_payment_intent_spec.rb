@@ -53,8 +53,8 @@ describe StripeDeferredPaymentIntent do
     end
   end
 
-  # Fee routing is pure request construction; asserting the built params avoids needing a live
-  # connected account per branch (the direct-charge round-trip is covered end-to-end in U12).
+  # Fee routing is pure request construction; asserting the built params avoids live
+  # Stripe account setup for every branch.
   describe ".create fee routing" do
     let(:captured_params) { [] }
 

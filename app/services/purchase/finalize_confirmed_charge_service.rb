@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Finalizes a single client-confirmed (Lane B) purchase from an already-retrieved PaymentIntent.
+# Finalizes a single browser-confirmed purchase from an already-retrieved PaymentIntent.
 #
-# Unlike Purchase::ConfirmService, it does NOT confirm the intent — the browser already did. It is
+# Unlike Purchase::ConfirmService, it does NOT confirm the intent because the browser already did. It is
 # handed a retrieve-only charge intent so a `processing` intent is never re-confirmed (which Stripe
 # rejects). Idempotent: a purchase that another trigger (AJAX, return page, or webhook) already
 # finalized is a no-op, so fulfillment happens exactly once.
@@ -46,10 +46,9 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       nil
     end
 
-    # Lane A copies the buyer-facing card presentation off the server-built chargeable in
-    # Purchase#prepare_for_charge!; Lane B never builds one (the browser confirmed), so derive
-    # card_visual/type/country from the confirmed charge, whose payment_method_details carry
-    # brand/last4/country. Expiry, fingerprint, and processor id are handled by #save_charge_data.
+    # Browser-confirmed checkout never builds a server-side chargeable, so derive
+    # card_visual/type/country from the confirmed charge. Expiry, fingerprint, and
+    # processor id are handled by #save_charge_data.
     def assign_confirmed_card_presentation(processor_charge)
       return if processor_charge.card_last4.blank?
 

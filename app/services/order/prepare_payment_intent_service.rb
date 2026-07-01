@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
-# Lane B (client-confirm) counterpart to Order::ChargeService. Instead of charging a server-built
-# PaymentMethod, it inspects the browser's ConfirmationToken pre-charge (card country, for PPP),
-# creates an *unconfirmed* PaymentIntent, and persists the order ↔ intent mapping before returning
-# the client_secret. The browser confirms the intent and Order::FinalizeConfirmedChargeService
-# completes it. Confirm mode is single-seller (one PaymentIntent funds one seller's charge), so
-# there is no per-seller loop. Order::ChargeService and the server-confirm path are untouched.
+# Prepares a browser-confirmed charge by inspecting the ConfirmationToken before any
+# charge, creating an unconfirmed PaymentIntent, and persisting the order/payment-intent
+# mapping before returning the client_secret.
 class Order::PreparePaymentIntentService
   include Order::ResponseHelpers
 
@@ -170,7 +167,7 @@ class Order::PreparePaymentIntentService
       end
     end
 
-    # Resolved on each purchase by resolve_merchant_account_and_fees (single-seller, so they share one).
+    # Resolved on each purchase by resolve_merchant_account_and_fees; confirm mode has one seller.
     def merchant_account
       @merchant_account ||= purchases_to_charge.first.merchant_account
     end

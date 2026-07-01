@@ -3024,19 +3024,16 @@ class Purchase < ApplicationRecord
     self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
   end
 
-  # Shared by the server-confirm chargeable path (card_country resolved from the chargeable) and the
-  # client-confirm preview path (card_country read from the ConfirmationToken's payment_method_preview).
+  # Shared by server-confirmed charges and browser-confirmed previews.
   # True when PPP verification does not apply, or the card's country matches the buyer's IP country.
   def purchasing_power_parity_card_country_verified?(card_country_alpha2)
     return true if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
     card_country_alpha2 == Compliance::Countries.find_by_name(ip_country)&.alpha2
   end
 
-  # Lane B (client-confirm) has no chargeable to drive the charge-time merchant-account + fee setup
-  # that Order::ChargeService performs via load_and_prepare_chargeable. Combined-charge purchases
-  # have their fees computed at create time with no charge_processor_id, so the Stripe processor fee
-  # is excluded. Resolve the seller's merchant account and recompute fees so gumroad_amount_cents
-  # (and the resulting transfer/balance) include the processor fee, matching the server-confirm path.
+  # Browser-confirmed checkout has no chargeable to drive the charge-time merchant-account
+  # and fee setup that Order::ChargeService performs. Combined-charge purchases need the
+  # seller's merchant account resolved here so gumroad_amount_cents includes processor fees.
   def resolve_merchant_account_and_recompute_fees!(charge_processor_id)
     self.charge_processor_id ||= charge_processor_id
     prepare_merchant_account(charge_processor_id)

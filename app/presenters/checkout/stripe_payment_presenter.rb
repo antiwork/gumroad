@@ -2,12 +2,10 @@
 
 # Chooses the Stripe checkout payment integration for the current checkout props.
 #
-# Two Payment Element lanes coexist. Lane A ("payment_element") keeps Rails on the
-# existing stripe_payment_method_id server-confirm charge path. Lane B
-# ("payment_element_confirm") inverts control: the browser confirms the PaymentIntent
-# client-side, two-step, via a ConfirmationToken. Lane B is additive and only selected
-# behind both Payment Element flags, and only for a single-seller, one-time,
-# non-direct-charge cart; everything else stays on Lane A or falls back to CardElement.
+# Two Payment Element integrations coexist: "payment_element" keeps server-confirmed
+# PaymentMethods, while "payment_element_confirm" lets the browser confirm a PaymentIntent
+# with a ConfirmationToken. Confirm mode is additive and limited to single-seller,
+# one-time, non-direct-charge carts.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
@@ -38,8 +36,7 @@ class Checkout::StripePaymentPresenter
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason) if fallback_reason.present?
 
-    # The Lane B confirm gate sits above the Lane A setup/payment-mode pick: a confirm-eligible
-    # cart is always a one-time charge, so it never reaches the setup branch below.
+    # Confirm-eligible carts are always one-time charges, so check them before setup mode.
     return confirm_mode_props if confirm_mode_eligible?(checkout_items)
 
     stripe_elements_mode =
@@ -86,10 +83,9 @@ class Checkout::StripePaymentPresenter
       }
     end
 
-    # Lane B is only offered when both flags are active for the (single) seller and the cart is a
-    # plain one-time charge on a non-direct-charge account. Multi-seller stays on Lane A (one
-    # confirmation funds one PaymentIntent), future-charge/reusable carts need setup_future_usage
-    # that the Phase 1 deferred intent does not set, and connected-account scoping is not built yet.
+    # One ConfirmationToken funds one PaymentIntent, so confirm mode is limited to one
+    # seller. Reusable-payment-method flows need setup_future_usage, and connected-account
+    # scoping is not supported here.
     def confirm_mode_eligible?(items)
       sellers.one? &&
         sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&

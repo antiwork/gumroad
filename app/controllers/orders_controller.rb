@@ -55,9 +55,8 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Lane B (client-confirm) initiation. Builds the order, inspects the browser's ConfirmationToken,
-  # creates an unconfirmed PaymentIntent, and returns its client_secret so the browser can confirm.
-  # Receipts are deferred to #finalize, mirroring how #create defers them to #confirm for SCA.
+  # Starts browser-confirmed Payment Element checkout by returning an unconfirmed
+  # PaymentIntent client_secret. Receipts wait for #finalize, like SCA confirmation.
   def prepare
     order_params = permitted_order_params.merge!(
       {
@@ -86,9 +85,8 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Lane B (client-confirm) finalization. Idempotent: reached by the inline AJAX call (Phase 1) and
-  # later the redirect return page and webhook. Retrieves the confirmed PaymentIntent and finalizes
-  # the order without re-charging, exactly once.
+  # Finalizes a browser-confirmed PaymentIntent without re-charging. This is idempotent
+  # because AJAX, redirect return, and webhook paths can all reach it.
   def finalize
     ActiveRecord::Base.connection.stick_to_primary!
 

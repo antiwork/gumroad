@@ -233,9 +233,8 @@ type PrepareOrderResponse = {
   offer_codes: OfferCodes;
 };
 
-// Lane B (client-confirm): build the order + an unconfirmed PaymentIntent (#prepare), confirm it
-// client-side with the ConfirmationToken, then finalize (#finalize). Mirrors startOrderCreation's
-// CartPurchaseResult contract so the cart-submit consumer is unchanged.
+// Browser-confirmed order creation mirrors startOrderCreation's CartPurchaseResult
+// contract so the cart-submit consumer is unchanged.
 export const startConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
@@ -281,7 +280,7 @@ export const startConfirmOrderCreation = async (
       });
     }
 
-    // Inline method (card/wallet/Link) resolved in-page → finalize via the AJAX endpoint.
+    // Inline methods resolve in-page, then finalize via the AJAX endpoint.
     const finalizeResponse = await finalizeConfirmOrder(order.id);
     return mapResultsByUid(
       requestData,
@@ -317,9 +316,8 @@ const finalizeConfirmOrder = async (orderId: string): Promise<ConfirmOrderRespon
   return typia.assert<ConfirmOrderResponse>(await response.json());
 };
 
-// Both #prepare and #finalize key their line items by the cart-item uid, so map straight across by
-// uid (like the Lane A success path) rather than re-matching by permalink, which collides when the
-// cart holds the same product under two variants. The prepare confirmation envelope is skipped.
+// #prepare and #finalize key line items by cart-item uid, so map by uid rather
+// than permalink, which collides when the cart holds two variants of one product.
 const mapResultsByUid = (
   requestData: StartCartPurchaseRequestPayload,
   lineItems: Record<

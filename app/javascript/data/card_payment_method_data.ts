@@ -99,9 +99,8 @@ export type PaymentElementConfirmationTokenResult =
   | { status: "success"; confirmationTokenId: string; cardCountry: string | null }
   | StripeErrorParams;
 
-// Lane B (client-confirm) counterpart to preparePaymentElementPaymentMethodData. Instead of
-// creating a PaymentMethod, it mints a ConfirmationToken from the Payment Element. The server
-// inspects it (card country for PPP) before the browser confirms the PaymentIntent with it.
+// Mint a ConfirmationToken instead of a PaymentMethod so the server can inspect the
+// previewed card country before the browser confirms the PaymentIntent.
 export const createPaymentElementConfirmationToken = async (
   cardData: PaymentElementCardData,
 ): Promise<PaymentElementConfirmationTokenResult> => {

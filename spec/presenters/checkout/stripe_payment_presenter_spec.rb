@@ -284,13 +284,13 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
-  describe "client-confirm (Lane B)" do
+  describe "Payment Element confirm integration" do
     it "selects the confirm integration for a single-seller one-time card cart with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product]))
         .to eq(payment_element_confirm_props)
     end
 
-    it "stays on Lane A when only the base Payment Element flag is enabled" do
+    it "keeps server-confirm Payment Element when only the base flag is enabled" do
       expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props)
     end
 
@@ -303,7 +303,7 @@ describe Checkout::StripePaymentPresenter do
         .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
     end
 
-    it "stays on Lane A for a multi-seller cart even when every seller has both flags" do
+    it "keeps server-confirm Payment Element for a multi-seller cart even when every seller has both flags" do
       cart = create(:cart, :guest)
       [100, 200].each do |price_cents|
         product = create(:product, user: create(:user), price_cents:)
@@ -315,22 +315,22 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(cart:)).to eq(payment_element_props)
     end
 
-    it "stays on Lane A for a recurring membership even with both flags (Phase 1 is one-time only)" do
+    it "keeps server-confirm Payment Element for a recurring membership because confirm mode is one-time only" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
         .to eq(payment_element_props)
     end
 
-    it "stays on Lane A for a commission product even with both flags" do
+    it "keeps server-confirm Payment Element for a commission product even with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(native_type: Link::NATIVE_TYPE_COMMISSION)]))
         .to eq(payment_element_props)
     end
 
-    it "stays on Lane A SetupIntent mode for a preorder even with both flags" do
+    it "keeps server-confirm SetupIntent mode for a preorder even with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(is_preorder: true)]))
         .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
     end
 
-    it "stays on Lane A for a direct-charge seller even with both flags (connected-account scoping is not built yet)" do
+    it "keeps server-confirm Payment Element for a direct-charge seller even with both flags" do
       seller = create(:user, check_merchant_account_is_linked: true)
       product = create(:product, user: seller, price_cents: 1234)
       create(:merchant_account_stripe_connect, user: seller)

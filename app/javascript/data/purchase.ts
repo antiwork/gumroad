@@ -12,7 +12,7 @@ import { ProductToAdd } from "$app/components/Checkout/cartState";
 export type PurchasePaymentMethod =
   | AnyPaymentMethodResult
   | { type: "not-applicable" }
-  // Lane B (client-confirm): the card lives in the ConfirmationToken, sent to #prepare separately.
+  // Browser-confirmed cards live in the ConfirmationToken sent to #prepare.
   | { type: "payment-element-confirm"; confirmationTokenId: string; cardCountry: string | null };
 
 export type SuccessfulLineItemResult = {

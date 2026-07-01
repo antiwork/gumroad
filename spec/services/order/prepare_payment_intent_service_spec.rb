@@ -59,7 +59,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(response[:order][:stripe_connect_account_id]).to be_nil
         expect(Order.find_by_secure_external_id(response[:order][:id], scope: "confirm")).to eq(order)
 
-        # Mapping persisted before responding (KTD3): Charge + per-purchase ProcessorPaymentIntent.
+        # Mapping is persisted before responding so webhooks can resolve the order.
         expect(order.charges.count).to eq(1)
         charge = order.charges.last
         expect(charge.stripe_payment_intent_id).to be_present

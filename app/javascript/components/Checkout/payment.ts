@@ -41,10 +41,8 @@ export type PaymentElementConfig = {
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
-// Lane B (client-confirm) collects with the same deferred Payment Element but, instead of
-// manually creating a PaymentMethod server-side, mints a ConfirmationToken on the client. It
-// therefore drops payment_method_creation ("manual" is the Lane A signal) and is always in
-// payment (charge) mode in Phase 1 — future-charge setup stays on Lane A.
+// Browser-confirmed checkout mints a ConfirmationToken from the Payment Element, so it
+// omits payment_method_creation and stays in one-time payment mode.
 export type PaymentElementConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: "usd";
@@ -242,9 +240,8 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
-// Lane B safety net. The server only emits the confirm integration for eligible carts and the
-// browser must never widen that, so this mirrors the server gate: single-seller, one-time card
-// only (no future-charge or reusable-payment-method flows in Phase 1).
+// The browser must not widen server eligibility for the confirm integration:
+// single-seller, one-time card checkouts only.
 export function canUseStripePaymentElementConfirm(state: State): state is StateWithPaymentElementConfirmCheckout {
   if (state.products.length === 0) return false;
   if (state.checkoutPayment.integration !== "payment_element_confirm") return false;

@@ -312,7 +312,7 @@ describe("canUseStripePaymentElementConfirm", () => {
     expect(canUseStripePaymentElementConfirm(confirmState())).toBe(true);
   });
 
-  it("falls back when the server selected the Lane A Payment Element integration", () => {
+  it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementConfirm(state())).toBe(false);
   });
 
@@ -324,7 +324,7 @@ describe("canUseStripePaymentElementConfirm", () => {
     expect(canUseStripePaymentElementConfirm(confirmState({ products: [] }))).toBe(false);
   });
 
-  it("falls back for multi-seller carts (Lane B funds one PaymentIntent)", () => {
+  it("falls back for multi-seller carts because one ConfirmationToken funds one PaymentIntent", () => {
     expect(
       canUseStripePaymentElementConfirm(
         confirmState({
@@ -337,7 +337,7 @@ describe("canUseStripePaymentElementConfirm", () => {
     ).toBe(false);
   });
 
-  it("falls back for reusable-payment-method flows (Phase 1 is one-time only)", () => {
+  it("falls back for reusable-payment-method flows because confirm mode is one-time only", () => {
     expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ recurrence: "monthly" })] }))).toBe(
       false,
     );

@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
-# Creates an *unconfirmed* Stripe PaymentIntent for the client-confirm (Lane B) checkout.
-#
-# Where StripeChargeProcessor#create_payment_intent_or_charge! attaches a server-built
-# PaymentMethod and confirms, this hands an empty PaymentIntent + client_secret to the browser,
-# which confirms it with a ConfirmationToken. It lives in its own class so the server-confirm
-# processor stays untouched. Fee routing (platform / Gumroad-managed destination /
-# connected-account direct charge) mirrors the processor's three merchant-account branches.
+# Builds an unconfirmed PaymentIntent for browser confirmation with a ConfirmationToken.
+# Keeps the server-confirm processor untouched while mirroring its fee-routing branches.
 class StripeDeferredPaymentIntent
   include StripeErrorHandler
 
@@ -46,12 +41,9 @@ class StripeDeferredPaymentIntent
         currency: "usd",
         description:,
         metadata: metadata || { purchase: reference },
-        # The browser mints its ConfirmationToken from a Payment Element configured with an explicit
-        # payment_method_types list (see Checkout::StripePaymentPresenter#confirm_mode_props), so the deferred
-        # intent must be created the same way: Stripe refuses to confirm a payment_method_types-scoped token
-        # against an automatic_payment_methods intent. Card is inline-only, so scoping to card also keeps
-        # Phase 1 free of redirect-based methods (the reason automatic_payment_methods previously set
-        # allow_redirects: "never").
+        # Stripe rejects a payment_method_types-scoped ConfirmationToken against an
+        # automatic_payment_methods intent, so this must match the Payment Element config.
+        # Scoping to card also excludes redirect-based methods from this inline checkout path.
         payment_method_types: ["card"],
       }
       params[:transfer_group] = transfer_group if transfer_group.present?

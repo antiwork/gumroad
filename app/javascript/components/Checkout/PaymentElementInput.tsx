@@ -22,8 +22,8 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 
-// Lane A (server-confirm) and Lane B (client-confirm) mount the same deferred Payment Element;
-// they differ only in whether payment_method_creation: "manual" is present.
+// Server-confirm and browser-confirm integrations share the Payment Element; only
+// server-confirm sets payment_method_creation: "manual".
 type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
@@ -201,8 +201,8 @@ const StripePaymentElementProvider = ({
       currency: elementsOptions.currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
-      // Lane B omits payment_method_creation: ConfirmationTokens are minted from the elements
-      // directly, so "manual" must not be set or createConfirmationToken({ elements }) is rejected.
+      // ConfirmationTokens are minted from Elements directly, so "manual" must not be set
+      // or createConfirmationToken({ elements }) is rejected.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
         : {}),

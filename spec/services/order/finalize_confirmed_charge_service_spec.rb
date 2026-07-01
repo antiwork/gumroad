@@ -22,7 +22,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
   end
 
   before do
-    # Gumroad platform merchant account so the deferred intent + finalize stay on the platform.
+    # Keep the deferred intent and finalize call on the platform Stripe account.
     MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
       ma.charge_processor_alive_at = Time.current
     end
@@ -33,7 +33,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
     Stripe.deserialize(response.http_body).id
   end
 
-  # Builds an order and runs the Lane B prepare step, returning the order with an unconfirmed intent.
+  # Builds an order and runs the prepare step, returning the order with an unconfirmed intent.
   def prepared_order
     params = { line_items: [line_item] }.merge(common_params)
     order, = Order::CreateService.new(params:).perform
@@ -63,8 +63,8 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
       expect(responses[cart_uid(purchase)][:success]).to be(true)
       expect(purchase.reload).to be_successful
       expect(purchase.stripe_transaction_id).to be_present
-      # Lane B has no server-side chargeable, so the buyer-facing card presentation is derived from the
-      # confirmed charge at finalize; without it these fields would be nil.
+      # Browser-confirmed purchases derive buyer-facing card presentation from the
+      # confirmed charge; without that finalize work these fields would be nil.
       expect(purchase.card_visual).to eq("**** **** **** 4242")
       expect(purchase.card_type).to eq("visa")
       expect(purchase.card_country).to eq("US")

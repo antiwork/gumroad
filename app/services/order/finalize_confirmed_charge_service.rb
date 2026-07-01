@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-# Lane B (client-confirm) counterpart to Order::ConfirmService. The single idempotent finalize
-# entry point reached by the inline AJAX endpoint (Phase 1), and later the redirect return page
-# and the PaymentIntent webhook. It retrieves the order's PaymentIntent once (retrieve-only, never
-# re-confirming) and delegates each purchase to Purchase::FinalizeConfirmedChargeService, which is
-# safe to call repeatedly — fulfillment happens exactly once regardless of how many triggers fire.
+# Idempotently finalizes a browser-confirmed order without re-confirming the PaymentIntent.
+# AJAX, redirect return, and webhook paths can all reach this service, so fulfillment must
+# happen exactly once.
 class Order::FinalizeConfirmedChargeService
   include Order::ResponseHelpers
 
@@ -29,9 +27,8 @@ class Order::FinalizeConfirmedChargeService
   private
     attr_reader :order, :responses
 
-    # Key by the frontend's cart-item uid ("<permalink> <variant_external_id>") rather than the
-    # purchase id, so the browser maps results back to line items unambiguously even when the cart
-    # holds the same product under two variants (permalink alone collides).
+    # Key by cart-item uid rather than purchase id so the browser can map results back
+    # even when two variants share the same permalink.
     def cart_item_uid(purchase)
       "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
     end

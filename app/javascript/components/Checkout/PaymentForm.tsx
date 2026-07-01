@@ -680,7 +680,7 @@ const CreditCardContent = ({
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementConfirm = canUseStripePaymentElementConfirm(state);
-  // Both lanes mount the same deferred Payment Element; only the submit step differs.
+  // Both Payment Element integrations mount the same UI; only the submit step differs.
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementConfirm;
   const stripePaymentElementConfig =
     usesPaymentElement && state.checkoutPayment.integration !== "card_element"
@@ -717,8 +717,8 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
-      // Lane B (client-confirm): mint a ConfirmationToken from the Payment Element instead of a
-      // server-confirmed PaymentMethod. A saved card falls through to the Lane A path below.
+      // Browser-confirmed checkout mints a ConfirmationToken instead of a server-confirmed
+      // PaymentMethod. Saved cards still use the server-confirm path below.
       if (useStripePaymentElementConfirm && !useSavedCard) {
         const controller = assertDefined(
           paymentElementRef.current,
