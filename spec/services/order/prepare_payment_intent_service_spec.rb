@@ -234,5 +234,41 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses).to have_key("#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}")
       end
     end
+
+    context "with a mixed free-and-paid single-seller cart" do
+      before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
+
+      # The free item must ride on the same charge as the paid one, so finalize's send_charge_receipts
+      # covers it (matching Order::ChargeService). Otherwise mixed client-confirm carts skip receipts
+      # for their free items.
+      it "adds the free purchase to the charge alongside the paid one" do
+        free_product = create(:product, user: seller, price_cents: 0)
+        params = {
+          line_items: [
+            line_item,
+            { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+          ],
+        }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        paid_purchase = order.purchases.find { _1.link_id == product.id }
+        free_purchase = order.purchases.find { _1.link_id == free_product.id }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        allow(StripeDeferredPaymentIntent).to receive(:create).and_return(charge_intent)
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        charge = order.charges.last
+        expect(paid_purchase.reload.charge).to eq(charge)
+        expect(free_purchase.reload.charge).to eq(charge)
+        expect(free_purchase).to be_successful
+        expect(charge.successful_purchases).to include(free_purchase)
+        # The charge amount stays paid-only; the free item contributes nothing.
+        expect(charge.amount_cents).to eq(paid_purchase.total_transaction_cents)
+      end
+    end
   end
 end
