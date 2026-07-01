@@ -55,7 +55,10 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
       purchase.card_visual = ChargeableVisual.build_visual(processor_charge.card_last4, processor_charge.card_number_length)
       purchase.card_type = processor_charge.card_type
-      purchase.card_country = processor_charge.card_country
+      # card_country (and its "stripe" source) are already set from the ConfirmationToken preview at prepare
+      # time; only refresh it when the confirmed charge carries a country, so a null value never clobbers the
+      # good preview and leaves card_country_source "stripe" with a blank country.
+      purchase.card_country = processor_charge.card_country if processor_charge.card_country.present?
     end
 
     def fail_purchase
