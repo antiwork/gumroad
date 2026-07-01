@@ -8,11 +8,13 @@ describe ReceiptPresenter::ItemInfo do
 
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
+  let!(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) || create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
   let(:purchase) do
     create(
       :purchase,
       link: product,
       seller:,
+      merchant_account:,
       price_cents: 1_499,
       created_at: DateTime.parse("January 1, 2023")
     )
@@ -243,6 +245,30 @@ describe ReceiptPresenter::ItemInfo do
               expect(props[:general_attributes]).to eq(
                 [
                   { label: "Product price", value: "€14.99" }
+                ]
+              )
+            end
+          end
+
+          context "when the purchase has buyer-presentment amounts" do
+            before do
+              charge = create(:charge, seller:, purchases: [purchase])
+              charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 18_74)
+              create(:purchase_presentment,
+                     purchase:,
+                     charge_presentment:,
+                     presentment_price_cents: 18_74,
+                     presentment_tip_cents: 0,
+                     presentment_seller_tax_cents: 0,
+                     presentment_gumroad_tax_cents: 0,
+                     presentment_shipping_cents: 0,
+                     presentment_total_cents: 18_74)
+            end
+
+            it "returns product price in the buyer-presentment currency" do
+              expect(props[:general_attributes]).to eq(
+                [
+                  { label: "Product price", value: "CAD$18.74" },
                 ]
               )
             end
