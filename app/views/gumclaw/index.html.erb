@@ -1,0 +1,57 @@
+<div class="min-h-screen">
+  <div class="-mb-8 lg:-mb-20">
+    <%= render "home/shared/header",
+      bg_color: "dark-gray",
+      text_color: "white",
+      subtitle: "Meet Gumclaw",
+      title: "Gumroad is run<br class=\"sm:hidden\"> <span class=\"whitespace-nowrap\">by an agent.</span>",
+      description: "Gumclaw is the autonomous AI agent that runs Gumroad, handling support, operations, and engineering end-to-end.",
+      no_border: true,
+      gap: "gap-8 md:gap-12" do %>
+      <%= render "home/shared/button", text: "Learn more at Antiwork", url: "https://antiwork.com", variant: "dark" %>
+    <% end %>
+  </div>
+
+  <div class="relative bg-dark-gray">
+    <div class="text-white pt-16 sm:pt-24 pb-32">
+      <div class="flex flex-col justify-center gap-4 sm:gap-6 mx-auto text-center max-w-5xl mb-12 sm:mb-16 px-8 md:mb-28">
+        <h2 class="text-4xl md:text-6xl lg:text-7xl">How it works</h2>
+        <p class="text-lg md:text-2xl">We replaced the org chart with an agent that ships.</p>
+      </div>
+      <%= render "home/shared/how_we_build",
+        cards: [
+          {
+            icon: image_path("careers/audience.svg"),
+            icon_bg: "pink",
+            title: "Runs support",
+            description: "Gumclaw answers creator tickets, issues refunds, reviews risk, and resolves payout questions autonomously, around the clock."
+          },
+          {
+            icon: image_path("careers/launch.svg"),
+            icon_bg: "yellow",
+            title: "Ships code",
+            description: "It writes production code, opens pull requests, and fixes bugs directly in our open-source repository."
+          },
+          {
+            icon: image_path("careers/flag.svg"),
+            icon_bg: "purple",
+            title: "Handles operations",
+            description: "From reconciliation to compliance to monitoring, Gumclaw runs the day-to-day so the team can focus on building."
+          }
+        ]
+      %>
+    </div>
+  </div>
+
+  <div class="px-8 py-16 lg:px-[4vw] lg:py-24">
+    <div class="flex flex-col gap-8 lg:gap-16 max-w-5xl mx-auto items-center text-center">
+      <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl">Curious how a company runs on an agent?</h1>
+      <p class="text-lg md:text-2xl max-w-3xl">Antiwork builds the tools and the agents behind Gumroad. See how we work.</p>
+      <%= render "home/shared/button", text: "Learn more at Antiwork", url: "https://antiwork.com" %>
+    </div>
+  </div>
+
+  <%= image_tag "about/new-sale.svg", alt: "Gumroad illustration", class: "w-full min-h-[300px] object-cover" %>
+
+  <%= render "home/shared/footer" %>
+</div>

@@ -164,7 +164,7 @@ export const HomeNav = () => {
     if (path === Routes.gumroad_blog_root_path()) {
       return url.startsWith(path);
     }
-    if (path === Routes.careers_path()) {
+    if (path === Routes.gumclaw_path()) {
       return url.startsWith(path);
     }
     if (path === Routes.about_path()) {
@@ -179,7 +179,7 @@ export const HomeNav = () => {
     { href: Routes.pricing_path(), label: "Pricing" },
     { href: Routes.features_path(), label: "Features" },
     { href: Routes.about_path(), label: "About" },
-    ...(career_pages ? [{ href: Routes.careers_path(), label: "Jobs" }] : []),
+    ...(career_pages ? [{ href: Routes.gumclaw_path(), label: "Gumclaw" }] : []),
   ];
 
   return (

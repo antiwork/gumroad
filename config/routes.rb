@@ -459,9 +459,10 @@ Rails.application.routes.draw do
 
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
-    get "/careers", to: "careers#index"
-    get "/careers/:slug", to: "careers#show", as: :career
-    get "/jobs", to: redirect("/careers")
+    get "/gumclaw", to: "gumclaw#index"
+    get "/careers", to: redirect("/gumclaw")
+    get "/careers/:slug", to: redirect("/gumclaw")
+    get "/jobs", to: redirect("/gumclaw")
     get "/features", to: "home#features"
     get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
