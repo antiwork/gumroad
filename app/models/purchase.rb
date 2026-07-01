@@ -2931,7 +2931,7 @@ class Purchase < ApplicationRecord
     end
   end
 
-  def save_charge_data(processor_charge, chargeable: nil)
+  def save_charge_data(processor_charge, chargeable: nil, allow_missing_flow_of_funds: false)
     self.charge_processor_id = processor_charge.charge_processor_id
     self.stripe_refunded = processor_charge.refunded
     self.stripe_transaction_id = processor_charge.id
@@ -2945,7 +2945,10 @@ class Purchase < ApplicationRecord
     save!
 
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
+    return false if allow_missing_flow_of_funds && stripe_charge_processor? && processor_charge.flow_of_funds.blank?
+
     load_flow_of_funds(processor_charge)
+    true
   end
 
   def is_an_off_session_charge_on_indian_card?

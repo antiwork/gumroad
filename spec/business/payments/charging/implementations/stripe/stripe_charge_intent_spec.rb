@@ -91,51 +91,6 @@ describe StripeChargeIntent, :vcr do
     expect(described_class.new(payment_intent:).charge).to eq(processor_charge)
   end
 
-  it "retries loading the charge when flow of funds is required" do
-    payment_intent = Stripe::PaymentIntent.construct_from(
-      id: "pi_success",
-      status: StripeIntentStatus::SUCCESS,
-      latest_charge: "ch_success"
-    )
-    charge_without_flow_of_funds = BaseProcessorCharge.new
-    charge_without_flow_of_funds.id = "ch_success"
-    charge_with_flow_of_funds = BaseProcessorCharge.new
-    charge_with_flow_of_funds.id = "ch_success"
-    charge_with_flow_of_funds.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 1_00)
-    charge_processor = instance_double(StripeChargeProcessor)
-
-    allow_any_instance_of(described_class).to receive(:sleep)
-    allow(StripeChargeProcessor).to receive(:new).and_return(charge_processor)
-    expect(charge_processor).to receive(:get_charge)
-      .twice
-      .with("ch_success", merchant_account: nil)
-      .and_return(charge_without_flow_of_funds, charge_with_flow_of_funds)
-
-    expect(described_class.new(payment_intent:, requires_flow_of_funds: true).charge).to eq(charge_with_flow_of_funds)
-  end
-
-  it "raises when required flow of funds is still unavailable after retries" do
-    payment_intent = Stripe::PaymentIntent.construct_from(
-      id: "pi_success",
-      status: StripeIntentStatus::SUCCESS,
-      latest_charge: "ch_success"
-    )
-    processor_charge = BaseProcessorCharge.new
-    processor_charge.id = "ch_success"
-    charge_processor = instance_double(StripeChargeProcessor)
-
-    allow_any_instance_of(described_class).to receive(:sleep)
-    allow(StripeChargeProcessor).to receive(:new).and_return(charge_processor)
-    expect(charge_processor).to receive(:get_charge)
-      .exactly(4).times
-      .with("ch_success", merchant_account: nil)
-      .and_return(processor_charge)
-
-    expect do
-      described_class.new(payment_intent:, requires_flow_of_funds: true)
-    end.to raise_error(ChargeProcessorUnavailableError, "Stripe charge ch_success is missing flow of funds")
-  end
-
   context "when Stripe payment intent is not successful" do
     let(:processor_payment_intent) do
       create_stripe_payment_intent(nil,

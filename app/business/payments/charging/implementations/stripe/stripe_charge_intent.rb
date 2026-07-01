@@ -2,14 +2,10 @@
 
 # Creates a ChargeIntent from Stripe::PaymentIntent
 class StripeChargeIntent < ChargeIntent
-  FLOW_OF_FUNDS_RETRY_DELAYS = [0.25, 0.5, 1].freeze
-  private_constant :FLOW_OF_FUNDS_RETRY_DELAYS
-
   delegate :id, :client_secret, to: :payment_intent
 
-  def initialize(payment_intent:, merchant_account: nil, requires_flow_of_funds: false)
+  def initialize(payment_intent:, merchant_account: nil)
     self.payment_intent = payment_intent
-    self.requires_flow_of_funds = requires_flow_of_funds
 
     load_charge(payment_intent, merchant_account) if succeeded?
     validate_next_action
@@ -43,7 +39,7 @@ class StripeChargeIntent < ChargeIntent
       # For PaymentIntents with capture_method = automatic we always expect a single charge
       raise "Expected a charge for payment intent #{payment_intent.id}, but got nil" unless charge_id.present?
 
-      self.charge = charge_with_flow_of_funds(charge_id, merchant_account)
+      self.charge = StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
     end
 
     def validate_next_action
@@ -51,20 +47,4 @@ class StripeChargeIntent < ChargeIntent
         ErrorNotifier.notify "Stripe charge intent #{id} requires an unsupported action: #{payment_intent.next_action.type}"
       end
     end
-
-    def charge_with_flow_of_funds(charge_id, merchant_account)
-      charge = StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
-      return charge unless requires_flow_of_funds && charge.flow_of_funds.blank?
-
-      FLOW_OF_FUNDS_RETRY_DELAYS.each do |delay|
-        Rails.logger.info("Retrying Stripe charge #{charge_id} because its balance transaction is not available yet")
-        sleep(delay)
-        charge = StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
-        return charge if charge.flow_of_funds.present?
-      end
-
-      raise ChargeProcessorUnavailableError, "Stripe charge #{charge_id} is missing flow of funds"
-    end
-
-    attr_accessor :requires_flow_of_funds
 end

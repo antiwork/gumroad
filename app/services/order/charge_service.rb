@@ -216,26 +216,27 @@ class Order::ChargeService
       charge.credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if charge.credit_card&.requires_mandate?
 
       if charge_intent&.succeeded?
+        charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
+
         purchases.each do |purchase|
           if purchases_to_charge.include?(purchase)
             purchase.paypal_order_id = charge.paypal_order_id if charge.paypal_order_id.present?
             if charge_intent.is_a? StripeChargeIntent
-              purchase.build_processor_payment_intent(intent_id: charge_intent.id)
+              save_processor_payment_intent!(purchase, charge_intent.id)
             end
-            purchase.save_charge_data(charge_intent.charge, chargeable:)
+            purchase.save_charge_data(charge_intent.charge,
+                                      chargeable:,
+                                      allow_missing_flow_of_funds: charge_waiting_for_flow_of_funds)
           end
 
           next unless purchase.in_progress? && purchase.errors.empty?
+          next if charge_waiting_for_flow_of_funds && purchase_has_charge_data?(purchase)
           Purchase::MarkSuccessfulService.new(purchase).perform
           handle_recommended_purchase(purchase)
         end
       elsif charge_intent&.requires_action?
         purchases_to_charge.each do |purchase|
-          if purchase.processor_payment_intent.present?
-            purchase.processor_payment_intent.update!(intent_id: charge_intent.id)
-          else
-            purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
-          end
+          save_processor_payment_intent!(purchase, charge_intent.id)
         end
       else
         purchases.each do |purchase|
@@ -271,6 +272,8 @@ class Order::ChargeService
         elsif charge_intent&.requires_action? || setup_intent&.requires_action?
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+        elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
+          Rails.logger.info("Leaving purchase #{purchase.id} in_progress because charge #{charge_intent.charge.id} is missing flow of funds")
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
           mark_charged_purchase_successful(purchase)
         else
@@ -300,6 +303,8 @@ class Order::ChargeService
             stripe_connect_account_id: order.purchases.last.merchant_account.is_a_stripe_connect_account? ? order.purchases.last.merchant_account.charge_processor_merchant_id : nil
           }
         }
+      elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
+        charge_responses[line_item_uid] ||= purchase_pending_processor_settlement_response(purchase)
       else
         charge_responses[line_item_uid] ||= purchase.purchase_response
         handle_recommended_purchase(purchase)
@@ -309,6 +314,37 @@ class Order::ChargeService
 
   def purchase_has_charge_data?(purchase)
     purchase.errors.empty? && (purchase.stripe_transaction_id.present? || purchase.paypal_order_id.present?)
+  end
+
+  def save_processor_payment_intent!(purchase, intent_id)
+    if purchase.processor_payment_intent.present?
+      purchase.processor_payment_intent.update!(intent_id:)
+    else
+      purchase.create_processor_payment_intent!(intent_id:)
+    end
+  end
+
+  def purchase_waiting_for_flow_of_funds?(purchase)
+    charge_intent_waiting_for_flow_of_funds?(purchase.charge)
+  end
+
+  def charge_intent_waiting_for_flow_of_funds?(charge)
+    charge_intent&.succeeded? &&
+      charge_intent.is_a?(StripeChargeIntent) &&
+      charge&.charge_presentment.present? &&
+      charge_intent.charge.flow_of_funds.blank?
+  end
+
+  def purchase_pending_processor_settlement_response(purchase)
+    purchase.purchase_response.tap do |response|
+      response[:content_url] = nil
+      response[:redirect_token] = nil
+      response[:url_redirect_external_id] = nil
+      response[:should_show_receipt] = false
+      response[:show_view_content_button_on_product_page] = false
+      response[:has_third_party_analytics] = false
+      response[:bundle_products]&.each { _1[:content_url] = nil }
+    end
   end
 
   def mark_charged_purchase_successful(purchase)

@@ -6183,6 +6183,39 @@ describe Purchase, :vcr do
       expect(charge.processor_fee_currency).to eq(stripe_charge.fee_currency)
       expect(charge.payment_method_fingerprint).to eq(stripe_charge.card_fingerprint)
     end
+
+    it "can save Stripe charge metadata without loading flow of funds" do
+      stripe_charge = BaseProcessorCharge.new
+      stripe_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      stripe_charge.id = "ch_pending_settlement"
+      stripe_charge.refunded = false
+      stripe_charge.card_fingerprint = "card-fingerprint"
+      stripe_charge.card_instance_id = "pm_card"
+      stripe_charge.card_expiry_month = 12
+      stripe_charge.card_expiry_year = 2030
+      stripe_charge.flow_of_funds = nil
+
+      charge = create(:charge)
+      purchase = create(:purchase_in_progress,
+                        charge_processor_id: nil,
+                        stripe_transaction_id: nil,
+                        processor_fee_cents_currency: nil,
+                        stripe_fingerprint: nil,
+                        stripe_card_id: nil,
+                        card_expiry_month: nil,
+                        card_expiry_year: nil,
+                        flow_of_funds: nil)
+      charge.purchases << purchase
+
+      expect(purchase.save_charge_data(stripe_charge, allow_missing_flow_of_funds: true)).to eq(false)
+
+      expect(purchase.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
+      expect(purchase.stripe_transaction_id).to eq("ch_pending_settlement")
+      expect(purchase.stripe_fingerprint).to eq("card-fingerprint")
+      expect(purchase.stripe_card_id).to eq("pm_card")
+      expect(purchase.flow_of_funds).to be_nil
+      expect(charge.reload.processor_transaction_id).to eq("ch_pending_settlement")
+    end
   end
 
   describe "#refunded?" do

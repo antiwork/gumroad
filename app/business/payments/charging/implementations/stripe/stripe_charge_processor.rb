@@ -282,7 +282,7 @@ class StripeChargeProcessor
 
       payment_intent.confirm if payment_intent.status == StripeIntentStatus::REQUIRES_CONFIRMATION
 
-      StripeChargeIntent.new(payment_intent:, merchant_account:, requires_flow_of_funds: stripe_fx_quote_id.present?)
+      StripeChargeIntent.new(payment_intent:, merchant_account:)
     end
   end
 

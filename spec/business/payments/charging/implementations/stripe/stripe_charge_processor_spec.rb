@@ -661,7 +661,7 @@ describe StripeChargeProcessor, :vcr do
         }
       ).and_return(payment_intent)
       expect(StripeChargeIntent).to receive(:new)
-        .with(payment_intent:, merchant_account:, requires_flow_of_funds: true)
+        .with(payment_intent:, merchant_account:)
         .and_call_original
 
       charge_intent = subject.create_payment_intent_or_charge!(
