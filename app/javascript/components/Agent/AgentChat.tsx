@@ -437,7 +437,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
             </Button>
           </div>
         </form>
-        <small className="flex flex-wrap items-center justify-center gap-2 text-muted">
+        {/* Promo line for the CLI — hidden on phones where it eats vertical space near the composer. */}
+        <small className="hidden flex-wrap items-center justify-center gap-2 text-muted sm:flex">
           <span>Same toolset powers our CLI · Try</span>
           <code className="rounded border border-border px-1.5 py-0.5 font-[inherit]">
             brew install antiwork/cli/gumroad
