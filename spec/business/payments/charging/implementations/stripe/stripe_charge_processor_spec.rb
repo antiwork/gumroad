@@ -660,6 +660,9 @@ describe StripeChargeProcessor, :vcr do
           idempotency_key: "buyer-currency-charge-test-fxq_test",
         }
       ).and_return(payment_intent)
+      expect(StripeChargeIntent).to receive(:new)
+        .with(payment_intent:, merchant_account:, requires_flow_of_funds: true)
+        .and_call_original
 
       charge_intent = subject.create_payment_intent_or_charge!(
         merchant_account,
