@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Taxonomy } from "$app/utils/discover";
 
+import { buildCategoryOptions } from "$app/components/ProductEdit/ShareTab/taxonomyOptions";
 import { Select } from "$app/components/Select";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
@@ -16,15 +17,7 @@ export const TaxonomyEditor = ({
   taxonomies: Taxonomy[];
 }) => {
   const uid = React.useId();
-  const options = React.useMemo(() => {
-    const taxonomyMap = new Map(taxonomies.map((item) => [item.key, item]));
-    return taxonomies.map((taxonomy) => {
-      let label = taxonomy.label;
-      let current: Taxonomy | undefined = taxonomy;
-      while ((current = taxonomyMap.get(current.parent_key ?? ""))) label = `${current.label} > ${label}`;
-      return { id: taxonomy.key, label };
-    });
-  }, [taxonomies]);
+  const options = React.useMemo(() => buildCategoryOptions(taxonomies), [taxonomies]);
 
   return (
     <Fieldset>
