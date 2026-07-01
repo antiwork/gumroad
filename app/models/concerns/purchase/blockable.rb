@@ -206,7 +206,7 @@ module Purchase::Blockable
       block_buyer!
     end
 
-    def pause_payouts_for_seller_based_on_recent_failures!
+    def flag_seller_based_on_recent_failures!
       return if Feature.inactive?(:block_seller_based_on_recent_failures)
       return if IGNORED_ERROR_CODES.include?(error_code)
       return if seller.verified?

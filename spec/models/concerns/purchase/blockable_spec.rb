@@ -570,7 +570,7 @@ describe Purchase::Blockable do
       end
     end
 
-    describe "pause payouts for seller internally based on recent failures" do
+    describe "flag seller based on recent failures (informational, no payout pause)" do
       let(:seller) { create(:user) }
       let(:product) { create(:product, user: seller) }
       let!(:purchase) { create(:purchase, link: product, purchase_state: "in_progress") }
