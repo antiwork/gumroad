@@ -54,7 +54,8 @@ class CheckoutPresenter
       cart:,
       add_products: props[:add_products],
       clear_cart: props[:clear_cart],
-      saved_credit_card:
+      saved_credit_card:,
+      browser_guid:
     ).props
 
     props

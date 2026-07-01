@@ -42,8 +42,8 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil)
-    described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:).props
+  def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil, browser_guid: nil)
+    described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:, browser_guid:).props
   end
 
   it "selects Stripe Payment Element for a flagged single-seller charged checkout without a saved card" do
@@ -261,5 +261,74 @@ describe Checkout::StripePaymentPresenter do
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+  end
+
+  describe "checkout-level sampling flag" do
+    let(:sampling_flag) { described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME }
+    let(:browser_guid) { SecureRandom.uuid }
+
+    def checkout_actor_for(flipper_id)
+      OpenStruct.new(flipper_id:)
+    end
+
+    it "samples every eligible checkout while the sampling flag is unconfigured (fails open)" do
+      expect(Flipper.feature(sampling_flag).state).to eq(:off)
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product], browser_guid:))
+        .to eq(payment_element_props)
+    end
+
+    it "renders Payment Element when the checkout's browser guid is in the sampled bucket" do
+      Feature.activate_user(sampling_flag, checkout_actor_for(browser_guid))
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product], browser_guid:))
+        .to eq(payment_element_props)
+    end
+
+    it "falls back to CardElement when the sampling flag is configured but this checkout is not sampled" do
+      # Flag is conditional (enabled for a different actor), so this checkout's actor is excluded.
+      Feature.activate_user(sampling_flag, checkout_actor_for("some-other-guid"))
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product], browser_guid:))
+        .to eq(card_element_fallback("checkout_not_sampled"))
+    end
+
+    it "keys sampling on the cart when a cart is present" do
+      cart = create(:cart, :guest)
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      create(:cart_product, cart:, product:)
+      Feature.activate_user(sampling_flag, checkout_actor_for(cart.id.to_s))
+
+      expect(stripe_payment_props(cart:, browser_guid:)).to eq(payment_element_props)
+    end
+
+    it "falls back to CardElement for a cart checkout whose cart is not in the sampled bucket" do
+      cart = create(:cart, :guest)
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      create(:cart_product, cart:, product:)
+      # Enable the browser guid but NOT the cart id — cart takes precedence, so this checkout is excluded.
+      Feature.activate_user(sampling_flag, checkout_actor_for(browser_guid))
+
+      expect(stripe_payment_props(cart:, browser_guid:)).to eq(card_element_fallback("checkout_not_sampled"))
+    end
+
+    it "samples a checkout with no cart and no browser guid (blank actor fails open)" do
+      Feature.activate_user(sampling_flag, checkout_actor_for("some-other-guid"))
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product]))
+        .to eq(payment_element_props)
+    end
+
+    it "keeps the seller flag dominant: an unflagged seller falls back even when this checkout is sampled" do
+      product = create(:product, price_cents: 1234)
+      Feature.activate_user(sampling_flag, checkout_actor_for(browser_guid))
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], browser_guid:))
+        .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+    end
   end
 end

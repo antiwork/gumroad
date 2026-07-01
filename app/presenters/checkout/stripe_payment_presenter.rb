@@ -7,6 +7,15 @@
 # checkout may render Payment Element or must fall back to CardElement.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
+  # Optional checkout-level sampling throttle layered on top of the per-seller
+  # eligibility flag above. The seller flag decides who is ELIGIBLE (and is the
+  # kill switch); this flag decides what fraction of an eligible seller's
+  # checkouts actually render Payment Element, so conversion can be A/B compared
+  # against CardElement at the unit being measured (a checkout, not a seller).
+  # It fails OPEN: while unconfigured (Flipper state :off) every eligible
+  # checkout is sampled, preserving behavior for fully enabled sellers. It only
+  # restricts once an operator sets a percentage/actor gate on it.
+  STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME = :stripe_payment_element_checkout_sampling
   STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
@@ -19,13 +28,14 @@ class Checkout::StripePaymentPresenter
   # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
   STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
 
-  attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
+  attr_reader :cart, :add_products, :clear_cart, :saved_credit_card, :browser_guid
 
-  def initialize(cart:, add_products:, clear_cart:, saved_credit_card:)
+  def initialize(cart:, add_products:, clear_cart:, saved_credit_card:, browser_guid: nil)
     @cart = cart
     @add_products = add_products
     @clear_cart = clear_cart
     @saved_credit_card = saved_credit_card
+    @browser_guid = browser_guid
   end
 
   def props
@@ -90,7 +100,35 @@ class Checkout::StripePaymentPresenter
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
 
+      # Checkout-level sampling throttle runs LAST, so it only ever applies to an
+      # otherwise-eligible checkout — "checkout_not_sampled" stays cleanly
+      # separable from seller-ineligibility and structural fallbacks in the
+      # purchase_payment_flows analytics.
+      return "checkout_not_sampled" unless checkout_sampled?
+
       nil
+    end
+
+    # Fails open: an unconfigured sampling flag (Flipper state :off) samples every
+    # eligible checkout, so fully enabled sellers are unaffected. Once an operator
+    # sets a percentage/actor gate, only the sampled fraction renders Payment
+    # Element. Keyed on a stable per-checkout actor (cart when present, else the
+    # browser guid) so a buyer's payment surface never flips mid-checkout.
+    def checkout_sampled?
+      return true if Flipper.feature(STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME).state == :off
+
+      actor = checkout_sampling_actor
+      return true if actor.flipper_id.blank?
+
+      Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME, actor)
+    end
+
+    # Cart#id is a stable per-checkout key for logged-in/cart checkouts; single
+    # "Buy now" checkouts have no cart, so fall back to the browser guid. Flipper
+    # only CRC-hashes flipper_id for percentage bucketing — it is never exposed to
+    # the client, so the raw id is safe here.
+    def checkout_sampling_actor
+      OpenStruct.new(flipper_id: cart&.id&.to_s.presence || browser_guid.presence)
     end
 
     def setup_for_future_charges_without_charging?(items)
