@@ -173,6 +173,15 @@ describe FailAbandonedPurchaseWorker, :vcr do
 
           described_class.new.perform(purchase.id)
         end
+
+        it "does not finalize a charge that carries a payment intent id but is not client-confirmed" do
+          charge.update!(client_confirmed: false)
+          expect(Order::FinalizeConfirmedChargeService).not_to receive(:new)
+
+          described_class.new.perform(purchase.id)
+
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+        end
       end
 
       context "membership upgrade purchase" do
