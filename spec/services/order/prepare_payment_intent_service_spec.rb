@@ -215,5 +215,24 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_unique_test")
       end
     end
+
+    context "when a purchase matches no line item in params" do
+      # A bundle child (or any purchase whose permalink/variant is absent from params) must not be
+      # keyed under nil, which silently drops its response and collides across purchases.
+      it "keys the response by the computed cart-item uid instead of nil" do
+        free_product = create(:product, user: seller, price_cents: 0)
+        free_line_item = { uid: "unique-id-0", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 }
+        params = { line_items: [free_line_item] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        # Params whose line_items don't reference this purchase's permalink force the fallback path.
+        mismatched_params = params.merge(line_items: [free_line_item.merge(permalink: "nonexistent")])
+        responses = described_class.new(order:, params: mismatched_params, confirmation_token: nil).perform
+
+        expect(responses).not_to have_key(nil)
+        expect(responses).to have_key("#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}")
+      end
+    end
   end
 end

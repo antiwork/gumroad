@@ -225,6 +225,13 @@ class Order::PreparePaymentIntentService
       params[:line_items].find do |line_item|
         purchase.link.unique_permalink == line_item[:permalink] &&
           (line_item[:variants].blank? || purchase.variant_attributes.first&.external_id == line_item[:variants]&.first)
-      end&.dig(:uid)
+      end&.dig(:uid) || cart_item_uid_for(purchase)
+    end
+
+    # Fallback when a purchase matches no line item in params (e.g. a bundle child): mirror the
+    # browser's getCartItemUid ("permalink variantId") and finalize's cart_item_uid so the response
+    # is never stored under a nil key, which silently drops it and collides across purchases.
+    def cart_item_uid_for(purchase)
+      "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
     end
 end
