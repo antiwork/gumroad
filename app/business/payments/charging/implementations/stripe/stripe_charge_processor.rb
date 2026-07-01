@@ -14,6 +14,10 @@ class StripeChargeProcessor
 
   MANDATE_PREFIX = "Mandate-"
 
+  # Currencies Stripe charges in whole units instead of two-decimal minor units.
+  # https://docs.stripe.com/currencies#zero-decimal
+  ZERO_DECIMAL_CURRENCIES = %w[bif clp djf gnf jpy kmf krw mga pyg rwf ugx vnd vuv xaf xof xpf].freeze
+
   REQUEST_MANUAL_3DS_PARAMS = {
     payment_method_options: {
       card: {
@@ -25,6 +29,16 @@ class StripeChargeProcessor
 
   def self.charge_processor_id
     "stripe"
+  end
+
+  # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
+  # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
+  # passed to Stripe verbatim, so a charge is only safe when both conventions agree.
+  def self.charge_minor_units_compatible?(currency)
+    return false if currency.blank?
+
+    currency = currency.to_s.downcase
+    subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
   end
 
   def merchant_migrated?(merchant_account)

@@ -76,6 +76,7 @@ class Checkout::BuyerCurrencyEligibility
     buyer_currency = buyer_currency_for_ip(purchase.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
+    return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
 
     eligible(currency: buyer_currency)
   end

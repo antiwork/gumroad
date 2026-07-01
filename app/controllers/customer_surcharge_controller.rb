@@ -58,6 +58,7 @@ class CustomerSurchargeController < ApplicationController
         canonical_total_cents: quote.canonical_total_cents,
         presentment_total_cents: quote.presentment_total_cents,
         rate: (quote.presentment_total_cents.to_d / quote.canonical_total_cents).to_f,
+        subunit_to_unit: subunit_to_unit(quote.currency),
         expires_at: quote.stripe_fx_quote_expires_at.iso8601,
       }
     end

@@ -9,13 +9,17 @@ import {
 export type CheckoutBuyerCurrencyDisplay = {
   currencyCode: CurrencyCode;
   rate: number;
+  // The backend's authoritative minor-unit scale for the quote currency. Gumroad stores some
+  // currencies in non-ISO minor units (e.g. KRW as 1/100 won), so formatting must not rely on
+  // the currencies.json single_unit heuristic.
+  subunitToUnit: number;
 };
 
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
 ): CheckoutBuyerCurrencyDisplay | null => {
   const quote = surcharges?.buyer_currency_quote;
-  return quote ? { currencyCode: quote.currency, rate: quote.rate } : null;
+  return quote ? { currencyCode: quote.currency, rate: quote.rate, subunitToUnit: quote.subunit_to_unit } : null;
 };
 
 export const toBuyerCurrencyCents = (canonicalCents: number, buyerCurrencyDisplay: CheckoutBuyerCurrencyDisplay) =>
@@ -45,5 +49,6 @@ export const formatCheckoutPrice = (
   return formatMinorUnitPriceWithIntl(
     buyerCurrencyDisplay.currencyCode,
     toBuyerCurrencyCents(canonicalCents, buyerCurrencyDisplay),
+    buyerCurrencyDisplay.subunitToUnit,
   );
 };

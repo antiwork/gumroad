@@ -57,6 +57,32 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect(result).to be_nil
     end
+
+    it "returns nil for buyer currencies Gumroad stores in different minor units than Stripe charges" do
+      # KRW is stored as 1/100 won (config/initializers/money.rb) but Stripe charges whole won,
+      # so quoting it would charge buyers 100x the displayed amount.
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "175.223.10.1")
+
+      expect(result).to be_nil
+    end
+
+    it "quotes whole-unit presentment amounts for zero-decimal buyer currencies" do
+      jpy_quote = StripeFxQuote::Quote.new(id: "fxq_jpy", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.00694"))
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::JPY,
+        stripe_account_id: merchant_account.charge_processor_merchant_id
+      ).and_return(jpy_quote)
+
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "126.79.0.1")
+
+      # $10.00 at 0.00694 USD per JPY is 1440.92 yen, in whole yen — not 1/100-yen units.
+      expect(result).to have_attributes(currency: Currency::JPY, presentment_total_cents: 1441)
+    end
   end
 
   describe ".verify!" do

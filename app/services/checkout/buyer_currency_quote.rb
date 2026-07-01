@@ -83,6 +83,7 @@ class Checkout::BuyerCurrencyQuote
 
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
+    return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
 
     quote = StripeFxQuote.create(
       to_currency: Currency::USD,

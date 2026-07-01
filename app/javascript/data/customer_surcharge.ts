@@ -29,6 +29,7 @@ export type SurchargesResponse = {
     canonical_total_cents: number;
     presentment_total_cents: number;
     rate: number;
+    subunit_to_unit: number;
     expires_at: string;
   } | null;
 };

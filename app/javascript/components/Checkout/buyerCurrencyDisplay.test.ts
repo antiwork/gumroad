@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 
 import {
+  formatCheckoutPrice,
   getCheckoutBuyerCurrencyDisplay,
   toBuyerCurrencyCents,
   toCanonicalCents,
@@ -21,6 +22,7 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
     canonical_total_cents: 1_000,
     presentment_total_cents: 1_250,
     rate: 1.25,
+    subunit_to_unit: 100,
     expires_at: "2026-07-01T00:00:00Z",
   },
   ...overrides,
@@ -31,12 +33,32 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
     const display = getCheckoutBuyerCurrencyDisplay(surcharges());
 
     if (!display) throw new Error("Expected a buyer-currency display");
-    expect(display).toEqual({ currencyCode: "cad", rate: 1.25 });
+    expect(display).toEqual({ currencyCode: "cad", rate: 1.25, subunitToUnit: 100 });
     expect(toBuyerCurrencyCents(1_000, display)).toBe(1_250);
     expect(toCanonicalCents(1_250, display)).toBe(1_000);
   });
 
   it("does not use buyer-currency display when there is no quote", () => {
     expect(getCheckoutBuyerCurrencyDisplay(surcharges({ buyer_currency_quote: null }))).toBeNull();
+  });
+});
+
+describe("formatCheckoutPrice", () => {
+  it("formats buyer-currency amounts using the backend's minor-unit scale", () => {
+    expect(formatCheckoutPrice(1_000, { currencyCode: "cad", rate: 1.25, subunitToUnit: 100 })).toBe("CA$12.50");
+  });
+
+  it("formats zero-decimal buyer currencies as whole units", () => {
+    expect(formatCheckoutPrice(1_000, { currencyCode: "jpy", rate: 1.441, subunitToUnit: 1 })).toBe("¥1,441");
+  });
+
+  it("does not divide by the heuristic subunit when the backend scale is 1", () => {
+    // Guards against falling back to the currencies.json single_unit heuristic, which would
+    // divide non-flagged currencies by 100 regardless of how the backend denominates them.
+    expect(formatCheckoutPrice(1_441, { currencyCode: "jpy", rate: 1, subunitToUnit: 1 })).toBe("¥1,441");
+  });
+
+  it("formats canonical USD when no buyer-currency display exists", () => {
+    expect(formatCheckoutPrice(1_000, null)).toBe("US$10");
   });
 });

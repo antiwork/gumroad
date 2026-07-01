@@ -13,6 +13,24 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".charge_minor_units_compatible?" do
+    it "allows currencies whose stored minor units match what Stripe charges" do
+      expect(described_class.charge_minor_units_compatible?("usd")).to be(true)
+      expect(described_class.charge_minor_units_compatible?("cad")).to be(true)
+      expect(described_class.charge_minor_units_compatible?("jpy")).to be(true)
+    end
+
+    it "rejects KRW because Gumroad stores 1/100 won while Stripe charges whole won" do
+      expect(described_class.charge_minor_units_compatible?("krw")).to be(false)
+      expect(described_class.charge_minor_units_compatible?(Currency::KRW)).to be(false)
+    end
+
+    it "rejects blank currencies" do
+      expect(described_class.charge_minor_units_compatible?(nil)).to be(false)
+      expect(described_class.charge_minor_units_compatible?("")).to be(false)
+    end
+  end
+
   describe "#get_chargeable_for_params" do
     describe "with invalid params" do
       it "returns nil" do
