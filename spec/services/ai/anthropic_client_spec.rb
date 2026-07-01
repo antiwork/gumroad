@@ -54,6 +54,43 @@ describe Ai::AnthropicClient do
     end
   end
 
+  describe "API key resolution" do
+    it "uses ANTHROPIC_API_KEY when it is set" do
+      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-dedicated")
+
+      stub = stub_request(:post, url)
+        .with(headers: { "x-api-key" => "sk-ant-dedicated" })
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+    end
+
+    it "falls back to WALKS_ANTHROPIC_API_KEY when ANTHROPIC_API_KEY is blank" do
+      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
+      allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return("sk-ant-walks")
+
+      stub = stub_request(:post, url)
+        .with(headers: { "x-api-key" => "sk-ant-walks" })
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+    end
+
+    it "raises a clear error (no blank-key request) when both keys are missing" do
+      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
+      allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return(nil)
+      request = stub_request(:post, url)
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::Error, /not configured/i)
+      expect(request).not_to have_been_requested
+    end
+  end
+
   describe "#stream_messages" do
     # Build a raw Anthropic SSE body from a list of [event, data] pairs.
     def sse(*events)

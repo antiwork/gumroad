@@ -50,10 +50,17 @@ class Order::PreparePaymentIntentService
     end
 
     def mark_free_or_test_purchases_successful
-      order.purchases.each do |purchase|
-        next unless purchase.in_progress? && (purchase.free_purchase? || (purchase.is_test_purchase? && !purchase.is_preorder_authorization?))
+      free_or_test_purchases.each do |purchase|
         Purchase::MarkSuccessfulService.new(purchase).perform
         responses[line_item_uid_for(purchase)] = purchase.purchase_response
+      end
+    end
+
+    # Captured before marking (while still in_progress) so build_charge can add them to the seller's
+    # charge, mirroring Order::ChargeService so the finalize receipt covers free items too.
+    def free_or_test_purchases
+      @free_or_test_purchases ||= order.purchases.select do |purchase|
+        purchase.in_progress? && (purchase.free_purchase? || (purchase.is_test_purchase? && !purchase.is_preorder_authorization?))
       end
     end
 
@@ -138,7 +145,12 @@ class Order::PreparePaymentIntentService
       charge = order.charges.create!(seller:)
       charge.update!(merchant_account:, processor: merchant_account.charge_processor_id,
                      amount_cents:, gumroad_amount_cents:, client_confirmed: true)
-      purchases_to_charge.each do |purchase|
+      # Add the seller's already-successful free/test purchases alongside the paid ones, so
+      # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
+      # a seller group to its charge). Scoped to this charge's seller so a free item from another
+      # seller in a mixed cart isn't misattributed. The charge amount stays paid-only.
+      charge_purchases = purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
+      charge_purchases.each do |purchase|
         purchase.charge = charge
         purchase.save!
       end
@@ -225,6 +237,13 @@ class Order::PreparePaymentIntentService
       params[:line_items].find do |line_item|
         purchase.link.unique_permalink == line_item[:permalink] &&
           (line_item[:variants].blank? || purchase.variant_attributes.first&.external_id == line_item[:variants]&.first)
-      end&.dig(:uid)
+      end&.dig(:uid) || cart_item_uid_for(purchase)
+    end
+
+    # Fallback when a purchase matches no line item in params (e.g. a bundle child): mirror the
+    # browser's getCartItemUid ("permalink variantId") and finalize's cart_item_uid so the response
+    # is never stored under a nil key, which silently drops it and collides across purchases.
+    def cart_item_uid_for(purchase)
+      "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
     end
 end

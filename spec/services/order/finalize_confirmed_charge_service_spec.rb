@@ -112,4 +112,18 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
       expect(purchase.successful?).to be(false)
     end
   end
+
+  context "when no charge with a payment intent exists" do
+    it "reports every purchase as processing rather than an empty resubmittable success" do
+      params = { line_items: [line_item] }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+
+      responses = described_class.new(order:).perform
+
+      expect(responses[cart_uid(purchase)][:success]).to be(true)
+      expect(responses[cart_uid(purchase)][:processing]).to be(true)
+      expect(purchase.reload).to be_in_progress
+    end
+  end
 end

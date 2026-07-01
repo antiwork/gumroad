@@ -159,28 +159,19 @@ describe FailAbandonedPurchaseWorker, :vcr do
 
           allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_confirmed")
             .and_return(Stripe::PaymentIntent.construct_from(id: "pi_confirmed", status: "succeeded"))
-          # Stripe refuses to cancel a succeeded intent; the worker must then finalize, not give up.
           allow_any_instance_of(Purchase).to receive(:cancel_charge_intent!)
             .and_raise(ChargeProcessorError, "You cannot cancel this PaymentIntent because it has a status of succeeded.")
           allow(ChargeProcessor).to receive(:get_charge_intent).and_return(succeeded_intent)
         end
 
-        it "finalizes the captured charge's whole order instead of leaving it stuck in_progress" do
-          finalize = instance_double(Order::FinalizeConfirmedChargeService)
-          expect(Order::FinalizeConfirmedChargeService).to receive(:new)
-            .with(order: charge.order).and_return(finalize)
-          expect(finalize).to receive(:perform)
+        # Recovery of captured-but-abandoned client-confirm charges is deferred to the Phase 2 webhook;
+        # the worker must not finalize here, and must not raise on a succeeded intent it can't cancel.
+        it "leaves the purchase in_progress without finalizing" do
+          expect(Purchase::FinalizeConfirmedChargeService).not_to receive(:new)
 
-          described_class.new.perform(purchase.id)
-        end
+          expect { described_class.new.perform(purchase.id) }.not_to raise_error
 
-        it "does not finalize a charge that carries a payment intent id but is not client-confirmed" do
-          charge.update!(client_confirmed: false)
-          expect(Order::FinalizeConfirmedChargeService).not_to receive(:new)
-
-          described_class.new.perform(purchase.id)
-
-          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(purchase.reload).to be_in_progress
         end
       end
 
