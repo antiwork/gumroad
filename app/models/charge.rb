@@ -247,8 +247,7 @@ class Charge < ApplicationRecord
 
   private
     def copy_refund_errors_from(purchase)
-      messages = purchase.errors.full_messages.presence || ["The purchase could not be refunded."]
-      messages.each { errors.add(:base, _1) }
+      purchase.errors.full_messages.each { errors.add(:base, _1) }
     end
 
     # At least one product must be taxable for the charge to be taxable.
