@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
-# Builds an unconfirmed PaymentIntent for browser confirmation with a ConfirmationToken.
-# Keeps the server-confirm processor untouched while reusing the shared connect/destination
-# fee routing (StripeIntentChargeRouting).
-#
-# The caller MUST supply payment_method_types/currency from
-# Checkout::StripePaymentPresenter (CLIENT_CONFIRM_PAYMENT_METHOD_TYPES / CLIENT_CONFIRM_CURRENCY)
-# so the intent and the Payment Element can never drift — Stripe rejects a
+# Builds an unconfirmed PaymentIntent for client-confirm checkout.
+# payment_method_types/currency must match the Payment Element config because Stripe rejects a
 # payment_method_types-scoped ConfirmationToken against a mismatched intent.
 class StripeDeferredPaymentIntent
   include StripeErrorHandler

@@ -46,8 +46,7 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Starts browser-confirmed Payment Element checkout by returning an unconfirmed
-  # PaymentIntent client_secret. Receipts wait for #finalize, like SCA confirmation.
+  # Starts client-confirm Payment Element checkout by returning an unconfirmed PaymentIntent.
   def prepare
     order_params = build_order_params
 
@@ -69,8 +68,7 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Finalizes a browser-confirmed PaymentIntent without re-charging. This is idempotent
-  # because AJAX, redirect return, and webhook paths can all reach it.
+  # Finalizes a client-confirm PaymentIntent without re-charging.
   def finalize
     ActiveRecord::Base.connection.stick_to_primary!
 

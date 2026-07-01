@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-# Idempotently finalizes a browser-confirmed order without re-confirming the PaymentIntent.
-# AJAX, redirect return, and webhook paths can all reach this service, so fulfillment must
-# happen exactly once.
+# Idempotently finalizes a client-confirm order without re-confirming the PaymentIntent.
 class Order::FinalizeConfirmedChargeService
   include Order::ResponseHelpers
 

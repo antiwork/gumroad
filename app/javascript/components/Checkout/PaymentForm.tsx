@@ -680,7 +680,6 @@ const CreditCardContent = ({
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
-  // Both Payment Element integrations mount the same UI; only the submit step differs.
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig =
     usesPaymentElement && state.checkoutPayment.integration !== "card_element"
@@ -717,8 +716,7 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
-      // Browser-confirmed checkout mints a ConfirmationToken instead of a server-confirmed
-      // PaymentMethod. Saved cards still use the server-confirm path below.
+      // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {
         const controller = assertDefined(
           paymentElementRef.current,

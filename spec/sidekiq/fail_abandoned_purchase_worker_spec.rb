@@ -145,7 +145,7 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
-      describe "browser-confirmed (Lane B) charge that succeeded but was never finalized" do
+      describe "client-confirm charge that succeeded but was never finalized" do
         let(:seller) { create(:user) }
         let(:product) { create(:product, user: seller) }
         let(:purchase) { create(:purchase_in_progress, link: product, merchant_account: create(:merchant_account, user: seller)) }

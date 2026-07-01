@@ -524,9 +524,8 @@ const CheckoutIndexPage = () => {
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
-      // The card was captured but the order couldn't be finalized in-page. The webhook will
-      // fulfill it out-of-band, so tell the buyer it's processing and clear the (paid) cart so
-      // they can't resubmit and get charged twice.
+      // The card was captured, so clear the cart to prevent a second charge while fulfillment
+      // finishes out-of-band.
       if (e instanceof PaymentConfirmedError) {
         showAlert(
           "Your payment is being processed — check your email for your receipt. Please do not pay again.",

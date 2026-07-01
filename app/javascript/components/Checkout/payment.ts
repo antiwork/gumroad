@@ -41,8 +41,8 @@ export type PaymentElementConfig = {
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
-// Browser-confirmed checkout mints a ConfirmationToken from the Payment Element, so it
-// omits payment_method_creation and stays in one-time payment mode.
+// Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
+// payment_method_creation and stays in one-time payment mode.
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: "usd";
@@ -240,8 +240,8 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
-// The browser must not widen server eligibility for the client-confirm integration:
-// single-seller, one-time card checkouts only.
+// The browser must not widen server eligibility for client-confirm: single-seller,
+// one-time card checkouts only.
 export function canUseStripePaymentElementClientConfirm(
   state: State,
 ): state is StateWithPaymentElementClientConfirmCheckout {

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Finalizes a single browser-confirmed purchase from an already-retrieved PaymentIntent.
+# Finalizes a single client-confirm purchase from an already-retrieved PaymentIntent.
 #
 # Unlike Purchase::ConfirmService, it does NOT confirm the intent because the browser already did. It is
 # handed a retrieve-only charge intent so a `processing` intent is never re-confirmed (which Stripe
@@ -13,13 +13,8 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
     @charge_intent = charge_intent
   end
 
-  # Returns :pending (intent still processing), an error message string (failed), or nil (success
-  # or already-finalized no-op).
-  #
-  # with_lock serializes concurrent finalizers so only one runs the state transition and
-  # fulfillment. Phase 1 has a single trigger (AJAX), but the abandonment worker and the Phase-2
-  # webhook can race the browser call, and the unlocked in_progress? read would let two callers
-  # both fulfill and double-credit the same captured charge.
+  # with_lock serializes AJAX, abandonment-worker, and webhook finalizers so only one can fulfill
+  # the captured charge.
   def perform
     purchase.with_lock do
       if purchase.successful?
@@ -54,7 +49,7 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       nil
     end
 
-    # Browser-confirmed checkout never builds a server-side chargeable, so derive
+    # Client-confirm checkout never builds a server-side chargeable, so derive
     # card_visual/type/country from the confirmed charge. Expiry, fingerprint, and
     # processor id are handled by #save_charge_data.
     def assign_confirmed_card_presentation(processor_charge)
@@ -62,9 +57,8 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
       purchase.card_visual = ChargeableVisual.build_visual(processor_charge.card_last4, processor_charge.card_number_length)
       purchase.card_type = processor_charge.card_type
-      # card_country (and its "stripe" source) are already set from the ConfirmationToken preview at prepare
-      # time; only refresh it when the confirmed charge carries a country, so a null value never clobbers the
-      # good preview and leaves card_country_source "stripe" with a blank country.
+      # Only overwrite the previewed card country when Stripe returns a confirmed value; null would
+      # clobber card_country while leaving card_country_source as "stripe".
       purchase.card_country = processor_charge.card_country if processor_charge.card_country.present?
     end
 

@@ -63,7 +63,7 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
       expect(responses[cart_uid(purchase)][:success]).to be(true)
       expect(purchase.reload).to be_successful
       expect(purchase.stripe_transaction_id).to be_present
-      # Browser-confirmed purchases derive buyer-facing card presentation from the
+      # Client-confirm purchases derive buyer-facing card presentation from the
       # confirmed charge; without that finalize work these fields would be nil.
       expect(purchase.card_visual).to eq("**** **** **** 4242")
       expect(purchase.card_type).to eq("visa")

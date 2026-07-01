@@ -251,8 +251,7 @@ export class PaymentConfirmedError extends Error {}
 
 const FINALIZE_MAX_ATTEMPTS = 3;
 
-// Browser-confirmed order creation mirrors startOrderCreation's CartPurchaseResult
-// contract so the cart-submit consumer is unchanged.
+// Client-confirm order creation keeps the same CartPurchaseResult contract as startOrderCreation.
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,

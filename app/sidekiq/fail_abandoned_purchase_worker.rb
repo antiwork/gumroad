@@ -47,9 +47,8 @@ class FailAbandonedPurchaseWorker
     rescue ChargeProcessorError
       charge_intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
 
-      # A browser-confirmed (Lane B) charge that succeeded but was never finalized (the buyer
-      # vanished before the AJAX finalize) has no server-side confirmation to recover it, so
-      # finalize the captured charge idempotently here instead of leaving it stuck in_progress.
+      # If a client-confirm charge succeeded but the buyer left before finalize, recover the captured
+      # charge here instead of leaving the purchase in_progress.
       return Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform if charge_intent&.succeeded? && confirmed_charge?
 
       # Ignore the error if:
@@ -61,8 +60,8 @@ class FailAbandonedPurchaseWorker
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
-    # Lane B purchases carry a combined Charge mapped to the PaymentIntent; other purchases have
-    # their own finalization path, so keep today's cancel-only behavior for them.
+    # Client-confirm purchases carry a combined Charge mapped to the PaymentIntent; other purchases
+    # keep the cancel-only abandonment behavior.
     def confirmed_charge?
       purchase.charge&.stripe_payment_intent_id.present?
     end

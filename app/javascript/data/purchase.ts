@@ -12,7 +12,7 @@ import { ProductToAdd } from "$app/components/Checkout/cartState";
 export type PurchasePaymentMethod =
   | AnyPaymentMethodResult
   | { type: "not-applicable" }
-  // Browser-confirmed cards live in the ConfirmationToken sent to #prepare.
+  // Client-confirm cards live in the ConfirmationToken sent to #prepare.
   | { type: "payment-element-client-confirm"; confirmationTokenId: string; cardCountry: string | null };
 
 export type SuccessfulLineItemResult = {
@@ -116,7 +116,7 @@ export const getPaymentDetailsSource = (
 ): PaymentDetailsSource | null => {
   if (paymentMethod.type === "saved") return "saved_payment_method";
   if (paymentMethod.type === "not-applicable") return null;
-  // Lane B collects the card via the Stripe Payment Element and confirms it in the browser.
+  // Client-confirm always collects card details through the Payment Element.
   if (paymentMethod.type === "payment-element-client-confirm") return "payment_element";
   switch (paymentMethod.cardParamsResult.type) {
     case "cc":

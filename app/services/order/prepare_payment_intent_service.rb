@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-# Prepares a browser-confirmed charge by inspecting the ConfirmationToken before any
-# charge, creating an unconfirmed PaymentIntent, and persisting the order/payment-intent
-# mapping before returning the client_secret.
+# Prepares a client-confirm charge by inspecting the ConfirmationToken before creating the
+# unconfirmed PaymentIntent.
 class Order::PreparePaymentIntentService
   include Order::ResponseHelpers
 
@@ -58,9 +57,8 @@ class Order::PreparePaymentIntentService
       end
     end
 
-    # One ConfirmationToken funds one PaymentIntent, so client-confirm is single-seller only. The
-    # presenter and JS gate enforce this in the UI; re-check server-side so a crafted multi-seller
-    # request can't fund one seller's charge with another seller's line items.
+    # One ConfirmationToken funds one PaymentIntent, so re-check the single-seller constraint
+    # server-side before charging a crafted cart.
     def block_multiple_sellers
       return false if purchases_to_charge.map(&:seller_id).uniq.one?
 
@@ -95,8 +93,8 @@ class Order::PreparePaymentIntentService
       fail_all_purchases_when_any_errored
     end
 
-    # A seller can block a buyer's email from purchasing. Lane A runs this at charge time
-    # (Order::ChargeService); combined-charge purchases skip it at create time, so run it here.
+    # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
+    # create time, so run it before creating the PaymentIntent.
     def block_purchases_with_blocked_customer_emails
       purchases_to_charge.each(&:check_for_blocked_customer_emails)
       fail_all_purchases_when_any_errored
@@ -202,7 +200,7 @@ class Order::PreparePaymentIntentService
       end
     end
 
-    # Resolved on each purchase by resolve_merchant_account_and_fees; confirm mode has one seller.
+    # Resolved on each purchase by resolve_merchant_account_and_fees; client-confirm has one seller.
     def merchant_account
       @merchant_account ||= purchases_to_charge.first.merchant_account
     end

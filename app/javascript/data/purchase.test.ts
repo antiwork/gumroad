@@ -90,7 +90,7 @@ describe("getPaymentDetailsSource", () => {
     expect(getPaymentDetailsSource({ type: "not-applicable" }, true)).toBeNull();
   });
 
-  it("reports payment_element for a browser-confirmed (Lane B) card, which always uses the Payment Element", () => {
+  it("reports payment_element for a client-confirm card, which always uses the Payment Element", () => {
     const clientConfirmPaymentMethod: PurchasePaymentMethod = {
       type: "payment-element-client-confirm",
       confirmationTokenId: "ctoken_123",

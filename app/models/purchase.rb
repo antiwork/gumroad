@@ -3029,16 +3029,15 @@ class Purchase < ApplicationRecord
     self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
   end
 
-  # Shared by server-confirmed charges and browser-confirmed previews.
+  # Shared by server-confirmed charges and client-confirm previews.
   # True when PPP verification does not apply, or the card's country matches the buyer's IP country.
   def purchasing_power_parity_card_country_verified?(card_country_alpha2)
     return true if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
     card_country_alpha2 == Compliance::Countries.find_by_name(ip_country)&.alpha2
   end
 
-  # Browser-confirmed checkout has no chargeable to drive the charge-time merchant-account
-  # and fee setup that Order::ChargeService performs. Combined-charge purchases need the
-  # seller's merchant account resolved here so gumroad_amount_cents includes processor fees.
+  # Client-confirm checkout has no chargeable to drive Order::ChargeService's merchant-account setup.
+  # Resolve it here so gumroad_amount_cents includes processor fees.
   def resolve_merchant_account_and_recompute_fees!(charge_processor_id, merchant_account: nil)
     self.charge_processor_id ||= charge_processor_id
     prepare_merchant_account(charge_processor_id, resolved_merchant_account: merchant_account)

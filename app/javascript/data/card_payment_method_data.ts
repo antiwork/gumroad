@@ -99,8 +99,7 @@ export type PaymentElementConfirmationTokenResult =
   | { status: "success"; confirmationTokenId: string; cardCountry: string | null }
   | StripeErrorParams;
 
-// Mint a ConfirmationToken instead of a PaymentMethod so the server can inspect the
-// previewed card country before the browser confirms the PaymentIntent.
+// Use a ConfirmationToken so the server can inspect card country before client confirmation.
 export const createPaymentElementConfirmationToken = async (
   cardData: PaymentElementCardData,
 ): Promise<PaymentElementConfirmationTokenResult> => {

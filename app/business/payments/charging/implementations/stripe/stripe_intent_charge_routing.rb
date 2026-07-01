@@ -4,9 +4,8 @@
 # a connected (direct-charge) account collects an application fee on its own account; a
 # Gumroad-managed account takes a destination transfer; the platform account keeps everything.
 #
-# Lane B (StripeDeferredPaymentIntent) uses this. Lane A's
-# StripeChargeProcessor#create_payment_intent_or_charge! still inlines the same three-way branch
-# and should adopt this the next time it is touched — until then the two MUST move together.
+# Client-confirm checkout uses this helper; the server-confirm path still inlines the same branch in
+# StripeChargeProcessor#create_payment_intent_or_charge!, so keep the two in sync until it is moved.
 module StripeIntentChargeRouting
   module_function
 

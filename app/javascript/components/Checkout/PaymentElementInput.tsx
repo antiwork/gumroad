@@ -22,7 +22,7 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 
-// Server-confirm and browser-confirm integrations share the Payment Element; only
+// Server-confirm and client-confirm integrations share the Payment Element; only
 // server-confirm sets payment_method_creation: "manual".
 type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClientConfirmConfig;
 
@@ -201,8 +201,7 @@ const StripePaymentElementProvider = ({
       currency: elementsOptions.currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
-      // ConfirmationTokens are minted from Elements directly, so "manual" must not be set
-      // or createConfirmationToken({ elements }) is rejected.
+      // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
         : {}),

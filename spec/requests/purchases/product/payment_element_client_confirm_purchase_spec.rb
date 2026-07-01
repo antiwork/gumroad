@@ -3,11 +3,8 @@
 require("spec_helper")
 require "timeout"
 
-# Browser E2E for the Payment Element client-confirm integration. Most coverage stubs the
-# browser-side Stripe seam; this drives the real iframe plus #prepare/confirm/#finalize
-# handshake against Stripe test mode.
+# E2E coverage for the Payment Element client-confirm handshake against Stripe test mode.
 describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: true) do
-  # Read the serialized checkout integration from the Inertia page props.
   def checkout_payment_props
     page.evaluate_script(<<~JS)
       JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
@@ -16,8 +13,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
   before do
     @seller = create(:user)
-    # Use the platform account so token minting, browser confirmation, and the deferred
-    # intent all happen on the same Stripe account.
+    # Keep token minting, client confirmation, and the deferred intent on the same Stripe account.
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     @product = create(:product_with_pdf_file, user: @seller, price_cents: 1000)
@@ -33,15 +29,14 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
     expect(checkout_payment["fallback_reason"]).to be_nil
     expect(page).to have_selector("iframe[src*='elements-inner-payment']")
 
-    # Guard against silently falling back to the server-confirm charge service; both paths
-    # produce a ch_ charge, so purchase-level assertions alone cannot distinguish them.
+    # Both paths produce a ch_ charge, so assert this does not fall back to server-confirm.
     expect(Order::ChargeService).not_to receive(:new)
 
     check_out(@product, payment_element: true)
 
     purchase = Purchase.last
     expect(purchase.successful?).to be(true)
-    # The platform-account Payment Element charges the browser-entered 4242 card directly.
+    # The platform-account Payment Element confirms the entered 4242 card directly.
     expect(purchase.stripe_transaction_id).to match(/\Ach_/)
     expect(purchase.card_visual).to eq("**** **** **** 4242")
     # The intent -> order mapping is durable and written at prepare time: the unconfirmed PaymentIntent (pi_)
@@ -57,8 +52,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
-    # check_out(error:) expects a failed purchase, but client-side confirm errors never
-    # reach #finalize, so the built purchase remains in_progress.
+    # Client-side confirm errors never reach #finalize, so the built purchase remains in_progress.
     fill_checkout_form(@product, credit_card: nil)
     fill_in_payment_element(number: "4000000000000002")
     click_on "Pay", exact: true
@@ -78,8 +72,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
-    # check_out drives the inline 3DS challenge, covering confirmPayment rather than
-    # the older confirmCardPayment path.
+    # Covers confirmPayment rather than the older confirmCardPayment path.
     check_out(@product, payment_element: true, credit_card: { number: "4000002500003155" }, sca: true)
 
     purchase = Purchase.last
