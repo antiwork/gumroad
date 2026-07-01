@@ -34,6 +34,7 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
     def finalize_successful_charge
       purchase.charge_intent = charge_intent
+      assign_confirmed_card_presentation(charge_intent.charge)
       purchase.save_charge_data(charge_intent.charge)
 
       if purchase.errors.present?
@@ -43,6 +44,18 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
       handle_purchase_success
       nil
+    end
+
+    # Lane A copies the buyer-facing card presentation off the server-built chargeable in
+    # Purchase#prepare_for_charge!; Lane B never builds one (the browser confirmed), so derive
+    # card_visual/type/country from the confirmed charge, whose payment_method_details carry
+    # brand/last4/country. Expiry, fingerprint, and processor id are handled by #save_charge_data.
+    def assign_confirmed_card_presentation(processor_charge)
+      return if processor_charge.card_last4.blank?
+
+      purchase.card_visual = ChargeableVisual.build_visual(processor_charge.card_last4, processor_charge.card_number_length)
+      purchase.card_type = processor_charge.card_type
+      purchase.card_country = processor_charge.card_country
     end
 
     def fail_purchase

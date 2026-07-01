@@ -63,6 +63,11 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
       expect(responses[cart_uid(purchase)][:success]).to be(true)
       expect(purchase.reload).to be_successful
       expect(purchase.stripe_transaction_id).to be_present
+      # Lane B has no server-side chargeable, so the buyer-facing card presentation is derived from the
+      # confirmed charge at finalize; without it these fields would be nil.
+      expect(purchase.card_visual).to eq("**** **** **** 4242")
+      expect(purchase.card_type).to eq("visa")
+      expect(purchase.card_country).to eq("US")
       expect(order.charges.last.reload.processor_transaction_id).to be_present
       succeeded_at = purchase.succeeded_at
 
