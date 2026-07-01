@@ -35,6 +35,7 @@
 /vendor/bundle
 app/javascript/json_schemas
 app/javascript/stylesheets/pages_tailwind.generated.html
+app/javascript/routes.*
 app/javascript/utils/routes.*
 docker/base/Gemfile*
 dump.rdb
