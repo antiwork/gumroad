@@ -2,28 +2,32 @@
 
 # Server-authoritative policy boundary for the client-confirmed Intent path (Lane B). Given a cart's
 # sellers and product lifecycle, it decides whether the cart may confirm client-side and which Stripe
-# payment methods it may use. The frontend must never widen this: the presenter feeds the resolved
-# payment_method_types to the Payment Element and Order::PreparePaymentIntentService feeds the same
-# value to the deferred PaymentIntent, so the two sides cannot drift.
+# payment methods it may use. The frontend cannot widen this: payment_method_types is the intersection
+# of the eligible set with a hardcoded launched set, so no client-supplied value can add a method.
 #
 # Two method sets are distinguished:
-#   - eligible_payment_method_types: the policy set the cart *could* use per the origin decision memo
-#     ("Payment-method eligibility by product type"). This is the logged decision and what later units
-#     intersect with per-method launch/PPP gates.
+#   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
+#     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Only card
-#     is launched — redirect methods need the return page + allow_redirects (U10/U11), inline
-#     wallets/Link need frontend verification (U9), and connected-account scoping needs U12. Widening
-#     LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job, and the deferred intent's payment_method_types
-#     moves with it automatically because both sides read this resolver (the Bug 1 handshake invariant).
+#     is launched, because the other methods need machinery that isn't built yet: redirect methods need
+#     the server return page + allow_redirects, delayed-notification methods need the PaymentIntent
+#     webhook lifecycle, inline wallets/Link need frontend verification, and connected-account sellers
+#     need account-scoped Elements. Widening LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
 #
-# Always an explicit array, never Stripe's automatic_payment_methods: Stripe refuses to confirm a
-# payment_method_types-scoped ConfirmationToken (which the Payment Element mints) against an
-# automatic_payment_methods intent.
+# Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
+# Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
+# confirmed against an automatic_payment_methods intent — hence an explicit array here, never
+# automatic_payment_methods). Both sides read this resolver, but they derive its lifecycle inputs
+# independently (the presenter from the cart, PreparePaymentIntentService from the persisted purchases).
+# Today that can't diverge because card survives every filter, so both land on ["card"]. When LAUNCHED
+# widens, those two derivations must be reconciled — and PreparePaymentIntentService hard-stops an
+# ineligible cart before creating the intent, so any residual mismatch fails closed rather than reaching
+# Stripe with the wrong method list.
 class Checkout::PaymentMethodResolver
-  # Buyer-present single-seller dynamic set (memo single-buy row). Apple Pay / Google Pay ride on
-  # "card" in the Payment Element, so they are not separate types here.
+  # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
+  # Element, so they are not separate types here.
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp].freeze
-  # Afterpay/Clearpay and Affirm are one-time, buyer-present only (memo), so a recurring lifecycle drops them.
+  # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
   # Only card is launched on the client-confirmed path today; later units widen this (see class comment).
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card].freeze
@@ -42,7 +46,7 @@ class Checkout::PaymentMethodResolver
   end
 
   def resolve
-    @resolve ||= begin
+    @resolution ||= begin
       reason = ineligibility_reason
       eligible = eligible_method_policy
       resolution = Resolution.new(
@@ -61,8 +65,8 @@ class Checkout::PaymentMethodResolver
   private
     attr_reader :sellers, :recurring, :commission, :setup_for_future
 
-    # Mirrors Checkout::StripePaymentPresenter#client_confirm_eligible? gates (single-seller, non-connect,
-    # one-time) as an ordered set of reasons, so a blocked cart records *why* it stayed on Lane A.
+    # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
+    # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
     def ineligibility_reason
       return "multi_seller" unless sellers.one?
       return "direct_charge_seller" if sellers.any?(&:stripe_connect_account)

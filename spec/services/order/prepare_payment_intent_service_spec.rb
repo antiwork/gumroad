@@ -146,6 +146,26 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # #prepare is directly callable and only re-checks multi-seller; the charge path must re-check the
+    # rest of the client-confirm cart shape server-side so a recurring/commission/connect cart the
+    # presenter never mounts can't slip through and hand Stripe a nil payment_method_types.
+    context "with a connected-account seller the charge path deems client-confirm ineligible" do
+      before { create(:merchant_account_stripe_connect, user: seller) }
+
+      it "blocks pre-charge with a logged reason instead of building an intent with no method list" do
+        order, params = build_order
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
     context "when the buyer's email is blocked by the seller" do
       before do
         create(:merchant_account, user: seller)
@@ -188,7 +208,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
-        expect(create_args[:payment_method_types]).to eq(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES)
+        expect(create_args[:payment_method_types]).to eq(["card"])
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 

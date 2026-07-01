@@ -20,6 +20,7 @@ class Order::PreparePaymentIntentService
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
     return responses if block_multiple_sellers
+    return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
 
     preview = retrieve_payment_method_preview
@@ -70,6 +71,18 @@ class Order::PreparePaymentIntentService
       return false if purchases_to_charge.map(&:seller_id).uniq.one?
 
       Rails.logger.error("Multi-seller client-confirm prepare blocked for order #{order.id}")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # The charge path — not the browser — is the authority on client-confirm eligibility. Re-check the
+    # cart shape server-side so a crafted #prepare (a recurring/commission/connect cart the endpoint
+    # otherwise doesn't gate), or one the presenter mounted from different signals, is rejected with a
+    # logged reason instead of building a deferred intent with no valid payment_method_types.
+    def block_ineligible_for_client_confirm
+      return false if payment_method_resolution.client_confirm_eligible?
+
+      Rails.logger.error("Client-confirm ineligible cart blocked for order #{order.id}: #{payment_method_resolution.fallback_reason}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
     end
@@ -179,15 +192,20 @@ class Order::PreparePaymentIntentService
       nil
     end
 
-    # Recompute the client-confirm method set from server-owned purchases so the deferred intent's
-    # payment_method_types matches the Payment Element's (the Bug 1 handshake invariant), never trusting
-    # a client-supplied list. Single-seller is already enforced by block_multiple_sellers.
+    # Non-nil once block_ineligible_for_client_confirm has passed: the deferred intent's
+    # payment_method_types must equal the Payment Element's or Stripe rejects the ConfirmationToken.
     def resolved_payment_method_types
-      @resolved_payment_method_types ||= Checkout::PaymentMethodResolver.new(
+      payment_method_resolution.payment_method_types
+    end
+
+    # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
+    # list. Single-seller is already enforced by block_multiple_sellers, so resolve for that one seller.
+    def payment_method_resolution
+      @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION }
-      ).resolve.payment_method_types
+      ).resolve
     end
 
     # Persist the mapping before responding so a webhook arriving before the browser returns can

@@ -27,13 +27,12 @@ describe Checkout::PaymentMethodResolver do
         resolution = resolve
 
         expect(resolution.payment_method_types).to eq(["card"])
-        expect(resolution.payment_method_types).to all(be_a(String))
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
       end
 
-      it "returns an explicit method list, never Stripe's automatic_payment_methods" do
-        expect(resolve.payment_method_types).to be_an(Array)
+      it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
+        expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end
     end
 
