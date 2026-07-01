@@ -303,12 +303,12 @@ export const startClientConfirmOrderCreation = async (
     // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.
     const finalizeResponse = await finalizeClientConfirmOrder(order.id);
 
-    // A processing PaymentIntent means the money is in flight but not yet fulfilled; the webhook
-    // finalizes it out-of-band, so tell the buyer it is processing rather than success/failure.
-    const isProcessing = Object.values(finalizeResponse.line_items).some(
-      (lineItem) => "processing" in lineItem && lineItem.processing,
-    );
-    if (isProcessing) throw new PaymentConfirmedError();
+    // The card is captured, so any non-all-success finalize (processing, a per-line error, or empty)
+    // must surface as processing, never a resubmittable failure. `[].every` is true, so guard empty.
+    const lineItems = Object.values(finalizeResponse.line_items);
+    const allSucceeded =
+      lineItems.length > 0 && lineItems.every((lineItem) => lineItem.success && !("processing" in lineItem));
+    if (!allSucceeded) throw new PaymentConfirmedError();
 
     // offer_codes/can_buyer_sign_up are cart-level; finalize doesn't carry them, so keep prepare's.
     return mapResultsByUid(

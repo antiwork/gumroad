@@ -12,8 +12,10 @@ class Order::FinalizeConfirmedChargeService
   def perform
     charge = order.charges.find { _1.stripe_payment_intent_id.present? }
     if charge.nil?
+      # Never return empty success after the browser confirmed a payment: the client maps empty line
+      # items to resubmittable failures, risking a second charge. Report processing instead.
       Rails.logger.error("Finalize found no client-confirm charge for order #{order.id}")
-      return responses
+      return mark_all_processing
     end
 
     charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
@@ -32,6 +34,13 @@ class Order::FinalizeConfirmedChargeService
     # even when two variants share the same permalink.
     def cart_item_uid(purchase)
       "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
+    end
+
+    def mark_all_processing
+      order.purchases.each do |purchase|
+        responses[cart_item_uid(purchase)] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
+      end
+      responses
     end
 
     def response_for(purchase, result)
