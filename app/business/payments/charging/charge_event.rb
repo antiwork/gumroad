@@ -16,9 +16,7 @@ class ChargeEvent
   TYPE_CHARGE_SUCCEEDED = :charge_succeeded
   # A PaymentIntent has failed. We need to mark  the corresponding purchase as failed if it's still in progress.
   TYPE_PAYMENT_INTENT_FAILED = :payment_intent_failed
-  # A PaymentIntent has succeeded. Source of truth for finalizing a client-confirmed purchase.
   TYPE_PAYMENT_INTENT_SUCCEEDED = :payment_intent_succeeded
-  # A PaymentIntent is processing. The corresponding purchase stays in progress until the later succeeded/failed event.
   TYPE_PAYMENT_INTENT_PROCESSING = :payment_intent_processing
   # A charge has been refunded or refund has been further updated
   TYPE_CHARGE_REFUND_UPDATED = :charge_refund_updated

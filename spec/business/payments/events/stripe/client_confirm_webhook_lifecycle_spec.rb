@@ -2,12 +2,6 @@
 
 require "spec_helper"
 
-# End-to-end coverage of the PaymentIntent webhook lifecycle as the source of truth for
-# client-confirmed (Lane B) fulfillment, with no stubbing of the Stripe interaction or the finalize
-# path. Events are run through HandleStripeEventWorker (the exact call the webhook endpoint makes)
-# -> StripeEventHandler -> charge processor -> finalize against a real (Stripe test mode, VCR)
-# confirmed PaymentIntent. The signed-HTTP + signature-verification + enqueue layer is covered
-# separately in spec/controllers/foreign_webhooks_controller_spec.rb.
 describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 10_00) }
@@ -33,9 +27,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
-  # Builds a real client-confirmed (Lane B) order with an unconfirmed PaymentIntent, the way
-  # Order::PreparePaymentIntentService does, but with a unique idempotency key so a fresh VCR
-  # recording never collides with a key reused across test-DB id resets (VCR replays by URI).
+  # Unique idempotency key so a fresh VCR recording never collides across test-DB id resets.
   def build_client_confirmed_order(line_items: [line_item])
     params = { line_items: }.merge(common_params)
     order, = Order::CreateService.new(params:).perform
@@ -81,8 +73,6 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     }
   end
 
-  # Runs the event through HandleStripeEventWorker, exactly as the webhook endpoint does after
-  # verifying the signature and enqueuing.
   def deliver_webhook(event)
     HandleStripeEventWorker.perform_async(event)
     HandleStripeEventWorker.drain
@@ -105,7 +95,6 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       expect(ProcessedStripeEvent.processed?("evt_succeeded_1")).to be(true)
       succeeded_at = purchase.succeeded_at
 
-      # A re-delivered event must not fulfill again.
       expect do
         deliver_webhook(event)
       end.not_to change { ActivateIntegrationsWorker.jobs.size }

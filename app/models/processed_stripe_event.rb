@@ -10,6 +10,6 @@ class ProcessedStripeEvent < ApplicationRecord
   def self.record!(event_id, event_type: nil)
     create!(event_id:, event_type:)
   rescue ActiveRecord::RecordNotUnique
-    # Concurrent delivery of the same event already recorded it; the unique index makes this a no-op.
+    nil
   end
 end

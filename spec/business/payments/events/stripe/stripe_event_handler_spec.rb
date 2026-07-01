@@ -357,8 +357,6 @@ describe StripeEventHandler do
     end
 
     describe "a payment intent lifecycle event" do
-      # Client-confirmed (Lane B) charges are destination charges on the platform account, so these
-      # events are handled via the gumroad path, not for connected accounts (direct charges are a later step).
       %w[payment_intent.succeeded payment_intent.processing].each do |event_type|
         it "does not route #{event_type} to StripeChargeProcessor" do
           stripe_event = {

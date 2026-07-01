@@ -60,8 +60,6 @@ class FailAbandonedPurchaseWorker
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
-    # Only browser-confirmed (Lane B) charges are self-healed here; server-confirmed charges also carry
-    # a stripe_payment_intent_id but have their own finalization path, so key on the explicit flag.
     def confirmed_charge?
       purchase.charge&.client_confirmed?
     end

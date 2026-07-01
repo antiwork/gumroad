@@ -95,9 +95,6 @@ module Purchase::ChargeEventsHandler
   def handle_event_succeeded!(event)
     handle_event_informational!(event)
 
-    # payment_intent.succeeded is the source of truth for client-confirmed (Lane B) fulfillment.
-    # Scoped to that event so charge.succeeded keeps its existing behavior; idempotent via the finalize
-    # service's in_progress -> successful guard, so a replayed event fulfills exactly once.
     return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
 
     charged_purchases.each do |purchase|
@@ -136,7 +133,6 @@ module Purchase::ChargeEventsHandler
     end
   end
 
-  # Keeps its purchases in progress with no fulfillment; the later succeeded/failed webhook resolves them.
   def handle_event_processing!(event)
     handle_event_informational!(event)
   end
@@ -147,8 +143,6 @@ module Purchase::ChargeEventsHandler
   end
 
   private
-    # Server-confirmed charges (Lane A, Indian off-session) also carry a stripe_payment_intent_id, so
-    # a browser-confirmed (Lane B) charge is identified by the explicit flag, not the intent id.
     def client_confirmed_charge?
       is_a?(Charge) && client_confirmed?
     end

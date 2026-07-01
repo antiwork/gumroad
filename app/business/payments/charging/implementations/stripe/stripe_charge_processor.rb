@@ -9,7 +9,6 @@ class StripeChargeProcessor
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
 
-  # PaymentIntent lifecycle events that drive client-confirmed (Lane B) fulfillment, deduped via ProcessedStripeEvent.
   PAYMENT_INTENT_LIFECYCLE_EVENTS = %w(payment_intent.processing payment_intent.succeeded).freeze
 
   # https://stripe.com/docs/api/refunds/create#create_refund-reason
@@ -864,9 +863,6 @@ class StripeChargeProcessor
       event.comment = stripe_event["type"]
       event.type = stripe_event["type"] == "payment_intent.succeeded" ? ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED : ChargeEvent::TYPE_PAYMENT_INTENT_PROCESSING
 
-      # These events fire for every PaymentIntent, so only client-confirmed (Lane B) charges are acted
-      # on; Lane A and Indian off-session recurring resolve by primary key and are ignored. Stripe
-      # delivers at-least-once, so a re-delivered event is a no-op.
       chargeable = Charge::Chargeable.find_by_stripe_event(event)
       return unless chargeable.is_a?(Charge) && chargeable.client_confirmed?
       return if ProcessedStripeEvent.processed?(stripe_event["id"])
