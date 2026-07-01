@@ -94,6 +94,7 @@ describe("startClientConfirmOrderCreation", () => {
     vi.stubGlobal("Routes", {
       prepare_orders_path: () => "/orders/prepare",
       finalize_order_path: (id: string) => `/orders/${id}/finalize`,
+      checkout_return_url: (id: string) => `https://gumroad.test/checkout/returns/${id}`,
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
