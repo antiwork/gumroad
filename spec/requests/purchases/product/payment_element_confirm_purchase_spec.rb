@@ -85,4 +85,41 @@ describe("PurchaseScenario using StripeJs client-confirm (Lane B)", type: :syste
     expect(leftover.purchase_state).to eq("in_progress")
     expect(leftover.stripe_transaction_id).to be_nil
   end
+
+  it "completes an inline 3DS challenge under client-confirm and fulfills" do
+    visit("/checkout?product=#{@product.unique_permalink}")
+
+    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+
+    # The KTD4 fill_checkout_form extension forwards this 3DS-required card into the Payment Element; check_out
+    # then clicks Pay, drives within_sca_frame { click "Complete" }, and asserts the success alert + one sale.
+    # Proves the inline 3DS challenge resolves under Lane B's confirmPayment (previously only Lane A's
+    # confirmCardPayment path was covered).
+    check_out(@product, payment_element: true, credit_card: { number: "4000002500003155" }, sca: true)
+
+    purchase = Purchase.last
+    expect(purchase.successful?).to be(true)
+    expect(purchase.stripe_transaction_id).to match(/\Ach_/)
+  end
+
+  it "surfaces an authentication failure when the inline 3DS challenge is failed under client-confirm" do
+    visit("/checkout?product=#{@product.unique_permalink}")
+
+    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+
+    fill_checkout_form(@product, credit_card: nil)
+    fill_in_payment_element(number: "4000002500003155")
+    click_on "Pay", exact: true
+
+    within_sca_frame { click_on "Fail" }
+
+    # A failed client-side 3DS challenge returns confirmResult.error and never reaches #finalize, so — like a
+    # decline — the purchase is left in_progress (not failed) and no charge lands. Composed manually for the
+    # same reason U2 is.
+    expect(page).to have_text(/authenticat/i, wait: 60)
+    expect(@product.sales.successful.count).to eq(0)
+    leftover = @product.sales.last
+    expect(leftover.purchase_state).to eq("in_progress")
+    expect(leftover.stripe_transaction_id).to be_nil
+  end
 end

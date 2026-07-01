@@ -139,7 +139,9 @@ module CheckoutHelpers
       expect(page).to have_command("Use a different card?")
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
     elsif payment_element && !is_free
-      fill_in_payment_element
+      # Forward a caller-supplied card into the Payment Element (e.g. a decline or 3DS card); defaults to
+      # 4242 when no card is given, so existing payment_element callers are unaffected.
+      fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
     elsif !credit_card.nil? && !is_free
       fill_in_credit_card(**credit_card)
     end
