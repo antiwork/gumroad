@@ -8,14 +8,7 @@ class OrdersController < ApplicationController
   before_action :fetch_affiliates, only: [:create, :prepare]
 
   def create
-    order_params = permitted_order_params.merge!(
-      {
-        browser_guid: cookies[:_gumroad_guid],
-        session_id: session.id,
-        ip_address: request.remote_ip,
-        is_mobile: is_mobile?
-      }
-    ).to_h
+    order_params = build_order_params
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
@@ -24,9 +17,7 @@ class OrdersController < ApplicationController
 
     charge_responses = Order::ChargeService.new(order:, params: order_params).perform
 
-    if order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid: order_params[:browser_guid]).any?
-      UtmLinkSaleAttributionJob.perform_async(order.id, order_params[:browser_guid])
-    end
+    attribute_utm_link_sale(order, order_params[:browser_guid])
 
     purchase_responses.merge!(charge_responses)
 
@@ -58,14 +49,7 @@ class OrdersController < ApplicationController
   # Starts browser-confirmed Payment Element checkout by returning an unconfirmed
   # PaymentIntent client_secret. Receipts wait for #finalize, like SCA confirmation.
   def prepare
-    order_params = permitted_order_params.merge!(
-      {
-        browser_guid: cookies[:_gumroad_guid],
-        session_id: session.id,
-        ip_address: request.remote_ip,
-        is_mobile: is_mobile?
-      }
-    ).to_h
+    order_params = build_order_params
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
@@ -97,11 +81,26 @@ class OrdersController < ApplicationController
 
     order.purchases.select(&:successful?).each { create_purchase_event_and_recommendation_info(_1) }
     order.send_charge_receipts
+    attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
   end
 
   private
+    def build_order_params
+      permitted_order_params.merge!(
+        browser_guid: cookies[:_gumroad_guid],
+        session_id: session.id,
+        ip_address: request.remote_ip,
+        is_mobile: is_mobile?
+      ).to_h
+    end
+
+    def attribute_utm_link_sale(order, browser_guid)
+      return unless order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid:).any?
+      UtmLinkSaleAttributionJob.perform_async(order.id, browser_guid)
+    end
+
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
         params[:line_items] = params[:line_items].values
