@@ -145,7 +145,7 @@ const nodeConfig = {
 
 export default [
   includeIgnoreFile(fileURLToPath(import.meta.resolve("./.gitignore"))),
-  { ignores: ["vendor", "web/**/*"] },
+  { ignores: ["vendor", "web/**/*", "app/javascript/routes.*"] },
   prettierRecommended,
   js.configs.recommended,
   baseConfig,
