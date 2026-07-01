@@ -63,7 +63,7 @@ class OrdersController < ApplicationController
 
     purchase_responses.merge!(prepare_responses)
 
-    order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
+    record_purchase_events(order)
 
     render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
   end
@@ -77,7 +77,7 @@ class OrdersController < ApplicationController
 
     finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
 
-    order.purchases.select(&:successful?).each { create_purchase_event_and_recommendation_info(_1) }
+    record_purchase_events(order)
     order.send_charge_receipts
     attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
@@ -184,6 +184,15 @@ class OrdersController < ApplicationController
     def create_purchase_event_and_recommendation_info(purchase)
       create_purchase_event(purchase)
       purchase.handle_recommended_purchase if purchase.was_product_recommended
+    end
+
+    # Idempotent: each successful purchase gets one event, whether finalized in #prepare or #finalize.
+    def record_purchase_events(order)
+      order.purchases.each do |purchase|
+        next unless purchase.successful?
+        next if Event.purchase.exists?(purchase_id: purchase.id)
+        create_purchase_event_and_recommendation_info(purchase)
+      end
     end
 
     def render_error(error_message, purchase: nil)

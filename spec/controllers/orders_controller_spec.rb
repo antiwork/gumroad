@@ -2479,6 +2479,8 @@ describe OrdersController, :vcr do
       expect(Purchase.successful.count).to eq(0)
       expect(Purchase.last).to be_in_progress
       expect(Charge.last.stripe_payment_intent_id).to be_present
+
+      expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
@@ -2525,6 +2527,26 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["line_items"][uid]["success"]).to be(true)
       expect(purchase.reload).to be_successful
       expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
+    end
+
+    it "records each purchase event only once when finalize is called again" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      Order::PreparePaymentIntentService.new(order:, params:, confirmation_token: confirmation_token_id).perform
+      charge = order.charges.find { _1.stripe_payment_intent_id.present? }
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+      token = order.secure_external_id(scope: "confirm")
+
+      post :finalize, params: { id: token }
+      expect(purchase.reload).to be_successful
+      expect(Event.purchase.where(purchase_id: purchase.id).count).to eq(1)
+
+      expect do
+        post :finalize, params: { id: token }
+      end.not_to change { Event.purchase.where(purchase_id: purchase.id).count }
+
+      expect(response.parsed_body["success"]).to be(true)
     end
 
     it "raises not-found for an unknown order token" do
