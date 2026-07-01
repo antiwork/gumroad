@@ -19,7 +19,7 @@ Generate a concise, high-quality PR description from the current branch and its 
 
 - **Any product/UI change** (a view, component, CSS, layout, mobile behavior, copy a user sees, a button, spacing, colors — anything a user could perceive): a **before/after VIDEO or screenshots are REQUIRED**, showing **desktop + mobile, light + dark** where applicable. A mobile-layout or CSS tweak is exactly the kind of change that MUST have visual proof — that is the whole point of the rule. "Minor layout fix" is NOT an exemption; it is the primary target.
 - **Non-user-facing change** (pure backend/refactor/config): a **short walkthrough video** of the relevant existing functionality is still required to demonstrate nothing broke.
-- If you do not yet have the media, the PR is NOT ready. Capture it first (boot the app, take the screenshots/video, store under `qa-media/pr-<number>-<desc>.<ext>`, reference via raw GitHub URL) — do NOT emit a description with an empty or deleted Before/After section for a product change.
+- If you do not yet have the media, the PR is NOT ready — do NOT emit a description with an empty or deleted Before/After section for a product change. **Run the prerequisite check below before proceeding**; it decides whether you may capture the media now or must HALT and hand the capture step back to a human.
 
 ### ⛔ Prerequisite check — run this BEFORE generating any description
 
