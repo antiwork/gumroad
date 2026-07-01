@@ -5,6 +5,7 @@ class Purchase
     ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE = "This purchase has an active dispute. " \
                                           "The funds have already been returned to the buyer. " \
                                           "No additional refund is needed."
+    # TODO(#5419): Remove this temporary error once buyer-presentment refunds are supported.
     BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE = "Refunds are temporarily unavailable for buyer-local-currency purchases."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
@@ -38,6 +39,7 @@ class Purchase
         errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
         return false
       end
+      # TODO(#5419): Remove this hard stop once buyer-presentment purchase refunds are supported.
       return false if buyer_presentment_refund_blocked?
 
       if (merchant_account.is_a_stripe_connect_account? && !merchant_account.active?) ||
@@ -288,6 +290,7 @@ class Purchase
       errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
       return false
     end
+    # TODO(#5419): Remove this hard stop once buyer-presentment tax refunds are supported.
     return false if buyer_presentment_refund_blocked?
 
     begin
@@ -347,7 +350,7 @@ class Purchase
   def buyer_presentment_refund_blocked?
     return false if purchase_presentment.blank?
 
-    # TODO(#5419): Remove this hard stop once buyer-presentment refunds are supported.
+    # TODO(#5419): Remove this helper once all buyer-presentment refund paths are supported.
     errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE
     ErrorNotifier.notify(
       "Buyer-presentment refund attempted before refund support shipped",

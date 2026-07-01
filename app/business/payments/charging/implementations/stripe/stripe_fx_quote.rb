@@ -20,6 +20,7 @@ class StripeFxQuote
     stripe_options[:stripe_account] = stripe_account_id if stripe_account_id.present?
 
     response = with_stripe_error_handler do
+      # Stripe Ruby 12.5.0 does not wrap the preview FX Quotes endpoint yet.
       Stripe.raw_request(
         :post,
         "/v1/fx_quotes",
