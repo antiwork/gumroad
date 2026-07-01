@@ -11,7 +11,7 @@ class DeleteOldProcessedStripeEventsJob
   DELETION_BATCH_SIZE = 100
 
   def perform
-    return unless ProcessedStripeEvent.exists?
+    return unless ProcessedStripeEvent.where("created_at < ?", VALID_DURATION.ago).exists?
 
     loop do
       ReplicaLagWatcher.watch

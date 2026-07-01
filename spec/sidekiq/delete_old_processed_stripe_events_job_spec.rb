@@ -16,5 +16,15 @@ describe DeleteOldProcessedStripeEventsJob do
     it "does not fail when there are no records" do
       expect(described_class.new.perform).to eq(nil)
     end
+
+    it "short-circuits without touching the replica watcher when no rows are old enough" do
+      ProcessedStripeEvent.create!(event_id: "evt_recent_only", created_at: 1.day.ago)
+
+      expect(ReplicaLagWatcher).not_to receive(:watch)
+
+      described_class.new.perform
+
+      expect(ProcessedStripeEvent.exists?(event_id: "evt_recent_only")).to be(true)
+    end
   end
 end
