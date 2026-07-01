@@ -61,4 +61,28 @@ describe("PurchaseScenario using StripeJs client-confirm (Lane B)", type: :syste
     expect(purchase.charge.stripe_payment_intent_id).to eq(purchase.processor_payment_intent.intent_id)
     expect(@product.sales.successful.count).to eq(1)
   end
+
+  it "surfaces a decline and creates no successful purchase when the card is declined at client confirm" do
+    visit("/checkout?product=#{@product.unique_permalink}")
+
+    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+
+    # Composed manually rather than via check_out(error:): a client-side confirmPayment decline never reaches
+    # #finalize, so the built purchase is left in_progress — check_out(error:) asserts a *failed* purchase and a
+    # sales.failed bump that this path does not produce (KTD4).
+    fill_checkout_form(@product, credit_card: nil)
+    fill_in_payment_element(number: "4000000000000002")
+    click_on "Pay", exact: true
+
+    # The decline flows through order.ts's confirmResult.error branch, which renders the Stripe message in the
+    # checkout results (Receipt.tsx) without throwing — so it never hits the catch that logs console.error and
+    # would trip JSErrorReporter. Exact Stripe copy is brittle, so assert the stable "declined" substring.
+    expect(page).to have_text(/declined/i, wait: 60)
+    expect(page).not_to have_alert(text: "Your purchase was successful!")
+
+    expect(@product.sales.successful.count).to eq(0)
+    leftover = @product.sales.last
+    expect(leftover.purchase_state).to eq("in_progress")
+    expect(leftover.stripe_transaction_id).to be_nil
+  end
 end
