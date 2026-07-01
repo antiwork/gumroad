@@ -6,7 +6,7 @@ describe StripeDeferredPaymentIntent do
   let(:amount_cents) { 1_00 }
   let(:amount_for_gumroad_cents) { 30 }
   let(:reference) { "deferred-intent-reference" }
-  let(:idempotency_key) { "deferred-intent-spec-key" }
+  let(:idempotency_key) { "deferred-intent-card-key" }
 
   def create_deferred_intent(**overrides)
     described_class.create(
@@ -23,14 +23,16 @@ describe StripeDeferredPaymentIntent do
   # The core deferred-intent contract is exercised against the platform account (no connected
   # account), mirroring how StripeChargeIntent specs create intents directly on the platform.
   describe ".create on the platform account", :vcr do
-    it "creates an unconfirmed PaymentIntent with automatic payment methods and no redirects" do
+    it "creates an unconfirmed PaymentIntent scoped to card so the browser's ConfirmationToken can confirm it" do
       charge_intent = create_deferred_intent
 
       expect(charge_intent).to be_a(StripeChargeIntent)
       payment_intent = charge_intent.payment_intent
       expect(payment_intent.status).to eq("requires_payment_method")
-      expect(payment_intent.automatic_payment_methods.enabled).to eq(true)
-      expect(payment_intent.automatic_payment_methods.allow_redirects).to eq("never")
+      # Must match the Payment Element's payment_method_types (see confirm_mode_props): Stripe rejects a
+      # payment_method_types-scoped ConfirmationToken confirmed against an automatic_payment_methods intent.
+      expect(payment_intent.payment_method_types.to_a).to eq(["card"])
+      expect(payment_intent.automatic_payment_methods).to be_nil
       expect(payment_intent.confirmation_method).to eq("automatic")
       expect(charge_intent.client_secret).to be_present
     end

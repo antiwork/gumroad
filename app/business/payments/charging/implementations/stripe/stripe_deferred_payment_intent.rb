@@ -10,8 +10,6 @@
 class StripeDeferredPaymentIntent
   include StripeErrorHandler
 
-  # Phase 1 keeps Lane B inline-only; the resolver opens redirect-based methods in a later phase.
-  ALLOW_REDIRECTS_NEVER = "never"
   STATEMENT_DESCRIPTOR_MAX_LENGTH = 22
 
   def self.create(...)
@@ -48,7 +46,13 @@ class StripeDeferredPaymentIntent
         currency: "usd",
         description:,
         metadata: metadata || { purchase: reference },
-        automatic_payment_methods: { enabled: true, allow_redirects: ALLOW_REDIRECTS_NEVER },
+        # The browser mints its ConfirmationToken from a Payment Element configured with an explicit
+        # payment_method_types list (see Checkout::StripePaymentPresenter#confirm_mode_props), so the deferred
+        # intent must be created the same way: Stripe refuses to confirm a payment_method_types-scoped token
+        # against an automatic_payment_methods intent. Card is inline-only, so scoping to card also keeps
+        # Phase 1 free of redirect-based methods (the reason automatic_payment_methods previously set
+        # allow_redirects: "never").
+        payment_method_types: ["card"],
       }
       params[:transfer_group] = transfer_group if transfer_group.present?
       params[:statement_descriptor_suffix] = statement_descriptor_suffix if statement_descriptor_suffix.present?
