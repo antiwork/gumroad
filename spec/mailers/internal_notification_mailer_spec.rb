@@ -17,6 +17,10 @@ describe InternalNotificationMailer do
     end
 
     it "CCs Gumclaw on every notification in addition to the room recipient" do
+      # The mailer dedups the CC when it equals the room's own recipient, so this
+      # assertion is only meaningful while the two addresses are distinct. Assert the
+      # prerequisite explicitly rather than relying on it implicitly.
+      expect(INTERNAL_NOTIFICATION_ALWAYS_CC).not_to eq(mail.to.first)
       expect(mail.cc).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
     end
 
