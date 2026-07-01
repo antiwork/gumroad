@@ -28,7 +28,7 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
-  contents: read
+  contents: write        # to enable GitHub native auto-merge on eligible PRs
   pull-requests: write   # to add/remove the `auto-merge-eligible` label
   statuses: write
 
@@ -132,20 +132,83 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NODE_ID: ${{ github.event.pull_request.node_id }}
           RESULT: ${{ steps.gate.outputs.result }}
           REASONS: ${{ steps.gate.outputs.reasons }}
         run: |
           set -euo pipefail
+
+          # Query the PR's CURRENT native-auto-merge arm state (enabledAt is null
+          # when not armed). Used to decide whether the ineligible path has real
+          # work to do, and to VERIFY a disarm actually took effect.
+          armed_state() {
+            gh api graphql -f query='
+              query($pr:ID!){ node(id:$pr){ ... on PullRequest{ autoMergeRequest{ enabledAt } } } }
+            ' -f pr="$PR_NODE_ID" --jq '.data.node.autoMergeRequest.enabledAt' 2>/dev/null || echo "unknown"
+          }
+
           if [ "$RESULT" = "0" ]; then
             desc="Eligible for safe-lane auto-merge"
             verdict="✅ **Eligible for safe-lane auto-merge** — small, bot-signed, ticket-scoped, allowlisted paths only."
             gh api -X POST "repos/$REPO/issues/$PR_NUMBER/labels" -f "labels[]=auto-merge-eligible" >/dev/null 2>&1 || true
+            # Arm GitHub NATIVE auto-merge (SQUASH — the only method the ruleset
+            # permits). This does NOT merge now: native auto-merge only fires once
+            # EVERY required status check on `main` is green. Until the ruleset
+            # requires checks, this call is a harmless no-op.
+            #
+            # expectedHeadOid BINDS the arming to the exact commit this run gated
+            # ($HEAD_SHA). If the PR was synchronized after the gate evaluated,
+            # the OIDs differ and GitHub REJECTS the mutation — so a stale run can
+            # never arm auto-merge for an unevaluated commit. Best-effort: failing
+            # to arm is fail-safe (an un-armed PR simply won't auto-merge).
+            if gh api graphql -f query='
+              mutation($pr:ID!, $sha:GitObjectID!){
+                enablePullRequestAutoMerge(input:{pullRequestId:$pr, mergeMethod:SQUASH, expectedHeadOid:$sha}){
+                  pullRequest{ number autoMergeRequest{ enabledAt } }
+                }
+              }' -f pr="$PR_NODE_ID" -f sha="$HEAD_SHA" >/dev/null 2>&1; then
+              echo "native auto-merge armed for $HEAD_SHA (fires when required checks pass)"
+            else
+              echo "auto-merge enable skipped (stale head, no-op until required checks configured, or already armed)"
+            fi
           else
             desc="Routes to human approval (advisory — not a failure)"
             verdict="🔶 **Not auto-merge-eligible — routes to the human one-tap approval lane.** This is **not** a build/spec failure; a human reviews and merges. Reasons below."
             gh api -X DELETE "repos/$REPO/issues/$PR_NUMBER/labels/auto-merge-eligible" >/dev/null 2>&1 || true
+            # An ineligible PR MUST NOT stay armed (e.g. a later push moved it from
+            # GREEN to RED). Only act if it is actually armed, then VERIFY. If we
+            # cannot prove it is disarmed, FAIL CLOSED: post a red required check
+            # and fail the job so the ineligible head cannot merge on green checks.
+            state="$(armed_state)"
+            if [ -n "$state" ] && [ "$state" != "null" ]; then
+              disarmed="no"
+              for attempt in 1 2 3; do
+                gh api graphql -f query='
+                  mutation($pr:ID!){ disablePullRequestAutoMerge(input:{pullRequestId:$pr}){ pullRequest{ number } } }
+                ' -f pr="$PR_NODE_ID" >/dev/null 2>&1 || true
+                after="$(armed_state)"
+                if [ -z "$after" ] || [ "$after" = "null" ]; then disarmed="yes"; break; fi
+                sleep 3
+              done
+              if [ "$disarmed" != "yes" ]; then
+                gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+                  -f state="error" \
+                  -f context="auto-merge-gate" \
+                  -f description="Ineligible PR still armed for auto-merge; blocking (fail-closed)" >/dev/null || true
+                {
+                  echo "## Auto-merge eligibility"
+                  echo
+                  echo "🔴 **Blocked (fail-closed).** This PR is not auto-merge-eligible, but native auto-merge was armed and could not be disabled after retries. Merge is blocked by a red \`auto-merge-gate\` check until a human disarms it."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "FAIL CLOSED: ineligible PR remains armed for auto-merge" >&2
+                exit 1
+              fi
+              echo "native auto-merge disarmed (PR is not eligible)"
+            fi
           fi
-          # ALWAYS success: eligibility is signaled by the label above, not by a red check.
+          # Reached only on safe paths (eligible, or ineligible+not-armed, or
+          # ineligible+successfully-disarmed). Eligibility is carried by the label,
+          # not by a red check, so this advisory status stays green.
           gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
             -f state="success" \
             -f context="auto-merge-gate" \
