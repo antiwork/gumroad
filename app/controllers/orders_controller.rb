@@ -63,7 +63,12 @@ class OrdersController < ApplicationController
 
     purchase_responses.merge!(prepare_responses)
 
-    order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
+    # Only free/test purchases reach a terminal successful state during prepare; chargeable purchases
+    # stay in_progress until #finalize confirms the PaymentIntent. Firing the event here for an
+    # in_progress purchase would create a premature "in_progress" Event::NAME_PURCHASE and then a
+    # second "successful" one at finalize (create_purchase_event is not idempotent), so record only
+    # the purchases finalized here and let #finalize cover the rest.
+    order.purchases.select(&:successful?).each { create_purchase_event_and_recommendation_info(_1) }
 
     render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
   end
@@ -75,9 +80,21 @@ class OrdersController < ApplicationController
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
+    # The browser retries #finalize up to FINALIZE_MAX_ATTEMPTS times on a dropped response, and the
+    # abandonment worker or a Stripe webhook can finalize the same charge out-of-band. Snapshot which
+    # purchases were already successful so create_purchase_event (which has no idempotency guard) fires
+    # exactly once per purchase instead of once per retry. send_charge_receipts and attribute_utm_link_sale
+    # are left unconditional because they are already idempotent (SendChargeReceiptJob no-ops once
+    # receipt_sent?; UtmLinkSaleAttributionJob is deduped by lock: :until_executed) and running them on
+    # every attempt lets a retry recover a side effect a failed earlier attempt never reached.
+    previously_successful_ids = order.purchases.filter_map { |purchase| purchase.id if purchase.successful? }.to_set
+
     finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
 
-    order.purchases.select(&:successful?).each { create_purchase_event_and_recommendation_info(_1) }
+    order.purchases.each do |purchase|
+      next unless purchase.successful? && previously_successful_ids.exclude?(purchase.id)
+      create_purchase_event_and_recommendation_info(purchase)
+    end
     order.send_charge_receipts
     attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
