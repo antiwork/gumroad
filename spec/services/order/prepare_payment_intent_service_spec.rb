@@ -168,11 +168,11 @@ describe Order::PreparePaymentIntentService, :vcr do
     end
 
     # The deferred intent's payment_method_types/currency MUST equal the Payment Element's, or Stripe
-    # rejects the ConfirmationToken; both come from Checkout::StripePaymentPresenter so they can't drift.
+    # rejects the ConfirmationToken. Both sides read Checkout::PaymentMethodResolver so they can't drift.
     context "the deferred intent method/currency contract" do
       before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
 
-      it "creates the intent with the presenter's payment_method_types and currency" do
+      it "creates the intent with the resolver's launched payment_method_types and currency" do
         order, params = build_order
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -188,7 +188,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
-        expect(create_args[:payment_method_types]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES)
+        expect(create_args[:payment_method_types]).to eq(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES)
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 

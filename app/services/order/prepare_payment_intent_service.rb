@@ -171,12 +171,23 @@ class Order::PreparePaymentIntentService
         # charge.external_id (derived from a database id) collides in Stripe test mode, where
         # idempotency keys persist for 24h across CI runs that reset the database and reuse those ids.
         idempotency_key: "deferred_intent_#{charge.external_id}_#{confirmation_token}",
-        payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+        payment_method_types: resolved_payment_method_types,
         currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       nil
+    end
+
+    # Recompute the client-confirm method set from server-owned purchases so the deferred intent's
+    # payment_method_types matches the Payment Element's (the Bug 1 handshake invariant), never trusting
+    # a client-supplied list. Single-seller is already enforced by block_multiple_sellers.
+    def resolved_payment_method_types
+      @resolved_payment_method_types ||= Checkout::PaymentMethodResolver.new(
+        sellers: [seller],
+        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
+        commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION }
+      ).resolve.payment_method_types
     end
 
     # Persist the mapping before responding so a webhook arriving before the browser returns can
