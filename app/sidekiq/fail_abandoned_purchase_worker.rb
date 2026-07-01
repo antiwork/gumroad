@@ -60,6 +60,8 @@ class FailAbandonedPurchaseWorker
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
+    # Client-confirm purchases carry a combined Charge mapped to the PaymentIntent; other purchases
+    # keep the cancel-only abandonment behavior.
     def confirmed_charge?
       purchase.charge&.client_confirmed?
     end
