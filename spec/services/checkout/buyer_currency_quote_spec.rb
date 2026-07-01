@@ -3,7 +3,11 @@
 describe Checkout::BuyerCurrencyQuote do
   let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
-  let!(:merchant_account) { create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD) }
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+      account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+    end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+  end
   let(:stripe_fx_quote) { StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8")) }
 
   before do

@@ -132,9 +132,10 @@ class Checkout::StripePaymentPresenter
     end
 
     def buyer_currency_presentment_candidate?(item)
-      Checkout::BuyerCurrencyEligibility.stripe_test_mode? &&
-        Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller]) &&
-        Checkout::BuyerCurrencyEligibility.buyer_presentment_display?(item[:buyer_currency_display])
+      Checkout::BuyerCurrencyEligibility.buyer_presentment_candidate?(
+        seller: item[:seller],
+        buyer_currency_display: item[:buyer_currency_display]
+      )
     end
 
     def setup_for_future_charges_without_charging?(items)

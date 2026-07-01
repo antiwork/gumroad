@@ -29,6 +29,12 @@ class Checkout::BuyerCurrencyEligibility
     display_mode == "buyer_local" && buyer_currency.present?
   end
 
+  def self.buyer_presentment_candidate?(seller:, buyer_currency_display:)
+    stripe_test_mode? &&
+      seller_enabled?(seller) &&
+      buyer_presentment_display?(buyer_currency_display)
+  end
+
   def self.supported_merchant_account?(merchant_account)
     merchant_account.is_managed_by_gumroad? || merchant_account.is_a_stripe_connect_account?
   end
