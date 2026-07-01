@@ -121,6 +121,27 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
+  context "when finalize fails transiently after payment_intent.succeeded" do
+    it "leaves the event unrecorded so the Sidekiq retry can finalize" do
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_retry")
+      create(:purchase_in_progress, link: product, seller:).tap { charge.purchases << _1 }
+      event = payment_intent_event("payment_intent.succeeded", charge, event_id: "evt_retry")
+
+      finalize = instance_double(Order::FinalizeConfirmedChargeService)
+      allow(Order::FinalizeConfirmedChargeService).to receive(:new).and_return(finalize)
+      allow(finalize).to receive(:perform).and_raise(Stripe::APIConnectionError.new("transient"))
+
+      expect { deliver_webhook(event) }.to raise_error(Stripe::APIConnectionError)
+      expect(ProcessedStripeEvent.processed?("evt_retry")).to be(false)
+
+      allow(finalize).to receive(:perform).and_return({})
+      deliver_webhook(event)
+
+      expect(finalize).to have_received(:perform).twice
+      expect(ProcessedStripeEvent.processed?("evt_retry")).to be(true)
+    end
+  end
+
   context "when payment_intent.succeeded arrives before a late payment_intent.processing" do
     it "keeps the purchase successful and does not regress it to in_progress" do
       order, charge = build_client_confirmed_order
