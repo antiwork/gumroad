@@ -121,6 +121,37 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
+  context "when payment_intent.succeeded arrives before a late payment_intent.processing" do
+    it "keeps the purchase successful and does not regress it to in_progress" do
+      order, charge = build_client_confirmed_order
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+
+      deliver_webhook(payment_intent_event("payment_intent.succeeded", charge, event_id: "evt_ooo_succeeded"))
+      expect(purchase.reload).to be_successful
+
+      deliver_webhook(payment_intent_event("payment_intent.processing", charge, event_id: "evt_ooo_processing"))
+      expect(purchase.reload).to be_successful
+    end
+  end
+
+  context "payment_intent.processing then payment_intent.payment_failed for a client-confirmed charge" do
+    it "leaves the purchase in progress; payment_failed is outside the new lifecycle scope" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_proc_fail")
+      purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+
+      deliver_webhook(payment_intent_event("payment_intent.processing", charge, event_id: "evt_pf_processing"))
+      expect(purchase.reload).to be_in_progress
+      expect(ProcessedStripeEvent.processed?("evt_pf_processing")).to be(true)
+
+      deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_pf_failed"))
+      expect(purchase.reload).to be_in_progress
+      expect(ProcessedStripeEvent.processed?("evt_pf_failed")).to be(false)
+    end
+  end
+
   context "payment_intent.succeeded for a multi-item combined charge" do
     it "fulfills every purchase in the single-seller charge" do
       second_product = create(:product, user: seller, price_cents: 5_00)
