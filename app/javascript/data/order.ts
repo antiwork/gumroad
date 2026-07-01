@@ -285,7 +285,10 @@ export const startClientConfirmOrderCreation = async (
     // Never pass `elements` alongside `confirmation_token` — they are mutually exclusive in Stripe.js.
     const confirmResult = await stripe.confirmPayment({
       clientSecret,
-      confirmParams: { confirmation_token: confirmationTokenId },
+      confirmParams: {
+        confirmation_token: confirmationTokenId,
+        return_url: Routes.checkout_return_url(order.id),
+      },
       redirect: "if_required",
     });
 
