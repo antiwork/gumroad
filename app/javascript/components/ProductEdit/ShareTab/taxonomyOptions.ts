@@ -18,5 +18,5 @@ export const buildCategoryOptions = (taxonomies: Taxonomy[]): CategoryOption[] =
       while ((current = taxonomyMap.get(current.parent_key ?? ""))) label = `${current.label} > ${label}`;
       return { id: taxonomy.key, label };
     })
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a, b) => a.label.localeCompare(b.label, "en", { sensitivity: "base" }));
 };

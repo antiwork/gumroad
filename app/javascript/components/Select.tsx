@@ -245,12 +245,15 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
     setMaxHeight(Math.max(0, Math.min(props.maxHeight, flipUp ? spaceAbove : spaceBelow)));
   }, [props.maxHeight, props.children, setMenuPlacement]);
 
-  const setRefs = (node: HTMLDataListElement | null) => {
-    listRef.current = node;
-    // react-select types innerRef as a div ref, but our menu is a <datalist>.
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    (props.innerRef as unknown as ((instance: HTMLDataListElement | null) => void) | undefined)?.(node);
-  };
+  const setRefs = React.useCallback(
+    (node: HTMLDataListElement | null) => {
+      listRef.current = node;
+      // react-select types innerRef as a div ref, but our menu is a <datalist>.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      (props.innerRef as unknown as ((instance: HTMLDataListElement | null) => void) | undefined)?.(node);
+    },
+    [props.innerRef],
+  );
 
   return (
     <datalist
