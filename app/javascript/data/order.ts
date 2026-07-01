@@ -312,11 +312,15 @@ export const startClientConfirmOrderCreation = async (
     );
     if (isProcessing) throw new PaymentConfirmedError();
 
+    // Line-item outcomes come from finalize, but offer_codes and can_buyer_sign_up are cart-level and
+    // resolved at prepare time (finalize has no email param, so its can_buyer_sign_up is unreliable and
+    // it returns offer_codes: []). Source them from prepare, mirroring the SCA path above which keeps
+    // the create response's offer_codes/can_buyer_sign_up rather than the confirm response's.
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
-      finalizeResponse.can_buyer_sign_up,
-      finalizeResponse.offer_codes,
+      prepareResponse.can_buyer_sign_up,
+      prepareResponse.offer_codes,
     );
   } catch (error) {
     if (error instanceof PaymentConfirmedError) throw error;
