@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
 # Builds an unconfirmed PaymentIntent for browser confirmation with a ConfirmationToken.
-# Keeps the server-confirm processor untouched while mirroring its fee-routing branches.
+# Keeps the server-confirm processor untouched while reusing the shared connect/destination
+# fee routing (StripeIntentChargeRouting).
+#
+# The caller MUST supply payment_method_types/currency from
+# Checkout::StripePaymentPresenter (CLIENT_CONFIRM_PAYMENT_METHOD_TYPES / CLIENT_CONFIRM_CURRENCY)
+# so the intent and the Payment Element can never drift — Stripe rejects a
+# payment_method_types-scoped ConfirmationToken against a mismatched intent.
 class StripeDeferredPaymentIntent
   include StripeErrorHandler
 
@@ -12,13 +18,16 @@ class StripeDeferredPaymentIntent
   end
 
   def initialize(merchant_account:, amount_cents:, amount_for_gumroad_cents:, reference:, description:,
-                 idempotency_key:, statement_description: nil, transfer_group: nil, metadata: nil)
+                 idempotency_key:, payment_method_types:, currency:, statement_description: nil,
+                 transfer_group: nil, metadata: nil)
     @merchant_account = merchant_account
     @amount_cents = amount_cents
     @amount_for_gumroad_cents = amount_for_gumroad_cents
     @reference = reference
     @description = description
     @idempotency_key = idempotency_key
+    @payment_method_types = payment_method_types
+    @currency = currency
     @statement_description = statement_description
     @transfer_group = transfer_group
     @metadata = metadata
@@ -33,58 +42,24 @@ class StripeDeferredPaymentIntent
 
   private
     attr_reader :merchant_account, :amount_cents, :amount_for_gumroad_cents, :reference, :description,
-                :idempotency_key, :statement_description, :transfer_group, :metadata
+                :idempotency_key, :payment_method_types, :currency, :statement_description, :transfer_group, :metadata
 
     def intent_params
       params = {
         amount: amount_cents,
-        currency: "usd",
+        currency:,
         description:,
         metadata: metadata || { purchase: reference },
-        # Stripe rejects a payment_method_types-scoped ConfirmationToken against an
-        # automatic_payment_methods intent, so this must match the Payment Element config.
-        # Scoping to card also excludes redirect-based methods from this inline checkout path.
-        payment_method_types: ["card"],
+        payment_method_types:,
       }
       params[:transfer_group] = transfer_group if transfer_group.present?
       params[:statement_descriptor_suffix] = statement_descriptor_suffix if statement_descriptor_suffix.present?
-      params.merge!(fee_params)
+      params.merge!(StripeIntentChargeRouting.fee_params(merchant_account:, amount_cents:, amount_for_gumroad_cents:))
       params
     end
 
-    # A connected (direct-charge) account collects an application fee on its own account; a
-    # Gumroad-managed account takes a destination transfer; the platform account keeps everything.
-    # Direct charge is checked first because a connected account also has a user.
-    def fee_params
-      if direct_charge_account?
-        ensure_charge_processor_merchant_id!
-        { application_fee_amount: amount_for_gumroad_cents }
-      elsif destination_charge_account?
-        ensure_charge_processor_merchant_id!
-        { transfer_data: { destination: merchant_account.charge_processor_merchant_id, amount: amount_cents - amount_for_gumroad_cents } }
-      else
-        {}
-      end
-    end
-
     def request_options
-      options = { idempotency_key: }
-      options[:stripe_account] = merchant_account.charge_processor_merchant_id if direct_charge_account?
-      options
-    end
-
-    def direct_charge_account?
-      merchant_account&.is_a_stripe_connect_account?
-    end
-
-    def destination_charge_account?
-      merchant_account&.user.present?
-    end
-
-    def ensure_charge_processor_merchant_id!
-      return if merchant_account.charge_processor_merchant_id.present?
-      raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user&.external_id} " \
-            "but has no Charge Processor Merchant ID."
+      StripeIntentChargeRouting.request_options(merchant_account:, idempotency_key:)
     end
 
     def statement_descriptor_suffix

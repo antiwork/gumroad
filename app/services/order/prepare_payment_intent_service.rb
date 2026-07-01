@@ -20,6 +20,8 @@ class Order::PreparePaymentIntentService
   def perform
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
+    return responses if block_multiple_sellers
+    return responses if block_purchases_with_blocked_customer_emails
 
     preview = retrieve_payment_method_preview
     return responses if preview.nil?
@@ -28,6 +30,12 @@ class Order::PreparePaymentIntentService
     return responses if block_purchasing_power_parity_mismatches
 
     prepare_unconfirmed_charge
+    responses
+  rescue => e
+    # A partial failure (e.g. a merchant account missing its Charge Processor Merchant ID) must
+    # leave every purchase in a terminal state with a buyer-facing error, not stuck in_progress.
+    Rails.logger.error("Error preparing client-confirm charge for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
+    fail_purchases_with(GENERIC_CHARGE_ERROR)
     responses
   end
 
@@ -50,6 +58,17 @@ class Order::PreparePaymentIntentService
       end
     end
 
+    # One ConfirmationToken funds one PaymentIntent, so client-confirm is single-seller only. The
+    # presenter and JS gate enforce this in the UI; re-check server-side so a crafted multi-seller
+    # request can't fund one seller's charge with another seller's line items.
+    def block_multiple_sellers
+      return false if purchases_to_charge.map(&:seller_id).uniq.one?
+
+      Rails.logger.error("Multi-seller client-confirm prepare blocked for order #{order.id}")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
     def retrieve_payment_method_preview
       if confirmation_token.blank?
         fail_purchases_with(GENERIC_CHARGE_ERROR)
@@ -58,7 +77,7 @@ class Order::PreparePaymentIntentService
 
       Stripe::ConfirmationToken.retrieve(confirmation_token).payment_method_preview
     rescue Stripe::StripeError => e
-      Rails.logger.error("Error retrieving ConfirmationToken for order #{order.id}: #{e.class} => #{e.message}")
+      Rails.logger.error("Error retrieving ConfirmationToken for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       nil
     end
@@ -73,9 +92,20 @@ class Order::PreparePaymentIntentService
 
     def block_purchasing_power_parity_mismatches
       purchases_to_charge.each(&:validate_purchasing_power_parity)
+      fail_all_purchases_when_any_errored
+    end
+
+    # A seller can block a buyer's email from purchasing. Lane A runs this at charge time
+    # (Order::ChargeService); combined-charge purchases skip it at create time, so run it here.
+    def block_purchases_with_blocked_customer_emails
+      purchases_to_charge.each(&:check_for_blocked_customer_emails)
+      fail_all_purchases_when_any_errored
+    end
+
+    # One PaymentIntent funds the whole charge, so a single failed purchase fails the entire order.
+    def fail_all_purchases_when_any_errored
       return false if purchases_to_charge.none? { |purchase| purchase.errors.any? }
 
-      # One PaymentIntent funds the whole charge, so a single PPP mismatch fails the entire order.
       purchases_to_charge.each do |purchase|
         purchase.errors.add(:base, GENERIC_CHARGE_ERROR) if purchase.errors.empty?
         Purchase::MarkFailedService.new(purchase).perform
@@ -97,9 +127,12 @@ class Order::PreparePaymentIntentService
 
     # Must run before amount_cents/gumroad_amount_cents are summed: it resolves the seller's merchant
     # account and recomputes fees so the Stripe processor fee (excluded at create time) is included.
+    # Single-seller (enforced above), so resolve the account once and reuse it across purchases.
     def resolve_merchant_account_and_fees
-      purchases_to_charge.each do |purchase|
-        purchase.resolve_merchant_account_and_recompute_fees!(StripeChargeProcessor.charge_processor_id)
+      first, *rest = purchases_to_charge
+      first.resolve_merchant_account_and_recompute_fees!(StripeChargeProcessor.charge_processor_id)
+      rest.each do |purchase|
+        purchase.resolve_merchant_account_and_recompute_fees!(StripeChargeProcessor.charge_processor_id, merchant_account: first.merchant_account)
       end
     end
 
@@ -123,10 +156,12 @@ class Order::PreparePaymentIntentService
         description: "Gumroad Charge #{charge.external_id}",
         statement_description: seller.name_or_username,
         transfer_group: charge.id_with_prefix,
-        idempotency_key: "deferred_intent_#{charge.external_id}"
+        idempotency_key: "deferred_intent_#{charge.external_id}",
+        payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+        currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       )
     rescue ChargeProcessorError => e
-      Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id}: #{e.class} => #{e.message}")
+      Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       nil
     end
 

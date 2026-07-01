@@ -16,6 +16,8 @@ describe StripeDeferredPaymentIntent do
       reference:,
       description: "Test product",
       idempotency_key:,
+      payment_method_types: ["card"],
+      currency: "usd",
       **overrides
     )
   end
@@ -77,7 +79,7 @@ describe StripeDeferredPaymentIntent do
       merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed")
 
       described_class.create(merchant_account:, amount_cents: 1_000, amount_for_gumroad_cents: 300,
-                             reference:, description: "x", idempotency_key:)
+                             reference:, description: "x", idempotency_key:, payment_method_types: ["card"], currency: "usd")
 
       params = captured_params.last[:params]
       expect(params[:transfer_data]).to eq(destination: "acct_managed", amount: 700)
@@ -90,7 +92,7 @@ describe StripeDeferredPaymentIntent do
       merchant_account = create(:merchant_account_stripe_connect, user: seller)
 
       described_class.create(merchant_account:, amount_cents: 1_000, amount_for_gumroad_cents: 300,
-                             reference:, description: "x", idempotency_key:)
+                             reference:, description: "x", idempotency_key:, payment_method_types: ["card"], currency: "usd")
 
       params = captured_params.last[:params]
       expect(params[:application_fee_amount]).to eq(300)

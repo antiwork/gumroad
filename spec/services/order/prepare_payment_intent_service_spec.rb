@@ -115,5 +115,82 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.purchases.first.reload).to be_failed
       end
     end
+
+    context "with a multi-seller cart" do
+      let(:other_seller) { create(:user) }
+      let(:other_product) { create(:product, user: other_seller, price_cents: 5_00) }
+
+      before do
+        create(:merchant_account, user: seller)
+        create(:merchant_account, user: other_seller)
+      end
+
+      it "blocks pre-charge so one seller's charge can't be funded by another seller's line items" do
+        params = {
+          line_items: [
+            line_item,
+            { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+          ]
+        }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-1"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.map(&:reload)).to all(be_failed)
+      end
+    end
+
+    context "when the buyer's email is blocked by the seller" do
+      before do
+        create(:merchant_account, user: seller)
+        BlockedCustomerObject.block_email!(email: common_params[:email], seller_id: seller.id)
+      end
+
+      it "blocks pre-charge without contacting Stripe or creating an intent" do
+        order, params = build_order
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BLOCKED_CUSTOMER_EMAIL_ADDRESS)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
+    # The deferred intent's payment_method_types/currency MUST equal the Payment Element's, or Stripe
+    # rejects the ConfirmationToken; both come from Checkout::StripePaymentPresenter so they can't drift.
+    context "the deferred intent method/currency contract" do
+      before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
+
+      it "creates the intent with the presenter's payment_method_types and currency" do
+        order, params = build_order
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(create_args[:payment_method_types]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES)
+        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+      end
+    end
   end
 end
