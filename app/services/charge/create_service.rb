@@ -38,6 +38,8 @@ class Charge::CreateService
 
     charge_intent = with_charge_processor_error_handler do
       presentment_args = buyer_currency_presentment_processor_args
+      idempotency_key = payment_intent_idempotency_key(presentment_args)
+      processor_args = idempotency_key.present? ? presentment_args.merge(idempotency_key:) : presentment_args
 
       ChargeProcessor.create_payment_intent_or_charge!(merchant_account,
                                                        chargeable,
@@ -51,8 +53,7 @@ class Charge::CreateService
                                                        setup_future_charges:,
                                                        metadata: StripeMetadata.build_metadata_large_list(purchases.map(&:external_id), key: :purchases, separator: ","),
                                                        mandate_options:,
-                                                       idempotency_key: payment_intent_idempotency_key(presentment_args),
-                                                       **presentment_args)
+                                                       **processor_args)
     end
     clear_buyer_currency_presentments if charge_intent.blank?
 
