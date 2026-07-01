@@ -4323,6 +4323,15 @@ describe Link, :vcr do
           end
         end
 
+        context "when the user's previous purchase was a paid product discounted to $0 by an offer code" do
+          let!(:offer_code) { create(:offer_code, products: [product], amount_cents: nil, amount_percentage: 100) }
+          let!(:purchase) { create(:free_purchase, link: product, purchaser: user, offer_code:) }
+
+          it "marks the purchase as paid" do
+            expect(product.purchase_info_for_product_page(user, nil)[:was_paid]).to eq(true)
+          end
+        end
+
         context "when the user has a previous gift sender purchase" do
           let!(:purchase) { create(:purchase, link: product, purchaser: user, is_gift_sender_purchase: true) }
 
