@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Charge::CreateService
+  BuyerCurrencyQuoteInvalid = Class.new(StandardError)
+  BUYER_CURRENCY_QUOTE_INVALID_MESSAGE = "The local-currency price changed or expired. Please review the updated total and try again."
+
   attr_accessor :order, :seller, :merchant_account, :chargeable, :purchases, :amount_cents, :gumroad_amount_cents,
                 :setup_future_charges, :off_session, :statement_description, :charge, :mandate_options, :params
 
@@ -76,6 +79,13 @@ class Charge::CreateService
 
   def with_charge_processor_error_handler
     yield
+  rescue BuyerCurrencyQuoteInvalid => e
+    logger.info "Buyer currency quote error: #{e.message} in charge: #{charge.external_id}"
+    purchases.each do |purchase|
+      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+    end
+    nil
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
@@ -207,14 +217,8 @@ class Charge::CreateService
       canonical_total_cents: amount_cents
     )
   rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
-    ErrorNotifier.notify(e, context: {
-                           charge_id: charge.id,
-                           charge_external_id: charge.external_id,
-                           seller_id: seller.id,
-                           merchant_account_id: merchant_account.id,
-                           presentment_currency: eligibility_decision.currency,
-                         })
-    raise ChargeProcessorInvalidRequestError, "Buyer currency quote is invalid"
+    Rails.logger.info("Buyer currency presentment quote rejected for charge #{charge.external_id}: #{e.message}")
+    raise BuyerCurrencyQuoteInvalid, e.message
   end
 
   def clear_buyer_currency_presentments

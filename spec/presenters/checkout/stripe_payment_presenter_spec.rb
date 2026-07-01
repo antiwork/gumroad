@@ -105,6 +105,7 @@ describe Checkout::StripePaymentPresenter do
   it "falls back to CardElement when buyer-currency presentment is enabled for the checkout" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
@@ -124,6 +125,29 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       elements_options: nil,
     )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "keeps the existing Payment Element and wallet path in live mode" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller

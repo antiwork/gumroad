@@ -150,22 +150,29 @@ class Charge < ApplicationRecord
 
   def refund_and_save!(refunding_user_id)
     transaction do
-      successful_purchases.all? do |purchase|
-        purchase.refund_and_save!(refunding_user_id).tap do |refunded|
-          copy_refund_errors_from(purchase) unless refunded
+      refunded_all_purchases = true
+      successful_purchases.each do |purchase|
+        refunded = purchase.refund_and_save!(refunding_user_id)
+        unless refunded
+          copy_refund_errors_from(purchase)
+          refunded_all_purchases = false
         end
       end
+      refunded_all_purchases
     end
   end
 
   def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil)
     transaction do
-      successful_purchases
-        .select { _1.gumroad_tax_cents > 0 }.all? do |purchase|
-        purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:).tap do |refunded|
-          copy_refund_errors_from(purchase) unless refunded
+      refunded_all_taxes = true
+      successful_purchases.select { _1.gumroad_tax_cents > 0 }.each do |purchase|
+        refunded = purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:)
+        unless refunded
+          copy_refund_errors_from(purchase)
+          refunded_all_taxes = false
         end
       end
+      refunded_all_taxes
     end
   end
 

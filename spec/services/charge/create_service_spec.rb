@@ -280,5 +280,39 @@ describe Charge::CreateService, :vcr do
                                 statement_description: seller_1.name_or_username,
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
+
+    it "stops before Stripe and marks purchases when the locked buyer-currency quote is invalid" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::CAD, fallback_reason: nil)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "expired buyer currency quote")
+      expect(ErrorNotifier).not_to receive(:notify)
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      charge = Charge::CreateService.new(order:,
+                                         seller: seller_1,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases: [purchase],
+                                         amount_cents: 10_00,
+                                         gumroad_amount_cents: 3_00,
+                                         setup_future_charges: false,
+                                         off_session: false,
+                                         statement_description: seller_1.name_or_username,
+                                         params: { buyer_currency_quote: "locked-token" }).perform
+
+      expect(charge.charge_intent).to be_nil
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    end
   end
 end

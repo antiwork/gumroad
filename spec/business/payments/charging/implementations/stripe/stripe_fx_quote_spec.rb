@@ -22,10 +22,11 @@ describe StripeFxQuote do
         lock_duration: "hour",
         usage: { type: "payment" },
       },
-      {
-        stripe_version: described_class::API_VERSION,
-        stripe_account: "acct_test",
-      }
+      hash_including(stripe_version: described_class::API_VERSION,
+                     stripe_account: "acct_test",
+                     client: have_attributes(config: have_attributes(open_timeout: described_class::OPEN_TIMEOUT_SECONDS,
+                                                                     read_timeout: described_class::READ_TIMEOUT_SECONDS,
+                                                                     write_timeout: described_class::WRITE_TIMEOUT_SECONDS)))
     ).and_return(response)
 
     quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
@@ -48,7 +49,10 @@ describe StripeFxQuote do
       :post,
       "/v1/fx_quotes",
       hash_including(to_currency: Currency::USD, from_currencies: [Currency::CAD]),
-      { stripe_version: described_class::API_VERSION }
+      hash_including(stripe_version: described_class::API_VERSION,
+                     client: have_attributes(config: have_attributes(open_timeout: described_class::OPEN_TIMEOUT_SECONDS,
+                                                                     read_timeout: described_class::READ_TIMEOUT_SECONDS,
+                                                                     write_timeout: described_class::WRITE_TIMEOUT_SECONDS)))
     ).and_return(response)
 
     quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: nil)

@@ -2930,6 +2930,42 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#buyer_presentment_price_cents" do
+    def purchase_with_presentment(was_tax_excluded_from_price:)
+      purchase = build(:purchase,
+                       price_cents: 10_00,
+                       total_transaction_cents: 10_00,
+                       was_purchase_taxable: true,
+                       was_tax_excluded_from_price:,
+                       tax_cents: 1_00)
+      purchase.save!(validate: false)
+      charge_presentment = create(:charge_presentment, presentment_total_cents: 12_50)
+      create(:purchase_presentment,
+             purchase:,
+             charge_presentment:,
+             presentment_price_cents: 11_25,
+             presentment_tip_cents: 0,
+             presentment_seller_tax_cents: 1_25,
+             presentment_gumroad_tax_cents: 0,
+             presentment_shipping_cents: 0,
+             presentment_total_cents: 12_50)
+      purchase
+    end
+
+    it "returns the pre-tax presentment price for tax-exclusive purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: true)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(11_25)
+    end
+
+    it "includes seller tax in the buyer-facing price for tax-inclusive purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: false)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(12_50)
+      expect(purchase.formatted_buyer_presentment_price).to eq("CAD$12.50")
+    end
+  end
+
   describe "#purchase_response" do
     let(:user) { create(:user, username: "admin2") }
     let(:link) { create(:product, user:, unique_permalink: "unique", custom_permalink: "custom") }

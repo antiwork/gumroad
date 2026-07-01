@@ -1395,7 +1395,9 @@ class Purchase < ApplicationRecord
   def buyer_presentment_price_cents
     return unless buyer_presentment?
 
-    purchase_presentment.presentment_price_cents
+    price_cents = purchase_presentment.presentment_price_cents
+    price_cents += purchase_presentment.presentment_seller_tax_cents unless was_tax_excluded_from_price
+    price_cents
   end
 
   def buyer_presentment_tax_cents
@@ -1409,7 +1411,7 @@ class Purchase < ApplicationRecord
   end
 
   def formatted_buyer_presentment_price
-    format_buyer_presentment_amount(purchase_presentment.presentment_price_cents)
+    format_buyer_presentment_amount(buyer_presentment_price_cents)
   end
 
   def formatted_buyer_presentment_tax

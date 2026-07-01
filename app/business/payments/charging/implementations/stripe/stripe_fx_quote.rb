@@ -5,6 +5,9 @@ class StripeFxQuote
 
   API_VERSION = "2025-07-30.preview"
   LOCK_DURATION = "hour"
+  OPEN_TIMEOUT_SECONDS = 2
+  READ_TIMEOUT_SECONDS = 5
+  WRITE_TIMEOUT_SECONDS = 2
 
   Quote = Struct.new(:id, :expires_at, :fx_rate, keyword_init: true)
 
@@ -13,7 +16,7 @@ class StripeFxQuote
   end
 
   def create(to_currency:, from_currency:, stripe_account_id:)
-    stripe_options = { stripe_version: API_VERSION }
+    stripe_options = { stripe_version: API_VERSION, client: stripe_client }
     stripe_options[:stripe_account] = stripe_account_id if stripe_account_id.present?
 
     response = with_stripe_error_handler do
@@ -34,6 +37,14 @@ class StripeFxQuote
   end
 
   private
+    def stripe_client
+      Stripe::StripeClient.new(
+        open_timeout: OPEN_TIMEOUT_SECONDS,
+        read_timeout: READ_TIMEOUT_SECONDS,
+        write_timeout: WRITE_TIMEOUT_SECONDS
+      )
+    end
+
     def build_quote(data, from_currency:)
       Quote.new(
         id: data.fetch(:id),

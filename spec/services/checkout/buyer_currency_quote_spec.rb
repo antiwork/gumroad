@@ -87,5 +87,21 @@ describe Checkout::BuyerCurrencyQuote do
         )
       end.to raise_error(described_class::InvalidToken, "total mismatch")
     end
+
+    it "rejects expired tokens" do
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      travel_to stripe_fx_quote.expires_at + 1.second do
+        expect do
+          described_class.verify!(
+            token: result.token,
+            seller:,
+            merchant_account:,
+            currency: Currency::CAD,
+            canonical_total_cents: 10_00
+          )
+        end.to raise_error(described_class::InvalidToken, "expired buyer currency quote")
+      end
+    end
   end
 end

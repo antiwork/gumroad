@@ -85,6 +85,10 @@ type CheckoutIndexPageProps = {
   };
 };
 
+const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
+const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
+  "The local-currency price changed or expired. Please review the updated total and try again.";
+
 function getCartItemUid(item: CartItem) {
   return `${item.product.permalink} ${item.option_id ?? ""}`;
 }
@@ -447,6 +451,18 @@ const CheckoutIndexPage = () => {
         return item ? { item, result } : [];
       });
       assert(isOpenTuple(results, 1), "startCartPayment returned empty results");
+
+      if (
+        results.some(
+          ({ result }) =>
+            !result.success && "error_code" in result && result.error_code === BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE,
+        )
+      ) {
+        showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
+        dispatch({ type: "cancel" });
+        dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
+        return;
+      }
 
       const failedItems = cartForm.data.cart.items.flatMap((item) => {
         const lineItem = result.lineItems[getCartItemUid(item)];

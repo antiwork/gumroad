@@ -2,9 +2,6 @@
 
 # Creates a ChargeIntent from Stripe::PaymentIntent
 class StripeChargeIntent < ChargeIntent
-  FLOW_OF_FUNDS_RETRY_DELAYS = [0.25, 0.5, 1].freeze
-  private_constant :FLOW_OF_FUNDS_RETRY_DELAYS
-
   delegate :id, :client_secret, to: :payment_intent
 
   def initialize(payment_intent:, merchant_account: nil)
@@ -52,14 +49,6 @@ class StripeChargeIntent < ChargeIntent
     end
 
     def charge_with_flow_of_funds(charge_id, merchant_account)
-      charge = StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
-      FLOW_OF_FUNDS_RETRY_DELAYS.each do |delay|
-        break if charge.flow_of_funds.present?
-
-        Rails.logger.info("Retrying Stripe charge #{charge_id} because its balance transaction is not available yet")
-        sleep(delay)
-        charge = StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
-      end
-      charge
+      StripeChargeProcessor.new.get_charge(charge_id, merchant_account:)
     end
 end
