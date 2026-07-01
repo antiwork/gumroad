@@ -43,7 +43,7 @@ export type PaymentElementConfig = {
 };
 // Browser-confirmed checkout mints a ConfirmationToken from the Payment Element, so it
 // omits payment_method_creation and stays in one-time payment mode.
-export type PaymentElementConfirmConfig = {
+export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: "usd";
   payment_method_types: ["card"];
@@ -61,9 +61,9 @@ export type CheckoutPaymentConfig =
       elements_options: PaymentElementConfig;
     }
   | {
-      integration: "payment_element_confirm";
+      integration: "payment_element_client_confirm";
       fallback_reason: null;
-      elements_options: PaymentElementConfirmConfig;
+      elements_options: PaymentElementClientConfirmConfig;
     };
 
 export type Product = {
@@ -143,8 +143,8 @@ type StateWithPaymentElementCheckout = State & {
   checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element" }>;
 };
 
-type StateWithPaymentElementConfirmCheckout = State & {
-  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element_confirm" }>;
+type StateWithPaymentElementClientConfirmCheckout = State & {
+  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
 };
 
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
@@ -240,11 +240,13 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
-// The browser must not widen server eligibility for the confirm integration:
+// The browser must not widen server eligibility for the client-confirm integration:
 // single-seller, one-time card checkouts only.
-export function canUseStripePaymentElementConfirm(state: State): state is StateWithPaymentElementConfirmCheckout {
+export function canUseStripePaymentElementClientConfirm(
+  state: State,
+): state is StateWithPaymentElementClientConfirmCheckout {
   if (state.products.length === 0) return false;
-  if (state.checkoutPayment.integration !== "payment_element_confirm") return false;
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return false;
   if (hasMultipleSellers(state)) return false;
 
   if (state.surcharges.type === "loaded") {
@@ -274,7 +276,7 @@ function canUseStripePaymentElementForFutureChargeSetup(state: State) {
 
 export function getStripePaymentElementAmount(state: State) {
   if (state.surcharges.type !== "loaded") return null;
-  if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementConfirm(state)) return null;
+  if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementClientConfirm(state)) return null;
   if (
     state.checkoutPayment.integration === "payment_element" &&
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT

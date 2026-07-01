@@ -29,7 +29,7 @@ describe StripeDeferredPaymentIntent do
       expect(charge_intent).to be_a(StripeChargeIntent)
       payment_intent = charge_intent.payment_intent
       expect(payment_intent.status).to eq("requires_payment_method")
-      # Must match the Payment Element's payment_method_types (see confirm_mode_props): Stripe rejects a
+      # Must match the Payment Element's payment_method_types (see client_confirm_props): Stripe rejects a
       # payment_method_types-scoped ConfirmationToken confirmed against an automatic_payment_methods intent.
       expect(payment_intent.payment_method_types.to_a).to eq(["card"])
       expect(payment_intent.automatic_payment_methods).to be_nil

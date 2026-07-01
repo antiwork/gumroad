@@ -36,9 +36,9 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
   end
 
-  def payment_element_confirm_props(stripe_link_enabled: false)
+  def payment_element_client_confirm_props(stripe_link_enabled: false)
     {
-      integration: described_class::STRIPE_PAYMENT_ELEMENT_CONFIRM_INTEGRATION,
+      integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -287,7 +287,7 @@ describe Checkout::StripePaymentPresenter do
   describe "Payment Element confirm integration" do
     it "selects the confirm integration for a single-seller one-time card cart with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product]))
-        .to eq(payment_element_confirm_props)
+        .to eq(payment_element_client_confirm_props)
     end
 
     it "keeps server-confirm Payment Element when only the base flag is enabled" do
@@ -315,7 +315,7 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(cart:)).to eq(payment_element_props)
     end
 
-    it "keeps server-confirm Payment Element for a recurring membership because confirm mode is one-time only" do
+    it "keeps server-confirm Payment Element for a recurring membership because client-confirm mode is one-time only" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
         .to eq(payment_element_props)
     end
@@ -340,7 +340,7 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
     end
 
-    it "enables Link in confirm mode when the seller has the Link flag" do
+    it "enables Link in client-confirm mode when the seller has the Link flag" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -348,7 +348,7 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
-        .to eq(payment_element_confirm_props(stripe_link_enabled: true))
+        .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))
     end
   end
 end

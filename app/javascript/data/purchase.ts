@@ -13,7 +13,7 @@ export type PurchasePaymentMethod =
   | AnyPaymentMethodResult
   | { type: "not-applicable" }
   // Browser-confirmed cards live in the ConfirmationToken sent to #prepare.
-  | { type: "payment-element-confirm"; confirmationTokenId: string; cardCountry: string | null };
+  | { type: "payment-element-client-confirm"; confirmationTokenId: string; cardCountry: string | null };
 
 export type SuccessfulLineItemResult = {
   success: true;
@@ -280,7 +280,7 @@ export const createPurchasesRequestData = (
   if (
     payload.paymentMethod.type !== "saved" &&
     payload.paymentMethod.type !== "not-applicable" &&
-    payload.paymentMethod.type !== "payment-element-confirm"
+    payload.paymentMethod.type !== "payment-element-client-confirm"
   ) {
     const { cardParamsResult } = payload.paymentMethod;
 

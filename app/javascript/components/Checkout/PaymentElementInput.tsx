@@ -14,7 +14,7 @@ import { getCssVariable } from "$app/utils/styles";
 import {
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type PaymentElementConfig,
-  type PaymentElementConfirmConfig,
+  type PaymentElementClientConfirmConfig,
 } from "$app/components/Checkout/payment";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -24,7 +24,7 @@ export type PaymentElementController = { stripe: Stripe; elements: StripeElement
 
 // Server-confirm and browser-confirm integrations share the Payment Element; only
 // server-confirm sets payment_method_creation: "manual".
-type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementConfirmConfig;
+type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClientConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 type LinkPrefillContact = { email: string; name: string };

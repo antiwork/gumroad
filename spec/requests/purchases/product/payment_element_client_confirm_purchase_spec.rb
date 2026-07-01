@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-# Browser E2E for the Payment Element confirm integration. Most coverage stubs the
+# Browser E2E for the Payment Element client-confirm integration. Most coverage stubs the
 # browser-side Stripe seam; this drives the real iframe plus #prepare/confirm/#finalize
 # handshake against Stripe test mode.
 describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: true) do
@@ -29,7 +29,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
     visit("/checkout?product=#{@product.unique_permalink}")
 
     checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element_confirm")
+    expect(checkout_payment["integration"]).to eq("payment_element_client_confirm")
     expect(checkout_payment["fallback_reason"]).to be_nil
     expect(page).to have_selector("iframe[src*='elements-inner-payment']")
 
@@ -55,7 +55,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
   it "surfaces a decline and creates no successful purchase when the card is declined at client confirm" do
     visit("/checkout?product=#{@product.unique_permalink}")
 
-    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+    expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
     # check_out(error:) expects a failed purchase, but client-side confirm errors never
     # reach #finalize, so the built purchase remains in_progress.
@@ -76,7 +76,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
   it "completes an inline 3DS challenge under client-confirm and fulfills" do
     visit("/checkout?product=#{@product.unique_permalink}")
 
-    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+    expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
     # check_out drives the inline 3DS challenge, covering confirmPayment rather than
     # the older confirmCardPayment path.
@@ -90,7 +90,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
   it "surfaces an authentication failure when the inline 3DS challenge is failed under client-confirm" do
     visit("/checkout?product=#{@product.unique_permalink}")
 
-    expect(checkout_payment_props["integration"]).to eq("payment_element_confirm")
+    expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
     fill_checkout_form(@product, credit_card: nil)
     fill_in_payment_element(number: "4000002500003155")

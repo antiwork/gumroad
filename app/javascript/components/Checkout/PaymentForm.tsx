@@ -40,7 +40,7 @@ import { CustomFields } from "$app/components/Checkout/CustomFields";
 import {
   addressFields,
   canUseStripePaymentElement,
-  canUseStripePaymentElementConfirm,
+  canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
   getTotalPrice,
@@ -679,9 +679,9 @@ const CreditCardContent = ({
 
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
-  const useStripePaymentElementConfirm = canUseStripePaymentElementConfirm(state);
+  const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   // Both Payment Element integrations mount the same UI; only the submit step differs.
-  const usesPaymentElement = useStripePaymentElement || useStripePaymentElementConfirm;
+  const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig =
     usesPaymentElement && state.checkoutPayment.integration !== "card_element"
       ? state.checkoutPayment.elements_options
@@ -719,7 +719,7 @@ const CreditCardContent = ({
 
       // Browser-confirmed checkout mints a ConfirmationToken instead of a server-confirmed
       // PaymentMethod. Saved cards still use the server-confirm path below.
-      if (useStripePaymentElementConfirm && !useSavedCard) {
+      if (useStripePaymentElementClientConfirm && !useSavedCard) {
         const controller = assertDefined(
           paymentElementRef.current,
           "`paymentElementRef.current` should be defined when confirming via the Payment Element",
@@ -742,7 +742,7 @@ const CreditCardContent = ({
         return dispatch({
           type: "set-payment-method",
           paymentMethod: {
-            type: "payment-element-confirm",
+            type: "payment-element-client-confirm",
             confirmationTokenId: tokenResult.confirmationTokenId,
             cardCountry: tokenResult.cardCountry,
           },
@@ -1283,7 +1283,7 @@ const PaymentMethodsSection = ({
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
 
   const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
-  const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementConfirm(state);
+  const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
   const cardPayDisabled = usesPaymentElement && !paymentElementReady;
 
   if (usesPaymentElement && !hasMultiplePaymentMethods) {

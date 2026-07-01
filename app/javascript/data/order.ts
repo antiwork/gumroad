@@ -235,12 +235,12 @@ type PrepareOrderResponse = {
 
 // Browser-confirmed order creation mirrors startOrderCreation's CartPurchaseResult
 // contract so the cart-submit consumer is unchanged.
-export const startConfirmOrderCreation = async (
+export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
 ): Promise<CartPurchaseResult> => {
   try {
-    const prepareResponse = await prepareConfirmOrder(requestData, confirmationTokenId);
+    const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
     if (!prepareResponse.success) {
       return translateOrderFailureResponseIntoLineItemFailures(requestData, prepareResponse);
     }
@@ -281,7 +281,7 @@ export const startConfirmOrderCreation = async (
     }
 
     // Inline methods resolve in-page, then finalize via the AJAX endpoint.
-    const finalizeResponse = await finalizeConfirmOrder(order.id);
+    const finalizeResponse = await finalizeClientConfirmOrder(order.id);
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
@@ -295,7 +295,7 @@ export const startConfirmOrderCreation = async (
   }
 };
 
-const prepareConfirmOrder = async (
+const prepareClientConfirmOrder = async (
   payload: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
 ): Promise<PrepareOrderResponse | OrderErrorResponse> => {
@@ -305,7 +305,7 @@ const prepareConfirmOrder = async (
   return typia.assert<PrepareOrderResponse | OrderErrorResponse>(await response.json());
 };
 
-const finalizeConfirmOrder = async (orderId: string): Promise<ConfirmOrderResponse> => {
+const finalizeClientConfirmOrder = async (orderId: string): Promise<ConfirmOrderResponse> => {
   const response = await request({
     method: "POST",
     url: Routes.finalize_order_path(orderId),

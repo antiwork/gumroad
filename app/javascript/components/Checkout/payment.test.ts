@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canUseStripePaymentElement,
-  canUseStripePaymentElementConfirm,
+  canUseStripePaymentElementClientConfirm,
   getStripePaymentElementAmount,
   isCardReadyToPay,
   requiresPaymentElementReusablePaymentMethod,
@@ -46,8 +46,8 @@ const cardElementConfig: CheckoutPaymentConfig = {
   elements_options: null,
 };
 
-const paymentElementConfirmConfig: CheckoutPaymentConfig = {
-  integration: "payment_element_confirm",
+const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
+  integration: "payment_element_client_confirm",
   fallback_reason: null,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -304,30 +304,30 @@ describe("canUseStripePaymentElement", () => {
   });
 });
 
-describe("canUseStripePaymentElementConfirm", () => {
-  const confirmState = (overrides: Partial<State> = {}) =>
-    state({ checkoutPayment: paymentElementConfirmConfig, ...overrides });
+describe("canUseStripePaymentElementClientConfirm", () => {
+  const clientConfirmState = (overrides: Partial<State> = {}) =>
+    state({ checkoutPayment: paymentElementClientConfirmConfig, ...overrides });
 
   it("allows a single-seller one-off card checkout when the server selected the confirm integration", () => {
-    expect(canUseStripePaymentElementConfirm(confirmState())).toBe(true);
+    expect(canUseStripePaymentElementClientConfirm(clientConfirmState())).toBe(true);
   });
 
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
-    expect(canUseStripePaymentElementConfirm(state())).toBe(false);
+    expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });
 
   it("falls back when the server selected the Card Element integration", () => {
-    expect(canUseStripePaymentElementConfirm(state({ checkoutPayment: cardElementConfig }))).toBe(false);
+    expect(canUseStripePaymentElementClientConfirm(state({ checkoutPayment: cardElementConfig }))).toBe(false);
   });
 
   it("falls back when the cart is empty", () => {
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [] }))).toBe(false);
+    expect(canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [] }))).toBe(false);
   });
 
   it("falls back for multi-seller carts because one ConfirmationToken funds one PaymentIntent", () => {
     expect(
-      canUseStripePaymentElementConfirm(
-        confirmState({
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({
           products: [
             product({ creator: { id: "seller-a", name: "Seller A", profile_url: "", avatar_url: "" } }),
             product({ creator: { id: "seller-b", name: "Seller B", profile_url: "", avatar_url: "" } }),
@@ -337,36 +337,42 @@ describe("canUseStripePaymentElementConfirm", () => {
     ).toBe(false);
   });
 
-  it("falls back for reusable-payment-method flows because confirm mode is one-time only", () => {
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ recurrence: "monthly" })] }))).toBe(
-      false,
-    );
+  it("falls back for reusable-payment-method flows because client-confirm mode is one-time only", () => {
     expect(
-      canUseStripePaymentElementConfirm(confirmState({ products: [product({ subscription_id: "sub_123" })] })),
+      canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [product({ recurrence: "monthly" })] })),
     ).toBe(false);
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ nativeType: "commission" })] }))).toBe(
-      false,
-    );
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({ products: [product({ subscription_id: "sub_123" })] }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({ products: [product({ nativeType: "commission" })] }),
+      ),
+    ).toBe(false);
   });
 
   it("falls back for future-charge and installment flows", () => {
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ payInInstallments: true })] }))).toBe(
-      false,
-    );
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ isPreorder: true })] }))).toBe(false);
-    expect(canUseStripePaymentElementConfirm(confirmState({ products: [product({ hasFreeTrial: true })] }))).toBe(
-      false,
-    );
+    expect(
+      canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [product({ payInInstallments: true })] })),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [product({ isPreorder: true })] })),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [product({ hasFreeTrial: true })] })),
+    ).toBe(false);
   });
 
   it("keeps the confirm path selected while the final total is pending", () => {
-    expect(canUseStripePaymentElementConfirm(confirmState({ surcharges: { type: "pending" } }))).toBe(true);
+    expect(canUseStripePaymentElementClientConfirm(clientConfirmState({ surcharges: { type: "pending" } }))).toBe(true);
   });
 
   it("falls back when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
     expect(
-      canUseStripePaymentElementConfirm(
-        confirmState({
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({
           surcharges: {
             type: "loaded",
             result: {
@@ -466,7 +472,7 @@ describe("getStripePaymentElementAmount", () => {
     expect(
       getStripePaymentElementAmount(
         state({
-          checkoutPayment: paymentElementConfirmConfig,
+          checkoutPayment: paymentElementClientConfirmConfig,
           surcharges: {
             type: "loaded",
             result: {

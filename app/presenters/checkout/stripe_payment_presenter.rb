@@ -3,8 +3,8 @@
 # Chooses the Stripe checkout payment integration for the current checkout props.
 #
 # Two Payment Element integrations coexist: "payment_element" keeps server-confirmed
-# PaymentMethods, while "payment_element_confirm" lets the browser confirm a PaymentIntent
-# with a ConfirmationToken. Confirm mode is additive and limited to single-seller,
+# PaymentMethods, while "payment_element_client_confirm" lets the browser confirm a PaymentIntent
+# with a ConfirmationToken. Client-confirm mode is additive and limited to single-seller,
 # one-time, non-direct-charge carts.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
@@ -12,7 +12,7 @@ class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
-  STRIPE_PAYMENT_ELEMENT_CONFIRM_INTEGRATION = "payment_element_confirm"
+  STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
   # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
@@ -37,7 +37,7 @@ class Checkout::StripePaymentPresenter
     return card_element_props(fallback_reason) if fallback_reason.present?
 
     # Confirm-eligible carts are always one-time charges, so check them before setup mode.
-    return confirm_mode_props if confirm_mode_eligible?(checkout_items)
+    return client_confirm_props if client_confirm_eligible?(checkout_items)
 
     stripe_elements_mode =
       if setup_for_future_charges_without_charging?(checkout_items)
@@ -83,24 +83,24 @@ class Checkout::StripePaymentPresenter
       }
     end
 
-    # One ConfirmationToken funds one PaymentIntent, so confirm mode is limited to one
+    # One ConfirmationToken funds one PaymentIntent, so client-confirm mode is limited to one
     # seller. Reusable-payment-method flows need setup_future_usage, and connected-account
     # scoping is not supported here.
-    def confirm_mode_eligible?(items)
+    def client_confirm_eligible?(items)
       sellers.one? &&
         sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
         sellers.none?(&:stripe_connect_account) &&
         !setup_for_future_charges_without_charging?(items) &&
-        items.none? { confirm_mode_unsupported_item?(_1) }
+        items.none? { client_confirm_unsupported_item?(_1) }
     end
 
-    def confirm_mode_unsupported_item?(item)
+    def client_confirm_unsupported_item?(item)
       item[:recurrence].present? || item[:native_type] == Link::NATIVE_TYPE_COMMISSION
     end
 
-    def confirm_mode_props
+    def client_confirm_props
       {
-        integration: STRIPE_PAYMENT_ELEMENT_CONFIRM_INTEGRATION,
+        integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
