@@ -15,17 +15,25 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
   # Returns :pending (intent still processing), an error message string (failed), or nil (success
   # or already-finalized no-op).
+  #
+  # with_lock serializes concurrent finalizers so only one runs the state transition and
+  # fulfillment. Phase 1 has a single trigger (AJAX), but the abandonment worker and the Phase-2
+  # webhook can race the browser call, and the unlocked in_progress? read would let two callers
+  # both fulfill and double-credit the same captured charge.
   def perform
-    return if purchase.successful?
-    return "There is a temporary problem, please try again (your card was not charged)." unless purchase.in_progress?
-
-    if charge_intent.succeeded?
-      finalize_successful_charge
-    elsif charge_intent.processing?
-      purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
-      :pending
-    else
-      fail_purchase
+    purchase.with_lock do
+      if purchase.successful?
+        nil
+      elsif !purchase.in_progress?
+        "There is a temporary problem, please try again (your card was not charged)."
+      elsif charge_intent.succeeded?
+        finalize_successful_charge
+      elsif charge_intent.processing?
+        purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
+        :pending
+      else
+        fail_purchase
+      end
     end
   end
 

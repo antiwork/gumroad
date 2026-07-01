@@ -13,7 +13,10 @@ class Order::FinalizeConfirmedChargeService
 
   def perform
     charge = order.charges.find { _1.stripe_payment_intent_id.present? }
-    return responses if charge.nil?
+    if charge.nil?
+      Rails.logger.error("Finalize found no client-confirm charge for order #{order.id}")
+      return responses
+    end
 
     charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 

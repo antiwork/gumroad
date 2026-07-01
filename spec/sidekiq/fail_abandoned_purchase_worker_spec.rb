@@ -145,6 +145,36 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
+      describe "browser-confirmed (Lane B) charge that succeeded but was never finalized" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller) }
+        let(:purchase) { create(:purchase_in_progress, link: product, merchant_account: create(:merchant_account, user: seller)) }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_confirmed") }
+        let(:succeeded_intent) { instance_double(StripeChargeIntent, succeeded?: true, canceled?: false) }
+
+        before do
+          charge.purchases << purchase
+          purchase.create_processor_payment_intent!(intent_id: "pi_confirmed")
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+
+          allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_confirmed")
+            .and_return(Stripe::PaymentIntent.construct_from(id: "pi_confirmed", status: "succeeded"))
+          # Stripe refuses to cancel a succeeded intent; the worker must then finalize, not give up.
+          allow_any_instance_of(Purchase).to receive(:cancel_charge_intent!)
+            .and_raise(ChargeProcessorError, "You cannot cancel this PaymentIntent because it has a status of succeeded.")
+          allow(ChargeProcessor).to receive(:get_charge_intent).and_return(succeeded_intent)
+        end
+
+        it "finalizes the captured charge instead of leaving it stuck in_progress" do
+          finalize = instance_double(Purchase::FinalizeConfirmedChargeService)
+          expect(Purchase::FinalizeConfirmedChargeService).to receive(:new)
+            .with(purchase: an_instance_of(Purchase), charge_intent: succeeded_intent).and_return(finalize)
+          expect(finalize).to receive(:perform)
+
+          described_class.new.perform(purchase.id)
+        end
+      end
+
       context "membership upgrade purchase" do
         let(:user) { create(:user) }
 
