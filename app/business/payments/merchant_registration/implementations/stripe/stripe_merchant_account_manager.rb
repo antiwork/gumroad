@@ -968,7 +968,7 @@ module StripeMerchantAccountManager
       if %w(rejection_appeal supportability_rejection_appeal).include?(risk_requirement_category)
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
-        user.suspend_due_to_stripe_risk
+        user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
       else
         # Some info/verification is required by Stripe for supportability.
         # Send a Stripe remediation link to the creator via email so they can submit the info.

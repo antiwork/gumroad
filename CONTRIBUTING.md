@@ -12,12 +12,13 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 ## Pull requests
 
 > ### ⛔ THE #1 RULE FOR ANY PRODUCT CHANGE: SHOW IT.
-> **Every PR that changes anything a user can see or experience MUST include before/after visual evidence — a video (preferred) or screenshots — covering desktop + mobile, light + dark where applicable.** This is the single most important requirement of a product PR, above code style, above everything. A "small" mobile/CSS/layout tweak is exactly the kind of change that needs a screenshot or clip — that is the whole point. Do NOT rationalize a visual change as too minor to capture. A product PR without media is not ready to review and should be sent back. Non-visual PRs still need a short walkthrough video (see below).
+>
+> **Every PR that changes anything a user can see or experience MUST include before/after visual evidence — a video (preferred) or screenshots — covering desktop + mobile, light + dark where applicable.** This is the single most important requirement of a product PR, above code style, above everything. A "small" mobile/CSS/layout tweak is exactly the kind of change that needs a screenshot or clip — that is the whole point. Do NOT rationalize a visual change as too minor to capture. A product PR without media is not ready to review and should be sent back. Non-visual PRs still need a short walkthrough video (see below) — **except PRs that only modify documentation or agent skill files, where the diff itself is the reviewable artifact and no video is required.**
 
 - Include an AI disclosure
 - Self-review (comment) on your code
 - Break up big 1k+ line PRs into smaller PRs (100 loc)
-- **Must**: Include a video for every PR. For user-facing changes, show before/after with light/dark mode and mobile/desktop. For non-user-facing changes, record a short walkthrough of the relevant existing functionality to demonstrate understanding and confirm nothing broke.
+- **Must**: Include a video for every PR. For user-facing changes, show before/after with light/dark mode and mobile/desktop. For non-user-facing changes, record a short walkthrough of the relevant existing functionality to demonstrate understanding and confirm nothing broke. Exception: PRs that only touch documentation or agent skill files need no video — the diff is the reviewable artifact.
 - Include updates to any tests, especially end-to-end tests!
 - Deploy the app to a preview URL and include QA steps
 
@@ -27,7 +28,7 @@ Non-trivial PRs should follow this structure:
 
 - **What** — What this PR does. Concrete changes, not a list of files.
 - **Why** — Why this change exists and why this approach was chosen over alternatives. When other PRs or approaches exist for the same problem, name them and say why this one wins (fewer changes, right API, no backend/storage churn, etc.).
-- **Before/After** — Video is required for all PRs. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
+- **Before/After** — Video is required for all PRs, except PRs that only touch documentation or agent skill files, where the diff itself is the reviewable artifact. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
 - **Test Results** — Screenshot of tests passing locally.
 
 Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. Reference them in PR descriptions with raw GitHub URLs:

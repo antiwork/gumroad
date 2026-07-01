@@ -1013,6 +1013,7 @@ class LinksController < ApplicationController
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
+            #{custom_html_analytics_head(product)}
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>
@@ -1054,6 +1055,51 @@ class LinksController < ApplicationController
             #{can_preview_custom_html? ? custom_html_live_reload_script(version_src: "/l/#{product.unique_permalink}/landing/version", nonce:) : ""}
           </body>
         </html>
+      HTML
+    end
+
+    # Custom HTML pages bypass the React product page, so the seller's analytics
+    # (Google Analytics, Facebook/TikTok pixels, and raw third-party snippets)
+    # never load. We inject them into the trusted wrapper — never the sandboxed
+    # landing iframe, whose strict CSP (connect-src 'none', no Google host in
+    # script-src) blocks them by design. The wrapper runs under the global site
+    # CSP, which allowlists those hosts, and the `custom_html_analytics` entry
+    # point reuses the same tracking modules the standard product page uses.
+    #
+    # The entry point fires the same events the standard product page would
+    # (product view + "I want this" on buy click) so switching to a custom page
+    # keeps the same analytics event names. begin_checkout and purchase stay on
+    # the standard checkout and receipt pages the buy button navigates to, which
+    # already fire them — firing them here too would double-count.
+    def custom_html_analytics_head(product)
+      return "" unless analytics_enabled?(seller: product.user)
+
+      analytics = product.analytics_data
+      has_product_third_party_analytics = product.has_third_party_analytics?("product")
+      has_configured_pixel = analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
+      return "" unless has_configured_pixel || has_product_third_party_analytics
+
+      props = {
+        seller_id: product.user.external_id,
+        analytics:,
+        has_product_third_party_analytics:,
+        third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        permalink: product.unique_permalink,
+        name: product.name,
+      }
+
+      # All three enabled flags are "true" (not per-pixel): this block only renders
+      # when analytics_enabled?, and the frontend gates each pixel on its own
+      # configured id — mirroring PageMeta::Analytics#set_analytics_meta_tags, which
+      # the wrapper's layout-less document can't accumulate. The props JSON goes in a
+      # double-quoted attribute, so ERB::Util.h (which escapes ") is the right escape
+      # here — json_escape would leave quotes intact and break out of the attribute.
+      <<~HTML.strip
+        <meta property="gr:google_analytics:enabled" content="true">
+        <meta property="gr:fb_pixel:enabled" content="true">
+        <meta property="gr:tiktok_pixel:enabled" content="true">
+        <meta name="gr:custom-html-analytics" content="#{ERB::Util.h(props.to_json)}">
+        #{helpers.vite_typescript_tag("custom_html_analytics")}
       HTML
     end
 end

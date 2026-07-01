@@ -70,6 +70,20 @@ describe User::Risk do
         another_user.suspend_due_to_stripe_risk
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
     end
+
+    it "records a suspension note without the reason when disabled_reason is not provided" do
+      user.suspend_due_to_stripe_risk
+
+      note = user.comments.where(comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE).last
+      expect(note.content).to eq("Suspended because of high risk reported by Stripe")
+    end
+
+    it "includes the Stripe requirements.disabled_reason in the suspension note when provided" do
+      user.suspend_due_to_stripe_risk(disabled_reason: "rejected.fraud")
+
+      note = user.comments.where(comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE).last
+      expect(note.content).to eq("Suspended because of high risk reported by Stripe (Stripe requirements.disabled_reason: rejected.fraud)")
+    end
   end
 
 

@@ -4,9 +4,13 @@ require "spec_helper"
 
 describe InternalNotificationMailer do
   describe "#notify" do
+    # Use the "risk" room, which maps to INTERNAL_NOTIFICATION_EMAIL — a recipient
+    # that is intentionally distinct from INTERNAL_NOTIFICATION_ALWAYS_CC. This keeps
+    # the `to` and `cc` assertions below meaningful even if PAYMENTS_NOTIFICATION_EMAIL
+    # and the always-CC address ever resolve to the same value in a shared config.
     subject(:mail) do
       described_class.notify(
-        room_name: "payments",
+        room_name: "risk",
         sender: "VAT Reporting",
         message_text: "VAT report generated successfully."
       )
@@ -17,11 +21,15 @@ describe InternalNotificationMailer do
     end
 
     it "CCs Gumclaw on every notification in addition to the room recipient" do
+      # The mailer dedups the CC when it equals the room's own recipient, so this
+      # assertion is only meaningful while the two addresses are distinct. Assert the
+      # prerequisite explicitly rather than relying on it implicitly.
+      expect(INTERNAL_NOTIFICATION_ALWAYS_CC).not_to eq(mail.to.first)
       expect(mail.cc).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
     end
 
     it "sets the subject with room name and sender" do
-      expect(mail.subject).to eq("[test] [payments] VAT Reporting")
+      expect(mail.subject).to eq("[test] [risk] VAT Reporting")
     end
 
     it "includes the sender and message in the body" do
