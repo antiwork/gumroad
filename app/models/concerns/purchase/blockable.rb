@@ -206,7 +206,7 @@ module Purchase::Blockable
       block_buyer!
     end
 
-    def pause_payouts_for_seller_based_on_recent_failures!
+    def flag_seller_based_on_recent_failures!
       return if Feature.inactive?(:block_seller_based_on_recent_failures)
       return if IGNORED_ERROR_CODES.include?(error_code)
       return if seller.verified?
@@ -230,13 +230,36 @@ module Purchase::Blockable
 
       failed_price_cents = failed_seller_purchases.sum(:price_cents)
       if failed_price_cents > max_seller_failed_purchases_price_cents
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        # NOTE (2026-07-01, Sahil): do NOT pause the seller's payouts here. A failed-purchase
+        # burst is almost always an EXTERNAL card-tester spraying stolen cards at a popular
+        # checkout — the seller is the VICTIM, and freezing their money is a terrible UX that
+        # punishes the wrong party. Keep the detection, but make it purely INFORMATIONAL:
+        # post to the #risk room (relayed to Telegram) for a human/agent to review, and leave
+        # payouts untouched. A genuine self-funding seller is caught by the risk-queue review
+        # flow (per-card buyer spread + seller-IP intersection), not by this blunt volume trip.
+        #
+        # Dedup guard: this runs on EVERY failed purchase, so once the cumulative volume crosses
+        # the threshold every subsequent failure in the same window would re-fire. Skip if we've
+        # already flagged this seller within the watch window — one comment + one #risk post per
+        # burst, not one per failed charge.
+        return if seller.comments.where(
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:recent_failed_purchases],
+          created_at: failed_seller_purchases_watch_minutes.minutes.ago..
+        ).exists?
 
         failed_price_amount = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
+
         seller.comments.create(
-          content: "Payouts paused due to high volume of failed purchases (#{failed_price_amount} USD in #{failed_seller_purchases_watch_minutes} minutes).",
+          content: "High volume of failed purchases (#{failed_price_amount} USD in #{failed_seller_purchases_watch_minutes} minutes) — flagged for review (payouts NOT paused).",
           comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
           author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:recent_failed_purchases]
+        )
+
+        InternalNotificationWorker.perform_async(
+          "risk",
+          "Card-testing watch",
+          "Seller #{seller.username || seller.external_id} (#{seller.email}) had #{failed_price_amount} in failed purchases in #{failed_seller_purchases_watch_minutes} minutes. Payouts were NOT paused — review for genuine self-funding vs. an external card-testing spray. Admin: #{seller.external_id}"
         )
       end
     end

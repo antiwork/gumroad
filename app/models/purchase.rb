@@ -222,7 +222,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_fraudulent_buyer_browser_guid!
     after_transition any => :failed, :do => :ban_card_testers!
     after_transition any => :failed, :do => :block_purchases_on_product!, if: lambda { |purchase| purchase.price_cents.nonzero? && !purchase.is_recurring_subscription_charge }
-    after_transition any => :failed, :do => :pause_payouts_for_seller_based_on_recent_failures!, if: lambda { |purchase| purchase.price_cents.nonzero? }
+    after_transition any => :failed, :do => :flag_seller_based_on_recent_failures!, if: lambda { |purchase| purchase.price_cents.nonzero? }
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
@@ -1147,7 +1147,7 @@ class Purchase < ApplicationRecord
     json = {
       created_at: purchase.created_at,
       should_show_receipt: !purchase.is_test_purchase? && purchase.successful_and_not_reversed?(include_gift: true),
-      was_paid: purchase.present? && purchase.paid?,
+      was_paid: purchase.present? && (purchase.paid? || purchase.offer_code_id.present?),
       show_view_content_button_on_product_page: purchase.show_view_content_button_on_product_page?,
       is_recurring_billing: link.is_recurring_billing,
       is_physical: link.is_physical,

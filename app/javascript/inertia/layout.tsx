@@ -38,7 +38,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <MetaTags />
         <Alert initial={null} />
-        <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
+        <div id="inertia-shell" className="flex h-dvh flex-col lg:flex-row">
           {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
             {children}

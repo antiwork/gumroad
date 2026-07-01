@@ -498,7 +498,7 @@
 - id: 289
   slug: "289-file-size-limits-on-gumroad"
   title: "File size limits"
-  description: "In this article: 16 GB File size limit 250 MB limit Download All button How to zip your files Mac PC Your file size limit depends on how you’ve decided to price"
+  description: "In this article: 20 GB File size limit 250 MB limit Download All button How to zip your files Mac PC Your file size limit depends on how you’ve decided to price"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 290
   slug: "290-facebook-domain-verification"
