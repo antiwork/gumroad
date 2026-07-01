@@ -272,6 +272,21 @@ describe ReceiptPresenter::ItemInfo do
                 ]
               )
             end
+
+            context "when the purchase has quantity" do
+              before do
+                purchase.update!(quantity: 2)
+              end
+
+              it "returns the buyer-presentment product price per unit" do
+                expect(props[:general_attributes]).to eq(
+                  [
+                    { label: "Product price", value: "CAD$9.37" },
+                    { label: "Quantity", value: 2 },
+                  ]
+                )
+              end
+            end
           end
         end
 

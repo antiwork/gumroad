@@ -59,6 +59,39 @@ describe Charge::PresentmentOrchestrator do
                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
+  it "uses a locked buyer quote total for the processor charge amount" do
+    locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
+      token: "locked-token",
+      currency: Currency::CAD,
+      canonical_total_cents: 10_00,
+      presentment_total_cents: 12_51,
+      fx_rate: BigDecimal("0.8"),
+      stripe_fx_quote_id: "fxq_locked",
+      stripe_fx_quote_expires_at: 30.minutes.from_now
+    )
+
+    expect(StripeFxQuote).not_to receive(:create)
+
+    result = described_class.new(charge:,
+                                 merchant_account:,
+                                 purchases: [purchase],
+                                 amount_cents: 10_00,
+                                 gumroad_amount_cents: 3_00,
+                                 eligibility_decision:,
+                                 locked_quote:).perform
+
+    expect(result).to have_attributes(processor_amount_cents: 12_51,
+                                      processor_currency: Currency::CAD,
+                                      processor_gumroad_amount_cents: 3_75,
+                                      stripe_fx_quote_id: "fxq_locked")
+    expect(charge.reload.charge_presentment).to have_attributes(presentment_total_cents: 12_51,
+                                                                presentment_gumroad_amount_cents: 3_75,
+                                                                stripe_fx_quote_id: "fxq_locked")
+    expect(purchase.reload.purchase_presentment).to have_attributes(presentment_price_cents: 12_51,
+                                                                    presentment_total_cents: 12_51,
+                                                                    presentment_gumroad_amount_cents: 3_75)
+  end
+
   it "falls back without creating presentment records when quote creation fails" do
     allow(ErrorNotifier).to receive(:notify)
     allow(StripeFxQuote).to receive(:create).and_raise(ChargeProcessorUnavailableError.new)

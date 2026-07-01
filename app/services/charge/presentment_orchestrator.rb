@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+# Coordinates the buyer-presentment charge setup for the PR-1 test-mode path.
+#
+# The checkout flow first locks or creates a Stripe FX quote, then snapshots the
+# buyer-facing presentment amounts on the charge and purchases, and finally
+# returns processor arguments for the PaymentIntent. Persisting before processor
+# confirmation lets receipts and accounting read a single stored quote, but it
+# also means post-money-movement exceptions need explicit reconciliation in the
+# later refund/dispute work. For this PR, Charge::CreateService clears snapshots
+# only when the processor path cleanly falls back before a charge intent exists.
 class Charge::PresentmentOrchestrator
   include CurrencyHelper
 
@@ -29,7 +38,7 @@ class Charge::PresentmentOrchestrator
       from_currency: eligibility_decision.currency,
       stripe_account_id: merchant_account.charge_processor_merchant_id
     )
-    presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate)
+    presentment_total_cents = locked_quote ? locked_quote.presentment_total_cents : presentment_cents_for(amount_cents, quote.fx_rate)
     presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, quote.fx_rate)
 
     persist_presentment!(quote:, presentment_total_cents:, presentment_gumroad_amount_cents:)

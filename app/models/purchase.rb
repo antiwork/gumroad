@@ -1400,6 +1400,12 @@ class Purchase < ApplicationRecord
     price_cents
   end
 
+  def buyer_presentment_price_per_unit_cents
+    return unless buyer_presentment?
+
+    buyer_presentment_price_cents / quantity
+  end
+
   def buyer_presentment_tax_cents
     return unless buyer_presentment?
 
@@ -1414,8 +1420,16 @@ class Purchase < ApplicationRecord
     format_buyer_presentment_amount(buyer_presentment_price_cents)
   end
 
+  def formatted_buyer_presentment_price_per_unit
+    format_buyer_presentment_amount(buyer_presentment_price_per_unit_cents)
+  end
+
   def formatted_buyer_presentment_tax
     format_buyer_presentment_amount(buyer_presentment_tax_cents)
+  end
+
+  def formatted_buyer_presentment_tip
+    format_buyer_presentment_amount(purchase_presentment.presentment_tip_cents)
   end
 
   def formatted_buyer_presentment_seller_tax(symbol: true)

@@ -236,7 +236,13 @@ describe Charge::CreateService, :vcr do
                                                                        processor_currency: Currency::CAD,
                                                                        processor_gumroad_amount_cents: 3_75,
                                                                        stripe_fx_quote_id: "fxq_test")
-      locked_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 1.hour.from_now, fx_rate: BigDecimal("0.8"))
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::CAD,
+                                                              canonical_total_cents: amount_cents,
+                                                              presentment_total_cents: 12_50,
+                                                              fx_rate: BigDecimal("0.8"),
+                                                              stripe_fx_quote_id: "fxq_test",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
 
       allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
       allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).with(

@@ -265,6 +265,21 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
+          it "redirects with an alert when a buyer-presentment tax refund is blocked" do
+            create(:purchase_presentment, purchase: @purchase)
+            allow(ErrorNotifier).to receive(:notify)
+
+            expect do
+              post :create, params: payload.merge(vat_id: "IE6388047V", purchase_id: @purchase.external_id, email: @purchase.email)
+            end.not_to change(Refund, :count)
+
+            expect(response).to redirect_to(new_purchase_invoice_path(@purchase.external_id, email: @purchase.email))
+            expect(flash[:alert]).to eq(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
+            expect(session["invoice_file_url_#{@purchase.external_id}"]).to be_nil
+            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+                                                                 context: hash_including(purchase_id: @purchase.id))
+          end
+
           it "does not refund tax when provided an invalid vat id" do
             post :create, params: payload.merge(vat_id: "EU123456789", purchase_id: @purchase.external_id, email: @purchase.email)
 

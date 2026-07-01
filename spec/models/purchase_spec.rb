@@ -2931,13 +2931,14 @@ describe Purchase, :vcr do
   end
 
   describe "#buyer_presentment_price_cents" do
-    def purchase_with_presentment(was_tax_excluded_from_price:)
+    def purchase_with_presentment(was_tax_excluded_from_price:, quantity: 1)
       purchase = build(:purchase,
                        price_cents: 10_00,
                        total_transaction_cents: 10_00,
                        was_purchase_taxable: true,
                        was_tax_excluded_from_price:,
-                       tax_cents: 1_00)
+                       tax_cents: 1_00,
+                       quantity:)
       purchase.save!(validate: false)
       charge_presentment = create(:charge_presentment, presentment_total_cents: 12_50)
       create(:purchase_presentment,
@@ -2963,6 +2964,13 @@ describe Purchase, :vcr do
 
       expect(purchase.buyer_presentment_price_cents).to eq(12_50)
       expect(purchase.formatted_buyer_presentment_price).to eq("CAD$12.50")
+    end
+
+    it "returns the per-unit buyer-facing price for quantity purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: false, quantity: 2)
+
+      expect(purchase.buyer_presentment_price_per_unit_cents).to eq(6_25)
+      expect(purchase.formatted_buyer_presentment_price_per_unit).to eq("CAD$6.25")
     end
   end
 

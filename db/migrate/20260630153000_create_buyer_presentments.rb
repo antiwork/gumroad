@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class CreateBuyerPresentments < ActiveRecord::Migration[7.0]
+class CreateBuyerPresentments < ActiveRecord::Migration[7.1]
   def change
     create_table :charge_presentments do |t|
       t.bigint :charge_id, null: false
