@@ -55,7 +55,7 @@ class Purchases::InvoicesController < ApplicationController
           note: address_fields.to_json,
           business_vat_id: refundable_vat_id
         )
-        unless tax_refunded || @chargeable.errors.empty?
+        if !tax_refunded && @chargeable.errors.present?
           message = @chargeable.errors.full_messages.to_sentence.presence || "Sorry, something went wrong."
           return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: message
         end

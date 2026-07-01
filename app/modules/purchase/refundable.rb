@@ -347,6 +347,7 @@ class Purchase
   def buyer_presentment_refund_blocked?
     return false if purchase_presentment.blank?
 
+    # TODO(#5419): Remove this hard stop once buyer-presentment refunds are supported.
     errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE
     ErrorNotifier.notify(
       "Buyer-presentment refund attempted before refund support shipped",
