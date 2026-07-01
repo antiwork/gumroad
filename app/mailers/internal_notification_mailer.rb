@@ -14,8 +14,14 @@ class InternalNotificationMailer < ApplicationMailer
     recipient = CHAT_ROOMS.dig(room_name.to_sym, :email)
     return if recipient.blank?
 
+    # CC Gumclaw on every internal notification, in addition to the room's own recipient,
+    # so it ingests the full stream. Skip if it's already the room's recipient (no dup).
+    always_cc = INTERNAL_NOTIFICATION_ALWAYS_CC.presence
+    cc = (always_cc && always_cc != recipient) ? always_cc : nil
+
     mail(
       to: recipient,
+      cc: cc,
       subject: "#{SUBJECT_PREFIX}[#{room_name}] #{sender}"
     )
   end

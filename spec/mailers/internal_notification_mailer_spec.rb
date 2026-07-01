@@ -16,6 +16,10 @@ describe InternalNotificationMailer do
       expect(mail.to).to eq([INTERNAL_NOTIFICATION_EMAIL])
     end
 
+    it "CCs Gumclaw on every notification in addition to the room recipient" do
+      expect(mail.cc).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
+    end
+
     it "sets the subject with room name and sender" do
       expect(mail.subject).to eq("[test] [payments] VAT Reporting")
     end
@@ -52,6 +56,27 @@ describe InternalNotificationMailer do
 
       it "returns a null mail" do
         expect(mail.to).to be_nil
+      end
+
+      it "does not CC Gumclaw when the room has no recipient" do
+        expect(mail.cc).to be_nil
+      end
+    end
+
+    context "when the room recipient IS the always-CC address" do
+      before { stub_const("CHAT_ROOMS", CHAT_ROOMS.merge(gumclaw_room: { email: INTERNAL_NOTIFICATION_ALWAYS_CC })) }
+
+      subject(:mail) do
+        described_class.notify(
+          room_name: "gumclaw_room",
+          sender: "Test",
+          message_text: "No duplicate"
+        )
+      end
+
+      it "does not duplicate the address into CC" do
+        expect(mail.to).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
+        expect(mail.cc).to be_nil
       end
     end
   end

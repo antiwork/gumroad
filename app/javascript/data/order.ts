@@ -249,8 +249,6 @@ type FinalizeOrderResponse = {
 // resubmittable cart — retrying would create a second charge.
 export class PaymentConfirmedError extends Error {}
 
-const FINALIZE_MAX_ATTEMPTS = 3;
-
 // Client-confirm order creation keeps the same CartPurchaseResult contract as startOrderCreation.
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
@@ -312,10 +310,7 @@ export const startClientConfirmOrderCreation = async (
     );
     if (isProcessing) throw new PaymentConfirmedError();
 
-    // Line-item outcomes come from finalize, but offer_codes and can_buyer_sign_up are cart-level and
-    // resolved at prepare time (finalize has no email param, so its can_buyer_sign_up is unreliable and
-    // it returns offer_codes: []). Source them from prepare, mirroring the SCA path above which keeps
-    // the create response's offer_codes/can_buyer_sign_up rather than the confirm response's.
+    // offer_codes/can_buyer_sign_up are cart-level; finalize doesn't carry them, so keep prepare's.
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
@@ -343,25 +338,16 @@ const prepareClientConfirmOrder = async (
   return typia.assert<PrepareOrderResponse | OrderErrorResponse>(await response.json());
 };
 
-// #finalize is idempotent, so a transient failure (dropped response, network blip) is safe to
-// retry — this keeps a captured charge from being reported as a failed order.
+// No retry: a dropped finalize surfaces as "processing" and the webhook/worker finalize server-side.
 const finalizeClientConfirmOrder = async (orderId: string): Promise<FinalizeOrderResponse> => {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < FINALIZE_MAX_ATTEMPTS; attempt++) {
-    try {
-      const response = await request({
-        method: "POST",
-        url: Routes.finalize_order_path(orderId),
-        accept: "json",
-        data: {},
-      });
-      if (!response.ok) throw new ResponseError();
-      return typia.assert<FinalizeOrderResponse>(await response.json());
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError;
+  const response = await request({
+    method: "POST",
+    url: Routes.finalize_order_path(orderId),
+    accept: "json",
+    data: {},
+  });
+  if (!response.ok) throw new ResponseError();
+  return typia.assert<FinalizeOrderResponse>(await response.json());
 };
 
 // #prepare and #finalize key line items by cart-item uid, so map by uid rather

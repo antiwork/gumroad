@@ -2480,8 +2480,6 @@ describe OrdersController, :vcr do
       expect(Purchase.last).to be_in_progress
       expect(Charge.last.stripe_payment_intent_id).to be_present
 
-      # The chargeable purchase is still in_progress, so prepare must not create a premature purchase
-      # event — #finalize records the (single) "successful" event once the PaymentIntent is confirmed.
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
@@ -2531,7 +2529,7 @@ describe OrdersController, :vcr do
       expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
     end
 
-    it "does not create a second purchase event when the browser retries finalize" do
+    it "records each purchase event only once when finalize is called again" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
       Order::PreparePaymentIntentService.new(order:, params:, confirmation_token: confirmation_token_id).perform
@@ -2544,8 +2542,6 @@ describe OrdersController, :vcr do
       expect(purchase.reload).to be_successful
       expect(Event.purchase.where(purchase_id: purchase.id).count).to eq(1)
 
-      # A dropped response makes the browser retry the idempotent endpoint; the already-successful
-      # purchase must not get a duplicate Event::NAME_PURCHASE on the retry.
       expect do
         post :finalize, params: { id: token }
       end.not_to change { Event.purchase.where(purchase_id: purchase.id).count }
