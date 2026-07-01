@@ -416,12 +416,13 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
             className="resize-none border-none bg-transparent p-2 focus:outline-none"
           />
           <div className="flex justify-end">
+            {/* size-11 (44px) over the icon default (48px): tighter, but still the min touch target. */}
             <Button
               type="submit"
               color={hasText ? "accent" : "filled"}
               size="icon"
               aria-label="Send"
-              className={classNames("size-10 rounded-full opacity-100", !hasText && "text-muted")}
+              className={classNames("size-11 rounded-full opacity-100", !hasText && "text-muted")}
               disabled={isSending || !hasText}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
