@@ -1,7 +1,10 @@
 <%
   gap_class = local_assigns[:gap] || "gap-20"
-  border_class = local_assigns[:no_border] ? "" : "border-b border-black"
-  text_color_class = local_assigns[:text_color] ? "text-#{local_assigns[:text_color]}" : ""
+  border_class = local_assigns[:no_border] ? "" : "border-b border-black dark:border-white/35"
+  # When a page passes an explicit text_color, respect it (e.g. white text on a dark hero).
+  # Otherwise the header sits on a bright/light bg_color that stays bright in dark mode, so
+  # force black text so it doesn't inherit the layout's global dark:text-white.
+  text_color_class = local_assigns[:text_color] ? "text-#{local_assigns[:text_color]}" : "text-black dark:text-black"
 %>
 <header class="relative flex flex-col items-center justify-center h-auto <%= border_class %> bg-<%= bg_color %> text-center <%= gap_class %> px-8 pt-16 pb-20 md:pt-20 md:pb-24 lg:pt-28 lg:pb-36 <%= text_color_class %>">
   <div class="flex flex-col max-w-2xl gap-8 lg:gap-10 lg:max-w-3xl">
