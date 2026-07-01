@@ -1,4 +1,5 @@
 app/javascript/utils/routes.*
+app/javascript/routes.*
 public
 vendor
 tmp
