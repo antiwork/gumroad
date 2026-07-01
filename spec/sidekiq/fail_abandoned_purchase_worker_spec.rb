@@ -149,7 +149,7 @@ describe FailAbandonedPurchaseWorker, :vcr do
         let(:seller) { create(:user) }
         let(:product) { create(:product, user: seller) }
         let(:purchase) { create(:purchase_in_progress, link: product, merchant_account: create(:merchant_account, user: seller)) }
-        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_confirmed") }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_confirmed", client_confirmed: true) }
         let(:succeeded_intent) { instance_double(StripeChargeIntent, succeeded?: true, canceled?: false) }
 
         before do

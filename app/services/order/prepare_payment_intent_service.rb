@@ -137,7 +137,7 @@ class Order::PreparePaymentIntentService
     def build_charge
       charge = order.charges.create!(seller:)
       charge.update!(merchant_account:, processor: merchant_account.charge_processor_id,
-                     amount_cents:, gumroad_amount_cents:)
+                     amount_cents:, gumroad_amount_cents:, client_confirmed: true)
       purchases_to_charge.each do |purchase|
         purchase.charge = charge
         purchase.save!

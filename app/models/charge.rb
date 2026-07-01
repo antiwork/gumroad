@@ -16,6 +16,7 @@ class Charge < ApplicationRecord
   attr_accessor :charge_intent, :setup_future_charges
 
   has_flags 1 => :receipt_sent,
+            2 => :client_confirmed,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

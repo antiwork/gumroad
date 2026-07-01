@@ -43,8 +43,10 @@ module Purchase::ChargeEventsHandler
       handle_event_dispute_lost!(event)
     when ChargeEvent::TYPE_SETTLEMENT_DECLINED
       handle_event_settlement_declined!(event)
-    when ChargeEvent::TYPE_CHARGE_SUCCEEDED
+    when ChargeEvent::TYPE_CHARGE_SUCCEEDED, ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED
       handle_event_succeeded!(event)
+    when ChargeEvent::TYPE_PAYMENT_INTENT_PROCESSING
+      handle_event_processing!(event)
     when ChargeEvent::TYPE_PAYMENT_INTENT_FAILED
       handle_event_failed!(event)
     when ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
@@ -93,6 +95,11 @@ module Purchase::ChargeEventsHandler
   def handle_event_succeeded!(event)
     handle_event_informational!(event)
 
+    # payment_intent.succeeded is the source of truth for client-confirmed (Lane B) fulfillment.
+    # Scoped to that event so charge.succeeded keeps its existing behavior; idempotent via the finalize
+    # service's in_progress -> successful guard, so a replayed event fulfills exactly once.
+    return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
+
     charged_purchases.each do |purchase|
       if purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
         stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id,
@@ -129,8 +136,24 @@ module Purchase::ChargeEventsHandler
     end
   end
 
+  # Keeps its purchases in progress with no fulfillment; the later succeeded/failed webhook resolves them.
+  def handle_event_processing!(event)
+    handle_event_informational!(event)
+  end
+
   def handle_event_informational!(event)
     transaction_fee_cents = event.extras.try(:[], "fee_cents")
     update_processor_fee_cents!(processor_fee_cents: transaction_fee_cents) if transaction_fee_cents
   end
+
+  private
+    # Server-confirmed charges (Lane A, Indian off-session) also carry a stripe_payment_intent_id, so
+    # a browser-confirmed (Lane B) charge is identified by the explicit flag, not the intent id.
+    def client_confirmed_charge?
+      is_a?(Charge) && client_confirmed?
+    end
+
+    def finalize_client_confirmed_charge!
+      Order::FinalizeConfirmedChargeService.new(order:).perform
+    end
 end

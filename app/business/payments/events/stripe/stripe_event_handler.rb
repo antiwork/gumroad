@@ -3,7 +3,7 @@
 class StripeEventHandler
   attr_accessor :params
   # See full list of events at https://stripe.com/docs/api/events/types
-  ALL_HANDLED_EVENTS = %w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed}.freeze
+  ALL_HANDLED_EVENTS = %w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed payment_intent.processing payment_intent.succeeded}.freeze
 
   # Handle's a Stripe event. Calls out to the necessary modules
   # that handle different types of Stripe events.
@@ -51,10 +51,15 @@ class StripeEventHandler
       StripeChargeProcessor.handle_stripe_event(stripe_event) if stripe_event["type"].start_with?("charge.",
                                                                                                   "capital.",
                                                                                                   "radar.",
-                                                                                                  "payment_intent.payment_failed")
+                                                                                                  "payment_intent.payment_failed",
+                                                                                                  "payment_intent.processing",
+                                                                                                  "payment_intent.succeeded")
     end
 
     def handle_event_for_connected_account(stripe_connect_account_id:)
+      # Client-confirmed (Lane B) charges are destination charges on the platform account, so their
+      # PaymentIntent lifecycle events arrive via handle_event_for_gumroad. Connected-account direct
+      # charges are a later step; until then these events on a connected account are not ours to act on.
       if stripe_event["type"].start_with?("charge.", "radar.", "payment_intent.payment_failed")
         StripeChargeProcessor.handle_stripe_event(stripe_event)
       elsif stripe_event["type"].start_with?("account.", "capability.")
