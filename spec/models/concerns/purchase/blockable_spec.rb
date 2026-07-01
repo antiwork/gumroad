@@ -608,13 +608,26 @@ describe Purchase::Blockable do
       end
 
       context "when seller is not verified" do
-        it "pauses payouts when threshold is exceeded" do
+        it "does NOT pause payouts even when threshold is exceeded (informational only)" do
           expect(seller.verified?).to be(false)
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
 
-          expect(seller.reload.payouts_paused_internally).to be(true)
-          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+          expect(seller.reload.payouts_paused_internally).to be(false)
+          expect(seller.payouts_paused_by_source).to be_nil
+        end
+
+        it "enqueues a #risk notification when threshold is exceeded" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+
+          expect do
+            purchase.mark_failed!
+          end.to change { InternalNotificationWorker.jobs.size }.by(1)
+
+          job = InternalNotificationWorker.jobs.last
+          expect(job["args"][0]).to eq("risk")
+          expect(job["args"][2]).to include("failed purchases")
+          expect(job["args"][2]).to include("NOT paused")
         end
       end
 
@@ -655,12 +668,15 @@ describe Purchase::Blockable do
         let(:newer_product) { create(:product, user: newer_seller) }
         let!(:newer_purchase) { create(:purchase, link: newer_product, purchase_state: "in_progress") }
 
-        it "pauses payouts for the seller when threshold is exceeded" do
+        it "does NOT pause payouts but flags for review when threshold is exceeded" do
           create_list(:failed_purchase, 5, link: newer_product, price_cents: 250)
-          newer_purchase.mark_failed!
 
-          expect(newer_seller.reload.payouts_paused_internally).to be(true)
-          expect(newer_seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+          expect do
+            newer_purchase.mark_failed!
+          end.to change { InternalNotificationWorker.jobs.size }.by(1)
+
+          expect(newer_seller.reload.payouts_paused_internally).to be(false)
+          expect(newer_seller.payouts_paused_by_source).to be_nil
         end
       end
 
@@ -675,30 +691,32 @@ describe Purchase::Blockable do
       end
 
       context "when total failed amount is above threshold" do
-        it "pauses payouts internally" do
+        it "does NOT pause payouts internally (informational only)" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
 
-          expect(seller.reload.payouts_paused_internally).to be(true)
-          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+          expect(seller.reload.payouts_paused_internally).to be(false)
+          expect(seller.payouts_paused_by_source).to be_nil
         end
 
-        it "creates a comment with the failed amount" do
+        it "creates a review comment with the failed amount (no pause)" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
 
           comment = seller.comments.last
-          expect(comment.content).to eq("Payouts paused due to high volume of failed purchases ($13.50 USD in 60 minutes).")
+          expect(comment.content).to eq("High volume of failed purchases ($13.50 USD in 60 minutes) — flagged for review (payouts NOT paused).")
           expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
           expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_recent_failures")
         end
 
         context "when some purchases are outside the watch window" do
-          it "does not pause payouts internally" do
+          it "does not flag or comment" do
             travel_to Time.current do
               create_list(:failed_purchase, 2, link: product, price_cents: 250)
               create_list(:failed_purchase, 3, link: product, price_cents: 250, created_at: 61.minutes.ago)
-              purchase.mark_failed!
+              expect do
+                purchase.mark_failed!
+              end.not_to change { InternalNotificationWorker.jobs.size }
               expect(seller.reload.payouts_paused_internally).to be(false)
               expect(seller.payouts_paused_by_source).to be nil
             end
@@ -713,7 +731,7 @@ describe Purchase::Blockable do
         end
 
         context "when total failed amount is below default threshold" do
-          it "does not pause payouts internally" do
+          it "does not flag the seller" do
             # default max amount is $2000
             create_list(:failed_purchase, 5, link: product, price_cents: 200_00)
             purchase.mark_failed!
@@ -724,13 +742,16 @@ describe Purchase::Blockable do
         end
 
         context "when total failed amount is above default threshold" do
-          it "pauses payouts internally" do
+          it "flags for review but does NOT pause payouts" do
             # default max amount is $2000
             create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
-            purchase.mark_failed!
 
-            expect(seller.reload.payouts_paused_internally).to be(true)
-            expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+            expect do
+              purchase.mark_failed!
+            end.to change { InternalNotificationWorker.jobs.size }.by(1)
+
+            expect(seller.reload.payouts_paused_internally).to be(false)
+            expect(seller.payouts_paused_by_source).to be_nil
           end
         end
       end
