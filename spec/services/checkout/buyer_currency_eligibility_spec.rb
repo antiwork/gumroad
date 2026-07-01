@@ -51,7 +51,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back for the Gumroad platform-account path" do
+  it "allows the PR1 Stripe test-mode Gumroad platform-account path" do
     platform_merchant_account = create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
     purchase.update!(merchant_account: platform_merchant_account)
 
@@ -64,8 +64,9 @@ describe Checkout::BuyerCurrencyEligibility do
                                             setup_future_charges:,
                                             off_session:).decision
 
-    expect(platform_decision).not_to be_eligible
-    expect(platform_decision.fallback_reason).to eq(:unsupported_charge_model)
+    expect(platform_decision).to be_eligible
+    expect(platform_decision.currency).to eq(Currency::CAD)
+    expect(platform_decision.fallback_reason).to be_nil
   end
 
   it "falls back when the internal rollout flag is disabled" do

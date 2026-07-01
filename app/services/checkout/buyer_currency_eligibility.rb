@@ -36,7 +36,7 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.supported_merchant_account?(merchant_account)
-    merchant_account.is_a_stripe_connect_account?
+    merchant_account.is_managed_by_gumroad? || merchant_account.is_a_stripe_connect_account?
   end
 
   def self.usd_settling_merchant_account?(merchant_account)

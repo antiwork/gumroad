@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
 describe Checkout::BuyerCurrencyQuote do
-  let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+  let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
-  let!(:merchant_account) { create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_connect", currency: Currency::USD) }
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+      account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+    end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+  end
   let(:stripe_fx_quote) { StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8")) }
 
   before do
@@ -50,18 +54,6 @@ describe Checkout::BuyerCurrencyQuote do
       expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(products: [product, create(:product, user: seller)], canonical_total_cents: 20_00, ip: "24.48.0.1")
-
-      expect(result).to be_nil
-    end
-
-    it "returns nil when the seller only has the Gumroad platform account" do
-      merchant_account.destroy!
-      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
-        account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
-      end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
-      expect(StripeFxQuote).not_to receive(:create)
-
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
