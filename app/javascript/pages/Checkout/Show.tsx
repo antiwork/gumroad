@@ -30,6 +30,7 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
+  canUseStripePaymentElement,
   computeTip,
   computeTipForPrice,
   type CheckoutPaymentConfig,
@@ -339,6 +340,7 @@ const CheckoutIndexPage = () => {
         zipCode: state.zipCode,
         state: state.state,
         paymentMethod: state.status.paymentMethod,
+        usedStripePaymentElement: canUseStripePaymentElement(state),
         shippingInfo: cartForm.data.cart.items.some((item) => item.product.require_shipping)
           ? {
               save: state.saveAddress,

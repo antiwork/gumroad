@@ -128,4 +128,31 @@ describe UserPolicy do
       end
     end
   end
+
+  permissions :use_store_agent? do
+    it "grants access to owner" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "grants access to admin" do
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "grants access to marketing" do
+      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "denies access to accountant" do
+      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "denies access to support" do
+      seller_context = SellerContext.new(user: support_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+  end
 end

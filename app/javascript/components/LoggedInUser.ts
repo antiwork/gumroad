@@ -70,6 +70,9 @@ type Policies = {
   churn: {
     show: boolean;
   };
+  user: {
+    use_store_agent: boolean;
+  };
 };
 
 export type LoggedInUser = {

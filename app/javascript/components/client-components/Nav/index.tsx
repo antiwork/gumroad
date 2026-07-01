@@ -18,6 +18,7 @@ import {
   Handshake,
   HomeAlt2,
   MessageBubble,
+  MessageBubbleDots,
   Search,
   Store,
   Workflow,
@@ -132,6 +133,14 @@ export const Nav = (props: Props) => {
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
+        {loggedInUser?.policies.user.use_store_agent ? (
+          <ClientNavLink
+            text="Agent"
+            icon={<MessageBubbleDots pack="filled" className="size-5" />}
+            href={Routes.agent_url(routeParams)}
+            exactHrefMatch
+          />
+        ) : null}
         {currentSeller ? (
           <ClientNavLink
             text="Profile"

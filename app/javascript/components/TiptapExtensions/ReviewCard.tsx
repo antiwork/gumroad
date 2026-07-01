@@ -8,7 +8,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Review } from "$app/components/Review";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 
@@ -59,6 +58,7 @@ export const ReviewCard = Node.create({
 const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
   const reviewId = typia.assert<string>(node.attrs.reviewId ?? "");
   const [review, setReview] = React.useState<ReviewType | null>(null);
+  const [failedToLoad, setFailedToLoad] = React.useState(false);
   const isEditable = editor.isEditable;
   const seller = useCurrentSeller();
 
@@ -69,7 +69,7 @@ const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         setReview(review);
       } catch (error) {
         assertResponseError(error);
-        showAlert(error.message, "error");
+        setFailedToLoad(true);
       }
     };
 
@@ -103,7 +103,7 @@ const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
             hideResponse
           />
         </article>
-      ) : (
+      ) : failedToLoad ? null : (
         <Skeleton className="h-32" />
       )}
     </NodeViewWrapper>

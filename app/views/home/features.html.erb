@@ -3,18 +3,18 @@
   subtitle: "Product features",
   title: "Built for new beginnings",
   description: "Gumroad is a powerful, but simple, e-commerce platform that puts a wide selection of tools at your fingertips. Now you can sell the digital services you want—books, memberships, courses, and more—right to your audience." do %>
-<div class="override hidden relative mx-auto h-96 w-full max-w-6xl overflow-hidden border-y border-black bg-pink p-8 rounded-full border lg:block">
-  <div class="relative z-10 flex h-full flex-col justify-between border border-black bg-pink rounded-full px-8">
+<div class="override hidden relative mx-auto h-96 w-full max-w-6xl overflow-hidden border-y border-black dark:border-white/35 bg-pink dark:text-black p-8 rounded-full border lg:block">
+  <div class="relative z-10 flex h-full flex-col justify-between border border-black dark:border-white/35 bg-pink dark:text-black rounded-full px-8">
     <div class="-mt-3 justify-between px-32 flex">
-      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+      <div class="flex h-6 items-center bg-pink dark:text-black pr-6 gap-x-3">
         <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
         <div class="text-xl xl:text-2xl">Open Account</div>
       </div>
-      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+      <div class="flex h-6 items-center bg-pink dark:text-black pr-6 gap-x-3">
         <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
         <div class="text-xl xl:text-2xl">Add Product</div>
       </div>
-      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+      <div class="flex h-6 items-center bg-pink dark:text-black pr-6 gap-x-3">
         <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
         <div class="text-xl xl:text-2xl">Start Selling</div>
       </div>
@@ -26,11 +26,11 @@
       <%= image_tag "features/games.svg" %>
     </div>
     <div class="-mb-3 justify-between px-32 flex">
-      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+      <div class="flex h-6 items-center bg-pink dark:text-black pl-6 gap-x-3">
         <div class="text-xl xl:text-2xl">Repeat</div>
         <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
       </div>
-      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+      <div class="flex h-6 items-center bg-pink dark:text-black pl-6 gap-x-3">
         <div class="text-xl xl:text-2xl">Get paid</div>
         <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3  translate-y-px rotate-180", alt: "" %>
       </div>
@@ -71,8 +71,8 @@
   description: "Gumroad plays well with others. Set up your store on our <br class=\"hidden override md:inline\">platform, or easily embed it on your existing site."
 %>
 
-<div class="flex flex-col overflow-hidden border-y border-black lg:flex-row">
-  <div class="flex items-center justify-center border-b border-black bg-orange p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-l xl:p-32">
+<div class="flex flex-col overflow-hidden border-y border-black dark:border-white/35 lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-orange dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-l xl:p-32">
     <div class="relative">
       <%= image_tag "features/home-feature-4.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing customizable store options" %>
       <%= image_tag "features/thumbsup.svg", class: "absolute -bottom-28 -left-10 w-24 transform-gpu md:-bottom-24 md:-left-32 md:w-44", data: { parallax: true }, alt: "Thumbs up icon" %>
@@ -168,10 +168,10 @@
   </button>
 
   <div class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
-    <button class="all-unset h-4 w-4 rounded-full border border-black border-solid bg-black override" data-carousel-indicator data-slide="0"></button>
-    <button class="all-unset h-4 w-4 rounded-full border border-black border-solid" data-carousel-indicator data-slide="1"></button>
-    <button class="all-unset h-4 w-4 rounded-full border border-black border-solid" data-carousel-indicator data-slide="2"></button>
-    <button class="all-unset h-4 w-4 rounded-full border border-black border-solid" data-carousel-indicator data-slide="3"></button>
+    <button class="all-unset h-4 w-4 rounded-full border border-black dark:border-white/35 border-solid bg-black override" data-carousel-indicator data-slide="0"></button>
+    <button class="all-unset h-4 w-4 rounded-full border border-black dark:border-white/35 border-solid" data-carousel-indicator data-slide="1"></button>
+    <button class="all-unset h-4 w-4 rounded-full border border-black dark:border-white/35 border-solid" data-carousel-indicator data-slide="2"></button>
+    <button class="all-unset h-4 w-4 rounded-full border border-black dark:border-white/35 border-solid" data-carousel-indicator data-slide="3"></button>
   </div>
 </div>
 <%= render "home/shared/carousel" %>
@@ -182,8 +182,8 @@
   description: "Once you get set up, it's easy to ring the register.<br class=\"hidden override md:inline\"> Here's how you can sell and get paid, fast."
 %>
 
-<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
-  <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+<div class="flex flex-col overflow-hidden border-t border-black dark:border-white/35 lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-purple dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
     <div class="relative max-w-xl">
       <%= image_tag "features/features-3.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing payment integrations" %>
     </div>
@@ -218,8 +218,8 @@
   </div>
 </div>
 
-<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
-  <div class="flex items-center justify-center border-b border-black bg-purple lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-l">
+<div class="flex flex-col overflow-hidden border-t border-black dark:border-white/35 lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-purple dark:text-black lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-l">
     <div class="relative">
       <%= image_tag "features/features-4.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing payment integrations" %>
     </div>
@@ -246,8 +246,8 @@
   </div>
 </div>
 
-<div class="flex flex-col overflow-hidden border-y border-black lg:flex-row-reverse">
-  <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+<div class="flex flex-col overflow-hidden border-y border-black dark:border-white/35 lg:flex-row-reverse">
+  <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-purple dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
     <div class="relative max-w-xl">
       <%= image_tag "features/features-5.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing license keys" %>
     </div>
@@ -288,8 +288,8 @@
   description: "We've spent ten years building an end-to-end platform <br class=\"hidden override md:inline\">so you can start selling in seconds."
 %>
 
-<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
-  <div class="flex items-center justify-center border-b border-black bg-orange p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+<div class="flex flex-col overflow-hidden border-t border-black dark:border-white/35 lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-orange dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
     <div class="relative">
       <%= image_tag "features/features-6.svg", alt: "Illustration showing various creator tools and features", class: "h-auto w-full", data: { parallax: true } %>
       <%= image_tag "features/easy.svg", alt: "Easy sticker with handwritten text", class: "absolute -right-10 -top-10 w-32 transform-gpu parallax-coins md:w-36", data: { parallax: true } %>
@@ -327,8 +327,8 @@
   </div>
 </div>
 
-<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
-  <div class="relative flex items-center justify-center bg-yellow lg:order-2 lg:w-1/2">
+<div class="flex flex-col overflow-hidden border-t border-black dark:border-white/35 lg:flex-row">
+  <div class="relative flex items-center justify-center bg-yellow dark:text-black lg:order-2 lg:w-1/2">
     <div class="absolute inset-0" role="presentation" aria-hidden="true" style="background: url(<%= image_path('features/blob-bg.svg') %>) center no-repeat; background-size: cover;"></div>
     <div class="relative p-8 sm:p-12 md:p-16 xl:p-32">
       <div class="relative max-w-2xl">

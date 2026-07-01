@@ -140,6 +140,16 @@ class Purchase::CreateService < Purchase::BaseService
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 
+      payment_flow_attributes = PurchasePaymentFlow.attributes_for_checkout_params(params)
+      if payment_flow_attributes && !purchase.free_purchase?
+        begin
+          purchase.create_purchase_payment_flow(payment_flow_attributes)
+        rescue => e
+          Rails.logger.error("Error recording purchase payment flow (purchase #{purchase.id}): #{e.class} => #{e.message}")
+          ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) } unless e.is_a?(ActiveRecord::RecordNotUnique)
+        end
+      end
+
       # Make sure the giftee purchase is created successfully before attempting a charge
       create_giftee_purchase if purchase.is_gift_sender_purchase
 

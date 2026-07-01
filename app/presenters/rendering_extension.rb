@@ -116,6 +116,9 @@ module RenderingExtension
         },
         churn: {
           show: Pundit.policy!(pundit_user, :churn).show?,
+        },
+        user: {
+          use_store_agent: Pundit.policy!(pundit_user, pundit_user.seller).use_store_agent?,
         }
       }
     end

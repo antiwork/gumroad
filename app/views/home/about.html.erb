@@ -1,5 +1,5 @@
-<div class="bg-gray min-h-screen">
-  <header class="grid grid-cols-1 bg-gray">
+<div class="bg-gray dark:bg-black min-h-screen">
+  <header class="grid grid-cols-1 bg-gray dark:bg-black">
     <div data-hero-parallax-container class="relative flex items-center justify-center px-8 py-40 lg:px-[8vw] md:py-56">
       <div class="flex flex-col max-w-3xl items-center gap-6 text-center z-10">
         <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
@@ -15,22 +15,22 @@
               type="text"
               name="query"
               placeholder="Search marketplace ..."
-              class="!bg-gray mr-8 rounded focus:outline-hidden focus:ring-2 focus:ring-accent focus:border-accent w-full! sm:w-64 text-xl! h-14! lg:h-16! border !border-dark-gray dark:!bg-dark-gray dark:!laceholder-white dark:border-gray-600 dark:text-white! font-[inherit]"
+              class="!bg-gray mr-8 rounded focus:outline-hidden focus:ring-2 focus:ring-accent focus:border-accent w-full! sm:w-64 text-xl! h-14! lg:h-16! border !border-dark-gray dark:!bg-dark-gray dark:!placeholder-white dark:border-gray-600 dark:text-white! font-[inherit]"
               style="padding-left: 2rem; padding-right: 5rem;"
             />
             <button
               type="submit"
               aria-label="Search"
-              class="bg-white p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
+              class="bg-white dark:bg-dark-gray p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
               style="border: 1px solid #242423 !important;"
             >
-              <svg class="w-6 h-6 text-dark-gray" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <svg class="w-6 h-6 text-dark-gray dark:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </button>
           </form>
         </div>
         <div class="text-base">
-          <p class="text-dark-gray/50">
-            Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black inline-flex items-center gap-1 ml-1">
+          <p class="text-dark-gray/50 dark:text-white/50">
+            Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black dark:text-white dark:hover:text-white/70 inline-flex items-center gap-1 ml-1">
               <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
               </svg>
@@ -59,9 +59,9 @@
     </div>
   </header>
 
-  <div class="flex flex-col bg-gray max-w-6xl mx-auto px-4 gap-8 md:-mt-20">
+  <div class="flex flex-col bg-gray dark:bg-black max-w-6xl mx-auto px-4 gap-8 md:-mt-20">
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anything
@@ -74,7 +74,7 @@
           <%= image_tag "about/ukulele.png", alt: "Sell anything feature illustration", class: "w-full h-auto" %>
         </div>
       </div>
-      <div class="flex flex-col md:relative overflow-hidden bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative overflow-hidden bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl mb-4 text-balance">Make your own road</p>
           <p class="text-lg mb-4">
@@ -87,7 +87,7 @@
       </div>
     </div>
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="overflow-hidden flex flex-col justify-between bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
+      <div class="overflow-hidden flex flex-col justify-between bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
         <p class="text-4xl mb-8 md:mb-0 text-balance">Sell to anyone</p>
         <div class="flex flex-col gap-4">
           <% [
@@ -104,7 +104,7 @@
           <% end %>
         </div>
       </div>
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anywhere
@@ -119,22 +119,22 @@
       </div>
     </div>
     <div class="flex flex-col sm:flex-row gap-9">
-      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 md:p-14 flex-1">
+      <div class="bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 md:p-14 flex-1">
         <div class="flex flex-col md:relative">
           <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-1.svg", alt: "Side project 1", class: "w-full h-auto" %>
           </div>
-          <div class="order-1 md:order-0 md:absolute md:-top-4 md:left-0 sm:md:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:-top-4 md:left-0 sm:md:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-8 py-4 border border-black dark:border-white/35 mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">Instead of building a company...</p>
           </div>
         </div>
       </div>
-      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 flex-1">
+      <div class="bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 flex-1">
         <div class="flex flex-col md:relative">
           <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-2.svg", alt: "Side project 2", class: "w-full h-auto object-cover mx-auto" %>
           </div>
-          <div class="order-1 md:order-0 md:absolute md:bottom-1 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:bottom-1 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-6 py-4 border border-black dark:border-white/35 mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">...start selling a side project!</p>
           </div>
         </div>
@@ -142,13 +142,13 @@
     </div>
   </div>
 
-  <div class="relative bg-gray py-24 lg:py-32">
+  <div class="relative bg-gray dark:bg-black py-24 lg:py-32">
     <div class="px-8 lg:px-[4vw]">
       <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
         You know all those great ideas you have?
       </div>
     </div>
-    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
+    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange dark:text-black p-8 border-y border-black dark:border-white/35 lg:border lg:rounded-full">
       <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
         <lottie-player
           src="<%= image_path("about/gumhead.json") %>"
@@ -157,40 +157,40 @@
           autoplay>
         </lottie-player>
       </div>
-      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black bg-orange z-10 lg:px-8 lg:rounded-full">
+      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black dark:border-white/35 bg-orange dark:text-black z-10 lg:px-8 lg:rounded-full">
         <div class="override hidden px-4 md:flex justify-between -mt-3 lg:px-40">
-          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
+          <div class="flex h-6 items-center bg-orange dark:text-black pr-6 lg:gap-x-10">
             <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
             <div class="lg:text-2xl">The Gumroad Way</div>
           </div>
-          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
+          <div class="flex h-6 items-center bg-orange dark:text-black pr-6 lg:gap-x-10">
             <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
             <div class="lg:text-2xl">Start Small</div>
           </div>
         </div>
         <div class="override hidden px-4 md:flex justify-between -mb-3 lg:flex lg:px-40">
-          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
+          <div class="flex h-6 items-center bg-orange dark:text-black pl-6 lg:gap-x-10">
             <div class="lg:text-2xl">Get Better Together</div>
             <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
           </div>
-          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
+          <div class="flex h-6 items-center bg-orange dark:text-black pl-6 lg:gap-x-10">
             <div class="lg:text-2xl">Learn Quickly</div>
             <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
           </div>
         </div>
-        <div class="override flex h-6 items-center bg-orange absolute top-0 -ml-2 pr-3 -mt-3 left-1/2 -translate-x-1/2 lg:hidden">
+        <div class="override flex h-6 items-center bg-orange dark:text-black absolute top-0 -ml-2 pr-3 -mt-3 left-1/2 -translate-x-1/2 lg:hidden">
           <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
           <div class="whitespace-nowrap lg:text-2xl">The Gumroad Way</div>
         </div>
-        <div class="override flex h-6 items-center bg-orange absolute right-0 pr-3 origin-center rotate-90 top-1/2 -translate-y-1/2 translate-x-1/2 lg:hidden">
+        <div class="override flex h-6 items-center bg-orange dark:text-black absolute right-0 pr-3 origin-center rotate-90 top-1/2 -translate-y-1/2 translate-x-1/2 lg:hidden">
           <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
           <div class="whitespace-nowrap lg:text-2xl">Start Small</div>
         </div>
-        <div class="override flex h-6 items-center bg-orange absolute bottom-0 -ml-2 pl-3 -mb-3 left-1/2 -translate-x-1/2 lg:hidden">
+        <div class="override flex h-6 items-center bg-orange dark:text-black absolute bottom-0 -ml-2 pl-3 -mb-3 left-1/2 -translate-x-1/2 lg:hidden">
           <div class="whitespace-nowrap lg:text-2xl">Get Better Together</div>
           <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-4 w-4 translate-x-2 translate-y-px rotate-180" %>
         </div>
-        <div class="override flex h-6 items-center bg-orange absolute left-0 pr-3 origin-center -rotate-90 top-1/2 -translate-y-1/2 -translate-x-1/2 lg:hidden">
+        <div class="override flex h-6 items-center bg-orange dark:text-black absolute left-0 pr-3 origin-center -rotate-90 top-1/2 -translate-y-1/2 -translate-x-1/2 lg:hidden">
           <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
           <div class="whitespace-nowrap lg:text-2xl">Learn Quickly</div>
         </div>
@@ -209,7 +209,7 @@
     </div>
   </div>
 
-  <div class="relative bg-gray w-full">
+  <div class="relative bg-gray dark:bg-black w-full">
     <div class="flex flex-col justify-center gap-8 px-8 text-center py-20 md:items-center md:gap-16 md:pt-40">
       <h1 class="text-center text-6xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
         <% prev_week_payout = $redis.get(RedisKey.prev_week_payout_usd).presence || "3129297" %>
@@ -221,7 +221,7 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 bg-gray max-w-6xl mx-auto px-4 gap-x-8 gap-y-12">
+  <div class="grid grid-cols-1 lg:grid-cols-2 bg-gray dark:bg-black max-w-6xl mx-auto px-4 gap-x-8 gap-y-12">
     <% testimonials = [
       {
         quote: "I launched MaxPacks as an experimental side gig; but within 2 years those Procreate brushes were earning more than my 6-figure salary in CG. Leaving in favor of Gumroad enabled me to explore other aspects of my art, develop new hobbies, and finally prioritize my personal life.",
@@ -263,22 +263,22 @@
     <%= render "home/shared/discovery_category" %>
   </div>
 
-  <div class="bg-gray flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl">
+  <div class="bg-gray dark:bg-black flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl">
     <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+      <div class="flex bg-white dark:bg-dark-gray items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 dark:border-white/35 rounded-2xl">
         <h3 class="font-medium text-4xl md:text-5xl">
           Don't take risks.
           <br />
           That's scary!
         </h3>
       </div>
-      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+      <div class="bg-white dark:bg-dark-gray py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50 dark:border-white/35">
         <div class="relative">
           <%= image_tag "about/blog-post-circle-1.svg",
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute -top-4 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black">
+          <div class="absolute -top-4 left-0 sm:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-8 py-4 border border-black dark:border-white/35">
             <p class="text-xl font-medium m-0">Instead of selling a book...</p>
           </div>
         </div>
@@ -286,18 +286,18 @@
     </div>
 
     <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+      <div class="bg-white dark:bg-dark-gray py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50 dark:border-white/35">
         <div class="relative">
           <%= image_tag "about/blog-post-circle-2.svg",
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute -bottom-2 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black">
+          <div class="absolute -bottom-2 left-0 sm:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-6 py-4 border border-black dark:border-white/35">
             <p class="text-xl font-medium m-0">...start by selling a blog post!</p>
           </div>
         </div>
       </div>
-      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+      <div class="flex bg-white dark:bg-dark-gray items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 dark:border-white/35 rounded-2xl">
         <h3 class="font-medium text-4xl md:text-5xl">
           Place small bets.
           <br />

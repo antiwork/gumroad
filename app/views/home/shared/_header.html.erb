@@ -1,9 +1,22 @@
 <%
   gap_class = local_assigns[:gap] || "gap-20"
-  border_class = local_assigns[:no_border] ? "" : "border-b border-black"
-  text_color_class = local_assigns[:text_color] ? "text-#{local_assigns[:text_color]}" : ""
+  border_class = local_assigns[:no_border] ? "" : "border-b border-black dark:border-white/35"
+  # A neutral (non-accent) bg_color like "gray" should flip to a dark surface in dark mode; pass
+  # dark_bg_color (e.g. "black") to emit a dark:bg-* variant that matches the rest of the page.
+  bg_class = local_assigns[:dark_bg_color] ? "bg-#{bg_color} dark:bg-#{local_assigns[:dark_bg_color]}" : "bg-#{bg_color}"
+  # When a page passes an explicit text_color, respect it (e.g. white text on a dark hero).
+  # On a neutral surface that flips dark (dark_bg_color set), default text to white in dark mode so
+  # it stays readable. On bright accent backgrounds that stay bright in both modes, force black text
+  # so it doesn't inherit the layout's global dark:text-white.
+  text_color_class = if local_assigns[:text_color]
+    "text-#{local_assigns[:text_color]}"
+  elsif local_assigns[:dark_bg_color]
+    "text-black dark:text-white"
+  else
+    "text-black dark:text-black"
+  end
 %>
-<header class="relative flex flex-col items-center justify-center h-auto <%= border_class %> bg-<%= bg_color %> text-center <%= gap_class %> px-8 pt-16 pb-20 md:pt-20 md:pb-24 lg:pt-28 lg:pb-36 <%= text_color_class %>">
+<header class="relative flex flex-col items-center justify-center h-auto <%= border_class %> <%= bg_class %> text-center <%= gap_class %> px-8 pt-16 pb-20 md:pt-20 md:pb-24 lg:pt-28 lg:pb-36 <%= text_color_class %>">
   <div class="flex flex-col max-w-2xl gap-8 lg:gap-10 lg:max-w-3xl">
     <% if local_assigns[:subtitle].present? %>
       <div class="text-xl md:text-2xl"><%== subtitle %></div>

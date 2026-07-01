@@ -48,7 +48,7 @@ class Purchase::ReassignByEmailService
       end
     end
 
-    if mutable_purchases.any? { |purchase| purchase.reassignment_locked_at.present? }
+    if mutable_purchases.any?(&:is_reassignment_locked?)
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :locked, error_message: "One or more purchases are under review and cannot be reassigned")
     end
 

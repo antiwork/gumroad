@@ -105,6 +105,28 @@ export type StartCartPurchaseRequestPayload = {
   };
   lineItems: PurchaseLineItemPayload[];
   recaptchaResponse: string | null;
+  usedStripePaymentElement: boolean;
+};
+
+export type PaymentDetailsSource = "card_element" | "payment_element" | "payment_request" | "saved_payment_method";
+
+export const getPaymentDetailsSource = (
+  paymentMethod: PurchasePaymentMethod,
+  usedStripePaymentElement: boolean,
+): PaymentDetailsSource | null => {
+  if (paymentMethod.type === "saved") return "saved_payment_method";
+  if (paymentMethod.type === "not-applicable") return null;
+  // Lane B collects the card via the Stripe Payment Element and confirms it in the browser.
+  if (paymentMethod.type === "payment-element-client-confirm") return "payment_element";
+  switch (paymentMethod.cardParamsResult.type) {
+    case "cc":
+    case "error":
+      return usedStripePaymentElement ? "payment_element" : "card_element";
+    case "cc-payment-request":
+      return "payment_request";
+    case "paypal":
+      return null;
+  }
 };
 
 export type OfferCodes = { code: string; products: Record<string, Discount> }[];
@@ -276,6 +298,9 @@ export const createPurchasesRequestData = (
     }
     data.gift_note = payload.giftInfo.giftNote;
   }
+
+  const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
+  if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
 
   if (
     payload.paymentMethod.type !== "saved" &&

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_01_000006) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_02_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1777,6 +1777,17 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_01_000006) do
     t.index ["purchase_id"], name: "index_purchase_offer_code_discounts_on_purchase_id", unique: true
   end
 
+  create_table "purchase_payment_flows", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.string "payment_details_source", null: false
+    t.string "payment_details_transport", null: false
+    t.string "stripe_payment_method_type", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payment_details_source"], name: "index_purchase_payment_flows_on_payment_details_source"
+    t.index ["purchase_id"], name: "index_purchase_payment_flows_on_purchase_id", unique: true
+  end
+
   create_table "purchase_refund_policies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "purchase_id", null: false
     t.string "title", null: false
@@ -1902,7 +1913,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_01_000006) do
     t.bigint "price_id"
     t.string "recommended_by"
     t.datetime "deleted_at", precision: nil
-    t.datetime "reassignment_locked_at"
     t.index ["affiliate_id", "created_at"], name: "index_purchases_on_affiliate_id_and_created_at"
     t.index ["browser_guid"], name: "index_purchases_on_browser_guid"
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"

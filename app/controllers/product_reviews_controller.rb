@@ -35,9 +35,6 @@ class ProductReviewsController < ApplicationController
       .includes(:response, purchase: :purchaser, link: :user)
       .find_by_external_id!(permitted_params[:id])
 
-    product = review.link
-    return head :forbidden unless product.display_product_reviews || current_seller == product.user
-
     render json: {
       review: ProductReviewPresenter.new(review).product_review_props
     }

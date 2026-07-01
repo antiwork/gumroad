@@ -320,17 +320,22 @@ describe ProductReviewsController do
       end
     end
 
-    context "when product reviews are hidden" do
+    context "when the product page reviews section is disabled" do
       before { product.update!(display_product_reviews: false) }
 
-      it "returns forbidden" do
+      it "still returns the review so creator-embedded testimonial cards render" do
         get :show, params: { id: review.external_id }
-        expect(response).to have_http_status(:forbidden)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["review"].deep_symbolize_keys).to eq(
+          ProductReviewPresenter.new(review).product_review_props
+        )
       end
 
-      it "allows product owner to view the review" do
+      it "returns the review for the product owner" do
         sign_in product.user
         get :show, params: { id: review.external_id }
+
         expect(response).to be_successful
       end
     end

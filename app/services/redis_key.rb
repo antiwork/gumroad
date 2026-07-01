@@ -24,6 +24,7 @@ class RedisKey
     def free_purchases_watch_hours = "free_purchases_watch_hours"
     def max_allowed_free_purchases_of_same_product = "max_allowed_free_purchases_of_same_product"
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
+    def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"

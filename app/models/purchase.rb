@@ -116,6 +116,7 @@ class Purchase < ApplicationRecord
   has_one :purchase_taxjar_info
   has_one :recommended_purchase_info, dependent: :destroy
   has_one :purchase_wallet_type
+  has_one :purchase_payment_flow, dependent: :destroy, validate: false
   has_one :purchase_offer_code_discount
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
@@ -570,6 +571,10 @@ class Purchase < ApplicationRecord
             29 => :is_commission_deposit_purchase,
             30 => :is_commission_completion_purchase,
             31 => :is_installment_payment,
+            # Temporary, per-purchase lock set by Trust & Safety during fraud review;
+            # blocks Purchase::ReassignByEmailService from moving the purchase between
+            # accounts. Not a buyer-level block (see is_buyer_blocked_by_admin).
+            32 => :is_reassignment_locked,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1142,7 +1147,7 @@ class Purchase < ApplicationRecord
     json = {
       created_at: purchase.created_at,
       should_show_receipt: !purchase.is_test_purchase? && purchase.successful_and_not_reversed?(include_gift: true),
-      was_paid: purchase.present? && purchase.paid?,
+      was_paid: purchase.present? && (purchase.paid? || purchase.offer_code_id.present?),
       show_view_content_button_on_product_page: purchase.show_view_content_button_on_product_page?,
       is_recurring_billing: link.is_recurring_billing,
       is_physical: link.is_physical,

@@ -130,6 +130,7 @@ describe Order::ChargeService, :vcr do
       create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+      params[:payment_details_source] = "payment_element"
 
       order, _ = Order::CreateService.new(params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
@@ -137,6 +138,11 @@ describe Order::ChargeService, :vcr do
       charge_responses = Order::ChargeService.new(order:, params:).perform
 
       expect(order.reload.purchases.successful.count).to eq(2)
+      payment_flows = order.purchases.map(&:purchase_payment_flow)
+      expect(payment_flows).to all(be_present)
+      expect(payment_flows.map(&:payment_details_source).uniq).to eq(["payment_element"])
+      expect(payment_flows.map(&:payment_details_transport).uniq).to eq(["payment_method"])
+      expect(payment_flows.map(&:stripe_payment_method_type).uniq).to eq(["card"])
       expect(order.charges.count).to eq(1)
       charge = order.charges.last
       expect(charge.purchases.successful.count).to eq(2)

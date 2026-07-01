@@ -6,12 +6,15 @@ class S3UtilityController < Sellers::BaseController
   before_action :authorize
 
   def generate_multipart_signature
+    to_sign = params["to_sign"]
+    return render(json: { success: false, error: "Missing required parameter: to_sign" }, status: :bad_request) if to_sign.blank?
+
     # Prevent attackers from using newlines to split the request body and bypass the seller check
-    params["to_sign"].split(/[\n\r\s]/).grep(/\A\//).each do |url|
+    to_sign.split(/[\n\r\s]/).grep(/\A\//).each do |url|
       return render(json: { success: false, error: "Unauthorized" }, status: :forbidden) if !%r{\A/#{S3_BUCKET}/\w+/#{current_seller.external_id}/}.match?(url)
     end
 
-    render inline: Utilities.sign_with_aws_secret_key(params[:to_sign])
+    render inline: Utilities.sign_with_aws_secret_key(to_sign)
   end
 
   def current_utc_time_string

@@ -90,6 +90,7 @@
 <div class="relative" data-hero-parallax-container data-saas-hero>
   <%= render "home/shared/header",
     bg_color: "gray",
+    dark_bg_color: "black",
     gap: "gap-10 lg:gap-12",
     title: "Make software.<br>We'll help you sell.",
     description: "We handle checkout, license keys, subscriptions, and taxes in every country you sell in." do %>
@@ -120,7 +121,7 @@
         <%= render "home/shared/button", text: "Start selling", url: signup_path %>
         <%= render "home/shared/button", text: "See pricing", url: "#pricing", variant: "dark" %>
       </div>
-      <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-dark-gray">
+      <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-dark-gray dark:text-white/70">
         <span>✓ No monthly fee</span>
         <span>✓ 10% flat rate to start</span>
         <span>✓ Only pay when you sell</span>
@@ -130,8 +131,8 @@
 </div>
 
 <section id="features">
-  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
-    <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+  <div class="flex flex-col overflow-hidden border-b border-black dark:border-white/35 lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-purple dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
       <%= image_tag "saas/feature-license-api.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing software license key verification" %>
     </div>
     <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
@@ -142,11 +143,11 @@
     </div>
   </div>
 
-  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
-    <div class="flex items-center justify-center border-b border-black bg-pink p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
+  <div class="flex flex-col overflow-hidden border-b border-black dark:border-white/35 lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-pink dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
       <%= image_tag "saas/feature-subscription-billing.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing subscription billing plans" %>
     </div>
-    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black lg:w-1/2 lg:border-r xl:p-32">
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black dark:border-white/35 lg:w-1/2 lg:border-r xl:p-32">
       <div class="max-w-2xl space-y-4">
         <h3 class="text-balance text-3xl font-medium text-pink lg:text-4xl xl:text-5xl">Bill monthly, quarterly, or yearly.</h3>
         <p class="text-pretty text-lg lg:text-xl xl:text-2xl">Offer free trials and tiered pricing. Customers upgrade or downgrade on their own. We handle failed payments and retry them for you.</p>
@@ -154,8 +155,8 @@
     </div>
   </div>
 
-  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
-    <div class="flex items-center justify-center border-b border-black bg-yellow p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+  <div class="flex flex-col overflow-hidden border-b border-black dark:border-white/35 lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-yellow dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
       <%= image_tag "saas/feature-product-tiers.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing one product page with multiple tiers" %>
     </div>
     <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
@@ -166,11 +167,11 @@
     </div>
   </div>
 
-  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
-    <div class="flex items-center justify-center border-b border-black bg-green p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
+  <div class="flex flex-col overflow-hidden border-b border-black dark:border-white/35 lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black dark:border-white/35 bg-green dark:text-black p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
       <%= image_tag "saas/feature-merchant-of-record.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing taxes, fraud, and chargebacks handled for software sales" %>
     </div>
-    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black lg:w-1/2 lg:border-r xl:p-32">
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black dark:border-white/35 lg:w-1/2 lg:border-r xl:p-32">
       <div class="max-w-2xl space-y-4">
         <h3 class="text-balance text-3xl font-medium text-green lg:text-4xl xl:text-5xl">Hand off the tax, fraud, and chargebacks.</h3>
         <p class="text-pretty text-lg lg:text-xl xl:text-2xl">We charge buyers, collect VAT and sales tax, file it, and absorb chargebacks and fraud. You focus on building great software.</p>
@@ -178,33 +179,33 @@
     </div>
   </div>
 
-  <div class="bg-gray">
+  <div class="bg-gray dark:bg-black">
     <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
       <h3 class="mb-6 text-balance text-2xl font-medium md:text-3xl">And the rest you expect.</h3>
-      <div class="grid grid-cols-1 overflow-hidden rounded border border-black bg-white shadow-[4px_4px_0_#000] md:grid-cols-2 lg:grid-cols-3">
-        <div class="border-b border-black p-7 md:border-r lg:border-r">
+      <div class="grid grid-cols-1 overflow-hidden rounded border border-black dark:border-white/35 bg-white dark:bg-dark-gray shadow-[4px_4px_0_#000] dark:shadow-[4px_4px_0_rgba(255,255,255,0.25)] md:grid-cols-2 lg:grid-cols-3">
+        <div class="border-b border-black dark:border-white/35 p-7 md:border-r lg:border-r">
           <div class="mb-2 text-lg font-bold">License key API</div>
-          <div class="text-sm leading-relaxed text-dark-gray">Verify, activate, deactivate, and manage license keys programmatically.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">Verify, activate, deactivate, and manage license keys programmatically.</div>
         </div>
-        <div class="border-b border-black p-7 lg:border-r">
+        <div class="border-b border-black dark:border-white/35 p-7 lg:border-r">
           <div class="mb-2 text-lg font-bold">Webhooks</div>
-          <div class="text-sm leading-relaxed text-dark-gray">Get notified in real-time when customers subscribe, cancel, or update their plans.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">Get notified in real-time when customers subscribe, cancel, or update their plans.</div>
         </div>
-        <div class="border-b border-black p-7 md:border-r lg:border-r-0">
+        <div class="border-b border-black dark:border-white/35 p-7 md:border-r lg:border-r-0">
           <div class="mb-2 text-lg font-bold">Subscription analytics</div>
-          <div class="text-sm leading-relaxed text-dark-gray">MRR, churn rate, LTV. All the metrics you need, built into your dashboard.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">MRR, churn rate, LTV. All the metrics you need, built into your dashboard.</div>
         </div>
-        <div class="border-b border-black p-7 lg:border-b-0 lg:border-r">
+        <div class="border-b border-black dark:border-white/35 p-7 lg:border-b-0 lg:border-r">
           <div class="mb-2 text-lg font-bold">Custom domains</div>
-          <div class="text-sm leading-relaxed text-dark-gray">Sell from your own domain. your-app.com/pricing, not gumroad.com.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">Sell from your own domain. your-app.com/pricing, not gumroad.com.</div>
         </div>
-        <div class="border-b border-black p-7 md:border-b-0 md:border-r lg:border-r">
+        <div class="border-b border-black dark:border-white/35 p-7 md:border-b-0 md:border-r lg:border-r">
           <div class="mb-2 text-lg font-bold">Affiliates</div>
-          <div class="text-sm leading-relaxed text-dark-gray">Let your users sell for you. Built-in affiliate tracking and payouts.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">Let your users sell for you. Built-in affiliate tracking and payouts.</div>
         </div>
         <div class="p-7">
           <div class="mb-2 text-lg font-bold">Global payments</div>
-          <div class="text-sm leading-relaxed text-dark-gray">Accept payments in any currency. We handle conversion and local payment methods.</div>
+          <div class="text-sm leading-relaxed text-dark-gray dark:text-white/70">Accept payments in any currency. We handle conversion and local payment methods.</div>
         </div>
       </div>
     </div>
@@ -212,23 +213,23 @@
 </section>
 
 <section id="pricing">
-  <div class="bg-gray border-b border-black">
+  <div class="bg-gray dark:bg-black border-b border-black dark:border-white/35">
     <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
       <div class="mx-auto max-w-2xl text-center">
         <h2 class="text-balance text-4xl font-medium leading-[1.05] sm:text-5xl md:text-6xl">Just a percentage. No monthly bill.</h2>
-        <p class="mt-3 text-pretty text-lg text-dark-gray md:text-xl">We only earn when you earn.</p>
+        <p class="mt-3 text-pretty text-lg text-dark-gray dark:text-white/70 md:text-xl">We only earn when you earn.</p>
       </div>
     </div>
   </div>
 
-  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
-    <div class="flex flex-col items-center justify-center border-b border-black bg-purple p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+  <div class="flex flex-col overflow-hidden border-b border-black dark:border-white/35 lg:flex-row">
+    <div class="flex flex-col items-center justify-center border-b border-black dark:border-white/35 bg-purple dark:text-black p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
       <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">Starting out</div>
       <div class="text-7xl font-bold leading-[0.9] tracking-tight md:text-8xl lg:text-[128px]">10%</div>
       <div class="mt-4 text-lg font-medium md:text-xl">Flat rate</div>
       <p class="mt-4 max-w-sm text-pretty text-sm leading-relaxed text-black/70 md:text-base">No setup costs. No catch.</p>
     </div>
-    <div class="flex flex-col items-center justify-center bg-yellow p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="flex flex-col items-center justify-center bg-yellow dark:text-black p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
       <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">After $100K lifetime sales</div>
       <div class="text-7xl font-bold leading-[0.9] tracking-tight md:text-8xl lg:text-[128px]">5%</div>
       <div class="mt-4 text-lg font-medium md:text-xl">Half the rate</div>
@@ -236,11 +237,11 @@
     </div>
   </div>
 
-  <div class="bg-gray border-b border-black">
+  <div class="bg-gray dark:bg-black border-b border-black dark:border-white/35">
     <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
-      <div class="grid grid-cols-1 overflow-hidden rounded border border-black bg-white shadow-[4px_4px_0_#000] lg:grid-cols-2 lg:min-h-[520px]" data-saas-calc>
-        <div class="flex flex-col border-b border-black p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-14">
-          <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">Do the math</div>
+      <div class="grid grid-cols-1 overflow-hidden rounded border border-black dark:border-white/35 bg-white dark:bg-dark-gray shadow-[4px_4px_0_#000] dark:shadow-[4px_4px_0_rgba(255,255,255,0.25)] lg:grid-cols-2 lg:min-h-[520px]" data-saas-calc>
+        <div class="flex flex-col border-b border-black dark:border-white/35 p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-14">
+          <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60 dark:text-white/60">Do the math</div>
 
           <% [
             ["price", "Price per sale", 49, 1, 500, 1, "$"],
@@ -249,15 +250,15 @@
           ].each do |key, label, value, min, max, step, prefix| %>
             <div class="mb-7">
               <div class="mb-3 flex items-baseline justify-between">
-                <span class="text-sm font-medium text-dark-gray md:text-base"><%= label %></span>
-                <span class="text-sm font-medium text-dark-gray tabular-nums md:text-base"><%= prefix %><span data-saas-calc-value="<%= key %>"><%= number_with_delimiter(value) %></span></span>
+                <span class="text-sm font-medium text-dark-gray dark:text-white/70 md:text-base"><%= label %></span>
+                <span class="text-sm font-medium text-dark-gray dark:text-white/70 tabular-nums md:text-base"><%= prefix %><span data-saas-calc-value="<%= key %>"><%= number_with_delimiter(value) %></span></span>
               </div>
               <input type="range" class="gr-slider" aria-label="<%= label %>" aria-valuetext="<%= prefix %><%= number_with_delimiter(value) %>" data-saas-calc-input="<%= key %>" data-saas-calc-prefix="<%= prefix %>" min="<%= min %>" max="<%= max %>" step="<%= step %>" value="<%= value %>" style="--fill: <%= ((value - min).to_f / (max - min) * 100).round %>%">
             </div>
           <% end %>
         </div>
 
-        <div class="flex flex-col justify-between gap-6 bg-purple p-7 sm:p-10 lg:p-14" data-saas-calc-result-panel>
+        <div class="flex flex-col justify-between gap-6 bg-purple dark:text-black p-7 sm:p-10 lg:p-14" data-saas-calc-result-panel>
           <div>
             <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">You'd keep</div>
             <div class="text-5xl font-bold leading-[0.95] tracking-tight tabular-nums sm:text-6xl md:text-7xl lg:text-[88px]">
@@ -266,8 +267,8 @@
             <div class="mt-3 text-base text-black/70">per month, at a <span data-saas-calc-rate>10</span>% rate</div>
           </div>
 
-          <div class="grid gap-1.5 rounded border border-black bg-white p-4">
-            <div class="flex justify-between text-xs text-dark-gray tabular-nums sm:text-sm">
+          <div class="grid gap-1.5 rounded border border-black dark:border-white/35 bg-white dark:bg-dark-gray dark:text-white p-4">
+            <div class="flex justify-between text-xs text-dark-gray dark:text-white/70 tabular-nums sm:text-sm">
               <span>Monthly revenue</span>
               <span>$<span data-saas-calc-revenue>4,900</span></span>
             </div>
@@ -275,7 +276,7 @@
               <span>Gumroad fee (<span data-saas-calc-rate>10</span>%)</span>
               <span>−$<span data-saas-calc-fee>490</span></span>
             </div>
-            <div class="mt-1 flex items-baseline justify-between border-t border-black pt-2.5">
+            <div class="mt-1 flex items-baseline justify-between border-t border-black dark:border-white/35 pt-2.5">
               <span class="text-sm font-semibold">You keep</span>
               <span class="text-base font-bold tabular-nums">$<span data-saas-calc-keep>4,410</span></span>
             </div>
@@ -286,11 +287,11 @@
   </div>
 </section>
 
-<section id="faq" class="bg-white">
+<section id="faq" class="bg-white dark:bg-dark-gray">
   <div class="mx-auto max-w-4xl px-8 py-20 lg:px-12 lg:py-24">
     <h2 class="mb-12 text-balance text-center text-4xl font-medium leading-[1.05] sm:text-5xl md:text-6xl">Frequently asked questions</h2>
 
-    <div class="border-t border-black">
+    <div class="border-t border-black dark:border-white/35">
       <% [
         ["What kinds of software can I sell?", "Anything with a download or a license key — desktop apps, plugins, scripts, fonts, game assets, code. Subscriptions and one-time purchases both work."],
         ["Do I need to write code to use this?", "No. You set up products and tiers in the Gumroad dashboard and share a checkout link. If you want to verify license keys from your app, you can call our REST API — no SDK required."],
@@ -299,18 +300,18 @@
         ["When does the rate drop to 5%?", "Once your lifetime sales on Gumroad cross $100,000, every sale after that is 5% instead of 10%."],
         ["Can I use my own domain?", "Yes. Point your own domain at Gumroad and sell from there instead of gumroad.com — your branding stays consistent through checkout."]
       ].each do |question, answer| %>
-        <div class="accordion-item border-b border-black">
+        <div class="accordion-item border-b border-black dark:border-white/35">
           <div class="flex cursor-pointer items-center gap-4 py-5" data-accordion-trigger>
             <div class="flex h-6 w-6 shrink-0 items-center justify-center">
               <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
-                <line x1="4" y1="16" x2="28" y2="16" stroke="black" stroke-width="2" />
-                <line x1="16" y1="4" x2="16" y2="28" stroke="black" stroke-width="2" class="transition-transform duration-300" />
+                <line x1="4" y1="16" x2="28" y2="16" stroke="currentColor" stroke-width="2" />
+                <line x1="16" y1="4" x2="16" y2="28" stroke="currentColor" stroke-width="2" class="transition-transform duration-300" />
               </svg>
             </div>
             <h3 class="text-base font-medium md:text-lg"><%= question %></h3>
           </div>
           <div class="max-h-0 overflow-hidden transition-[max-height] duration-300" data-accordion-content>
-            <div class="max-w-3xl pb-6 pl-10 text-base leading-relaxed text-dark-gray"><%= answer %></div>
+            <div class="max-w-3xl pb-6 pl-10 text-base leading-relaxed text-dark-gray dark:text-white/70"><%= answer %></div>
           </div>
         </div>
       <% end %>
