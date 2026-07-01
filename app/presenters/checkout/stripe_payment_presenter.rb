@@ -21,6 +21,13 @@ class Checkout::StripePaymentPresenter
   # below Stripe's USD charge floor on CardElement. This is intentionally lower than
   # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
   STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
+  # Single source of truth for the client-confirm handshake: the deferred PaymentIntent
+  # (StripeDeferredPaymentIntent) is created with these exact values, because Stripe rejects a
+  # payment_method_types-scoped ConfirmationToken against a mismatched intent. Never hardcode
+  # these on one side alone — Order::PreparePaymentIntentService threads them into the intent so
+  # the two cannot drift (see spec asserting the intent is created with these values).
+  CLIENT_CONFIRM_PAYMENT_METHOD_TYPES = %w[card].freeze
+  CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -104,8 +111,8 @@ class Checkout::StripePaymentPresenter
         fallback_reason: nil,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
-          currency: "usd",
-          payment_method_types: ["card"],
+          currency: CLIENT_CONFIRM_CURRENCY,
+          payment_method_types: CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
           stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
         },
       }
