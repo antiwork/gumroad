@@ -55,7 +55,9 @@ Check the diff against every applicable rule in CONTRIBUTING.md (code standards,
 Evaluate readability and maintainability of new/modified code. See [references/review-guidance.md](references/review-guidance.md) for what to flag vs what to leave alone. The goal is clear, explicit code — not clever or compact code.
 
 **Pass 4 — PR Structure**
-AI disclosure, description quality (explains _why_), before/after for UI changes, test results, appropriate size — all per CONTRIBUTING.md.
+AI disclosure, description quality (explains _why_), before/after media, test results, appropriate size — all per CONTRIBUTING.md.
+
+**⛔ Media evidence is a BLOCKING check (CONTRIBUTING.md line 17 — a hard `Must`).** If the PR touches product/UI (any view, component, CSS, layout, mobile behavior, user-visible copy) and has **no before/after video or screenshots**, raise it as a **critical** finding at **confidence 95+** and set the Verdict to request-changes. Do NOT wave through a mobile/CSS/layout PR just because the prose description is clear — "the code looks right" is not a substitute for visual proof. A missing video on a non-visual change (no walkthrough) is at least an **important** finding.
 
 ### 4. Score and Filter
 

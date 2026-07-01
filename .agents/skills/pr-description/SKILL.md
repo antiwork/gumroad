@@ -13,6 +13,16 @@ description: >
 
 Generate a concise, high-quality PR description from the current branch and its linked GitHub issue. Output to an unstaged `.md` file — never publish or update a PR.
 
+## ⛔ RULE #0 — MEDIA EVIDENCE IS MANDATORY (read before anything else)
+
+**CONTRIBUTING.md line 17 is a hard `Must`: _"Include a video for every PR."_ This is the single most important requirement for any PR that touches product — do NOT treat it as optional, and do NOT rationalize a change as "too small to film."**
+
+- **Any product/UI change** (a view, component, CSS, layout, mobile behavior, copy a user sees, a button, spacing, colors — anything a user could perceive): a **before/after VIDEO or screenshots are REQUIRED**, showing **desktop + mobile, light + dark** where applicable. A mobile-layout or CSS tweak is exactly the kind of change that MUST have visual proof — that is the whole point of the rule. "Minor layout fix" is NOT an exemption; it is the primary target.
+- **Non-user-facing change** (pure backend/refactor/config): a **short walkthrough video** of the relevant existing functionality is still required to demonstrate nothing broke.
+- If you do not yet have the media, the PR is NOT ready. Capture it first (boot the app, take the screenshots/video, store under `qa-media/pr-<number>-<desc>.<ext>`, reference via raw GitHub URL) — do NOT emit a description with an empty or deleted Before/After section for a product change.
+
+**The Before/After section below is NOT deletable for product changes.** The only case where it may be omitted is a genuinely non-visual change, and even then a walkthrough video goes in its place. When in doubt: include media.
+
 ## Workflow
 
 ### 1. Gather Context
@@ -55,7 +65,7 @@ Read key changed files if the diff alone doesn't make the approach clear.
 
 Follow the PR description structure in CONTRIBUTING.md. The template below implements it:
 
-Adapt sections based on what's relevant — not every section is needed for every PR.
+Adapt the prose sections to what's relevant — but the **Before/After media section is mandatory for any product/UI change** and is never dropped to save effort (RULE #0). "Not every section is needed" applies to optional prose, never to the media evidence on a visual change.
 
 **Style rules:**
 
@@ -81,7 +91,9 @@ For features: what was built. For fixes: what was wrong and what was changed.]
 [Why this change exists and why this approach over alternatives.
 Business or user rationale. Strategic context if relevant.]
 
-<!-- BEFORE/AFTER — include for UI/CSS changes, delete this section otherwise
+<!-- BEFORE/AFTER — REQUIRED for every product/UI change (see RULE #0). Do NOT delete this
+     section for anything a user can perceive. Video required; screenshots acceptable for
+     static layout. For non-visual changes, replace with a short walkthrough video instead.
 ## Before/After
 
 Before:
@@ -127,6 +139,6 @@ Tell the user the file was created and suggest they review it before posting.
 
 - Use `gh` read-only only. Never create, comment on, or update PRs.
 - Always fetch the GitHub issue — it provides critical context for the Problem section.
-- Omit the Before/After section entirely for non-UI changes (remove the HTML comment too).
-- Omit the Test Results section if not applicable (remove the HTML comment too).
+- **NEVER omit the Before/After section for a product/UI change** (see RULE #0 — media is a hard `Must`). It may only be dropped for a genuinely non-visual change, and even then a short walkthrough video replaces it. If you catch yourself deleting Before/After on a UI/CSS/layout/mobile PR, stop — that is the exact rule violation this skill exists to prevent.
+- Omit the Test Results section only if there are genuinely no tests to run (remove the HTML comment too); otherwise include the passing-tests screenshot.
 - The AI disclosure format follows CONTRIBUTING.md.

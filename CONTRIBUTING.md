@@ -11,6 +11,9 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 
 ## Pull requests
 
+> ### ⛔ THE #1 RULE FOR ANY PRODUCT CHANGE: SHOW IT.
+> **Every PR that changes anything a user can see or experience MUST include before/after visual evidence — a video (preferred) or screenshots — covering desktop + mobile, light + dark where applicable.** This is the single most important requirement of a product PR, above code style, above everything. A "small" mobile/CSS/layout tweak is exactly the kind of change that needs a screenshot or clip — that is the whole point. Do NOT rationalize a visual change as too minor to capture. A product PR without media is not ready to review and should be sent back. Non-visual PRs still need a short walkthrough video (see below).
+
 - Include an AI disclosure
 - Self-review (comment) on your code
 - Break up big 1k+ line PRs into smaller PRs (100 loc)
