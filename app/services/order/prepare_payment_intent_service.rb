@@ -154,7 +154,11 @@ class Order::PreparePaymentIntentService
         description: "Gumroad Charge #{charge.external_id}",
         statement_description: seller.name_or_username,
         transfer_group: charge.id_with_prefix,
-        idempotency_key: "deferred_intent_#{charge.external_id}",
+        # Scope the key to the ConfirmationToken, which Stripe mints fresh per attempt and never
+        # reuses, so retrying this exact create stays idempotent. A key built only from
+        # charge.external_id (derived from a database id) collides in Stripe test mode, where
+        # idempotency keys persist for 24h across CI runs that reset the database and reuse those ids.
+        idempotency_key: "deferred_intent_#{charge.external_id}_#{confirmation_token}",
         payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
         currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       )

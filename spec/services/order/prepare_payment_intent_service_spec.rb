@@ -191,6 +191,29 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES)
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
+
+      # A key built only from the (database-id-derived) external_id collides in Stripe test mode,
+      # where idempotency keys persist for 24h across CI runs that reset the database and reuse ids;
+      # scoping it to the fresh-per-attempt ConfirmationToken keeps it unique without losing idempotency.
+      it "scopes the idempotency key to the confirmation token so a reused charge id cannot replay a stale intent" do
+        order, params = build_order
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_unique_test").perform
+
+        charge = order.charges.last
+        expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_unique_test")
+      end
     end
   end
 end
