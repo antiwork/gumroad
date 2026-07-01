@@ -127,10 +127,25 @@ class Ai::AnthropicClient
 
     def http
       HTTP.timeout(timeout).headers(
-        "x-api-key" => GlobalConfig.get("ANTHROPIC_API_KEY"),
+        "x-api-key" => api_key,
         "anthropic-version" => API_VERSION,
         "content-type" => "application/json",
       )
+    end
+
+    # The store agent's own Anthropic key. Falls back to the Walks synthesis key (already provisioned
+    # in production) when a dedicated ANTHROPIC_API_KEY hasn't been set yet, so the agent isn't dark
+    # on a missing config — otherwise every request goes out with a blank x-api-key and Anthropic
+    # rejects it with a 401 ("x-api-key header is required"), taking the whole feature down with the
+    # generic "Sorry, I ran into a problem" error. Remove the fallback once ANTHROPIC_API_KEY is set.
+    # Failing fast here with a clear message (rather than shipping a blank key upstream) keeps a future
+    # config gap legible instead of surfacing as a confusing upstream 401.
+    def api_key
+      key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
+            GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
+      raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
+
+      key
     end
 
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
