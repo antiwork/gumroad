@@ -223,6 +223,7 @@ type OrderRequiresPaymentConfirmationResponse = {
   client_secret: string;
   order: { id: string; stripe_connect_account_id: string | null };
 };
+type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
 type PrepareOrderResponse = {
   success: true;
   line_items: Record<
@@ -232,6 +233,23 @@ type PrepareOrderResponse = {
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
+// #finalize can return a `processing` line item when the PaymentIntent settles asynchronously,
+// so it needs its own response type — reusing ConfirmOrderResponse would make typia.assert throw
+// on the processing shape and misreport a captured payment as a failure.
+type FinalizeOrderResponse = {
+  success: true;
+  line_items: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse | ProcessingPurchaseResponse>;
+  can_buyer_sign_up: boolean;
+  offer_codes: OfferCodes;
+};
+
+// Thrown once stripe.confirmPayment has captured the card but the order could not be finalized
+// in-page (finalize kept failing, or the intent is still processing). The charge is real, so the
+// consumer must surface a "processing" message and must NOT drop the buyer back into a
+// resubmittable cart — retrying would create a second charge.
+export class PaymentConfirmedError extends Error {}
+
+const FINALIZE_MAX_ATTEMPTS = 3;
 
 // Browser-confirmed order creation mirrors startOrderCreation's CartPurchaseResult
 // contract so the cart-submit consumer is unchanged.
@@ -239,6 +257,7 @@ export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
 ): Promise<CartPurchaseResult> => {
+  let paymentConfirmed = false;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
     if (!prepareResponse.success) {
@@ -280,8 +299,20 @@ export const startClientConfirmOrderCreation = async (
       });
     }
 
-    // Inline methods resolve in-page, then finalize via the AJAX endpoint.
+    // The card is captured from here on, so any later failure must surface as a distinct
+    // "processing" outcome, never a resubmittable failure (which would risk a second charge).
+    paymentConfirmed = true;
+
+    // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.
     const finalizeResponse = await finalizeClientConfirmOrder(order.id);
+
+    // A processing PaymentIntent means the money is in flight but not yet fulfilled; the webhook
+    // finalizes it out-of-band, so tell the buyer it is processing rather than success/failure.
+    const isProcessing = Object.values(finalizeResponse.line_items).some(
+      (lineItem) => "processing" in lineItem && lineItem.processing,
+    );
+    if (isProcessing) throw new PaymentConfirmedError();
+
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
@@ -289,8 +320,12 @@ export const startClientConfirmOrderCreation = async (
       finalizeResponse.offer_codes,
     );
   } catch (error) {
+    if (error instanceof PaymentConfirmedError) throw error;
     // eslint-disable-next-line no-console
     console.error("Error occurred processing client-confirm order", error);
+    // A failure after the card was confirmed must not re-enable resubmission — the charge may be
+    // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
+    if (paymentConfirmed) throw new PaymentConfirmedError();
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: [] });
   }
 };
@@ -305,15 +340,25 @@ const prepareClientConfirmOrder = async (
   return typia.assert<PrepareOrderResponse | OrderErrorResponse>(await response.json());
 };
 
-const finalizeClientConfirmOrder = async (orderId: string): Promise<ConfirmOrderResponse> => {
-  const response = await request({
-    method: "POST",
-    url: Routes.finalize_order_path(orderId),
-    accept: "json",
-    data: {},
-  });
-  if (!response.ok) throw new ResponseError();
-  return typia.assert<ConfirmOrderResponse>(await response.json());
+// #finalize is idempotent, so a transient failure (dropped response, network blip) is safe to
+// retry — this keeps a captured charge from being reported as a failed order.
+const finalizeClientConfirmOrder = async (orderId: string): Promise<FinalizeOrderResponse> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < FINALIZE_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await request({
+        method: "POST",
+        url: Routes.finalize_order_path(orderId),
+        accept: "json",
+        data: {},
+      });
+      if (!response.ok) throw new ResponseError();
+      return typia.assert<FinalizeOrderResponse>(await response.json());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 };
 
 // #prepare and #finalize key line items by cart-item uid, so map by uid rather
@@ -322,14 +367,17 @@ const mapResultsByUid = (
   requestData: StartCartPurchaseRequestPayload,
   lineItems: Record<
     LineItemUid,
-    OrderRequiresPaymentConfirmationResponse | ConfirmedPurchaseResponse | PurchaseErrorResponse
+    | OrderRequiresPaymentConfirmationResponse
+    | ConfirmedPurchaseResponse
+    | PurchaseErrorResponse
+    | ProcessingPurchaseResponse
   >,
   canBuyerSignUp: boolean,
   offerCodes: OfferCodes,
 ): CartPurchaseResult =>
   ensureValidCartResult(requestData, {
     lineItems: Object.entries(lineItems).reduce<CartPurchaseResult["lineItems"]>((acc, [uid, result]) => {
-      if (!("requires_payment_confirmation" in result)) acc[uid] = result;
+      if (!("requires_payment_confirmation" in result) && !("processing" in result)) acc[uid] = result;
       return acc;
     }, {}),
     canBuyerSignUp,

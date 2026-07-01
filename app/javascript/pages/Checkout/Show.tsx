@@ -3,7 +3,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
-import { startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
+import { PaymentConfirmedError, startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
@@ -522,6 +522,18 @@ const CheckoutIndexPage = () => {
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
+      // The card was captured but the order couldn't be finalized in-page. The webhook will
+      // fulfill it out-of-band, so tell the buyer it's processing and clear the (paid) cart so
+      // they can't resubmit and get charged twice.
+      if (e instanceof PaymentConfirmedError) {
+        showAlert(
+          "Your payment is being processed — check your email for your receipt. Please do not pay again.",
+          "warning",
+        );
+        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
+        dispatch({ type: "cancel" });
+        return;
+      }
       assertResponseError(e);
       showAlert("Sorry, something went wrong. Please try again.", "error");
       dispatch({ type: "cancel" });
