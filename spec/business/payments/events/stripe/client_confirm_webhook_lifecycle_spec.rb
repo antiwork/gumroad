@@ -27,7 +27,6 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
-  # Unique idempotency key so a fresh VCR recording never collides across test-DB id resets.
   def build_client_confirmed_order(line_items: [line_item])
     params = { line_items: }.merge(common_params)
     order, = Order::CreateService.new(params:).perform

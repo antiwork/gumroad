@@ -870,8 +870,6 @@ class StripeChargeProcessor
 
     ChargeProcessor.handle_event(event) unless event.nil?
 
-    # Recorded only after a successful dispatch, so a failed finalize is retried (Sidekiq, then the
-    # abandonment worker) rather than marked processed and skipped.
     ProcessedStripeEvent.record!(stripe_event["id"], event_type: stripe_event["type"]) if event && PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
   end
 
