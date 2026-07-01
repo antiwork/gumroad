@@ -237,6 +237,17 @@ module Purchase::Blockable
         # post to the #risk room (relayed to Telegram) for a human/agent to review, and leave
         # payouts untouched. A genuine self-funding seller is caught by the risk-queue review
         # flow (per-card buyer spread + seller-IP intersection), not by this blunt volume trip.
+        #
+        # Dedup guard: this runs on EVERY failed purchase, so once the cumulative volume crosses
+        # the threshold every subsequent failure in the same window would re-fire. Skip if we've
+        # already flagged this seller within the watch window — one comment + one #risk post per
+        # burst, not one per failed charge.
+        return if seller.comments.where(
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:recent_failed_purchases],
+          created_at: failed_seller_purchases_watch_minutes.minutes.ago..
+        ).exists?
+
         failed_price_amount = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
 
         seller.comments.create(

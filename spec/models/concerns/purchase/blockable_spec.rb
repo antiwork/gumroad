@@ -629,6 +629,22 @@ describe Purchase::Blockable do
           expect(job["args"][2]).to include("failed purchases")
           expect(job["args"][2]).to include("NOT paused")
         end
+
+        it "flags and notifies only once per watch window despite repeated failures" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+
+          expect do
+            purchase.mark_failed!
+          end.to change { InternalNotificationWorker.jobs.size }.by(1)
+             .and change { seller.comments.where(comment_type: Comment::COMMENT_TYPE_ON_PROBATION).count }.by(1)
+
+          # A subsequent failure in the same window must NOT re-fire the comment or the #risk post.
+          another_purchase = create(:purchase, link: product, purchase_state: "in_progress")
+          expect do
+            another_purchase.mark_failed!
+          end.to not_change { InternalNotificationWorker.jobs.size }
+             .and not_change { seller.comments.where(comment_type: Comment::COMMENT_TYPE_ON_PROBATION).count }
+        end
       end
 
       context "when error code is ignored" do
