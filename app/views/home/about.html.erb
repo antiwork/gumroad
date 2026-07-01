@@ -21,16 +21,16 @@
             <button
               type="submit"
               aria-label="Search"
-              class="bg-white p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
+              class="bg-white dark:bg-dark-gray p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
               style="border: 1px solid #242423 !important;"
             >
-              <svg class="w-6 h-6 text-dark-gray" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <svg class="w-6 h-6 text-dark-gray dark:text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </button>
           </form>
         </div>
         <div class="text-base">
           <p class="text-dark-gray/50">
-            Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black inline-flex items-center gap-1 ml-1">
+            Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black dark:text-white inline-flex items-center gap-1 ml-1">
               <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
               </svg>
@@ -61,7 +61,7 @@
 
   <div class="flex flex-col bg-gray max-w-6xl mx-auto px-4 gap-8 md:-mt-20">
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anything
@@ -74,7 +74,7 @@
           <%= image_tag "about/ukulele.png", alt: "Sell anything feature illustration", class: "w-full h-auto" %>
         </div>
       </div>
-      <div class="flex flex-col md:relative overflow-hidden bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative overflow-hidden bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl mb-4 text-balance">Make your own road</p>
           <p class="text-lg mb-4">
@@ -87,7 +87,7 @@
       </div>
     </div>
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="overflow-hidden flex flex-col justify-between bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
+      <div class="overflow-hidden flex flex-col justify-between bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
         <p class="text-4xl mb-8 md:mb-0 text-balance">Sell to anyone</p>
         <div class="flex flex-col gap-4">
           <% [
@@ -104,7 +104,7 @@
           <% end %>
         </div>
       </div>
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+      <div class="flex flex-col md:relative bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
         <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anywhere
@@ -119,22 +119,22 @@
       </div>
     </div>
     <div class="flex flex-col sm:flex-row gap-9">
-      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 md:p-14 flex-1">
+      <div class="bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 md:p-14 flex-1">
         <div class="flex flex-col md:relative">
           <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-1.svg", alt: "Side project 1", class: "w-full h-auto" %>
           </div>
-          <div class="order-1 md:order-0 md:absolute md:-top-4 md:left-0 sm:md:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:-top-4 md:left-0 sm:md:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-8 py-4 border border-black dark:border-white/35 mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">Instead of building a company...</p>
           </div>
         </div>
       </div>
-      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 flex-1">
+      <div class="bg-white dark:bg-dark-gray border border-dark-gray/50 dark:border-white/35 rounded-3xl p-8 flex-1">
         <div class="flex flex-col md:relative">
           <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-2.svg", alt: "Side project 2", class: "w-full h-auto object-cover mx-auto" %>
           </div>
-          <div class="order-1 md:order-0 md:absolute md:bottom-1 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:bottom-1 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-6 py-4 border border-black dark:border-white/35 mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">...start selling a side project!</p>
           </div>
         </div>
@@ -148,7 +148,7 @@
         You know all those great ideas you have?
       </div>
     </div>
-    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
+    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black dark:border-white/35 lg:border lg:rounded-full">
       <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
         <lottie-player
           src="<%= image_path("about/gumhead.json") %>"
@@ -157,7 +157,7 @@
           autoplay>
         </lottie-player>
       </div>
-      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black bg-orange z-10 lg:px-8 lg:rounded-full">
+      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black dark:border-white/35 bg-orange z-10 lg:px-8 lg:rounded-full">
         <div class="override hidden px-4 md:flex justify-between -mt-3 lg:px-40">
           <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
             <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
@@ -265,20 +265,20 @@
 
   <div class="bg-gray flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl">
     <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+      <div class="flex bg-white dark:bg-dark-gray items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 dark:border-white/35 rounded-2xl">
         <h3 class="font-medium text-4xl md:text-5xl">
           Don't take risks.
           <br />
           That's scary!
         </h3>
       </div>
-      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+      <div class="bg-white dark:bg-dark-gray py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50 dark:border-white/35">
         <div class="relative">
           <%= image_tag "about/blog-post-circle-1.svg",
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute -top-4 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black">
+          <div class="absolute -top-4 left-0 sm:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-8 py-4 border border-black dark:border-white/35">
             <p class="text-xl font-medium m-0">Instead of selling a book...</p>
           </div>
         </div>
@@ -286,18 +286,18 @@
     </div>
 
     <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
-      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+      <div class="bg-white dark:bg-dark-gray py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50 dark:border-white/35">
         <div class="relative">
           <%= image_tag "about/blog-post-circle-2.svg",
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute -bottom-2 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black">
+          <div class="absolute -bottom-2 left-0 sm:-left-8 bg-white dark:bg-dark-gray rounded-2xl px-6 sm:px-6 py-4 border border-black dark:border-white/35">
             <p class="text-xl font-medium m-0">...start by selling a blog post!</p>
           </div>
         </div>
       </div>
-      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+      <div class="flex bg-white dark:bg-dark-gray items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 dark:border-white/35 rounded-2xl">
         <h3 class="font-medium text-4xl md:text-5xl">
           Place small bets.
           <br />

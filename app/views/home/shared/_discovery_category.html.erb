@@ -81,7 +81,7 @@
           <%= link_to(
             tag[:name],
             discover_taxonomy_url(tag[:path], tags: tag[:name], host: DISCOVER_DOMAIN),
-            class: "px-4 py-2 bg-white rounded-full text-lg md:text-2xl font-medium text-black border border-gray-300 no-underline motion-safe:hover:-translate-x-1 motion-safe:hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all whitespace-nowrap"
+            class: "px-4 py-2 bg-white dark:bg-dark-gray rounded-full text-lg md:text-2xl font-medium text-black dark:text-white border border-gray-300 dark:border-white/35 no-underline motion-safe:hover:-translate-x-1 motion-safe:hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] dark:hover:shadow-[4px_4px_0_0_rgba(255,255,255,0.35)] transition-all whitespace-nowrap"
           ) %>
         </div>
       <% end %>
