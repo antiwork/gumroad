@@ -41,6 +41,14 @@ export type PaymentElementConfig = {
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
+// Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
+// payment_method_creation and stays in one-time payment mode.
+export type PaymentElementClientConfirmConfig = {
+  stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
+  currency: "usd";
+  payment_method_types: ["card"];
+  stripe_link_enabled: boolean;
+};
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
@@ -51,6 +59,11 @@ export type CheckoutPaymentConfig =
       integration: "payment_element";
       fallback_reason: null;
       elements_options: PaymentElementConfig;
+    }
+  | {
+      integration: "payment_element_client_confirm";
+      fallback_reason: null;
+      elements_options: PaymentElementClientConfirmConfig;
     };
 
 export type Product = {
@@ -128,6 +141,10 @@ export type State = {
 
 type StateWithPaymentElementCheckout = State & {
   checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element" }>;
+};
+
+type StateWithPaymentElementClientConfirmCheckout = State & {
+  checkoutPayment: Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
 };
 
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
@@ -223,6 +240,31 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
+// The browser must not widen server eligibility for client-confirm: single-seller,
+// one-time card checkouts only.
+export function canUseStripePaymentElementClientConfirm(
+  state: State,
+): state is StateWithPaymentElementClientConfirmCheckout {
+  if (state.products.length === 0) return false;
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return false;
+  if (hasMultipleSellers(state)) return false;
+
+  if (state.surcharges.type === "loaded") {
+    const total = getTotalPrice(state);
+    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
+  }
+
+  return !state.products.some(
+    (product) =>
+      product.payInInstallments ||
+      product.hasFreeTrial ||
+      product.isPreorder ||
+      !!product.recurrence ||
+      !!product.subscription_id ||
+      product.nativeType === "commission",
+  );
+}
+
 function canUseStripePaymentElementForFutureChargeSetup(state: State) {
   return (
     !hasMultipleSellers(state) &&
@@ -233,8 +275,12 @@ function canUseStripePaymentElementForFutureChargeSetup(state: State) {
 }
 
 export function getStripePaymentElementAmount(state: State) {
-  if (!canUseStripePaymentElement(state) || state.surcharges.type !== "loaded") return null;
-  if (state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
+  if (state.surcharges.type !== "loaded") return null;
+  if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementClientConfirm(state)) return null;
+  if (
+    state.checkoutPayment.integration === "payment_element" &&
+    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+  )
     return null;
   return getTotalPrice(state);
 }

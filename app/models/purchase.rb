@@ -3024,11 +3024,23 @@ class Purchase < ApplicationRecord
   end
 
   def validate_purchasing_power_parity
-    return if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
-    if card_country != Compliance::Countries.find_by_name(ip_country)&.alpha2
-      errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
-      self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
-    end
+    return if purchasing_power_parity_card_country_verified?(card_country)
+    errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
+    self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
+  end
+
+  # Shared by server-confirmed charges and client-confirm previews.
+  # True when PPP verification does not apply, or the card's country matches the buyer's IP country.
+  def purchasing_power_parity_card_country_verified?(card_country_alpha2)
+    return true if !is_purchasing_power_parity_discounted || seller.purchasing_power_parity_payment_verification_disabled?
+    card_country_alpha2 == Compliance::Countries.find_by_name(ip_country)&.alpha2
+  end
+
+  # Client-confirm checkout has no chargeable to drive Order::ChargeService's merchant-account setup.
+  # Resolve it here so gumroad_amount_cents includes processor fees.
+  def resolve_merchant_account_and_recompute_fees!(charge_processor_id, merchant_account: nil)
+    self.charge_processor_id ||= charge_processor_id
+    prepare_merchant_account(charge_processor_id, resolved_merchant_account: merchant_account)
   end
 
   def total_price_before_installments
@@ -3331,9 +3343,10 @@ class Purchase < ApplicationRecord
       end
     end
 
-    def prepare_merchant_account(charge_processor_id)
+    def prepare_merchant_account(charge_processor_id, resolved_merchant_account: nil)
       # Note: This assumes for the time being that all chargeables have only one internal chargeable.
-      self.merchant_account = seller.merchant_account(charge_processor_id)
+      # Single-seller callers may pass a pre-resolved account to skip the per-purchase lookup.
+      self.merchant_account = resolved_merchant_account || seller.merchant_account(charge_processor_id)
       self.merchant_account ||= MerchantAccount.gumroad(charge_processor_id)
       if merchant_account&.is_a_brazilian_stripe_connect_account? && affiliate.present?
         self.error_code = PurchaseErrorCode::BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE

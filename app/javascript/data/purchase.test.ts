@@ -89,4 +89,14 @@ describe("getPaymentDetailsSource", () => {
   it("reports nothing when there is no applicable payment method", () => {
     expect(getPaymentDetailsSource({ type: "not-applicable" }, true)).toBeNull();
   });
+
+  it("reports payment_element for a client-confirm card, which always uses the Payment Element", () => {
+    const clientConfirmPaymentMethod: PurchasePaymentMethod = {
+      type: "payment-element-client-confirm",
+      confirmationTokenId: "ctoken_123",
+      cardCountry: "US",
+    };
+    expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
+    expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
+  });
 });

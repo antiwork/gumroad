@@ -9,7 +9,11 @@ import { getConnectedAccountStripeInstance, getStripeInstance } from "$app/utils
 
 import { ProductToAdd } from "$app/components/Checkout/cartState";
 
-export type PurchasePaymentMethod = AnyPaymentMethodResult | { type: "not-applicable" };
+export type PurchasePaymentMethod =
+  | AnyPaymentMethodResult
+  | { type: "not-applicable" }
+  // Client-confirm cards live in the ConfirmationToken sent to #prepare.
+  | { type: "payment-element-client-confirm"; confirmationTokenId: string; cardCountry: string | null };
 
 export type SuccessfulLineItemResult = {
   success: true;
@@ -112,6 +116,8 @@ export const getPaymentDetailsSource = (
 ): PaymentDetailsSource | null => {
   if (paymentMethod.type === "saved") return "saved_payment_method";
   if (paymentMethod.type === "not-applicable") return null;
+  // Client-confirm always collects card details through the Payment Element.
+  if (paymentMethod.type === "payment-element-client-confirm") return "payment_element";
   switch (paymentMethod.cardParamsResult.type) {
     case "cc":
     case "error":
@@ -296,7 +302,11 @@ export const createPurchasesRequestData = (
   const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
 
-  if (payload.paymentMethod.type !== "saved" && payload.paymentMethod.type !== "not-applicable") {
+  if (
+    payload.paymentMethod.type !== "saved" &&
+    payload.paymentMethod.type !== "not-applicable" &&
+    payload.paymentMethod.type !== "payment-element-client-confirm"
+  ) {
     const { cardParamsResult } = payload.paymentMethod;
 
     const paymentParams = cardParamsResult.cardParams;

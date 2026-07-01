@@ -42,7 +42,7 @@ export const prepareCardPaymentMethodData = async (
   return cardPaymentMethodParams(paymentMethodResult.paymentMethod);
 };
 
-type PaymentElementCardData = {
+export type PaymentElementCardData = {
   stripe: Stripe;
   elements: StripeElements;
   email: string;
@@ -93,6 +93,35 @@ export const preparePaymentElementPaymentMethodData = async (
   }
 
   return cardPaymentMethodParams(paymentMethodResult.paymentMethod);
+};
+
+export type PaymentElementConfirmationTokenResult =
+  | { status: "success"; confirmationTokenId: string; cardCountry: string | null }
+  | StripeErrorParams;
+
+// Use a ConfirmationToken so the server can inspect card country before client confirmation.
+export const createPaymentElementConfirmationToken = async (
+  cardData: PaymentElementCardData,
+): Promise<PaymentElementConfirmationTokenResult> => {
+  const submitResult = await cardData.elements.submit();
+  if (submitResult.error) {
+    return { status: "error", stripe_error: submitResult.error };
+  }
+
+  const result = await cardData.stripe.createConfirmationToken({
+    elements: cardData.elements,
+    params: { payment_method_data: { billing_details: paymentElementBillingDetails(cardData) } },
+  });
+
+  if (result.error) {
+    return { status: "error", stripe_error: result.error };
+  }
+
+  return {
+    status: "success",
+    confirmationTokenId: result.confirmationToken.id,
+    cardCountry: result.confirmationToken.payment_method_preview.card?.country ?? null,
+  };
 };
 
 type CardPaymentMethodPayload = {

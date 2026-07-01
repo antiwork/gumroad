@@ -2443,4 +2443,116 @@ describe OrdersController, :vcr do
       end
     end
   end
+
+  describe "POST prepare" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:line_items) { [{ uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }] }
+    let(:common_params) do
+      {
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Edgar Gumstein", street_address: "123 Gum Road", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" }
+      }
+    end
+
+    def confirmation_token_id
+      response = Stripe.raw_request(:post, "/v1/test_helpers/confirmation_tokens", { payment_method: "pm_card_visa" })
+      Stripe.deserialize(response.http_body).id
+    end
+
+    it "builds the order and returns a client_secret for the browser to confirm, without charging" do
+      expect(Order::ChargeService).not_to receive(:new)
+
+      expect do
+        post :prepare, params: { line_items:, confirmation_token: confirmation_token_id }.merge(common_params)
+      end.to change(Order, :count).by(1)
+        .and change(Charge, :count).by(1)
+        .and change(ProcessorPaymentIntent, :count).by(1)
+
+      expect(response.parsed_body["success"]).to be(true)
+      line_item = response.parsed_body["line_items"]["unique-id-0"]
+      expect(line_item["requires_payment_confirmation"]).to be(true)
+      expect(line_item["client_secret"]).to be_present
+      expect(line_item["order"]["id"]).to be_present
+
+      expect(Purchase.successful.count).to eq(0)
+      expect(Purchase.last).to be_in_progress
+      expect(Charge.last.stripe_payment_intent_id).to be_present
+
+      expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
+    end
+
+    it "enforces reCAPTCHA before building the order or issuing a client_secret" do
+      allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
+      allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+
+      expect do
+        post :prepare, params: { line_items:, confirmation_token: "ctoken-unused" }.merge(common_params)
+      end.not_to change(Order, :count)
+
+      expect(response.parsed_body["success"]).to be(false)
+    end
+  end
+
+  describe "POST finalize" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:line_items) { [{ uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }] }
+    let(:common_params) do
+      {
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Edgar Gumstein", street_address: "123 Gum Road", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" }
+      }
+    end
+
+    def confirmation_token_id
+      response = Stripe.raw_request(:post, "/v1/test_helpers/confirmation_tokens", { payment_method: "pm_card_visa" })
+      Stripe.deserialize(response.http_body).id
+    end
+
+    it "finalizes the confirmed order, marks the purchase successful, and sends the receipt" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      Order::PreparePaymentIntentService.new(order:, params:, confirmation_token: confirmation_token_id).perform
+      charge = order.charges.find { _1.stripe_payment_intent_id.present? }
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+
+      post :finalize, params: { id: order.secure_external_id(scope: "confirm") }
+
+      uid = "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["line_items"][uid]["success"]).to be(true)
+      expect(purchase.reload).to be_successful
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
+    end
+
+    it "records each purchase event only once when finalize is called again" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      Order::PreparePaymentIntentService.new(order:, params:, confirmation_token: confirmation_token_id).perform
+      charge = order.charges.find { _1.stripe_payment_intent_id.present? }
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+      token = order.secure_external_id(scope: "confirm")
+
+      post :finalize, params: { id: token }
+      expect(purchase.reload).to be_successful
+      expect(Event.purchase.where(purchase_id: purchase.id).count).to eq(1)
+
+      expect do
+        post :finalize, params: { id: token }
+      end.not_to change { Event.purchase.where(purchase_id: purchase.id).count }
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "raises not-found for an unknown order token" do
+      expect do
+        post :finalize, params: { id: "invalid-token" }
+      end.to raise_error(ActionController::RoutingError)
+    end
+  end
 end

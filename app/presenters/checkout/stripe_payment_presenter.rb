@@ -1,15 +1,13 @@
 # frozen_string_literal: true
 
-# Chooses the Stripe checkout payment integration for the current checkout props.
-#
-# The first Stripe Payment Element rollout keeps Rails on the existing
-# stripe_payment_method_id charge path, so this presenter only decides whether
-# checkout may render Payment Element or must fall back to CardElement.
+# Chooses between card, server-confirm Payment Element, and client-confirm Payment Element checkout.
 class Checkout::StripePaymentPresenter
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
+  STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
+  STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
   # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
   # not a selector for Gumroad's backend PaymentIntent/SetupIntent API path.
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT = "payment"
@@ -18,6 +16,9 @@ class Checkout::StripePaymentPresenter
   # below Stripe's USD charge floor on CardElement. This is intentionally lower than
   # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
   STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
+  # Stripe rejects a payment_method_types-scoped ConfirmationToken against a mismatched intent.
+  CLIENT_CONFIRM_PAYMENT_METHOD_TYPES = %w[card].freeze
+  CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
 
@@ -32,6 +33,9 @@ class Checkout::StripePaymentPresenter
     checkout_items = items
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason) if fallback_reason.present?
+
+    # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
+    return client_confirm_props if client_confirm_eligible?(checkout_items)
 
     stripe_elements_mode =
       if setup_for_future_charges_without_charging?(checkout_items)
@@ -72,6 +76,33 @@ class Checkout::StripePaymentPresenter
           currency: "usd",
           payment_method_types: ["card"],
           payment_method_creation: "manual",
+          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+        },
+      }
+    end
+
+    # One ConfirmationToken funds one PaymentIntent, so client-confirm is limited to one seller.
+    # Reusable-payment-method flows need setup_future_usage, and connected-account scoping is not supported here.
+    def client_confirm_eligible?(items)
+      sellers.one? &&
+        sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
+        sellers.none?(&:stripe_connect_account) &&
+        !setup_for_future_charges_without_charging?(items) &&
+        items.none? { client_confirm_unsupported_item?(_1) }
+    end
+
+    def client_confirm_unsupported_item?(item)
+      item[:recurrence].present? || item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+    end
+
+    def client_confirm_props
+      {
+        integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
+        fallback_reason: nil,
+        elements_options: {
+          stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+          currency: CLIENT_CONFIRM_CURRENCY,
+          payment_method_types: CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
           stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
         },
       }

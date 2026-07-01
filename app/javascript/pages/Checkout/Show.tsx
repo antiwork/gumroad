@@ -3,7 +3,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
-import { startOrderCreation } from "$app/data/order";
+import { PaymentConfirmedError, startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
@@ -429,7 +429,10 @@ const CheckoutIndexPage = () => {
           };
         }),
       };
-      const result = await startOrderCreation(requestData);
+      const result =
+        requestData.paymentMethod.type === "payment-element-client-confirm"
+          ? await startClientConfirmOrderCreation(requestData, requestData.paymentMethod.confirmationTokenId)
+          : await startOrderCreation(requestData);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(
@@ -521,6 +524,17 @@ const CheckoutIndexPage = () => {
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
+      // The card was captured, so clear the cart to prevent a second charge while fulfillment
+      // finishes out-of-band.
+      if (e instanceof PaymentConfirmedError) {
+        showAlert(
+          "Your payment is being processed — check your email for your receipt. Please do not pay again.",
+          "warning",
+        );
+        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
+        dispatch({ type: "cancel" });
+        return;
+      }
       assertResponseError(e);
       showAlert("Sorry, something went wrong. Please try again.", "error");
       dispatch({ type: "cancel" });

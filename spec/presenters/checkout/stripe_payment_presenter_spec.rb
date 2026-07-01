@@ -24,8 +24,29 @@ describe Checkout::StripePaymentPresenter do
     checkout_product_for(product, **overrides)
   end
 
+  def confirm_flagged_seller_product(**overrides)
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+    checkout_product_for(product, **overrides)
+  end
+
   def card_element_fallback(reason)
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
+  end
+
+  def payment_element_client_confirm_props(stripe_link_enabled: false)
+    {
+      integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
+      fallback_reason: nil,
+      elements_options: {
+        stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+        currency: "usd",
+        payment_method_types: ["card"],
+        stripe_link_enabled:,
+      },
+    }
   end
 
   def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: false)
@@ -261,5 +282,73 @@ describe Checkout::StripePaymentPresenter do
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+  end
+
+  describe "Payment Element confirm integration" do
+    it "selects the confirm integration for a single-seller one-time card cart with both flags" do
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product]))
+        .to eq(payment_element_client_confirm_props)
+    end
+
+    it "keeps server-confirm Payment Element when only the base flag is enabled" do
+      expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props)
+    end
+
+    it "falls back to CardElement when only the confirm flag is enabled but the base flag is not" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+    end
+
+    it "keeps server-confirm Payment Element for a multi-seller cart even when every seller has both flags" do
+      cart = create(:cart, :guest)
+      [100, 200].each do |price_cents|
+        product = create(:product, user: create(:user), price_cents:)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, product.user)
+        create(:cart_product, cart:, product:)
+      end
+
+      expect(stripe_payment_props(cart:)).to eq(payment_element_props)
+    end
+
+    it "keeps server-confirm Payment Element for a recurring membership because client-confirm mode is one-time only" do
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
+        .to eq(payment_element_props)
+    end
+
+    it "keeps server-confirm Payment Element for a commission product even with both flags" do
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(native_type: Link::NATIVE_TYPE_COMMISSION)]))
+        .to eq(payment_element_props)
+    end
+
+    it "keeps server-confirm SetupIntent mode for a preorder even with both flags" do
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(is_preorder: true)]))
+        .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
+    end
+
+    it "keeps server-confirm Payment Element for a direct-charge seller even with both flags" do
+      seller = create(:user, check_merchant_account_is_linked: true)
+      product = create(:product, user: seller, price_cents: 1234)
+      create(:merchant_account_stripe_connect, user: seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
+    end
+
+    it "enables Link in client-confirm mode when the seller has the Link flag" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))
+    end
   end
 end

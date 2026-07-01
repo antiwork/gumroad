@@ -15,7 +15,10 @@ import * as BraintreePaypal from "braintree-web/paypal";
 import * as React from "react";
 
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
-import { preparePaymentRequestPaymentMethodData } from "$app/data/card_payment_method_data";
+import {
+  createPaymentElementConfirmationToken,
+  preparePaymentRequestPaymentMethodData,
+} from "$app/data/card_payment_method_data";
 import {
   getPaymentMethodResult,
   getPaymentRequestPaymentMethodResult,
@@ -37,6 +40,7 @@ import { CustomFields } from "$app/components/Checkout/CustomFields";
 import {
   addressFields,
   canUseStripePaymentElement,
+  canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
   getTotalPrice,
@@ -675,8 +679,10 @@ const CreditCardContent = ({
 
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
+  const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
+  const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig =
-    useStripePaymentElement && state.checkoutPayment.integration === "payment_element"
+    usesPaymentElement && state.checkoutPayment.integration !== "card_element"
       ? state.checkoutPayment.elements_options
       : null;
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
@@ -686,12 +692,14 @@ const CreditCardContent = ({
   }, []);
 
   React.useEffect(() => {
-    if (!useStripePaymentElement) handlePaymentElementReady(null);
-  }, [handlePaymentElementReady, useStripePaymentElement]);
+    if (!usesPaymentElement) handlePaymentElementReady(null);
+  }, [handlePaymentElementReady, usesPaymentElement]);
 
   React.useEffect(() => {
-    onPaymentElementReadyChange?.(isCardReadyToPay({ useSavedCard, useStripePaymentElement, paymentElementReady }));
-  }, [onPaymentElementReadyChange, useSavedCard, useStripePaymentElement, paymentElementReady]);
+    onPaymentElementReadyChange?.(
+      isCardReadyToPay({ useSavedCard, useStripePaymentElement: usesPaymentElement, paymentElementReady }),
+    );
+  }, [onPaymentElementReadyChange, useSavedCard, usesPaymentElement, paymentElementReady]);
 
   React.useEffect(() => {
     dispatch({
@@ -706,7 +714,39 @@ const CreditCardContent = ({
   React.useEffect(() => {
     if (state.status.type !== "starting" || state.paymentMethod !== "card") return;
     (async () => {
-      if (!useSavedCard && useStripePaymentElement && !paymentElementReady) return;
+      if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
+
+      // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
+      if (useStripePaymentElementClientConfirm && !useSavedCard) {
+        const controller = assertDefined(
+          paymentElementRef.current,
+          "`paymentElementRef.current` should be defined when confirming via the Payment Element",
+        );
+        const tokenResult = await createPaymentElementConfirmationToken({
+          stripe: controller.stripe,
+          elements: controller.elements,
+          email: state.email,
+          fullName: state.fullName,
+          zipCode: state.zipCode,
+          country: state.country,
+          state: state.state,
+          city: state.city,
+          address: state.address,
+        });
+        if (tokenResult.status === "error") {
+          setCardError(true);
+          return dispatch({ type: "cancel" });
+        }
+        return dispatch({
+          type: "set-payment-method",
+          paymentMethod: {
+            type: "payment-element-client-confirm",
+            confirmationTokenId: tokenResult.confirmationTokenId,
+            cardCountry: tokenResult.cardCountry,
+          },
+        });
+      }
+
       if (!useSavedCard && !useStripePaymentElement && !cardElementRef.current) {
         setCardError(true);
         return dispatch({ type: "cancel" });
@@ -755,7 +795,7 @@ const CreditCardContent = ({
       }
       dispatch({ type: "set-payment-method", paymentMethod });
     })().catch(fail);
-  }, [paymentElementReady, state.status.type, useStripePaymentElement]);
+  }, [paymentElementReady, state.status.type, usesPaymentElement]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1241,10 +1281,10 @@ const PaymentMethodsSection = ({
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
 
   const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
-  const useStripePaymentElement = canUseStripePaymentElement(state);
-  const cardPayDisabled = useStripePaymentElement && !paymentElementReady;
+  const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
+  const cardPayDisabled = usesPaymentElement && !paymentElementReady;
 
-  if (useStripePaymentElement && !hasMultiplePaymentMethods) {
+  if (usesPaymentElement && !hasMultiplePaymentMethods) {
     return (
       <>
         <CreditCardContent onPaymentElementReadyChange={handlePaymentElementReadyChange} />

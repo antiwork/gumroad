@@ -11,12 +11,20 @@ import * as React from "react";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
-import { STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
+import {
+  STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
+  type PaymentElementConfig,
+  type PaymentElementClientConfirmConfig,
+} from "$app/components/Checkout/payment";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
+
+// Server-confirm and client-confirm integrations share the Payment Element; only
+// server-confirm sets payment_method_creation: "manual".
+type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClientConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 type LinkPrefillContact = { email: string; name: string };
@@ -40,7 +48,7 @@ export const PaymentElementInput = ({
   onChange,
 }: {
   amount: number | null;
-  elementsOptions: PaymentElementConfig;
+  elementsOptions: CheckoutPaymentElementOptions;
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
@@ -174,7 +182,7 @@ const StripePaymentElementProvider = ({
   children,
 }: {
   amount: number | null;
-  elementsOptions: PaymentElementConfig;
+  elementsOptions: CheckoutPaymentElementOptions;
   children: React.ReactNode;
 }) => {
   const [stripePromise] = React.useState(getStripeInstance);
@@ -193,7 +201,10 @@ const StripePaymentElementProvider = ({
       currency: elementsOptions.currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
-      paymentMethodCreation: elementsOptions.payment_method_creation,
+      // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
+      ...("payment_method_creation" in elementsOptions
+        ? { paymentMethodCreation: elementsOptions.payment_method_creation }
+        : {}),
       fonts: [{ family: font.name, src: `url(${font.url})` }],
       appearance: {
         variables: {

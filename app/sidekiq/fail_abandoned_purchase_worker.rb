@@ -53,6 +53,9 @@ class FailAbandonedPurchaseWorker
       # In both these cases the purchase will transition to a successful or failed state.
       #
       # Raise all other (unexpected) errors.
+      #
+      # A client-confirm charge that succeeded but was never finalized (browser disappeared) stays
+      # in_progress here; the Phase 2 PaymentIntent webhook is the source of truth that finalizes it.
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
