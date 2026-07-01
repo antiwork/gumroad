@@ -22,7 +22,7 @@ describe Charge, :vcr do
       expect(create(:charge)).not_to be_client_confirmed
     end
 
-    it "is true only when explicitly set on a browser-confirmed (Lane B) charge" do
+    it "is true only when explicitly set on a browser-confirmed charge" do
       expect(create(:charge, client_confirmed: true)).to be_client_confirmed
     end
   end

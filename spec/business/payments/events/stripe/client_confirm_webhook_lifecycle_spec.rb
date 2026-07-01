@@ -206,7 +206,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
   end
 
   context "when the PaymentIntent is not a client-confirmed charge" do
-    it "ignores a server-confirmed (Lane A) charge and records nothing" do
+    it "ignores a server-confirmed charge and records nothing" do
       order, charge = build_client_confirmed_order
       charge.update!(client_confirmed: false)
       purchase = order.purchases.first
