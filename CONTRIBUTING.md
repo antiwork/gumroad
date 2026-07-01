@@ -26,7 +26,7 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 Non-trivial PRs should follow this structure:
 
 - **What** — What this PR does. Concrete changes, not a list of files.
-- **Why** — Why this change exists and why this approach was chosen over alternatives.
+- **Why** — Why this change exists and why this approach was chosen over alternatives. When other PRs or approaches exist for the same problem, name them and say why this one wins (fewer changes, right API, no backend/storage churn, etc.).
 - **Before/After** — Video is required for all PRs. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
 - **Test Results** — Screenshot of tests passing locally.
 
