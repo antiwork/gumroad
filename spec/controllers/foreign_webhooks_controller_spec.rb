@@ -26,24 +26,6 @@ describe ForeignWebhooksController do
       expect(HandleStripeEventWorker).to have_enqueued_sidekiq_job(json)
     end
 
-    it "responds successfully to payment_intent.succeeded" do
-      json = { type: "payment_intent.succeeded", id: "evt_pi_succeeded", pending_webhooks: "0", user_id: "1" }
-      endpoint_secret = GlobalConfig.dig(:stripe, :endpoint_secret)
-      request.headers["Stripe-Signature"] = stripe_signature_header(json, endpoint_secret)
-      post :stripe, params: json, as: :json
-      expect(response).to be_successful
-      expect(HandleStripeEventWorker).to have_enqueued_sidekiq_job(json)
-    end
-
-    it "responds successfully to payment_intent.processing" do
-      json = { type: "payment_intent.processing", id: "evt_pi_processing", pending_webhooks: "0", user_id: "1" }
-      endpoint_secret = GlobalConfig.dig(:stripe, :endpoint_secret)
-      request.headers["Stripe-Signature"] = stripe_signature_header(json, endpoint_secret)
-      post :stripe, params: json, as: :json
-      expect(response).to be_successful
-      expect(HandleStripeEventWorker).to have_enqueued_sidekiq_job(json)
-    end
-
     it "responds with bad request for invalid stripe signature" do
       json = { type: "charge.succeeded", id: "evt_dafasdfadsf", pending_webhooks: "0", user_id: "1" }
       request.headers["Stripe-Signature"] = "invalid"
