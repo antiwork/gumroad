@@ -103,6 +103,24 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
+  context "when the browser finalized inline before the webhook arrives" do
+    it "fulfills exactly once across both triggers" do
+      order, charge = build_client_confirmed_order
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      purchase = order.purchases.first
+
+      expect do
+        Order::FinalizeConfirmedChargeService.new(order:).perform
+      end.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
+      expect(purchase.reload).to be_successful
+
+      expect do
+        deliver_webhook(payment_intent_event("payment_intent.succeeded", charge, event_id: "evt_after_inline"))
+      end.not_to change { ActivateIntegrationsWorker.jobs.size }
+      expect(purchase.reload).to be_successful
+    end
+  end
+
   context "payment_intent.succeeded for a multi-item combined charge" do
     it "fulfills every purchase in the single-seller charge" do
       second_product = create(:product, user: seller, price_cents: 5_00)
