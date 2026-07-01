@@ -39,17 +39,19 @@ module User::Risk
     end
   end
 
-  def suspend_due_to_stripe_risk
+  def suspend_due_to_stripe_risk(disabled_reason: nil)
     transaction do
       update!(tos_violation_reason: "Stripe reported high risk")
       suspend_for_tos_violation!(author_name: "stripe_risk", bulk: true, skip_generic_suspension_email: true) unless suspended?
       links.alive.find_each do |product|
         product.unpublish!(is_unpublished_by_admin: true)
       end
+      note = "Suspended because of high risk reported by Stripe"
+      note += " (Stripe requirements.disabled_reason: #{disabled_reason})" if disabled_reason.present?
       comments.create!(
         author_name: "stripe_risk",
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-        content: "Suspended because of high risk reported by Stripe"
+        content: note
       )
       ContactingCreatorMailer.suspended_due_to_stripe_risk(id).deliver_later
     end
