@@ -278,6 +278,26 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_props)
     end
 
+    it "drops sampling to 0% (CardElement) once the flag is explicitly deactivated" do
+      # Regression: deactivate leaves the flag existing with state :off. Guarding on
+      # state == :off would fail open and route 100% of eligible checkouts to Payment
+      # Element — the opposite of an operator's rollback intent. Guarding on
+      # configured? (existence) honors the deactivation.
+      Feature.deactivate(sampling_flag)
+      expect(Flipper.feature(sampling_flag).state).to eq(:off)
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product], browser_guid:))
+        .to eq(card_element_fallback("checkout_not_sampled"))
+    end
+
+    it "drops sampling to 0% (CardElement) when set to 0 percent of actors" do
+      Feature.activate_percentage(sampling_flag, 0)
+      expect(Flipper.feature(sampling_flag).state).to eq(:off)
+
+      expect(stripe_payment_props(add_products: [flagged_seller_product], browser_guid:))
+        .to eq(card_element_fallback("checkout_not_sampled"))
+    end
+
     it "renders Payment Element when the checkout's browser guid is in the sampled bucket" do
       Feature.activate_user(sampling_flag, checkout_actor_for(browser_guid))
 
