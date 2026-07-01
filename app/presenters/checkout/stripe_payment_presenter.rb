@@ -114,11 +114,24 @@ class Checkout::StripePaymentPresenter
     # sets a percentage/actor gate, only the sampled fraction renders Payment
     # Element. Keyed on a stable per-checkout actor (cart when present, else the
     # browser guid) so a buyer's payment surface never flips mid-checkout.
+    #
+    # OPERATIONAL FOOTGUN: because fail-open keys on state == :off, running
+    # Feature.deactivate(:stripe_payment_element_checkout_sampling) sets the state
+    # back to :off and samples 100% of eligible checkouts — the OPPOSITE of a
+    # rollback. To throttle sampling to zero without disabling seller eligibility,
+    # use Feature.activate_percentage(:stripe_payment_element_checkout_sampling, 0).
+    # The real kill switch for the whole experiment remains the seller-level
+    # :stripe_payment_element_checkout flag (deactivating it fails everyone back to
+    # CardElement via the AND in fallback_reason_for).
     def checkout_sampled?
-      return true if Flipper.feature(STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME).state == :off
-
       actor = checkout_sampling_actor
       return true if actor.flipper_id.blank?
+
+      # Fail open while the flag is unconfigured (:off): Feature.active? returns
+      # false for an :off flag, so check the raw state first to distinguish
+      # "not configured yet" (sample everyone) from "configured but this actor is
+      # excluded" (fall back to CardElement).
+      return true if Flipper.feature(STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME).state == :off
 
       Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_SAMPLING_FEATURE_NAME, actor)
     end
