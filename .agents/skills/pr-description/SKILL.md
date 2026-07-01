@@ -21,6 +21,15 @@ Generate a concise, high-quality PR description from the current branch and its 
 - **Non-user-facing change** (pure backend/refactor/config): a **short walkthrough video** of the relevant existing functionality is still required to demonstrate nothing broke.
 - If you do not yet have the media, the PR is NOT ready. Capture it first (boot the app, take the screenshots/video, store under `qa-media/pr-<number>-<desc>.<ext>`, reference via raw GitHub URL) — do NOT emit a description with an empty or deleted Before/After section for a product change.
 
+### ⛔ Prerequisite check — run this BEFORE generating any description
+
+This is a text-generation skill: the agent running it often has **no** running app or screenshot/video capture tooling. That is exactly the situation the rule exists to catch — do NOT rationalize past it. Before writing a single line of the description:
+
+1. Decide whether the change is a product/user-facing change (see the bullets above).
+2. If it is, ask: **can I actually capture the required media right now** (is the app bootable, is capture tooling available)?
+   - **YES** → capture the media first, then generate the description with the real media embedded.
+   - **NO** → **HALT.** Do NOT generate a description with a placeholder, an empty Before/After section, or a prose-only substitute. Instead, output a one-line stop message telling the human exactly what to capture and where to store it (`qa-media/pr-<number>-<desc>.<ext>`), and let them capture it before you proceed. Failing loudly here is the whole point — a description that silently omits the media is worse than no description.
+
 **The Before/After section below is NOT deletable for product changes.** The only case where it may be omitted is a genuinely non-visual change, and even then a walkthrough video goes in its place. When in doubt: include media.
 
 ## Workflow
