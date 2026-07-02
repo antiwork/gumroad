@@ -103,6 +103,15 @@ export function trackProductEvent(config: AnalyticsConfig | undefined, data: Pro
   }
 }
 
+// A bare page_view for surfaces with no product to attach (the custom HTML
+// profile page). Product surfaces get their page_view from trackProductEvent,
+// which sends it alongside the product-shaped event for the action.
+export function trackPageView(config: AnalyticsConfig) {
+  if (!shouldTrack() || !config.googleAnalyticsId || typeof gtag === "undefined") return;
+
+  logSellerEvent(config.id, "page_view", { page: window.location.pathname + window.location.search });
+}
+
 export function startTrackingForSeller(data: AnalyticsConfig) {
   if (!shouldTrack() || !data.googleAnalyticsId) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();

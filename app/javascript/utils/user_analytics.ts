@@ -71,6 +71,16 @@ export function startTrackingForSeller(id: string, data: AnalyticsData) {
   TikTokPixel.startTrackingForSeller(config);
 }
 
+// Fires the seller's GA page_view on pages with no product context (the custom
+// HTML profile page). GA only: TikTok already sends its page event when the
+// pixel bootstraps in startTrackingForSeller, and the Facebook pixel is only
+// ever sent product-shaped events in this codebase.
+export function trackSellerPageView(id: string) {
+  const config = configs.get(id);
+  if (!config) return;
+  GoogleAnalytics.trackPageView(config);
+}
+
 export function trackProductEvent(id: string | undefined, data: ProductAnalyticsEvent) {
   const config = id ? configs.get(id) : undefined;
 

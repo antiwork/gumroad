@@ -77,4 +77,38 @@ describe ThirdPartyAnalyticsController do
       expect { get :index, params: { link_id: @product.unique_permalink, purchase_id: "@purchase.external_id" } }.to raise_error(ActionController::RoutingError)
     end
   end
+
+  # Serves the custom HTML profile page (#5676), which has no product to key
+  # the index action on. Only universal snippets marked "all" apply — a profile
+  # is neither a product page nor a receipt.
+  describe "profile" do
+    it "includes only the seller's universal run-everywhere snippets" do
+      get :profile, params: { username: @seller.username }
+
+      expect(response.body).to include @global_user_snippet.analytics_code
+      expect(response.body).to_not include @global_product_snippet.analytics_code
+      expect(response.body).to_not include @product_user_snippet.analytics_code
+      expect(response.body).to_not include @receipt_user_snippet.analytics_code
+      expect(response.body).to_not include @product_product_snippet.analytics_code
+      expect(response.body).to_not include @receipt_product_snippet.analytics_code
+    end
+
+    it "excludes deleted snippets" do
+      @global_user_snippet.mark_deleted
+
+      get :profile, params: { username: @seller.username }
+
+      expect(response.body).to_not include @global_user_snippet.analytics_code
+    end
+
+    it "raises an e404 for an unknown username" do
+      expect { get :profile, params: { username: "nosuchuser" } }.to raise_error(ActionController::RoutingError)
+    end
+
+    it "raises an e404 for a deleted user" do
+      @seller.update_columns(deleted_at: Time.current)
+
+      expect { get :profile, params: { username: @seller.username } }.to raise_error(ActionController::RoutingError)
+    end
+  end
 end

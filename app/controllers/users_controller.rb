@@ -259,6 +259,7 @@ class UsersController < ApplicationController
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
+            #{profile_custom_html_analytics_head(user)}
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>
@@ -271,6 +272,59 @@ class UsersController < ApplicationController
             #{live_reload}
           </body>
         </html>
+      HTML
+    end
+
+    # A custom HTML profile bypasses the React profile page, so the seller's
+    # account-scoped analytics (Google Analytics, Facebook/TikTok pixels,
+    # universal raw snippets) never load — the gap #5658 closed for custom
+    # product landing pages, on the profile surface (#5676). Like the product
+    # version, the tracking goes into this trusted wrapper only: the sandboxed
+    # landing iframe's strict CSP blocks the analytics hosts by design, while
+    # the wrapper runs under the global site CSP, which allowlists them.
+    #
+    # Unlike a product page, a profile has no permalink, name, or buy action, so
+    # the entry point only bootstraps the pixels and fires a seller GA page_view
+    # — no view_item/ViewContent/add_to_cart, which are product-shaped events a
+    # standard profile page doesn't fire either.
+    def profile_custom_html_analytics_head(user)
+      return "" unless analytics_enabled?(seller: user)
+
+      # Same shape as Link#analytics_data, which is sourced entirely from the
+      # user — the profile just reads the account fields directly.
+      analytics = {
+        google_analytics_id: user.google_analytics_id,
+        facebook_pixel_id: user.facebook_pixel_id,
+        tiktok_pixel_id: user.tiktok_pixel_id,
+        free_sales: !user.skip_free_sale_analytics?,
+      }
+      # Only location "all" ("run everywhere") snippets apply here: "product" and
+      # "receipt" universal snippets target those surfaces, and a profile is neither.
+      has_universal_third_party_analytics = user.third_party_analytics.universal.alive.where(location: "all").exists?
+      has_configured_pixel = analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
+      return "" unless has_configured_pixel || has_universal_third_party_analytics
+
+      props = {
+        seller_id: user.external_id,
+        analytics:,
+        # The snippet endpoint for products is keyed on a permalink, which a
+        # profile doesn't have, so the profile variant is keyed on the username
+        # and the URL is built here rather than with Routes on the frontend.
+        third_party_analytics_url: has_universal_third_party_analytics ? profile_third_party_analytics_url(username: user.username, host: THIRD_PARTY_ANALYTICS_DOMAIN) : nil,
+      }
+
+      # All three enabled flags are "true" (not per-pixel): this block only renders
+      # when analytics_enabled?, and the frontend gates each pixel on its own
+      # configured id — mirroring PageMeta::Analytics#set_analytics_meta_tags, which
+      # the wrapper's layout-less document can't accumulate. The props JSON goes in a
+      # double-quoted attribute, so ERB::Util.h (which escapes ") is the right escape
+      # here — json_escape would leave quotes intact and break out of the attribute.
+      <<~HTML.strip
+        <meta property="gr:google_analytics:enabled" content="true">
+        <meta property="gr:fb_pixel:enabled" content="true">
+        <meta property="gr:tiktok_pixel:enabled" content="true">
+        <meta name="gr:custom-html-profile-analytics" content="#{ERB::Util.h(props.to_json)}">
+        #{helpers.vite_typescript_tag("custom_html_profile_analytics")}
       HTML
     end
 
