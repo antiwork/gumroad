@@ -113,7 +113,7 @@ describe Gift::ConvertToNonGiftService do
         let(:giftee) { create(:user, email: "giftee@example.com") }
         let!(:receiver_leg) do
           create(:membership_purchase, :gift_receiver, link: product, seller:, subscription:,
-                                        purchaser: giftee, email: "giftee@example.com")
+                                                       purchaser: giftee, email: "giftee@example.com")
         end
 
         before { subscription.update!(user: giftee) }
@@ -131,6 +131,41 @@ describe Gift::ConvertToNonGiftService do
           build_service.process!
 
           expect(subscription.reload.user).to eq(payer)
+          expect(subscription.reload.email).to eq("payer@example.com")
+        end
+      end
+
+      context "when the payer is a guest buyer (nil purchaser)" do
+        let!(:gifter_purchase) do
+          create(:membership_purchase, link: product, seller:, subscription:, purchaser: nil,
+                                       email: "payer@example.com", is_gift_sender_purchase: true, gift_given: gift)
+        end
+
+        it "sets the subscription user to nil and resolves email via the payer purchase" do
+          result = build_service.process!
+
+          expect(result.converted).to be(true)
+          expect(subscription.reload.user).to be_nil
+          expect(subscription.reload.gift?).to be(false)
+          expect(subscription.reload.email).to eq("payer@example.com")
+        end
+      end
+
+      context "when the paying buyer is a guest (nil purchaser)" do
+        let!(:gifter_purchase) do
+          create(:membership_purchase, link: product, seller:, subscription:, purchaser: nil,
+                                       email: "payer@example.com", is_gift_sender_purchase: true, gift_given: gift)
+        end
+
+        before { subscription.update!(user: create(:user, email: "giftee@example.com")) }
+
+        it "clears the subscription owner and resolves email to the payer via the original purchase" do
+          expect(subscription.reload.gift?).to be(true)
+          expect(subscription.reload.email).to eq("giftee@example.com")
+
+          build_service.process!
+
+          expect(subscription.reload.user).to be_nil
           expect(subscription.reload.email).to eq("payer@example.com")
         end
       end
