@@ -157,13 +157,15 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           {label ??
             (purchase && (purchase.was_paid || product.recurrences)
               ? "Purchase again"
-              : product.recurrences
-                ? "Subscribe"
-                : selection.rent
-                  ? "Rent"
-                  : product.custom_button_text_option
-                    ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
+              : purchase && !selection.rent
+                ? "Download again"
+                : product.recurrences
+                  ? "Subscribe"
+                  : selection.rent
+                    ? "Rent"
+                    : product.custom_button_text_option
+                      ? getCtaName(product.custom_button_text_option)
+                      : "I want this!")}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 && discountedPriceCents > 0 ? (

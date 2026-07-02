@@ -14,10 +14,10 @@ describe "Product page CTA button for a returning buyer", :js, type: :system do
       login_as buyer
     end
 
-    it "shows the regular CTA instead of 'Purchase again'" do
+    it "shows 'Download again' instead of 'Purchase again'" do
       visit short_link_path(product)
 
-      expect(page).to have_link("I want this!")
+      expect(page).to have_link("Download again")
       expect(page).to have_no_link("Purchase again")
     end
   end
