@@ -474,7 +474,7 @@ describe ProductPresenter do
               default: true,
             }
           ],
-          taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+          taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
           custom_domain_verification_status: {
             success: false,
             message: "Domain verification failed. Please make sure you have correctly configured the DNS record for #{custom_domain.domain}."
@@ -740,7 +740,7 @@ describe ProductPresenter do
             is_physical: false,
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(membership.user.timezone).iso8601,
             profile_sections: [],
-            taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+            taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
             custom_domain_verification_status: nil,
             sales_count_for_inventory: 0,
             successful_sales_count: 0,
@@ -957,7 +957,7 @@ describe ProductPresenter do
             is_physical: false,
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(new_product.user.timezone).iso8601,
             profile_sections: [],
-            taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+            taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
             custom_domain_verification_status: nil,
             sales_count_for_inventory: 0,
             successful_sales_count: 0,

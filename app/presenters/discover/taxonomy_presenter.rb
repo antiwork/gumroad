@@ -354,6 +354,19 @@ class Discover::TaxonomyPresenter
     taxonomies
   end
 
+  # The Discover nav wants taxonomies in sales-popularity order, but the product editor's
+  # category picker is a lookup of a category the seller already has in mind, so it lists
+  # them alphabetically by the breadcrumb the picker displays ("3D > 3D Assets > 3ds Max"),
+  # keeping each root next to its descendants.
+  def taxonomies_for_category_picker
+    taxonomies = taxonomies_for_nav
+    taxonomies_by_key = taxonomies.index_by { |taxonomy| taxonomy[:key] }
+    breadcrumbs = {}
+    taxonomies.sort_by do |taxonomy|
+      hierarchy_for_taxonomy(taxonomy, taxonomies_by_key, breadcrumbs, attribute: :label, separator: " > ").downcase
+    end
+  end
+
   def categories_for_api
     categories_by_id.values.sort_by { |category| category[:path] }
   end
@@ -398,9 +411,16 @@ class Discover::TaxonomyPresenter
     end
 
     def path_for_taxonomy(taxonomy, taxonomies_by_id, path_by_id)
-      path_by_id[taxonomy[:key]] ||= begin
-        parent = taxonomies_by_id[taxonomy[:parent_key]]
-        parent.present? ? "#{path_for_taxonomy(parent, taxonomies_by_id, path_by_id)}/#{taxonomy[:slug]}" : taxonomy[:slug]
+      hierarchy_for_taxonomy(taxonomy, taxonomies_by_id, path_by_id, attribute: :slug, separator: "/")
+    end
+
+    # Joins `attribute` from the root down to `taxonomy` (e.g. "3d/3d-assets" or "3D > 3D Assets"),
+    # memoizing each taxonomy's result in `cache` so shared ancestors are only walked once.
+    def hierarchy_for_taxonomy(taxonomy, taxonomies_by_key, cache, attribute:, separator:)
+      cache[taxonomy[:key]] ||= begin
+        parent = taxonomies_by_key[taxonomy[:parent_key]]
+        value = taxonomy[attribute].to_s
+        parent ? "#{hierarchy_for_taxonomy(parent, taxonomies_by_key, cache, attribute:, separator:)}#{separator}#{value}" : value
       end
     end
 end

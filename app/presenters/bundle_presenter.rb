@@ -40,7 +40,7 @@ class BundlePresenter
   def edit_share_props
     profile_sections = bundle.user.seller_profile_products_sections
     shared_props.merge(
-      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
       profile_sections: profile_sections.map do |section|
         {
           id: section.external_id,
