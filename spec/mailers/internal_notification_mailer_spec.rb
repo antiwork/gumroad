@@ -66,8 +66,17 @@ describe InternalNotificationMailer do
         expect(mail.to).to be_nil
       end
 
-      it "does not CC the configured global recipient when the room has no recipient" do
+      it "does not CC when the room has no recipient" do
         expect(mail.cc).to be_nil
+      end
+
+      context "even when a global CC address is configured" do
+        before { stub_const("INTERNAL_NOTIFICATION_ALWAYS_CC", "audit@example.com") }
+
+        it "does not CC the configured recipient" do
+          expect(mail.to).to be_nil
+          expect(mail.cc).to be_nil
+        end
       end
     end
 
