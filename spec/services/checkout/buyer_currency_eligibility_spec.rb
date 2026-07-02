@@ -104,6 +104,20 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:wallet_payment_request)
   end
 
+  it "falls back for future-charge card setups such as save-card checkouts" do
+    save_card_decision = described_class.new(order:,
+                                             seller:,
+                                             merchant_account:,
+                                             chargeable:,
+                                             purchases:,
+                                             params:,
+                                             setup_future_charges: true,
+                                             off_session:).decision
+
+    expect(save_card_decision).not_to be_eligible
+    expect(save_card_decision.fallback_reason).to eq(:future_charge_setup)
+  end
+
   it "falls back for multi-item checkouts" do
     purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
 

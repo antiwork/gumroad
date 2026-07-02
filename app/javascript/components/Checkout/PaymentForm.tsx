@@ -677,6 +677,13 @@ const CreditCardContent = ({
   const [useSavedCard, setUseSavedCard] = React.useState(!!state.savedCreditCard);
   const [keepOnFile, setKeepOnFile] = React.useState(isLoggedIn);
 
+  // Mirror the save-card intent into checkout state: saving a card charges through the
+  // canonical path in PR 1, so the cart must stop displaying buyer-currency totals.
+  const willSaveCard = !useSavedCard && isLoggedIn && keepOnFile;
+  React.useEffect(() => {
+    dispatch({ type: "set-value", willSaveCard });
+  }, [dispatch, willSaveCard]);
+
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);

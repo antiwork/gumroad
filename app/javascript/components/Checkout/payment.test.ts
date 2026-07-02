@@ -5,6 +5,7 @@ import {
   canUseStripePaymentElementClientConfirm,
   getStripePaymentElementAmount,
   isCardReadyToPay,
+  reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresReusablePaymentMethod,
@@ -114,6 +115,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   },
   availablePaymentMethods: [],
   paymentMethod: "card",
+  willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   status: { type: "input", errors: new Set() },
@@ -617,5 +619,28 @@ describe("isCardReadyToPay", () => {
     expect(isCardReadyToPay({ useSavedCard: false, useStripePaymentElement: false, paymentElementReady: false })).toBe(
       true,
     );
+  });
+});
+
+describe("reduceCheckoutState", () => {
+  it("stores the save-card intent without invalidating loaded surcharges", () => {
+    const initial = state();
+
+    const next = reduceCheckoutState(initial, { type: "set-value", willSaveCard: true });
+
+    expect(next.willSaveCard).toBe(true);
+    // The locked FX quote lives in the surcharges result; toggling the save-card checkbox must
+    // not reset it, or every toggle would mint a fresh Stripe quote.
+    expect(next.surcharges).toBe(initial.surcharges);
+
+    const reverted = reduceCheckoutState(next, { type: "set-value", willSaveCard: false });
+    expect(reverted.willSaveCard).toBe(false);
+    expect(reverted.surcharges).toBe(initial.surcharges);
+  });
+
+  it("invalidates loaded surcharges for fields that change the totals", () => {
+    const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
+
+    expect(next.surcharges).toEqual({ type: "pending" });
   });
 });

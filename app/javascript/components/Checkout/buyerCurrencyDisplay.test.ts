@@ -5,6 +5,7 @@ import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import {
   formatCheckoutPrice,
   getCheckoutBuyerCurrencyDisplay,
+  getCheckoutBuyerCurrencyQuoteToken,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
@@ -40,6 +41,23 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
 
   it("does not use buyer-currency display when there is no quote", () => {
     expect(getCheckoutBuyerCurrencyDisplay(surcharges({ buyer_currency_quote: null }))).toBeNull();
+  });
+
+  it("does not use buyer-currency display when the checkout will save the card", () => {
+    // Saving a card charges through the canonical path, so displaying locked local-currency
+    // totals would show an amount the buyer is never charged.
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: true })).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: false })).not.toBeNull();
+  });
+});
+
+describe("getCheckoutBuyerCurrencyQuoteToken", () => {
+  it("sends the locked quote token only when buyer-currency totals are displayed", () => {
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges())).toBe("quote-token");
+    // Saving the card charges canonically, so the token must be withheld with the display.
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { willSaveCard: true })).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }))).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(null)).toBeNull();
   });
 });
 

@@ -223,6 +223,7 @@ export const Checkout = ({
   const displayTipSelector = isTippingEnabled(state);
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
+    { willSaveCard: state.willSaveCard },
   );
 
   return (

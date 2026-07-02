@@ -17,7 +17,11 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
-import { formatCheckoutPrice, getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
+import {
+  formatCheckoutPrice,
+  getCheckoutBuyerCurrencyDisplay,
+  getCheckoutBuyerCurrencyQuoteToken,
+} from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   type CartItem,
   type CartState,
@@ -189,6 +193,7 @@ const CheckoutIndexPage = () => {
   const [state, dispatch] = reducer;
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
+    { willSaveCard: state.willSaveCard },
   );
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
@@ -374,8 +379,10 @@ const CheckoutIndexPage = () => {
           locale: navigator.language,
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
-        buyerCurrencyQuote:
-          state.surcharges.type === "loaded" ? (state.surcharges.result.buyer_currency_quote?.token ?? null) : null,
+        buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
+          state.surcharges.type === "loaded" ? state.surcharges.result : null,
+          { willSaveCard: state.willSaveCard },
+        ),
         lineItems: cartForm.data.cart.items.map((item) => {
           const discounted = getDiscountedPrice(cartForm.data.cart, item);
 
