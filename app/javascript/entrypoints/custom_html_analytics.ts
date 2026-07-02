@@ -24,7 +24,11 @@ type ProductProps = SharedProps & {
 // checkout bridge, only the seller's universal snippets.
 type ProfileProps = SharedProps & {
   has_universal_third_party_analytics: boolean;
-  username: string;
+  // Ruby emits the block whenever a pixel id is configured, even when the
+  // seller has no username (username -> JSON null). Universal snippets — the
+  // only consumer of username below — require username.present? server-side,
+  // so a null username here always coincides with has_universal = false.
+  username: string | null;
 };
 
 // A custom HTML landing page renders as a bare wrapper document that embeds the
@@ -75,7 +79,7 @@ if (configElement) {
     });
   } else {
     trackProfilePageView(props.seller_id);
-    if (props.has_universal_third_party_analytics)
+    if (props.has_universal_third_party_analytics && props.username != null)
       addProfileThirdPartyAnalytics({ domain: props.third_party_analytics_domain, username: props.username });
   }
 }
