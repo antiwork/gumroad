@@ -16,7 +16,10 @@ class UploadUsStatesSalesTaxToTaxjarJob
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   sidekiq_retries_exhausted do |job, exception|
-    date = job["args"].first
+    # The scheduler fires with no args (see config/sidekiq_schedule.yml), so job["args"].first is
+    # nil for a scheduled run. Mirror #perform's default so the alert email's re-run command is
+    # actionable instead of "perform_async(\"\")".
+    date = job["args"].first || Date.yesterday.iso8601
     AccountingMailer.us_states_sales_tax_taxjar_upload_failed(
       date, exception.class.name, exception.message
     ).deliver_later

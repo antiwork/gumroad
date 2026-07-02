@@ -31,6 +31,19 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
 
       described_class.sidekiq_retries_exhausted_block.call(job, exception)
     end
+
+    it "falls back to yesterday's date when the scheduler fired the job with no args" do
+      job = { "args" => [] }
+      exception = HTTP::ConnectionError.new("failed to connect: getaddrinfo")
+      mailer = double("mailer")
+
+      expect(AccountingMailer).to receive(:us_states_sales_tax_taxjar_upload_failed)
+        .with(Date.yesterday.iso8601, "HTTP::ConnectionError", "failed to connect: getaddrinfo")
+        .and_return(mailer)
+      expect(mailer).to receive(:deliver_later)
+
+      described_class.sidekiq_retries_exhausted_block.call(job, exception)
+    end
   end
 
   describe "uploading a day's orders", :vcr do
