@@ -43,6 +43,7 @@ class Checkout::ReturnsController < ApplicationController
     def success_redirect_url(order)
       purchases = order.purchases.select(&:successful?)
       purchase = purchases.first
+      return checkout_path if purchase.nil?
 
       if purchases.one? && purchase.has_content?
         if purchase.link.native_type == Link::NATIVE_TYPE_COFFEE
