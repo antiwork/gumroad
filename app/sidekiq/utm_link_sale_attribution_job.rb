@@ -53,7 +53,7 @@ class UtmLinkSaleAttributionJob
       utm_link = visit.utm_link
       visit.update!(country_code: Compliance::Countries.find_by_name(purchase.country)&.alpha2) if visit.country_code.blank? && purchase.country.present?
 
-      utm_link.utm_link_driven_sales.create!(utm_link_visit: visit, purchase:)
+      utm_link.utm_link_driven_sales.where(utm_link_visit: visit, purchase:).first_or_create!
     end
   end
 end

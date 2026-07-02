@@ -150,6 +150,20 @@ describe UtmLinkSaleAttributionJob do
     end
   end
 
+  context "when the job runs again for the same order and visit" do
+    it "does not create a duplicate driven sale" do
+      purchase = create(:purchase, link: product, seller:)
+      order.purchases << purchase
+      create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+
+      described_class.new.perform(order.id, browser_guid)
+
+      expect do
+        described_class.new.perform(order.id, browser_guid)
+      end.not_to change { utm_link.utm_link_driven_sales.count }
+    end
+  end
+
   context "when multiple visits of different utm links qualify for the same purchase" do
     it "attributes the purchase to only one visit which is the most recent among all applicable links" do
       purchase = create(:purchase, link: product, seller:)
