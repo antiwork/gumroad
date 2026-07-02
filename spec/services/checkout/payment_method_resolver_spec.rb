@@ -38,6 +38,37 @@ describe Checkout::PaymentMethodResolver do
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
         expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end
+
+      it "does not report Link enabled without the Link flag" do
+        expect(resolve.stripe_link_enabled?).to be(false)
+      end
+    end
+
+    context "with the seller-scoped Link flag active" do
+      before { Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller) }
+
+      it "launches link alongside card so the Element and the deferred intent widen together" do
+        resolution = resolve
+
+        expect(resolution.payment_method_types).to eq(%w[card link])
+        expect(resolution.stripe_link_enabled?).to be(true)
+      end
+
+      it "keeps link out of the launched set for another (unflagged) seller" do
+        other = create(:user)
+
+        resolution = described_class.new(sellers: [other]).resolve
+
+        expect(resolution.payment_method_types).to eq(["card"])
+        expect(resolution.stripe_link_enabled?).to be(false)
+      end
+
+      it "still reports no methods and no Link on an ineligible cart" do
+        resolution = resolve(recurring: true)
+
+        expect(resolution.payment_method_types).to be_nil
+        expect(resolution.stripe_link_enabled?).to be(false)
+      end
     end
 
     context "with a recurring (subscription) lifecycle" do

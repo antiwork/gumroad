@@ -42,11 +42,12 @@ export type PaymentElementConfig = {
   stripe_link_enabled: boolean;
 };
 // Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
-// payment_method_creation and stays in one-time payment mode.
+// payment_method_creation and stays in one-time payment mode. The method list is server-resolved
+// (card always; link per-seller) — the client never widens it.
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: "usd";
-  payment_method_types: ["card"];
+  payment_method_types: string[];
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };

@@ -9,10 +9,10 @@
 #   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Only card
-#     is launched, because the other methods need machinery that isn't built yet: redirect methods need
-#     the server return page + allow_redirects, delayed-notification methods need the PaymentIntent
-#     webhook lifecycle, and inline wallets/Link need frontend verification. Widening
-#     LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
+#     is launched unconditionally; Link joins it per-seller behind :stripe_payment_element_link, reusing
+#     Lane A's flag so the two lanes launch Link together. The remaining methods need machinery that
+#     isn't built yet: redirect methods need allow_redirects enablement, and delayed-notification
+#     methods need pending UX. Widening the launched set further is a later unit's job.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -29,13 +29,19 @@ class Checkout::PaymentMethodResolver
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Only card is launched on the client-confirmed path today; later units widen this (see class comment).
+  # Card is always launched on the client-confirmed path; later units widen this (see class comment).
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # Link launches per-seller behind Lane A's existing flag (see #launched_payment_method_types).
+  LINK_PAYMENT_METHOD_TYPE = "link"
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
   Resolution = Data.define(:client_confirm_eligible, :payment_method_types, :eligible_payment_method_types, :fallback_reason, :stripe_connect_account_id) do
     def client_confirm_eligible? = client_confirm_eligible
+
+    # One source of truth for the Payment Element's Link toggle: Link renders iff the intent will
+    # accept a link-type payment method, so the Element and the deferred intent cannot drift.
+    def stripe_link_enabled? = Array(payment_method_types).include?(LINK_PAYMENT_METHOD_TYPE)
   end
 
   def initialize(sellers:, recurring: false, commission: false, setup_for_future: false)
@@ -53,7 +59,7 @@ class Checkout::PaymentMethodResolver
         client_confirm_eligible: reason.nil?,
         # Nil on Lane A carts: they never mount the client-confirmed Payment Element, so there is no
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
-        payment_method_types: reason.nil? ? eligible & LAUNCHED_PAYMENT_METHOD_TYPES : nil,
+        payment_method_types: reason.nil? ? eligible & launched_payment_method_types : nil,
         eligible_payment_method_types: eligible,
         fallback_reason: reason,
         stripe_connect_account_id: reason.nil? ? stripe_connect_account_id : nil
@@ -92,6 +98,22 @@ class Checkout::PaymentMethodResolver
       methods = ONE_TIME_PAYMENT_METHOD_TYPES
       methods -= RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES if recurring
       methods
+    end
+
+    # The launched set is per-seller: Link requires the seller-scoped :stripe_payment_element_link
+    # flag (the same flag that gates Link on the server-confirm lane, so both lanes move together).
+    # PPP note: a Link payment method has no card country in the ConfirmationToken preview, so a
+    # PPP-discounted purchase paid via Link fails the existing card-country check (fails closed,
+    # buyer retries with a card). The PPP method matrix (U13) will gate Link out of PPP checkouts
+    # pre-render instead.
+    def launched_payment_method_types
+      return LAUNCHED_PAYMENT_METHOD_TYPES unless link_launched?
+
+      LAUNCHED_PAYMENT_METHOD_TYPES + [LINK_PAYMENT_METHOD_TYPE]
+    end
+
+    def link_launched?
+      sellers.one? && Feature.active?(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, sellers.first)
     end
 
     def log_decision(resolution)

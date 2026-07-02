@@ -119,7 +119,9 @@ class Checkout::StripePaymentPresenter
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,
           payment_method_types: resolution.payment_method_types,
-          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+          # Derived from the resolved method set (not a second flag read) so the Link toggle and the
+          # deferred intent's payment_method_types cannot drift.
+          stripe_link_enabled: resolution.stripe_link_enabled?,
           stripe_connect_account_id: resolution.stripe_connect_account_id,
         },
       }
