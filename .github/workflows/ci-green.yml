@@ -1,0 +1,52 @@
+name: CI Green
+
+# Reports a single required commit status ("ci/green") that native auto-merge
+# can wait on. The Tests workflow runs the real suite on `push` events (and on
+# `pull_request_target` for FORK PRs only — internal PR-target runs are noops).
+# The main ruleset requires the ci/green status, and until it lands, a PR shows
+# as pending. This closes the gap where auto-merge fired instantly because the
+# internal PR check suite was all noop/skipped (see gumroad PR #5667).
+#
+# Why commit statuses and not a job inside tests.yml: skipped check runs SATISFY
+# required checks, so any job name the internal-PR noop run also emits would be
+# an instant-green loophole. A workflow_run-triggered reporter never attaches
+# check runs to the PR head SHA — it only sets the status via the API, and only
+# for runs that actually executed the suite.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  statuses: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    # Real suite runs only: push events, or pull_request_target from a FORK
+    # (internal pull_request_target runs are noops and must not report).
+    if: >-
+      github.event.workflow_run.event == 'push' ||
+      (github.event.workflow_run.event == 'pull_request_target' &&
+       github.event.workflow_run.head_repository.full_name != github.repository)
+    steps:
+      - name: Set ci/green status on the tested commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ "$CONCLUSION" = "success" ]; then
+            STATE=success
+            DESC="Test suite passed"
+          else
+            STATE=failure
+            DESC="Test suite: $CONCLUSION"
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state="$STATE" \
+            -f context="ci/green" \
+            -f description="$DESC" \
+            -f target_url="$RUN_URL"
