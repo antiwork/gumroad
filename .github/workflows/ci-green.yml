@@ -41,9 +41,17 @@ jobs:
           if [ "$CONCLUSION" = "success" ]; then
             STATE=success
             DESC="Test suite passed"
-          else
+          elif [ "$CONCLUSION" = "failure" ] || [ "$CONCLUSION" = "timed_out" ] || [ "$CONCLUSION" = "action_required" ]; then
             STATE=failure
             DESC="Test suite: $CONCLUSION"
+          else
+            # cancelled, neutral, skipped — leave the status unset so the
+            # required check stays pending instead of flipping to failure.
+            # A concurrency-cancel is moot (the head has already moved to a
+            # new SHA); a manual cancel/timeout on the current head should
+            # not require a manual re-trigger to unblock auto-merge.
+            echo "Workflow conclusion is '$CONCLUSION'; not reporting ci/green."
+            exit 0
           fi
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
             -f state="$STATE" \
