@@ -43,8 +43,15 @@ class Checkout::ReturnsController < ApplicationController
     def success_redirect_url(order)
       purchases = order.purchases.select(&:successful?)
       purchase = purchases.first
-      if purchases.one? && purchase.has_content? && purchase.link.native_type != Link::NATIVE_TYPE_COFFEE
-        "#{purchase.url_redirect.download_page_url}?receipt=true"
+
+      if purchases.one? && purchase.has_content?
+        if purchase.link.native_type == Link::NATIVE_TYPE_COFFEE
+          "#{purchase.url_redirect.download_page_url}?purchase_email=#{CGI.escape(purchase.email)}"
+        else
+          "#{purchase.url_redirect.download_page_url}?receipt=true"
+        end
+      elsif logged_in_user&.confirmed? && purchases.all?(&:has_content?)
+        library_url(purchase_id: purchases.map(&:external_id))
       else
         purchase.link.long_url
       end

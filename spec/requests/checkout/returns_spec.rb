@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe "Checkout return page", :vcr, type: :request do
+  include Devise::Test::IntegrationHelpers
+
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 10_00) }
   let(:line_item) { { uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 } }
@@ -110,6 +112,35 @@ describe "Checkout return page", :vcr, type: :request do
 
         expect(order.purchases.reload).to all(be_successful)
         expect(response).to redirect_to(order.purchases.first.link.long_url)
+      end
+
+      it "redirects a signed-in confirmed buyer to their library" do
+        buyer = create(:user)
+        sign_in buyer
+        order, charge = build_client_confirmed_order(line_items: [line_item, second_line_item])
+        Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+
+        visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+        expect(order.purchases.reload).to all(be_successful)
+        expect(response).to redirect_to(library_path(purchase_id: order.purchases.map(&:external_id)))
+      end
+    end
+
+    context "when the purchase is a coffee" do
+      let(:seller) { create(:user, :eligible_for_service_products) }
+      let(:product) { create(:coffee_product, user: seller, price_cents: 5_00) }
+      let(:line_item) { { uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 5_00, variants: [product.alive_variants.first.external_id], quantity: 1 } }
+
+      it "redirects to the content page with the purchase email" do
+        order, charge = build_client_confirmed_order
+        Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+        purchase = order.purchases.first
+
+        visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+        expect(purchase.reload).to be_successful
+        expect(response).to redirect_to("#{purchase.url_redirect.download_page_url}?purchase_email=#{CGI.escape(purchase.email)}")
       end
     end
   end
