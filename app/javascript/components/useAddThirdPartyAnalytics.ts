@@ -31,3 +31,24 @@ export function addThirdPartyAnalytics({
   );
   document.body.appendChild(iframe);
 }
+
+// Profile-page variant: the profile has no product, so the seller's universal
+// ("all products", location "all") snippets load through the username-based
+// endpoint instead of the permalink-based one.
+type ProfileOptions = { username: string };
+
+export function useAddProfileThirdPartyAnalytics() {
+  const { thirdPartyAnalyticsDomain } = useDomains();
+
+  return (options: ProfileOptions) => addProfileThirdPartyAnalytics({ ...options, domain: thirdPartyAnalyticsDomain });
+}
+
+export function addProfileThirdPartyAnalytics({ domain, username }: ProfileOptions & { domain: string }) {
+  const iframe = document.createElement("iframe");
+  iframe.classList.add("hidden");
+  iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
+  iframe.ariaLabel = "Third-party analytics";
+  iframe.dataset.username = username;
+  iframe.setAttribute("src", Routes.profile_third_party_analytics_url(username, { host: domain }));
+  document.body.appendChild(iframe);
+}

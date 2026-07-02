@@ -259,6 +259,7 @@ class UsersController < ApplicationController
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
+            #{profile_custom_html_analytics_head(user)}
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>
@@ -271,6 +272,47 @@ class UsersController < ApplicationController
             #{live_reload}
           </body>
         </html>
+      HTML
+    end
+
+    # Mirrors LinksController#custom_html_analytics_head for the profile wrapper:
+    # a custom profile bypasses the Inertia profile page, so the seller's
+    # analytics would otherwise never load (#5676). The tracking runs only in
+    # this trusted same-origin wrapper — the global CSP allowlists the analytics
+    # hosts — never in the sandboxed landing iframe, whose strict CSP blocks
+    # them by design. The payload carries no permalink/name, which routes the
+    # shared custom_html_analytics entry point down its profile branch:
+    # page-view + pixel init + universal snippets only, no product events and no
+    # checkout listener, because a profile has no buy affordance.
+    def profile_custom_html_analytics_head(user)
+      return "" unless analytics_enabled?(seller: user)
+
+      analytics = user.analytics_data
+      # Universal snippets scoped to "product"/"receipt" belong to the purchase
+      # flow; only "all" runs on the profile. The snippet iframe URL is
+      # username-based, so it's only offered when a username exists.
+      has_universal_third_party_analytics =
+        user.username.present? && user.third_party_analytics.universal.alive.where(location: "all").exists?
+      has_configured_pixel = analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
+      return "" unless has_configured_pixel || has_universal_third_party_analytics
+
+      props = {
+        seller_id: user.external_id,
+        analytics:,
+        has_universal_third_party_analytics:,
+        third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        username: user.username,
+      }
+
+      # All three enabled flags are "true" (not per-pixel), and the props JSON is
+      # escaped with ERB::Util.h because it sits in a double-quoted attribute —
+      # same rationale as LinksController#custom_html_analytics_head.
+      <<~HTML.strip
+        <meta property="gr:google_analytics:enabled" content="true">
+        <meta property="gr:fb_pixel:enabled" content="true">
+        <meta property="gr:tiktok_pixel:enabled" content="true">
+        <meta name="gr:custom-html-analytics" content="#{ERB::Util.h(props.to_json)}">
+        #{helpers.vite_typescript_tag("custom_html_analytics")}
       HTML
     end
 

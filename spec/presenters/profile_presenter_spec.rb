@@ -79,7 +79,18 @@ describe ProfilePresenter do
         {
           **sections_presenter.props(request:, pundit_user:, seller_custom_domain_url: nil),
           bio: "Bio",
-          tabs: encrypted_tabs
+          tabs: encrypted_tabs,
+          seller_analytics: {
+            seller_id: seller.external_id,
+            analytics: {
+              google_analytics_id: nil,
+              facebook_pixel_id: nil,
+              tiktok_pixel_id: nil,
+              free_sales: true,
+            },
+            has_universal_third_party_analytics: false,
+            username: seller.username,
+          }
         }
       )
     end
@@ -140,7 +151,9 @@ describe ProfilePresenter do
           custom_html_pages_enabled: false,
           has_custom_landing_page: false,
           username: seller.username,
-          **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil),
+          # seller_analytics is only added to the public profile_props — the settings
+          # editor never boots visitor tracking.
+          **described_class.new(pundit_user: SellerContext.logged_out, seller:).profile_props(request:, seller_custom_domain_url: nil).except(:seller_analytics),
         }
       )
       expect(props[:profile_settings]).not_to have_key(:username)

@@ -1121,12 +1121,7 @@ class Link < ApplicationRecord
   end
 
   def analytics_data
-    {
-      google_analytics_id: user.google_analytics_id,
-      facebook_pixel_id: user.facebook_pixel_id,
-      tiktok_pixel_id: user.tiktok_pixel_id,
-      free_sales: !user.skip_free_sale_analytics?,
-    }
+    user.analytics_data
   end
 
   def has_multiple_variants?

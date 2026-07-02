@@ -27,7 +27,7 @@ class ProfilePresenter
     # to /profile, so the public component no longer renders the owner/editing shape. The real viewer
     # is still passed through, so "you own this", "already following this wishlist", and currency
     # reflect them (including the seller viewing their own page).
-    shared_profile_props(seller_custom_domain_url:, request:, editing: false).merge(creator_profile:)
+    shared_profile_props(seller_custom_domain_url:, request:, editing: false).merge(creator_profile:, seller_analytics:)
   end
 
   def profile_settings_props(request:)
@@ -72,6 +72,24 @@ class ProfilePresenter
 
     def profile_sections_presenter
       ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile)
+    end
+
+    # Seller GA/pixels never fired on the profile: startTrackingForSeller is only
+    # called from product/checkout surfaces (#5676). These props let Users/Show
+    # boot the account-scoped tracking. Enablement (production-only, seller's
+    # disable_third_party_analytics flag) stays with the gr:*:enabled meta tags
+    # the frontend already gates on — this only supplies the ids. Universal raw
+    # snippets are limited to location "all": "product"/"receipt" scope a snippet
+    # to the purchase flow, which a profile is not. The snippet iframe URL is
+    # username-based, so it's only offered when a username exists.
+    def seller_analytics
+      {
+        seller_id: seller.external_id,
+        analytics: seller.analytics_data,
+        has_universal_third_party_analytics:
+          seller.username.present? && seller.third_party_analytics.universal.alive.where(location: "all").exists?,
+        username: seller.username,
+      }
     end
 
     def can_edit_profile?

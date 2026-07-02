@@ -77,4 +77,35 @@ describe ThirdPartyAnalyticsController do
       expect { get :index, params: { link_id: @product.unique_permalink, purchase_id: "@purchase.external_id" } }.to raise_error(ActionController::RoutingError)
     end
   end
+
+  describe "profile" do
+    it "includes only universal snippets scoped to all pages" do
+      get :profile, params: { username: @seller.username }
+
+      expect(response.body).to include @global_user_snippet.analytics_code
+      expect(response.body).to_not include @global_product_snippet.analytics_code
+      expect(response.body).to_not include @product_user_snippet.analytics_code
+      expect(response.body).to_not include @product_product_snippet.analytics_code
+      expect(response.body).to_not include @receipt_user_snippet.analytics_code
+      expect(response.body).to_not include @receipt_product_snippet.analytics_code
+    end
+
+    it "excludes deleted snippets" do
+      @global_user_snippet.mark_deleted!
+
+      get :profile, params: { username: @seller.username }
+
+      expect(response.body).to_not include @global_user_snippet.analytics_code
+    end
+
+    it "raises an e404 if the user does not exist" do
+      expect { get :profile, params: { username: "nonexistent" } }.to raise_error(ActionController::RoutingError)
+    end
+
+    it "raises an e404 if the user is deleted" do
+      @seller.update_columns(deleted_at: Time.current)
+
+      expect { get :profile, params: { username: @seller.username } }.to raise_error(ActionController::RoutingError)
+    end
+  end
 end
