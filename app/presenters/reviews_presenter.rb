@@ -9,7 +9,7 @@ class ReviewsPresenter
 
   def reviews_props
     {
-      reviews: user.product_reviews.includes(:editable_video, :purchase, link: [:user, :thumbnail_alive]).map do |review|
+      reviews: user.product_reviews.merge(ProductReview.alive).includes(:editable_video, :purchase, link: [:user, :thumbnail_alive]).map do |review|
         product = review.link
         ProductReviewPresenter.new(review).review_form_props.merge(
           id: review.external_id,

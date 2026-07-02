@@ -187,6 +187,10 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
             ) : null}
           </>
         ) : null}
+
+        {purchase && !purchase.was_paid && !product.recurrences ? (
+          <small className="block text-center">You already own this</small>
+        ) : null}
       </>
     );
   },
