@@ -47,6 +47,29 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
     expect(@product.sales.successful.count).to eq(1)
   end
 
+  it "completes a card purchase on a connected account through the client-confirm handshake" do
+    @seller.update!(check_merchant_account_is_linked: true)
+    connect_account = create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", user: @seller)
+
+    visit("/checkout?product=#{@product.unique_permalink}")
+
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element_client_confirm")
+    expect(checkout_payment.dig("elements_options", "stripe_connect_account_id")).to eq(connect_account.charge_processor_merchant_id)
+    expect(page).to have_selector("iframe[src*='elements-inner-payment']")
+
+    expect(Order::ChargeService).not_to receive(:new)
+
+    check_out(@product, payment_element: true)
+
+    purchase = Purchase.last
+    expect(purchase.successful?).to be(true)
+    expect(purchase.merchant_account).to eq(connect_account)
+    expect(purchase.stripe_transaction_id).to match(/\Ach_/)
+    expect(purchase.processor_payment_intent.intent_id).to match(/\Api_/)
+    expect(purchase.charge.stripe_payment_intent_id).to eq(purchase.processor_payment_intent.intent_id)
+  end
+
   it "surfaces a decline and creates no successful purchase when the card is declined at client confirm" do
     visit("/checkout?product=#{@product.unique_permalink}")
 

@@ -48,6 +48,7 @@ export type PaymentElementClientConfirmConfig = {
   currency: "usd";
   payment_method_types: ["card"];
   stripe_link_enabled: boolean;
+  stripe_connect_account_id: string | null;
 };
 export type CheckoutPaymentConfig =
   | {

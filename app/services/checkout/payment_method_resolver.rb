@@ -11,8 +11,8 @@
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Only card
 #     is launched, because the other methods need machinery that isn't built yet: redirect methods need
 #     the server return page + allow_redirects, delayed-notification methods need the PaymentIntent
-#     webhook lifecycle, inline wallets/Link need frontend verification, and connected-account sellers
-#     need account-scoped Elements. Widening LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
+#     webhook lifecycle, and inline wallets/Link need frontend verification. Widening
+#     LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -34,7 +34,7 @@ class Checkout::PaymentMethodResolver
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
-  Resolution = Data.define(:client_confirm_eligible, :payment_method_types, :eligible_payment_method_types, :fallback_reason) do
+  Resolution = Data.define(:client_confirm_eligible, :payment_method_types, :eligible_payment_method_types, :fallback_reason, :stripe_connect_account_id) do
     def client_confirm_eligible? = client_confirm_eligible
   end
 
@@ -55,7 +55,8 @@ class Checkout::PaymentMethodResolver
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
         payment_method_types: reason.nil? ? eligible & LAUNCHED_PAYMENT_METHOD_TYPES : nil,
         eligible_payment_method_types: eligible,
-        fallback_reason: reason
+        fallback_reason: reason,
+        stripe_connect_account_id: reason.nil? ? stripe_connect_account_id : nil
       )
       log_decision(resolution)
       resolution
@@ -69,11 +70,20 @@ class Checkout::PaymentMethodResolver
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
     def ineligibility_reason
       return "multi_seller" unless sellers.one?
-      return "direct_charge_seller" if sellers.any?(&:stripe_connect_account)
+      return "direct_charge_account_unlinked" if direct_charge_seller? && stripe_connect_account_id.blank?
       return "recurring_charge" if recurring
       return "commission" if commission
       return "setup_flow" if setup_for_future
       nil
+    end
+
+    def direct_charge_seller?
+      sellers.one? && sellers.first.has_stripe_account_connected?
+    end
+
+    def stripe_connect_account_id
+      return nil unless direct_charge_seller?
+      sellers.first.stripe_connect_account&.charge_processor_merchant_id
     end
 
     def eligible_method_policy
@@ -91,7 +101,7 @@ class Checkout::PaymentMethodResolver
         "seller_ids=#{sellers.map { _1&.id }} recurring=#{recurring} commission=#{commission} " \
         "setup_for_future=#{setup_for_future} fallback_reason=#{resolution.fallback_reason.inspect} " \
         "eligible=#{resolution.eligible_payment_method_types} enabled=#{resolution.payment_method_types.inspect} " \
-        "launch_gated_out=#{launch_gated_out}"
+        "launch_gated_out=#{launch_gated_out} stripe_connect_account_id=#{resolution.stripe_connect_account_id.inspect}"
       )
     end
 end

@@ -93,11 +93,15 @@ class Order::PreparePaymentIntentService
         return
       end
 
-      Stripe::ConfirmationToken.retrieve(confirmation_token).payment_method_preview
+      Stripe::ConfirmationToken.retrieve(confirmation_token, confirmation_token_request_options).payment_method_preview
     rescue Stripe::StripeError => e
       Rails.logger.error("Error retrieving ConfirmationToken for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       nil
+    end
+
+    def confirmation_token_request_options
+      { stripe_account: payment_method_resolution.stripe_connect_account_id }.compact
     end
 
     def apply_previewed_card_country(preview)
@@ -134,6 +138,8 @@ class Order::PreparePaymentIntentService
 
     def prepare_unconfirmed_charge
       resolve_merchant_account_and_fees
+      return if fail_all_purchases_when_any_errored
+
       charge = build_charge
       charge_intent = create_unconfirmed_intent(charge)
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if charge_intent.nil?

@@ -101,14 +101,16 @@ class Checkout::StripePaymentPresenter
     end
 
     def client_confirm_props
+      resolution = payment_method_resolver.resolve
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,
-          payment_method_types: payment_method_resolver.resolve.payment_method_types,
+          payment_method_types: resolution.payment_method_types,
           stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+          stripe_connect_account_id: resolution.stripe_connect_account_id,
         },
       }
     end

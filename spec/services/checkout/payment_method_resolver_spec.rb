@@ -18,6 +18,10 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.fallback_reason).to be_nil
       end
 
+      it "scopes Elements to the platform account" do
+        expect(resolve.stripe_connect_account_id).to be_nil
+      end
+
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
           .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp])
@@ -63,19 +67,45 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.fallback_reason).to eq("multi_seller")
         expect(resolution.eligible_payment_method_types).to eq(%w[card paypal])
         expect(resolution.payment_method_types).to be_nil
+        expect(resolution.stripe_connect_account_id).to be_nil
       end
     end
 
     context "with a connected-account (direct-charge) seller" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true) }
-      before { create(:merchant_account_stripe_connect, user: seller) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
 
-      it "keeps the cart on Lane A until connected-account scoping ships" do
+      it "is client-confirm eligible with Elements scoped to the connected account" do
+        resolution = resolve
+
+        expect(resolution.client_confirm_eligible?).to be(true)
+        expect(resolution.fallback_reason).to be_nil
+        expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
+        expect(resolution.payment_method_types).to eq(["card"])
+      end
+
+      it "falls back to Lane A when the connected account has no Charge Processor Merchant ID" do
+        connect_account.update_column(:charge_processor_merchant_id, nil)
+
         resolution = resolve
 
         expect(resolution.client_confirm_eligible?).to be(false)
-        expect(resolution.fallback_reason).to eq("direct_charge_seller")
+        expect(resolution.fallback_reason).to eq("direct_charge_account_unlinked")
+        expect(resolution.stripe_connect_account_id).to be_nil
         expect(resolution.payment_method_types).to be_nil
+      end
+    end
+
+    context "with a seller who has a connect account but charges routed to Gumroad" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: false) }
+      before { create(:merchant_account_stripe_connect, user: seller) }
+
+      it "is client-confirm eligible with platform-scoped Elements, matching the charge routing" do
+        resolution = resolve
+
+        expect(resolution.client_confirm_eligible?).to be(true)
+        expect(resolution.stripe_connect_account_id).to be_nil
+        expect(resolution.payment_method_types).to eq(["card"])
       end
     end
 
@@ -104,7 +134,7 @@ describe Checkout::PaymentMethodResolver do
       resolver.resolve
 
       expect(Rails.logger).to have_received(:info).with(
-        a_string_matching(/client_confirm_eligible=true.*enabled=\["card"\].*launch_gated_out=/)
+        a_string_matching(/client_confirm_eligible=true.*enabled=\["card"\].*launch_gated_out=.*stripe_connect_account_id=nil/)
       )
     end
 
