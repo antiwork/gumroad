@@ -39,8 +39,22 @@ class StripeCharge < BaseProcessorCharge
       payment_method_details = stripe_charge[:payment_method_details]
       billing_details = stripe_charge[:billing_details]
       payment_card = payment_method_details[:card]
-      self.card_fingerprint = payment_card[:fingerprint]
       self.card_instance_id = stripe_charge[:payment_method]
+      # Inline non-card methods (e.g. Link on the client-confirmed path) carry no card block, so
+      # record what the method exposes instead of dereferencing a nil card.
+      if payment_card.nil?
+        method_type = payment_method_details[:type]
+        self.card_type = StripeCardType.to_new_card_type(method_type)
+        self.card_country = method_type.present? ? payment_method_details[method_type.to_sym]&.[](:country) : nil
+        self.card_zip_code = billing_details[:address][:postal_code] if billing_details.present?
+        # Inline wallets (e.g. Link) expose no card fingerprint, but paid purchases require a stable
+        # processor identifier (financial_transaction_validation wants stripe_fingerprint present).
+        # The PaymentMethod id is stable per funding instrument, so use it as the fingerprint.
+        self.card_fingerprint = stripe_charge[:payment_method]
+        return
+      end
+
+      self.card_fingerprint = payment_card[:fingerprint]
       self.card_last4 = payment_card[:last4]
       if payment_card[:brand].present?
         card_type = StripeCardType.to_new_card_type(payment_card[:brand])

@@ -118,9 +118,18 @@ class ReceiptPresenter::PaymentInfo
       return if chargeable.successful_purchases.all?(&:is_free_trial_purchase?)
       return if orderable.card_type.blank? && orderable.card_visual.blank?
 
+      # Inline wallet methods (e.g. Link) carry a card_type but no card_visual (no last4), so
+      # render the method name alone rather than dereferencing a nil visual.
+      value =
+        if orderable.card_visual.present?
+          "#{orderable.card_type.upcase} *#{orderable.card_visual.delete('*').delete(' ')}"
+        else
+          orderable.card_type.upcase
+        end
+
       {
         label: "Payment method",
-        value: "#{orderable.card_type.upcase} *#{orderable.card_visual.delete('*').delete(' ')}"
+        value:
       }
     end
   end

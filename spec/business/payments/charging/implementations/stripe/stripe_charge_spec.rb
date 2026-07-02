@@ -129,6 +129,44 @@ describe StripeCharge, :vcr do
     # zip_check_result will never be false since we do not create Charge object when an error is raised.
     # If the Stripe configuration changes in the future then a test should be added for this scenario.
 
+    describe "with a stripe charge paid with an inline non-card method (Link)" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_link",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: Currency::USD,
+          amount: 1_00,
+          payment_method_details: { type: "link", link: { country: "US" } },
+          billing_details: { address: { postal_code: "94117" } },
+          payment_method: "pm_test_link",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: Currency::USD,
+          amount: 1_00,
+          fee_details: [{ type: "stripe_fee", currency: Currency::USD, amount: 30 }],
+        }
+      end
+
+      let(:subject) { described_class.new(Stripe::Charge.construct_from(stripe_charge_hash), stripe_charge_balance_transaction, nil, nil, nil) }
+
+      it "records the method type and country without dereferencing a nil card block" do
+        expect(subject.card_type).to eq(CardType::LINK)
+        expect(subject.card_country).to eq("US")
+        expect(subject.card_instance_id).to eq("pm_test_link")
+        expect(subject.card_zip_code).to eq("94117")
+        expect(subject.card_last4).to be_nil
+        # Falls back to the PaymentMethod id so paid Link purchases satisfy the
+        # financial-transaction validation that requires a stable processor identifier.
+        expect(subject.card_fingerprint).to eq("pm_test_link")
+      end
+    end
+
     describe "with a destination charge but nil destination payment balance transaction" do
       let(:stripe_charge_hash) do
         {
