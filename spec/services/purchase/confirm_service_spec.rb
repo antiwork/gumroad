@@ -22,7 +22,7 @@ describe Purchase::ConfirmService, :vcr do
     it "schedules finalization instead of marking the purchase successful" do
       seller = create(:user)
       merchant_account = create(:merchant_account_stripe_connect, user: seller)
-      purchase = create(:purchase_in_progress, seller:, merchant_account:)
+      purchase = create(:purchase_in_progress, seller:, link: create(:product, user: seller), merchant_account:)
       charge = create(:charge, order: create(:order), seller:, merchant_account:)
       charge.purchases << purchase
       allow(purchase).to receive(:confirm_charge_intent!)
