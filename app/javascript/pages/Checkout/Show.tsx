@@ -553,9 +553,15 @@ const CheckoutIndexPage = () => {
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
-      // The card was captured, so clear the cart to prevent a second charge while fulfillment
-      // finishes out-of-band.
+      // The card was captured, so never drop the buyer back into a resubmittable cart. The return
+      // page resolves the payment to its durable outcome (receipt, pending, or retry with the cart
+      // restored) — a transient toast over an emptied cart reads like the purchase vanished.
       if (e instanceof PaymentConfirmedError) {
+        if (e.returnUrl) {
+          setRedirecting(true);
+          window.location.href = e.returnUrl;
+          return;
+        }
         showAlert(
           "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",

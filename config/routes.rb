@@ -794,6 +794,10 @@ Rails.application.routes.draw do
 
     resource :checkout, only: [:show, :update], controller: :checkout
 
+    namespace :checkout do
+      resources :returns, only: [:show]
+    end
+
     resources :licenses, only: [:update]
 
     post "/preorders/:id/charge_preorder", to: "purchases#charge_preorder", as: "charge_preorder"

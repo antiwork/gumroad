@@ -4,6 +4,8 @@
 class Order::FinalizeConfirmedChargeService
   include Order::ResponseHelpers
 
+  attr_reader :charge_intent
+
   def initialize(order:)
     @order = order
     @responses = {}
@@ -18,7 +20,7 @@ class Order::FinalizeConfirmedChargeService
       return mark_all_processing
     end
 
-    charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
+    @charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 
     order.purchases.each do |purchase|
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform

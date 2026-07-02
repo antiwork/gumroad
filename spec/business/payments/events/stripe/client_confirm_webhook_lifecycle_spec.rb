@@ -47,9 +47,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       statement_description: seller.name_or_username,
       transfer_group: charge.id_with_prefix,
       idempotency_key: "deferred_intent_test_#{SecureRandom.hex}",
-      # Matches the resolver's launched set for a non-US test buyer (ip 0.0.0.0 → no country → card
-      # only). Kept as an explicit list so the recorded Stripe cassettes stay stable.
-      payment_method_types: ["card"],
+      payment_method_types: Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES,
       currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
     )
     charge.update!(stripe_payment_intent_id: charge_intent.id)
