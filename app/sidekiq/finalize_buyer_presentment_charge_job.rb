@@ -19,12 +19,20 @@ class FinalizeBuyerPresentmentChargeJob
     return if charge.charge_presentment.blank?
 
     pending_purchases = charge.purchases.select { _1.in_progress? && _1.stripe_transaction_id.present? }
-    return if pending_purchases.none?
+    if pending_purchases.none?
+      # No purchase is awaiting settlement. If the purchases already finalized but the
+      # post-finalization SendChargeReceiptJob enqueue failed (e.g. a transient Redis error),
+      # the receipt would be orphaned: a Sidekiq retry of this job finds pending_purchases empty
+      # and SyncStuckPurchasesJob only recovers in_progress purchases. Re-enqueue the receipt so a
+      # retry closes the gap. SendChargeReceiptJob no-ops when charge.receipt_sent?.
+      enqueue_receipt(charge) if charge.purchases.any?(&:successful?) && !charge.receipt_sent?
+      return
+    end
 
     finalized = pending_purchases.all? { Purchase::SyncStatusWithChargeProcessorService.new(_1).perform }
 
     if finalized
-      SendChargeReceiptJob.set(queue: charge.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(charge.id)
+      enqueue_receipt(charge)
     elsif (delay = RETRY_DELAYS[attempt])
       self.class.perform_in(delay, charge_id, attempt + 1)
     else
@@ -36,4 +44,9 @@ class FinalizeBuyerPresentmentChargeJob
       )
     end
   end
+
+  private
+    def enqueue_receipt(charge)
+      SendChargeReceiptJob.set(queue: charge.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(charge.id)
+    end
 end

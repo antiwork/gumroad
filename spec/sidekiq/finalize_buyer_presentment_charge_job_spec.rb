@@ -60,8 +60,22 @@ describe FinalizeBuyerPresentmentChargeJob do
     expect(SendChargeReceiptJob.jobs.size).to eq(0)
   end
 
-  it "no-ops when no purchase is awaiting settlement" do
+  it "re-enqueues the receipt when purchases finalized but the receipt was never sent" do
+    # Simulates a Sidekiq retry after the original SendChargeReceiptJob enqueue failed
+    # (e.g. transient Redis error): the purchase is already successful, so pending_purchases
+    # is empty, but charge.receipt_sent? is still false.
     purchase.update!(purchase_state: "successful", succeeded_at: Time.current)
+    expect(Purchase::SyncStatusWithChargeProcessorService).not_to receive(:new)
+
+    described_class.new.perform(charge.id)
+
+    expect(SendChargeReceiptJob.jobs.size).to eq(1)
+    expect(SendChargeReceiptJob.jobs.first["args"]).to eq([charge.id])
+  end
+
+  it "does not re-enqueue the receipt once it has already been sent" do
+    purchase.update!(purchase_state: "successful", succeeded_at: Time.current)
+    charge.update!(receipt_sent: true)
     expect(Purchase::SyncStatusWithChargeProcessorService).not_to receive(:new)
 
     described_class.new.perform(charge.id)
