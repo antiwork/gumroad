@@ -710,6 +710,7 @@ Rails.application.routes.draw do
         get :receipt
         get :confirm_receipt_email
         get :subscribe
+        post :subscribe
         get :unsubscribe
         post :confirm
         post :change_can_contact
