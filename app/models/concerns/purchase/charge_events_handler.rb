@@ -122,6 +122,16 @@ module Purchase::ChargeEventsHandler
   def handle_event_failed!(event)
     handle_event_informational!(event)
 
+    # A client-confirm charge (card SCA drop-off, or a delayed-notification method like ACH whose
+    # debit later fails) transitions its still-in_progress purchases to failed so the buyer is
+    # returned to a resubmittable cart. The intent funds one charge, so every purchase in the group
+    # fails together. mark_failed! is a no-op on an already-terminal purchase, so a re-delivered
+    # webhook is safe.
+    if client_confirmed_charge?
+      charged_purchases.each { |purchase| purchase.mark_failed! if purchase.in_progress? }
+      return
+    end
+
     charged_purchases.each do |purchase|
       if purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
         if purchase.subscription.present?

@@ -47,7 +47,9 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       statement_description: seller.name_or_username,
       transfer_group: charge.id_with_prefix,
       idempotency_key: "deferred_intent_test_#{SecureRandom.hex}",
-      payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+      # Matches the resolver's launched set for a non-US test buyer (ip 0.0.0.0 → no country → card
+      # only). Kept as an explicit list so the recorded Stripe cassettes stay stable.
+      payment_method_types: ["card"],
       currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
     )
     charge.update!(stripe_payment_intent_id: charge_intent.id)
@@ -157,7 +159,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
   end
 
   context "payment_intent.processing then payment_intent.payment_failed for a client-confirmed charge" do
-    it "leaves the purchase in progress; payment_failed is outside the new lifecycle scope" do
+    it "keeps the purchase in progress while processing, then fails it to a resubmittable state on payment_failed" do
       seller = create(:user)
       charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_proc_fail")
       purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
@@ -167,9 +169,21 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       expect(purchase.reload).to be_in_progress
       expect(ProcessedStripeEvent.processed?("evt_pf_processing")).to be(true)
 
+      # A delayed-notification method (ACH) whose debit later fails must return the buyer to a
+      # resubmittable cart, so the client-confirmed charge's in_progress purchases are marked failed.
       deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_pf_failed"))
-      expect(purchase.reload).to be_in_progress
-      expect(ProcessedStripeEvent.processed?("evt_pf_failed")).to be(false)
+      expect(purchase.reload).to be_failed
+    end
+
+    it "is a no-op when the purchase already reached a terminal state (re-delivered payment_failed)" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_fail_terminal")
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+      expect(purchase).to be_successful
+
+      deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_pf_terminal"))
+      expect(purchase.reload).to be_successful
     end
   end
 

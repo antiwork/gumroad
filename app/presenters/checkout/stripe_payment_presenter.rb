@@ -103,7 +103,18 @@ class Checkout::StripePaymentPresenter
         recurring: items.any? { _1[:recurrence].present? },
         commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
         setup_for_future: setup_for_future_charges_without_charging?(items),
+        buyer_country:,
       )
+    end
+
+    # GeoIP-detected country (never the user's profile country) so the resolver's US-locked-method
+    # gate keys on the same basis as Order::PreparePaymentIntentService, which derives it from the
+    # purchase's ip_country (also GeoIP). Keeping them identical preserves the Element↔intent
+    # method-set invariant: Stripe rejects a ConfirmationToken whose types don't match the intent's.
+    def buyer_country
+      return @buyer_country if defined?(@buyer_country)
+
+      @buyer_country = Compliance::Countries.find_by_name(GeoIp.lookup(ip).try(:country_name))&.alpha2
     end
 
     def client_confirm_props

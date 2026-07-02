@@ -25,12 +25,19 @@
 # Stripe with the wrong method list.
 class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
-  # Element, so they are not separate types here.
-  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp].freeze
+  # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
+  # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
+  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Only card is launched on the client-confirmed path today; later units widen this (see class comment).
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # Launched on the client-confirmed path: card everywhere, plus ACH Direct Debit for US buyers
+  # (region-gated below). Cash App Pay (redirect) and the EUR methods stay gated until their machinery
+  # (server return page / buyer-currency FX) ships.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card us_bank_account].freeze
+  # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
+  # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
+  US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
+  US_ALPHA2 = "US"
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -38,11 +45,12 @@ class Checkout::PaymentMethodResolver
     def client_confirm_eligible? = client_confirm_eligible
   end
 
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false)
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
     @setup_for_future = setup_for_future
+    @buyer_country = buyer_country
   end
 
   def resolve
@@ -53,7 +61,7 @@ class Checkout::PaymentMethodResolver
         client_confirm_eligible: reason.nil?,
         # Nil on Lane A carts: they never mount the client-confirmed Payment Element, so there is no
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
-        payment_method_types: reason.nil? ? eligible & LAUNCHED_PAYMENT_METHOD_TYPES : nil,
+        payment_method_types: reason.nil? ? launched_method_set(eligible) : nil,
         eligible_payment_method_types: eligible,
         fallback_reason: reason
       )
@@ -63,7 +71,7 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
@@ -84,12 +92,24 @@ class Checkout::PaymentMethodResolver
       methods
     end
 
+    # What Stripe actually receives: the eligible policy set intersected with the launched set, then
+    # region-gated. A US-locked method (ACH now, Cash App later) is only offered when the buyer's
+    # GeoIP country is US, so a non-US buyer never sees a method they can't complete. When the buyer
+    # country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives.
+    def launched_method_set(eligible)
+      launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      return launched if buyer_country == US_ALPHA2
+
+      launched - US_LOCKED_PAYMENT_METHOD_TYPES
+    end
+
     def log_decision(resolution)
       launch_gated_out = resolution.eligible_payment_method_types - Array(resolution.payment_method_types)
       Rails.logger.info(
         "[#{self.class.name}] client_confirm_eligible=#{resolution.client_confirm_eligible} " \
         "seller_ids=#{sellers.map { _1&.id }} recurring=#{recurring} commission=#{commission} " \
-        "setup_for_future=#{setup_for_future} fallback_reason=#{resolution.fallback_reason.inspect} " \
+        "setup_for_future=#{setup_for_future} buyer_country=#{buyer_country.inspect} " \
+        "fallback_reason=#{resolution.fallback_reason.inspect} " \
         "eligible=#{resolution.eligible_payment_method_types} enabled=#{resolution.payment_method_types.inspect} " \
         "launch_gated_out=#{launch_gated_out}"
       )

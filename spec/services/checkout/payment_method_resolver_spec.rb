@@ -5,8 +5,8 @@ require "spec_helper"
 describe Checkout::PaymentMethodResolver do
   let(:seller) { create(:user) }
 
-  def resolve(sellers: [seller], **opts)
-    described_class.new(sellers:, **opts).resolve
+  def resolve(sellers: [seller], buyer_country: "US", **opts)
+    described_class.new(sellers:, buyer_country:, **opts).resolve
   end
 
   describe "#resolve" do
@@ -20,15 +20,23 @@ describe Checkout::PaymentMethodResolver do
 
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
-          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp])
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account])
       end
 
-      it "enables only the launched card method on Stripe, gating the rest behind later units" do
-        resolution = resolve
+      it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
+        resolution = resolve(buyer_country: "US")
 
-        expect(resolution.payment_method_types).to eq(["card"])
+        expect(resolution.payment_method_types).to eq(%w[card us_bank_account])
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+      end
+
+      it "drops US-locked methods (ACH) for a non-US buyer, leaving card only" do
+        expect(resolve(buyer_country: "GB").payment_method_types).to eq(["card"])
+      end
+
+      it "drops US-locked methods when the buyer country is unknown, failing safe to card only" do
+        expect(resolve(buyer_country: nil).payment_method_types).to eq(["card"])
       end
 
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
@@ -105,6 +113,17 @@ describe Checkout::PaymentMethodResolver do
 
       expect(Rails.logger).to have_received(:info).with(
         a_string_matching(/client_confirm_eligible=true.*enabled=\["card"\].*launch_gated_out=/)
+      )
+    end
+
+    it "logs the buyer country and the ACH launch for a US buyer" do
+      resolver = described_class.new(sellers: [seller], buyer_country: "US")
+      allow(Rails.logger).to receive(:info)
+
+      resolver.resolve
+
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_matching(/buyer_country="US".*enabled=\["card", "us_bank_account"\]/)
       )
     end
 
