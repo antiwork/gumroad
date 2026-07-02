@@ -47,7 +47,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       statement_description: seller.name_or_username,
       transfer_group: charge.id_with_prefix,
       idempotency_key: "deferred_intent_test_#{SecureRandom.hex}",
-      payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+      payment_method_types: Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES,
       currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
     )
     charge.update!(stripe_payment_intent_id: charge_intent.id)

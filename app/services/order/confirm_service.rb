@@ -26,6 +26,8 @@ class Order::ConfirmService
                                                                                     discount_code: purchase.offer_code.code }
         end
         purchase_responses[purchase.id] = error_response(error, purchase:)
+      elsif purchase.pending_buyer_presentment_settlement?
+        purchase_responses[purchase.id] = purchase_pending_processor_settlement_response(purchase)
       else
         purchase_responses[purchase.id] = purchase.purchase_response
       end

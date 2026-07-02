@@ -5,7 +5,6 @@ import { computeOfferDiscount } from "$app/data/offer_code";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
-import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
@@ -50,6 +49,13 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
+  type CheckoutBuyerCurrencyDisplay,
+  formatCheckoutPrice,
+  getCheckoutBuyerCurrencyDisplay,
+  toBuyerCurrencyCents,
+  toCanonicalCents,
+} from "./buyerCurrencyDisplay";
+import {
   type CartState,
   convertToUSD,
   hasFreeTrial,
@@ -69,10 +75,6 @@ import {
 } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
-
-function formatPrice(price: number) {
-  return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
-}
 
 const nameOfSalesTaxForCountry = (countryCode: string) => {
   switch (countryCode) {
@@ -219,6 +221,10 @@ export const Checkout = ({
 
   const isDesktop = useIsAboveBreakpoint("lg");
   const displayTipSelector = isTippingEnabled(state);
+  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
+    state.surcharges.type === "loaded" ? state.surcharges.result : null,
+    { willSaveCard: state.willSaveCard },
+  );
 
   return (
     <div className="mx-auto w-full max-w-400">
@@ -241,6 +247,7 @@ export const Checkout = ({
                     item={item}
                     cart={cart}
                     isGift={isGift}
+                    buyerCurrencyDisplay={buyerCurrencyDisplay}
                     updateCart={updateCart}
                   />
                 ))}
@@ -253,29 +260,29 @@ export const Checkout = ({
               <CartItemList>
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
-                    <TipSelector />
+                    <TipSelector buyerCurrencyDisplay={buyerCurrencyDisplay} />
                   </div>
                 ) : null}
                 <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
+                      <CartPriceItem title="Subtotal" price={formatCheckoutPrice(subtotal, buyerCurrencyDisplay)} />
                       {state.surcharges.result.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
-                          price={formatPrice(state.surcharges.result.tax_included_cents)}
+                          price={formatCheckoutPrice(state.surcharges.result.tax_included_cents, buyerCurrencyDisplay)}
                         />
                       ) : null}
                       {state.surcharges.result.tax_cents ? (
                         <CartPriceItem
                           title={nameOfSalesTaxForCountry(state.country)}
-                          price={formatPrice(state.surcharges.result.tax_cents)}
+                          price={formatCheckoutPrice(state.surcharges.result.tax_cents, buyerCurrencyDisplay)}
                         />
                       ) : null}
                       {state.surcharges.result.shipping_rate_cents ? (
                         <CartPriceItem
                           title="Shipping rate"
-                          price={formatPrice(state.surcharges.result.shipping_rate_cents)}
+                          price={formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, buyerCurrencyDisplay)}
                         />
                       ) : null}
                     </>
@@ -316,7 +323,7 @@ export const Checkout = ({
                           </Pill>
                         ))}
                       </h4>
-                      {discount > 0 ? <div>{formatPrice(-discount)}</div> : null}
+                      {discount > 0 ? <div>{formatCheckoutPrice(-discount, buyerCurrencyDisplay)}</div> : null}
                     </div>
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
@@ -343,24 +350,31 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
-                      <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
+                      <CartPriceItem
+                        title="Total"
+                        price={formatCheckoutPrice(total, buyerCurrencyDisplay)}
+                        variant="large"
+                      />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
                         <CartPriceItem
                           title="Payment today"
-                          price={formatPrice(total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal)}
+                          price={formatCheckoutPrice(
+                            total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
+                            buyerCurrencyDisplay,
+                          )}
                         />
                         {commissionCompletionTotal > 0 ? (
                           <CartPriceItem
                             title="Payment after completion"
-                            price={formatPrice(commissionCompletionTotal)}
+                            price={formatCheckoutPrice(commissionCompletionTotal, buyerCurrencyDisplay)}
                           />
                         ) : null}
                         {futureInstallmentsWithoutTipsTotal > 0 ? (
                           <CartPriceItem
                             title="Future installments"
-                            price={formatPrice(futureInstallmentsWithoutTipsTotal)}
+                            price={formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, buyerCurrencyDisplay)}
                           />
                         ) : null}
                       </div>
@@ -400,7 +414,7 @@ export const Checkout = ({
   );
 };
 
-const TipSelector = () => {
+const TipSelector = ({ buyerCurrencyDisplay }: { buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null }) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
   const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
@@ -411,10 +425,20 @@ const TipSelector = () => {
   }, [showPercentageOptions]);
 
   const tipPercentages = [0, 15, 20, 25];
+  const fixedTipCents =
+    buyerCurrencyDisplay && state.tip.type === "fixed" && state.tip.amount != null
+      ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
+      : state.tip.type === "fixed"
+        ? state.tip.amount
+        : null;
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
-      <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} variant="tip" />
+      <CartPriceItem
+        title="Add a tip?"
+        price={formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay)}
+        variant="tip"
+      />
       <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
         {showPercentageOptions ? (
           <Tabs
@@ -453,14 +477,17 @@ const TipSelector = () => {
           <PriceInput
             hasError={errors.has("tip")}
             ariaLabel="Tip"
-            currencyCode="usd"
-            cents={state.tip.type === "fixed" ? state.tip.amount : null}
+            currencyCode={buyerCurrencyDisplay?.currencyCode ?? "usd"}
+            cents={fixedTipCents}
             onChange={(newAmount) => {
               dispatch({
                 type: "set-value",
                 tip: {
                   type: "fixed",
-                  amount: newAmount,
+                  amount:
+                    buyerCurrencyDisplay && newAmount != null
+                      ? toCanonicalCents(newAmount, buyerCurrencyDisplay)
+                      : newAmount,
                 },
               });
             }}
@@ -506,11 +533,13 @@ const CartItemComponent = ({
   cart,
   updateCart,
   isGift,
+  buyerCurrencyDisplay,
 }: {
   item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
+  buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null;
 }) => {
   const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
   const [selection, setSelection] = React.useState<PriceSelection>({
@@ -675,7 +704,7 @@ const CartItemComponent = ({
       </CartItemMain>
       <CartItemEnd>
         <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
-          {formatPrice(convertToUSD(item, price))}
+          {formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay)}
         </span>
         {hasFreeTrial(item, isGift) && item.product.free_trial ? (
           <>
@@ -687,7 +716,11 @@ const CartItemComponent = ({
             </span>
             {item.recurrence ? (
               <span className="text-sm">
-                {formatAmountPerRecurrence(item.recurrence, formatPrice(convertToUSD(item, discount.price)))} after
+                {formatAmountPerRecurrence(
+                  item.recurrence,
+                  formatCheckoutPrice(convertToUSD(item, discount.price), buyerCurrencyDisplay),
+                )}{" "}
+                after
               </span>
             ) : null}
           </>

@@ -75,6 +75,22 @@ describe StripeChargeIntent, :vcr do
     end
   end
 
+  it "does not retry loading the charge when flow of funds is not available yet" do
+    payment_intent = Stripe::PaymentIntent.construct_from(
+      id: "pi_success",
+      status: StripeIntentStatus::SUCCESS,
+      latest_charge: "ch_success"
+    )
+    processor_charge = BaseProcessorCharge.new
+    processor_charge.id = "ch_success"
+    charge_processor = instance_double(StripeChargeProcessor)
+
+    expect(StripeChargeProcessor).to receive(:new).once.and_return(charge_processor)
+    expect(charge_processor).to receive(:get_charge).once.with("ch_success", merchant_account: nil).and_return(processor_charge)
+
+    expect(described_class.new(payment_intent:).charge).to eq(processor_charge)
+  end
+
   context "when Stripe payment intent is not successful" do
     let(:processor_payment_intent) do
       create_stripe_payment_intent(nil,

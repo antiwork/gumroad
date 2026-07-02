@@ -5,6 +5,7 @@ import {
   canUseStripePaymentElementClientConfirm,
   getStripePaymentElementAmount,
   isCardReadyToPay,
+  reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresReusablePaymentMethod,
@@ -20,6 +21,7 @@ const stripePaymentElementMinimumCharge = 50;
 const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
+  disable_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -31,6 +33,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
 const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
+  disable_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
@@ -43,12 +46,14 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
   fallback_reason: "stripe_payment_element_flag_disabled",
+  disable_wallets: false,
   elements_options: null,
 };
 
 const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   integration: "payment_element_client_confirm",
   fallback_reason: null,
+  disable_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -106,10 +111,12 @@ const state = (overrides: Partial<State> = {}): State => ({
       tax_cents: 0,
       tax_included_cents: 0,
       subtotal: 1_000,
+      buyer_currency_quote: null,
     },
   },
   availablePaymentMethods: [],
   paymentMethod: "card",
+  willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   status: { type: "input", errors: new Set() },
@@ -178,6 +185,30 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
+  });
+
+  it("allows setup-mode checkout for preorder and free-trial flows", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ isPreorder: true })] }),
+      ),
+    ).toBe(true);
+    expect(
+      canUseStripePaymentElement(
+        state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ hasFreeTrial: true })] }),
+      ),
+    ).toBe(true);
+  });
+
+  it("falls back for setup-mode checkout when mixed with a charged product", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: futureChargePaymentElementConfig,
+          products: [product({ isPreorder: true }), product({ permalink: "charged-product" })],
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("allows SetupIntent mode when every product is charged in the future", () => {
@@ -252,6 +283,7 @@ describe("canUseStripePaymentElement", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: 0,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -272,6 +304,7 @@ describe("canUseStripePaymentElement", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: 49,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -296,6 +329,7 @@ describe("canUseStripePaymentElement", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: 98,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -437,7 +471,7 @@ describe("requiresReusablePaymentMethodForCardCollection", () => {
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
   });
 
-  it("collects a one-off PaymentMethod in Payment Element SetupIntent mode", () => {
+  it("does not create a reusable card before setup-mode Payment Element collection", () => {
     const setupState = state({
       checkoutPayment: futureChargePaymentElementConfig,
       products: [product({ hasFreeTrial: true, recurrence: "monthly" })],
@@ -461,6 +495,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 100,
               tax_included_cents: 0,
               subtotal: 1_000,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -493,7 +528,7 @@ describe("getStripePaymentElementAmount", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
   });
 
-  it("returns null for SetupIntent mode", () => {
+  it("returns null for setup-mode checkout", () => {
     expect(
       getStripePaymentElementAmount(
         state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ isPreorder: true })] }),
@@ -514,6 +549,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: 0,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -534,6 +570,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: stripePaymentElementMinimumCharge - 1,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -554,6 +591,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: 98,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -582,5 +620,28 @@ describe("isCardReadyToPay", () => {
     expect(isCardReadyToPay({ useSavedCard: false, useStripePaymentElement: false, paymentElementReady: false })).toBe(
       true,
     );
+  });
+});
+
+describe("reduceCheckoutState", () => {
+  it("stores the save-card intent without invalidating loaded surcharges", () => {
+    const initial = state();
+
+    const next = reduceCheckoutState(initial, { type: "set-value", willSaveCard: true });
+
+    expect(next.willSaveCard).toBe(true);
+    // The locked FX quote lives in the surcharges result; toggling the save-card checkbox must
+    // not reset it, or every toggle would mint a fresh Stripe quote.
+    expect(next.surcharges).toBe(initial.surcharges);
+
+    const reverted = reduceCheckoutState(next, { type: "set-value", willSaveCard: false });
+    expect(reverted.willSaveCard).toBe(false);
+    expect(reverted.surcharges).toBe(initial.surcharges);
+  });
+
+  it("invalidates loaded surcharges for fields that change the totals", () => {
+    const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
+
+    expect(next.surcharges).toEqual({ type: "pending" });
   });
 });

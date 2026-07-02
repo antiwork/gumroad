@@ -12,6 +12,7 @@ class Charge < ApplicationRecord
   has_many :charge_purchases, dependent: :destroy
   has_many :purchases, through: :charge_purchases, dependent: :destroy
   has_many :refunds, through: :purchases
+  has_one :charge_presentment, dependent: :destroy
 
   attr_accessor :charge_intent, :setup_future_charges
 
@@ -150,18 +151,29 @@ class Charge < ApplicationRecord
 
   def refund_and_save!(refunding_user_id)
     transaction do
+      refunded_all_purchases = true
       successful_purchases.each do |purchase|
-        purchase.refund_and_save!(refunding_user_id)
+        refunded = purchase.refund_and_save!(refunding_user_id)
+        unless refunded
+          copy_refund_errors_from(purchase)
+          refunded_all_purchases = false
+        end
       end
+      refunded_all_purchases
     end
   end
 
   def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil)
     transaction do
-      successful_purchases
-        .select { _1.gumroad_tax_cents > 0 }.each do |purchase|
-        purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:)
+      refunded_all_taxes = true
+      successful_purchases.select { _1.gumroad_tax_cents > 0 }.each do |purchase|
+        refunded = purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:)
+        unless refunded
+          copy_refund_errors_from(purchase)
+          refunded_all_taxes = false
+        end
       end
+      refunded_all_taxes
     end
   end
 
@@ -235,6 +247,10 @@ class Charge < ApplicationRecord
   end
 
   private
+    def copy_refund_errors_from(purchase)
+      purchase.errors.full_messages.each { errors.add(:base, _1) }
+    end
+
     # At least one product must be taxable for the charge to be taxable.
     # For that, we need to find at least one purchase that was taxable.
     def purchase_with_tax_as_chargeable

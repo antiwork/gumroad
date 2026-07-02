@@ -677,6 +677,13 @@ const CreditCardContent = ({
   const [useSavedCard, setUseSavedCard] = React.useState(!!state.savedCreditCard);
   const [keepOnFile, setKeepOnFile] = React.useState(isLoggedIn);
 
+  // Mirror the save-card intent into checkout state: saving a card charges through the
+  // canonical path in PR 1, so the cart must stop displaying buyer-currency totals.
+  const willSaveCard = !useSavedCard && isLoggedIn && keepOnFile;
+  React.useEffect(() => {
+    dispatch({ type: "set-value", willSaveCard });
+  }, [dispatch, willSaveCard]);
+
   const [cardError, setCardError] = React.useState(false);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
@@ -1107,7 +1114,7 @@ const useIsPayPalAvailable = () => {
   return !!implementation;
 };
 
-const useStripePaymentRequest = () => {
+const useStripePaymentRequest = (disabled: boolean) => {
   const [state, dispatch] = useState();
   const stripe = useStripe();
   const fail = useFail();
@@ -1121,7 +1128,7 @@ const useStripePaymentRequest = () => {
   const stateRef = useRefToLatest(state);
 
   const paymentRequest = React.useMemo(() => {
-    if (!stripe) return null;
+    if (!stripe || disabled) return null;
     const paymentRequest = stripe.paymentRequest({
       country: "US",
       currency: "usd",
@@ -1164,7 +1171,7 @@ const useStripePaymentRequest = () => {
       })().catch(fail),
     );
     return paymentRequest;
-  }, [stripe]);
+  }, [stripe, disabled]);
 
   // Use a layout effect because `paymentRequest.show` needs to be called synchronously
   useOnChangeSync(() => {
@@ -1276,7 +1283,7 @@ const PaymentMethodsSection = ({
   isTestPurchase: boolean;
 }) => {
   const [state] = useState();
-  const { canPay, isGooglePay } = useStripePaymentRequest();
+  const { canPay, isGooglePay } = useStripePaymentRequest(state.checkoutPayment.disable_wallets);
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
 

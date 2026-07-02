@@ -6,11 +6,13 @@ require "shared_examples/receipt_presenter_concern"
 describe ReceiptPresenter::ChargeInfo do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
+  let!(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) || create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
   let(:purchase) do
     create(
       :purchase,
       link: product,
       seller:,
+      merchant_account:,
       price_cents: 14_99,
       created_at: DateTime.parse("January 1, 2023")
     )
@@ -32,6 +34,26 @@ describe ReceiptPresenter::ChargeInfo do
       context "when the purchase is not a membership" do
         it "returns formatted amount" do
           expect(presenter.formatted_total_transaction_amount).to eq("$14.99")
+        end
+      end
+
+      context "when the purchase has buyer-presentment amounts" do
+        before do
+          charge = purchase.charge || create(:charge, seller:, purchases: [purchase])
+          charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 18_74)
+          create(:purchase_presentment,
+                 purchase:,
+                 charge_presentment:,
+                 presentment_price_cents: 18_74,
+                 presentment_tip_cents: 0,
+                 presentment_seller_tax_cents: 0,
+                 presentment_gumroad_tax_cents: 0,
+                 presentment_shipping_cents: 0,
+                 presentment_total_cents: 18_74)
+        end
+
+        it "returns the buyer-presentment total" do
+          expect(presenter.formatted_total_transaction_amount).to eq("CAD$18.74")
         end
       end
     end

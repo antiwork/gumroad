@@ -54,7 +54,8 @@ class CheckoutPresenter
       cart:,
       add_products: props[:add_products],
       clear_cart: props[:clear_cart],
-      saved_credit_card:
+      saved_credit_card:,
+      ip:
     ).props
 
     props
@@ -316,6 +317,8 @@ class CheckoutPresenter
     end
 
     def product_common(product, recommended_by:)
+      buyer_currency_display = buyer_currency_display_props(product:, price_cents: product.price_cents, ip:)
+
       {
         permalink: product.unique_permalink,
         name: product.name,
@@ -327,8 +330,8 @@ class CheckoutPresenter
         } : nil,
         currency_code: product.price_currency_type.downcase,
         price_cents: product.price_cents,
-        buyer_currency_display: buyer_currency_display_props(product:, price_cents: product.price_cents, ip:),
-        supports_paypal: supports_paypal(product),
+        buyer_currency_display:,
+        supports_paypal: supports_paypal(product, buyer_currency_display:),
         custom_fields: product.custom_field_descriptors,
         exchange_rate: get_rate(product.price_currency_type).to_f / (is_currency_type_single_unit?(product.price_currency_type) ? 100 : 1),
         is_tiered_membership: product.is_tiered_membership,
@@ -343,9 +346,10 @@ class CheckoutPresenter
       }
     end
 
-    def supports_paypal(product)
+    def supports_paypal(product, buyer_currency_display:)
       return if Feature.active?(:disable_paypal_sales)
       return if Feature.active?(:disable_nsfw_paypal_connect_sales) && product.rated_as_adult?
+      return if Checkout::BuyerCurrencyEligibility.buyer_presentment_candidate?(seller: product.user, buyer_currency_display:)
 
       if Feature.active?(:disable_paypal_connect_sales)
         return if product.is_recurring_billing? || !product.user.pay_with_paypal_enabled?

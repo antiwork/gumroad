@@ -119,6 +119,38 @@ describe Charge, :vcr do
     end
   end
 
+  describe "#refund_and_save!" do
+    it "attempts every purchase refund even when one purchase fails" do
+      charge = create(:charge)
+      failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First refund failed"])
+      failed_purchase = instance_double(Purchase, refund_and_save!: false, errors: failed_errors)
+      successful_purchase = instance_double(Purchase, refund_and_save!: true)
+      allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
+
+      expect(charge.refund_and_save!(123)).to be(false)
+
+      expect(failed_purchase).to have_received(:refund_and_save!).with(123)
+      expect(successful_purchase).to have_received(:refund_and_save!).with(123)
+      expect(charge.errors[:base]).to include("First refund failed")
+    end
+  end
+
+  describe "#refund_gumroad_taxes!" do
+    it "attempts every taxable purchase refund even when one purchase fails" do
+      charge = create(:charge)
+      failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First tax refund failed"])
+      failed_purchase = instance_double(Purchase, gumroad_tax_cents: 100, refund_gumroad_taxes!: false, errors: failed_errors)
+      successful_purchase = instance_double(Purchase, gumroad_tax_cents: 100, refund_gumroad_taxes!: true)
+      allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
+
+      expect(charge.refund_gumroad_taxes!(refunding_user_id: 123, note: "note", business_vat_id: "vat")).to be(false)
+
+      expect(failed_purchase).to have_received(:refund_gumroad_taxes!).with(refunding_user_id: 123, note: "note", business_vat_id: "vat")
+      expect(successful_purchase).to have_received(:refund_gumroad_taxes!).with(refunding_user_id: 123, note: "note", business_vat_id: "vat")
+      expect(charge.errors[:base]).to include("First tax refund failed")
+    end
+  end
+
   describe "#require_shipping?" do
     let(:purchase) { create(:purchase) }
     let(:charge) { create(:charge, purchases: [purchase]) }
