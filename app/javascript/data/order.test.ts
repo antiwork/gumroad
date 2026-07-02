@@ -129,6 +129,26 @@ describe("startClientConfirmOrderCreation", () => {
     await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toBeInstanceOf(PaymentConfirmedError);
   });
 
+  it("carries the return-page URL on the error so the buyer can land on a durable outcome", async () => {
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({ success: true, line_items: {}, can_buyer_sign_up: false, offer_codes: [] }),
+      );
+
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toMatchObject({
+      returnUrl: "https://gumroad.test/checkout/returns/order-token?payment_intent=pi",
+    });
+  });
+
+  it("carries the return-page URL even when the finalize request itself fails", async () => {
+    requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse)).mockRejectedValueOnce(new Error("network down"));
+
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toMatchObject({
+      returnUrl: "https://gumroad.test/checkout/returns/order-token?payment_intent=pi",
+    });
+  });
+
   it("throws a non-resubmittable error when finalize returns no line items after capture", async () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))

@@ -247,14 +247,18 @@ type FinalizeOrderResponse = {
 // in-page (finalize kept failing, or the intent is still processing). The charge is real, so the
 // consumer must surface a "processing" message and must NOT drop the buyer back into a
 // resubmittable cart — retrying would create a second charge.
-export class PaymentConfirmedError extends Error {}
+export class PaymentConfirmedError extends Error {
+  constructor(readonly returnUrl: string | null = null) {
+    super();
+  }
+}
 
 // Client-confirm order creation keeps the same CartPurchaseResult contract as startOrderCreation.
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
 ): Promise<CartPurchaseResult> => {
-  let paymentConfirmed = false;
+  let confirmedReturnUrl: string | null = null;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
     if (!prepareResponse.success) {
@@ -301,7 +305,11 @@ export const startClientConfirmOrderCreation = async (
 
     // The card is captured from here on, so any later failure must surface as a distinct
     // "processing" outcome, never a resubmittable failure (which would risk a second charge).
-    paymentConfirmed = true;
+    // The return page resolves a captured payment to its durable outcome (receipt, pending, or
+    // failed-with-restored-cart), so every post-capture error carries its URL.
+    confirmedReturnUrl = `${Routes.checkout_return_url(order.id)}?payment_intent=${encodeURIComponent(
+      clientSecret.split("_secret")[0] ?? "",
+    )}`;
 
     // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.
     const finalizeResponse = await finalizeClientConfirmOrder(order.id);
@@ -311,7 +319,7 @@ export const startClientConfirmOrderCreation = async (
     const lineItems = Object.values(finalizeResponse.line_items);
     const allSucceeded =
       lineItems.length > 0 && lineItems.every((lineItem) => lineItem.success && !("processing" in lineItem));
-    if (!allSucceeded) throw new PaymentConfirmedError();
+    if (!allSucceeded) throw new PaymentConfirmedError(confirmedReturnUrl);
 
     // offer_codes/can_buyer_sign_up are cart-level; finalize doesn't carry them, so keep prepare's.
     return mapResultsByUid(
@@ -326,7 +334,7 @@ export const startClientConfirmOrderCreation = async (
     console.error("Error occurred processing client-confirm order", error);
     // A failure after the card was confirmed must not re-enable resubmission — the charge may be
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
-    if (paymentConfirmed) throw new PaymentConfirmedError();
+    if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: [] });
   }
 };
