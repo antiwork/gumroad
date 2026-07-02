@@ -162,6 +162,38 @@ describe "PurchaseRefunds", :vcr do
           expect(@purchase.reload.refunds).to be_empty
         end
       end
+
+      describe "charge.refund.updated webhook (handle_event_refund_updated!)" do
+        def build_refund_updated_event(refunded_amount_cents:)
+          event = ChargeEvent.new
+          event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+          event.refund_id = "re_webhook_#{SecureRandom.hex(6)}"
+          event.charge_id = @purchase.stripe_transaction_id
+          event.extras = { refund_status: "succeeded", refunded_amount_cents:, refund_reason: nil }
+          event
+        end
+
+        it "matches the full refunded amount against the presentment total, not canonical USD cents" do
+          presentment_total = @purchase.purchase_presentment.presentment_total_cents
+          charge_refund = build_presentment_charge_refund(presentment_cents: presentment_total)
+          expect_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund)
+
+          @purchase.handle_event_refund_updated!(build_refund_updated_event(refunded_amount_cents: presentment_total))
+
+          @purchase.reload
+          expect(@purchase.stripe_refunded).to be(true)
+          expect(@purchase.refunds.last.presentment_amount_cents).to eq(presentment_total)
+          expect(@purchase.refunds.last.total_transaction_cents).to eq(@purchase.total_transaction_cents)
+        end
+
+        it "does not treat canonical USD cents as a full presentment refund" do
+          expect_any_instance_of(StripeChargeProcessor).not_to receive(:get_refund)
+
+          @purchase.handle_event_refund_updated!(build_refund_updated_event(refunded_amount_cents: @purchase.total_transaction_cents))
+
+          expect(@purchase.reload.refunds).to be_empty
+        end
+      end
     end
 
     it "updates refund status" do
