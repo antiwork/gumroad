@@ -154,13 +154,16 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       it "blocks pre-charge with a logged reason instead of building an intent with no method list" do
         order, params = build_order
+        allow(Rails.logger).to receive(:error).and_call_original
 
         expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
         expect(StripeDeferredPaymentIntent).not_to receive(:create)
 
         responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
+        expect(Rails.logger).to have_received(:error).with(/Client-confirm ineligible cart blocked for order #{order.id}/)
         expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
         expect(order.charges).to be_empty
         expect(order.purchases.first.reload).to be_failed
       end
