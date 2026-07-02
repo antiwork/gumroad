@@ -17,6 +17,16 @@ describe Charge, :vcr do
     end
   end
 
+  describe "#client_confirmed?" do
+    it "defaults to false so server-confirmed and multi-seller charges are never treated as client-confirmed" do
+      expect(create(:charge)).not_to be_client_confirmed
+    end
+
+    it "is true only when explicitly set on a browser-confirmed charge" do
+      expect(create(:charge, client_confirmed: true)).to be_client_confirmed
+    end
+  end
+
   describe "#statement_description" do
     it "returns the name of the seller" do
       seller = create(:user, name: "US Seller")

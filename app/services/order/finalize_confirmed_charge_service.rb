@@ -24,6 +24,7 @@ class Order::FinalizeConfirmedChargeService
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
       responses[cart_item_uid(purchase)] = response_for(purchase, result)
     end
+    order.send_charge_receipts
     responses
   end
 

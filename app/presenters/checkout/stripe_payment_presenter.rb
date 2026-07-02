@@ -16,8 +16,10 @@ class Checkout::StripePaymentPresenter
   # below Stripe's USD charge floor on CardElement. This is intentionally lower than
   # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
   STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
-  # Stripe rejects a payment_method_types-scoped ConfirmationToken against a mismatched intent.
-  CLIENT_CONFIRM_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # The client-confirm payment_method_types are computed per cart by Checkout::PaymentMethodResolver and
+  # threaded into the deferred PaymentIntent by Order::PreparePaymentIntentService, so the Payment Element
+  # and the intent cannot drift (Stripe rejects a payment_method_types-scoped ConfirmationToken against a
+  # mismatched intent). Currency stays fixed here until buyer-currency charging lands (out of scope).
   CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card
@@ -35,7 +37,7 @@ class Checkout::StripePaymentPresenter
     return card_element_props(fallback_reason) if fallback_reason.present?
 
     # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
-    return client_confirm_props if client_confirm_eligible?(checkout_items)
+    return client_confirm_props if client_confirm_eligible?
 
     stripe_elements_mode =
       if setup_for_future_charges_without_charging?(checkout_items)
@@ -81,18 +83,21 @@ class Checkout::StripePaymentPresenter
       }
     end
 
-    # One ConfirmationToken funds one PaymentIntent, so client-confirm is limited to one seller.
-    # Reusable-payment-method flows need setup_future_usage, and connected-account scoping is not supported here.
-    def client_confirm_eligible?(items)
-      sellers.one? &&
-        sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
-        sellers.none?(&:stripe_connect_account) &&
-        !setup_for_future_charges_without_charging?(items) &&
-        items.none? { client_confirm_unsupported_item?(_1) }
+    # The Flipper flag is the activation switch for the client-confirm path; the resolver owns the
+    # cart-shape policy (single-seller, non-connect, one-time). One ConfirmationToken funds one
+    # PaymentIntent, so client-confirm is limited to one seller.
+    def client_confirm_eligible?
+      sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
+        payment_method_resolver.resolve.client_confirm_eligible?
     end
 
-    def client_confirm_unsupported_item?(item)
-      item[:recurrence].present? || item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+    def payment_method_resolver
+      @payment_method_resolver ||= Checkout::PaymentMethodResolver.new(
+        sellers:,
+        recurring: items.any? { _1[:recurrence].present? },
+        commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
+        setup_for_future: setup_for_future_charges_without_charging?(items),
+      )
     end
 
     def client_confirm_props
@@ -102,7 +107,7 @@ class Checkout::StripePaymentPresenter
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,
-          payment_method_types: CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+          payment_method_types: payment_method_resolver.resolve.payment_method_types,
           stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
         },
       }

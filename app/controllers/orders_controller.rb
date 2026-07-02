@@ -78,7 +78,6 @@ class OrdersController < ApplicationController
     finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
 
     record_purchase_events(order)
-    order.send_charge_receipts
     attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }

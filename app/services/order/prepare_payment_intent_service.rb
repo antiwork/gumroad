@@ -20,6 +20,7 @@ class Order::PreparePaymentIntentService
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
     return responses if block_multiple_sellers
+    return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
 
     preview = retrieve_payment_method_preview
@@ -70,6 +71,18 @@ class Order::PreparePaymentIntentService
       return false if purchases_to_charge.map(&:seller_id).uniq.one?
 
       Rails.logger.error("Multi-seller client-confirm prepare blocked for order #{order.id}")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # The charge path — not the browser — is the authority on client-confirm eligibility. Re-check the
+    # cart shape server-side so a crafted #prepare (a recurring/commission/connect cart the endpoint
+    # otherwise doesn't gate), or one the presenter mounted from different signals, is rejected with a
+    # logged reason instead of building a deferred intent with no valid payment_method_types.
+    def block_ineligible_for_client_confirm
+      return false if payment_method_resolution.client_confirm_eligible?
+
+      Rails.logger.error("Client-confirm ineligible cart blocked for order #{order.id}: #{payment_method_resolution.fallback_reason}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
     end
@@ -144,7 +157,7 @@ class Order::PreparePaymentIntentService
     def build_charge
       charge = order.charges.create!(seller:)
       charge.update!(merchant_account:, processor: merchant_account.charge_processor_id,
-                     amount_cents:, gumroad_amount_cents:)
+                     amount_cents:, gumroad_amount_cents:, client_confirmed: true)
       # Add the seller's already-successful free/test purchases alongside the paid ones, so
       # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
       # a seller group to its charge). Scoped to this charge's seller so a free item from another
@@ -171,12 +184,33 @@ class Order::PreparePaymentIntentService
         # charge.external_id (derived from a database id) collides in Stripe test mode, where
         # idempotency keys persist for 24h across CI runs that reset the database and reuse those ids.
         idempotency_key: "deferred_intent_#{charge.external_id}_#{confirmation_token}",
-        payment_method_types: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES,
+        payment_method_types: resolved_payment_method_types,
         currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       nil
+    end
+
+    # Non-nil once block_ineligible_for_client_confirm has passed: the deferred intent's
+    # payment_method_types must equal the Payment Element's or Stripe rejects the ConfirmationToken.
+    def resolved_payment_method_types
+      payment_method_resolution.payment_method_types
+    end
+
+    # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
+    # list. Single-seller is already enforced by block_multiple_sellers, so resolve for that one seller.
+    def payment_method_resolution
+      # setup_for_future is intentionally omitted (defaults to false): purchases_to_charge already
+      # excludes is_free_trial_purchase? and is_preorder_authorization? items, so a setup-only cart
+      # surfaces here as empty and exits at the top-level empty guard before this runs — there is no
+      # setup_flow-eligible purchase left to resolve. If purchases_to_charge ever admits a
+      # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
+      @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
+        sellers: [seller],
+        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
+        commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION }
+      ).resolve
     end
 
     # Persist the mapping before responding so a webhook arriving before the browser returns can

@@ -9,6 +9,8 @@ class StripeChargeProcessor
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
 
+  PAYMENT_INTENT_LIFECYCLE_EVENTS = %w(payment_intent.processing payment_intent.succeeded).freeze
+
   # https://stripe.com/docs/api/refunds/create#create_refund-reason
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
@@ -672,7 +674,7 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event(stripe_event)
-    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed")
+    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded")
       handle_stripe_charge_event(stripe_event)
     elsif stripe_event["type"].start_with?("capital.")
       handle_stripe_capital_loan_event(stripe_event)
@@ -847,9 +849,28 @@ class StripeChargeProcessor
       event.created_at = DateTime.strptime(stripe_event["created"].to_s, "%s")
       event.comment = stripe_event["type"]
       event.type = ChargeEvent::TYPE_PAYMENT_INTENT_FAILED
+    elsif PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
+      raise "Stripe Event #{stripe_event['id']} does not contain a 'payment_intent' object." if stripe_event["data"]["object"]["object"] != "payment_intent"
+
+      payment_intent = stripe_event["data"]["object"]
+      event = ChargeEvent.new
+      event.charge_processor_id = charge_processor_id
+      event.charge_event_id = stripe_event["id"]
+      event.charge_id = payment_intent["latest_charge"]
+      event.processor_payment_intent_id = payment_intent["id"]
+      event.charge_reference = get_charge_reference(payment_intent)
+      event.created_at = DateTime.strptime(stripe_event["created"].to_s, "%s")
+      event.comment = stripe_event["type"]
+      event.type = stripe_event["type"] == "payment_intent.succeeded" ? ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED : ChargeEvent::TYPE_PAYMENT_INTENT_PROCESSING
+
+      chargeable = Charge::Chargeable.find_by_stripe_event(event)
+      return unless chargeable.is_a?(Charge) && chargeable.client_confirmed?
+      return if ProcessedStripeEvent.processed?(stripe_event["id"])
     end
 
     ChargeProcessor.handle_event(event) unless event.nil?
+
+    ProcessedStripeEvent.record!(stripe_event["id"], event_type: stripe_event["type"]) if event && PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_widthdrawn(stripe_dispute, stripe_charge, event)

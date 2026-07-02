@@ -63,6 +63,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.charges.count).to eq(1)
         charge = order.charges.last
         expect(charge.stripe_payment_intent_id).to be_present
+        expect(charge).to be_client_confirmed
         expect(charge.amount_cents).to eq(order.purchases.sum(&:total_transaction_cents))
 
         # Fee recomputation: resolving the Gumroad-managed merchant account adds the Stripe processor
@@ -146,6 +147,29 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # #prepare is directly callable and only re-checks multi-seller; the charge path must re-check the
+    # rest of the client-confirm cart shape server-side so a recurring/commission/connect cart the
+    # presenter never mounts can't slip through and hand Stripe a nil payment_method_types.
+    context "with a connected-account seller the charge path deems client-confirm ineligible" do
+      before { create(:merchant_account_stripe_connect, user: seller) }
+
+      it "blocks pre-charge with a logged reason instead of building an intent with no method list" do
+        order, params = build_order
+        allow(Rails.logger).to receive(:error).and_call_original
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(Rails.logger).to have_received(:error).with(/Client-confirm ineligible cart blocked for order #{order.id}/)
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
     context "when the buyer's email is blocked by the seller" do
       before do
         create(:merchant_account, user: seller)
@@ -168,11 +192,11 @@ describe Order::PreparePaymentIntentService, :vcr do
     end
 
     # The deferred intent's payment_method_types/currency MUST equal the Payment Element's, or Stripe
-    # rejects the ConfirmationToken; both come from Checkout::StripePaymentPresenter so they can't drift.
+    # rejects the ConfirmationToken. Both sides read Checkout::PaymentMethodResolver so they can't drift.
     context "the deferred intent method/currency contract" do
       before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
 
-      it "creates the intent with the presenter's payment_method_types and currency" do
+      it "creates the intent with the resolver's launched payment_method_types and currency" do
         order, params = build_order
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -188,7 +212,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
-        expect(create_args[:payment_method_types]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_PAYMENT_METHOD_TYPES)
+        expect(create_args[:payment_method_types]).to eq(["card"])
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 
