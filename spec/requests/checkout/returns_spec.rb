@@ -134,6 +134,49 @@ describe "Checkout return page", :vcr, type: :request do
     end
   end
 
+  context "when the intent succeeded but no purchase could be finalized" do
+    it "renders the pending page and does not re-enable the cart" do
+      cart = create(:cart, :guest, browser_guid: order_params[:browser_guid])
+      order, charge = build_client_confirmed_order
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      allow_any_instance_of(Purchase).to receive(:save_charge_data) do |purchase|
+        purchase.errors.add(:base, "Something went wrong.")
+      end
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Checkout/Returns/Pending")
+      expect(cart.reload).not_to be_alive
+      expect(flash[:alert]).to be_nil
+    end
+  end
+
+  context "when only some purchases finalize after the intent succeeded" do
+    let(:second_product) { create(:product, user: seller, price_cents: 15_00) }
+    let(:second_line_item) { { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: second_product.price_cents, quantity: 1 } }
+
+    it "renders the pending page instead of silently redirecting" do
+      order, charge = build_client_confirmed_order(line_items: [line_item, second_line_item])
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+      allow_any_instance_of(Purchase).to receive(:save_charge_data).and_wrap_original do |original, *args|
+        purchase = original.receiver
+        if purchase.link_id == second_product.id
+          purchase.errors.add(:base, "Something went wrong.")
+        else
+          original.call(*args)
+        end
+      end
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Checkout/Returns/Pending")
+      expect(order.purchases.find_by(link_id: product.id)).to be_successful
+      expect(order.purchases.find_by(link_id: second_product.id)).to be_failed
+    end
+  end
+
   context "when the payment was not completed" do
     it "fails the purchases and sends the buyer back to checkout to retry" do
       order, charge = build_client_confirmed_order

@@ -6,13 +6,14 @@ module ClientConfirmedOrderFinalization
 
   private
     def finalize_client_confirmed_order(order)
-      responses = Order::FinalizeConfirmedChargeService.new(order:).perform
+      service = Order::FinalizeConfirmedChargeService.new(order:)
+      responses = service.perform
 
       record_purchase_events(order)
       order.send_charge_receipts
       attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
-      responses
+      [responses, service.charge_intent]
     end
 
     def attribute_utm_link_sale(order, browser_guid)

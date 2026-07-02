@@ -16,13 +16,14 @@ class Checkout::ReturnsController < ApplicationController
     charge = order.charges.find { _1.stripe_payment_intent_id.present? }
     e404 unless charge && ActiveSupport::SecurityUtils.secure_compare(charge.stripe_payment_intent_id, params[:payment_intent].to_s)
 
-    responses = finalize_client_confirmed_order(order)
+    responses, charge_intent = finalize_client_confirmed_order(order)
+    results = responses.values
 
-    if responses.values.any? { _1[:processing] }
+    if results.any? && results.all? { _1[:success] && !_1[:processing] }
+      redirect_to success_redirect_url(order), allow_other_host: true
+    elsif results.any? { _1[:processing] } || charge_intent&.succeeded?
       set_meta_tag(title: "Processing your payment")
       render inertia: "Checkout/Returns/Pending"
-    elsif responses.values.any? { _1[:success] }
-      redirect_to success_redirect_url(order), allow_other_host: true
     else
       restore_cart(order)
       flash[:alert] = failure_message(responses)

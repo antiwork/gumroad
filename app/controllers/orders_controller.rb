@@ -75,7 +75,7 @@ class OrdersController < ApplicationController
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
-    finalize_responses = finalize_client_confirmed_order(order)
+    finalize_responses, = finalize_client_confirmed_order(order)
 
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
   end
