@@ -216,9 +216,9 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 
-      # The launched set must equal the Payment Element's for the buyer's country, so ACH Direct Debit
-      # (us_bank_account) rides the deferred intent only when the server-owned ip_country is the US.
-      it "launches ACH Direct Debit for a US buyer, matching the Payment Element's method set" do
+      # The launched set must equal the Payment Element's for the buyer's country, so Cash App Pay and
+      # ACH Direct Debit ride the deferred intent only when the server-owned ip_country is the US.
+      it "launches Cash App Pay and ACH Direct Debit for a US buyer, matching the Payment Element's method set" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
@@ -235,7 +235,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_us").perform
 
-        expect(create_args[:payment_method_types]).to eq(%w[card us_bank_account])
+        expect(create_args[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
       end
 
       # A key built only from the (database-id-derived) external_id collides in Stripe test mode,

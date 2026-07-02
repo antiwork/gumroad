@@ -30,10 +30,11 @@ class Checkout::PaymentMethodResolver
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Launched on the client-confirmed path: card everywhere, plus ACH Direct Debit for US buyers
-  # (region-gated below). Cash App Pay (redirect) and the EUR methods stay gated until their machinery
-  # (server return page / buyer-currency FX) ships.
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card us_bank_account].freeze
+  # Launched on the client-confirmed path: card everywhere, plus the US-locked first-launch methods
+  # (region-gated below) — Cash App Pay (redirect; confirms via the #5664 return page) and ACH Direct
+  # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
+  # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card cashapp us_bank_account].freeze
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze

@@ -348,14 +348,14 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
-    it "launches ACH Direct Debit alongside card for a US buyer" do
+    it "launches Cash App Pay and ACH Direct Debit alongside card for a US buyer" do
       stub_geoip_country("104.28.0.1", "United States")
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
-        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card us_bank_account]))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
     end
 
-    it "offers card only for a non-US buyer (ACH is US-locked)" do
+    it "offers card only for a non-US buyer (Cash App/ACH are US-locked)" do
       stub_geoip_country("2.2.2.2", "United Kingdom")
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "2.2.2.2"))

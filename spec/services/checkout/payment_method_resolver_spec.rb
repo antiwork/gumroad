@@ -26,12 +26,12 @@ describe Checkout::PaymentMethodResolver do
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
         resolution = resolve(buyer_country: "US")
 
-        expect(resolution.payment_method_types).to eq(%w[card us_bank_account])
+        expect(resolution.payment_method_types).to eq(%w[card cashapp us_bank_account])
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
       end
 
-      it "drops US-locked methods (ACH) for a non-US buyer, leaving card only" do
+      it "drops US-locked methods (Cash App/ACH) for a non-US buyer, leaving card only" do
         expect(resolve(buyer_country: "GB").payment_method_types).to eq(["card"])
       end
 
@@ -116,14 +116,14 @@ describe Checkout::PaymentMethodResolver do
       )
     end
 
-    it "logs the buyer country and the ACH launch for a US buyer" do
+    it "logs the buyer country and the US-locked method launch for a US buyer" do
       resolver = described_class.new(sellers: [seller], buyer_country: "US")
       allow(Rails.logger).to receive(:info)
 
       resolver.resolve
 
       expect(Rails.logger).to have_received(:info).with(
-        a_string_matching(/buyer_country="US".*enabled=\["card", "us_bank_account"\]/)
+        a_string_matching(/buyer_country="US".*enabled=\["card", "cashapp", "us_bank_account"\]/)
       )
     end
 
