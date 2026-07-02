@@ -60,12 +60,14 @@ class Purchase::PresentmentRefund
     end
 
     def partial_presentment_amount_cents
-      allocated = Charge.allocate_by_largest_remainder(
+      # Split the presentment total between the refunded and unrefunded canonical
+      # portions so the refunded share is exact-cent consistent with the total.
+      refunded_share = Charge.allocate_by_largest_remainder(
         purchase_presentment.presentment_total_cents,
-        [canonical_gross_refund_cents],
+        [canonical_gross_refund_cents, purchase.total_transaction_cents - canonical_gross_refund_cents],
         purchase.total_transaction_cents
       ).first
-      [allocated, remaining_presentment_amount_cents].min
+      [refunded_share, remaining_presentment_amount_cents].min
     end
 
     def allocate_components(amount_cents)

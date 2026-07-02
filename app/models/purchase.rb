@@ -2058,14 +2058,18 @@ class Purchase < ApplicationRecord
   def process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
     return if affiliate_credit_cents == 0 || refund_cents == 0
 
+    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents
+      issued_affiliate_cents: -1 * refund_cents,
+      canonical_issued_amount:
     )
 
     affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents
+      issued_affiliate_cents: -1 * refund_cents,
+      canonical_issued_amount:
     )
 
     affiliate_balance_transaction = BalanceTransaction.create!(
@@ -2106,14 +2110,18 @@ class Purchase < ApplicationRecord
     logger.info("process_refund_or_chargeback_for_purchase_balance::dispute::#{dispute.inspect}")
     return unless charged_using_gumroad_merchant_account?
 
+    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: -1 * refund_cents
+      issued_net_cents: -1 * refund_cents,
+      canonical_issued_amount:
     )
 
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: -1 * refund_cents
+      issued_net_cents: -1 * refund_cents,
+      canonical_issued_amount:
     )
 
     seller_balance_transaction = BalanceTransaction.create!(
@@ -3166,6 +3174,15 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
+    # Refund counterpart of presentment_canonical_issued_amount: the processor refund is
+    # issued in the buyer's currency, but the balance debit must be booked against the
+    # canonical gross refund amount recorded on the refund row.
+    def presentment_canonical_refund_issued_amount(refund)
+      return if purchase_presentment.blank? || refund.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * refund.total_transaction_cents)
     end
 
     def web_csv_parity_fields

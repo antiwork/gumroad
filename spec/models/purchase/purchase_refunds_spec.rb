@@ -39,14 +39,80 @@ describe "PurchaseRefunds", :vcr do
     describe "buyer-presentment purchases" do
       let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-      it "blocks processor refunds before refund support ships" do
-        create(:purchase_presentment, purchase: @purchase)
+      def build_presentment_charge_refund(presentment_cents:, currency: Currency::CAD)
+        stripe_refund = double("stripe_refund", status: "succeeded", id: "re_presentment_#{SecureRandom.hex(6)}")
+        charge_refund = ChargeRefund.new
+        charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge_refund.id = stripe_refund.id
+        charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(currency, -presentment_cents)
+        charge_refund.instance_variable_set(:@refund, stripe_refund)
+        charge_refund
+      end
+
+      before do
+        create(:purchase_presentment,
+               purchase: @purchase,
+               presentment_currency: Currency::CAD,
+               presentment_price_cents: @purchase.total_transaction_cents * 2,
+               presentment_gumroad_tax_cents: 0,
+               presentment_total_cents: @purchase.total_transaction_cents * 2)
+        @purchase.association(:purchase_presentment).reset
+      end
+
+      it "sends the presentment amount to the processor and stores the refund snapshot" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                hash_including(amount_cents: presentment_total))
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_total))
+
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+
+        @purchase.reload
+        refund = @purchase.refunds.last
+        expect(@purchase.stripe_refunded).to be(true)
+        expect(refund.total_transaction_cents).to eq(@purchase.total_transaction_cents)
+        expect(refund.presentment_currency).to eq(Currency::CAD)
+        expect(refund.presentment_amount_cents).to eq(presentment_total)
+        balance_transaction = refund.balance_transactions.where(user: @user).last
+        expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+        expect(balance_transaction.issued_amount_gross_cents).to eq(-1 * @purchase.total_transaction_cents)
+      end
+
+      it "sends a partial presentment amount for a partial refund and clamps the final remainder" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+        canonical_partial = @purchase.total_transaction_cents / 2
+        presentment_partial = presentment_total / 2
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                hash_including(amount_cents: presentment_partial))
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_partial))
+        expect(@purchase.refund_and_save!(@user.id, amount_cents: canonical_partial)).to be(true)
+        @purchase.reload
+        expect(@purchase.stripe_partially_refunded).to be(true)
+        expect(@purchase.refunds.last.presentment_amount_cents).to eq(presentment_partial)
+
+        remaining_presentment = presentment_total - presentment_partial
+        expect(ChargeProcessor).to receive(:refund!)
+          .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                hash_including(amount_cents: remaining_presentment))
+          .and_return(build_presentment_charge_refund(presentment_cents: remaining_presentment))
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+        @purchase.reload
+        expect(@purchase.stripe_refunded).to be(true)
+        expect(@purchase.refunds.sum { _1.presentment_amount_cents.to_i }).to eq(presentment_total)
+      end
+
+      it "fails closed when no presentment refund amount is computable" do
+        allow_any_instance_of(Purchase::PresentmentRefund).to receive(:result).and_return(nil)
         allow(ErrorNotifier).to receive(:notify)
 
         expect(ChargeProcessor).not_to receive(:refund!)
         expect(@purchase.refund_and_save!(@user.id)).to be(false)
         expect(@purchase.errors[:base]).to include(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
-        expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+        expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund blocked: no presentment refund amount computable",
                                                              context: hash_including(purchase_id: @purchase.id))
       end
     end
@@ -591,14 +657,14 @@ describe "PurchaseRefunds", :vcr do
         describe "buyer-presentment purchases" do
           let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-          it "blocks processor tax refunds before refund support ships" do
+          it "blocks processor tax refunds until presentment tax refunds are supported" do
             create(:purchase_presentment, purchase: @purchase)
             allow(ErrorNotifier).to receive(:notify)
 
             expect(ChargeProcessor).not_to receive(:refund!)
             expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(false)
             expect(@purchase.errors[:base]).to include(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
-            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund blocked: no presentment refund amount computable",
                                                                  context: hash_including(purchase_id: @purchase.id))
           end
         end

@@ -49,7 +49,7 @@ describe Purchase::PresentmentRefund do
   it "computes a partial presentment refund by the canonical refund ratio" do
     result = described_class.new(purchase:, canonical_gross_refund_cents: 40).result
 
-    expect(result.presentment_amount_cents).to eq(55)
+    expect(result.presentment_amount_cents).to eq(54)
     expect([
       result.presentment_price_cents,
       result.presentment_tip_cents,

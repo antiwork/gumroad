@@ -39,8 +39,6 @@ class Purchase
         errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
         return false
       end
-      # TODO(#5419): Remove this hard stop once buyer-presentment purchase refunds are supported.
-      return false if buyer_presentment_refund_blocked?
 
       if (merchant_account.is_a_stripe_connect_account? && !merchant_account.active?) ||
           (paypal_charge_processor? &&
@@ -86,9 +84,22 @@ class Purchase
         end
 
         paypal_order_purchase_unit_refund = true if paypal_order_id
+
+        # Buyer-presentment purchases were charged in the buyer's currency, and Stripe
+        # denominates refunds in the original charge currency, so the refund sent to the
+        # processor must be the buyer-presentment amount, never canonical USD cents. Fail
+        # closed when a presentment refund amount cannot be computed for this purchase.
+        presentment_refund = nil
+        if buyer_presentment?
+          canonical_gross_refund_cents = gross_amount_cents.presence || gross_amount_refundable_cents
+          presentment_refund = Purchase::PresentmentRefund.new(purchase: self, canonical_gross_refund_cents:).result if stripe_charge_processor?
+          return false if presentment_refund.blank? && buyer_presentment_refund_blocked?
+        end
+        processor_refund_amount_cents = presentment_refund ? presentment_refund.presentment_amount_cents : gross_amount_cents
+
         charge_refund = ChargeProcessor.refund!(charge_processor_id,
                                                 stripe_transaction_id,
-                                                amount_cents: gross_amount_cents,
+                                                amount_cents: processor_refund_amount_cents,
                                                 merchant_account:,
                                                 reverse_transfer: !chargedback? || !chargeback_reversed,
                                                 paypal_order_purchase_unit_refund:,
@@ -108,7 +119,9 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud,
+                         canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
+                         presentment_refund:)
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false
@@ -194,8 +207,13 @@ class Purchase
   end
 
   # refunding_user_id can't be enforced from console (no current user), in which case it will be nil
-  def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false)
-    funds_refunded = flow_of_funds.issued_amount.cents.abs
+  #
+  # For buyer-presentment purchases, flow_of_funds.issued_amount is in the buyer's currency,
+  # so callers must pass canonical_gross_refund_cents (the canonical USD gross refund) for the
+  # canonical refund/balance records, plus the presentment_refund snapshot to persist on the refund.
+  def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
+                       canonical_gross_refund_cents: nil, presentment_refund: nil)
+    funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
     partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
       self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
@@ -214,6 +232,9 @@ class Purchase
       if stripe_refund
         refund.status = stripe_refund.status
         refund.processor_refund_id = stripe_refund.id
+      end
+      if presentment_refund
+        presentment_refund.json_data.each { |key, value| refund.public_send("#{key}=", value) }
       end
       refund.is_for_fraud = is_for_fraud
       refunds << refund
@@ -350,10 +371,12 @@ class Purchase
   def buyer_presentment_refund_blocked?
     return false if purchase_presentment.blank?
 
-    # TODO(#5419): Remove this helper once all buyer-presentment refund paths are supported.
+    # Fail closed whenever a presentment refund amount cannot be computed (non-Stripe
+    # processor, or an allocator edge case). Sending canonical USD cents to Stripe for a
+    # buyer-currency charge would refund the wrong amount.
     errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE
     ErrorNotifier.notify(
-      "Buyer-presentment refund attempted before refund support shipped",
+      "Buyer-presentment refund blocked: no presentment refund amount computable",
       context: {
         purchase_id: id,
         purchase_external_id: external_id,
