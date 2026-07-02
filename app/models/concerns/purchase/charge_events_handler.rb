@@ -125,8 +125,9 @@ module Purchase::ChargeEventsHandler
     # A client-confirm charge (card SCA drop-off, or a delayed-notification method like ACH whose
     # debit later fails) transitions its still-in_progress purchases to failed so the buyer is
     # returned to a resubmittable cart. The intent funds one charge, so every purchase in the group
-    # fails together. mark_failed! is a no-op on an already-terminal purchase, so a re-delivered
-    # webhook is safe.
+    # fails together. The in_progress? guard below is what makes a re-delivered webhook safe:
+    # mark_failed! only defines the in_progress -> failed transition, so calling it on an
+    # already-terminal purchase would raise AASM::InvalidTransition.
     if client_confirmed_charge?
       charged_purchases.each { |purchase| purchase.mark_failed! if purchase.in_progress? }
       return
