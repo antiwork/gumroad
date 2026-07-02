@@ -76,20 +76,36 @@ class ProfilePresenter
 
     # Seller GA/pixels never fired on the profile: startTrackingForSeller is only
     # called from product/checkout surfaces (#5676). These props let Users/Show
-    # boot the account-scoped tracking. Enablement (production-only, seller's
-    # disable_third_party_analytics flag) stays with the gr:*:enabled meta tags
-    # the frontend already gates on — this only supplies the ids. Universal raw
-    # snippets are limited to location "all": "product"/"receipt" scope a snippet
-    # to the purchase flow, which a profile is not. The snippet iframe URL is
+    # boot the account-scoped tracking. The GA/FB/TikTok pixels stay gated on the
+    # gr:*:enabled meta tags the frontend already checks via shouldTrack(), so
+    # this only supplies the ids for them. The universal raw-snippet iframe has
+    # NO shouldTrack() guard (addProfileThirdPartyAnalytics appends it directly),
+    # so its enablement must be honored server-side here — mirroring the custom
+    # HTML path's analytics_enabled?(seller:) gate (production/staging only, plus
+    # the seller's disable_third_party_analytics opt-out). Universal snippets are
+    # limited to location "all": "product"/"receipt" scope a snippet to the
+    # purchase flow, which a profile is not. The snippet iframe URL is
     # username-based, so it's only offered when a username exists.
     def seller_analytics
       {
         seller_id: seller.external_id,
         analytics: seller.analytics_data,
         has_universal_third_party_analytics:
-          seller.username.present? && seller.third_party_analytics.universal.alive.where(location: "all").exists?,
+          third_party_analytics_enabled? &&
+          seller.username.present? &&
+          seller.third_party_analytics.universal.alive.where(location: "all").exists?,
         username: seller.username,
       }
+    end
+
+    # Mirrors PageMeta::Analytics#analytics_enabled? for the universal-snippet
+    # iframe, which the frontend cannot gate with shouldTrack(). The profile show
+    # path never sets @disable_third_party_analytics, so only the environment gate
+    # and the per-seller opt-out apply here.
+    def third_party_analytics_enabled?
+      return false if !Rails.env.production? && !Rails.env.staging?
+
+      !seller.disable_third_party_analytics?
     end
 
     def can_edit_profile?

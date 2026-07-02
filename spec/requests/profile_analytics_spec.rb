@@ -12,6 +12,9 @@ describe "Profile page analytics", type: :request do
   let(:seller) { create(:user, username: "analyticsseller", google_analytics_id: "G-ABC123") }
 
   describe "standard (Inertia) profile page" do
+    # analytics_enabled? only tracks in production/staging, matching the rest of the app.
+    before { allow(Rails.env).to receive(:production?).and_return(true) }
+
     def seller_analytics_props
       get "#{seller.subdomain_with_protocol}/", headers: { "X-Inertia" => "true" }
       expect(response).to be_successful
@@ -40,6 +43,23 @@ describe "Profile page analytics", type: :request do
 
     it "does not flag snippets scoped to the purchase flow" do
       ThirdPartyAnalytic.create!(user: seller, analytics_code: "<script>1</script>", location: "product")
+
+      expect(seller_analytics_props["has_universal_third_party_analytics"]).to eq(false)
+    end
+
+    it "does not flag universal snippets when the seller opted out of third-party analytics" do
+      ThirdPartyAnalytic.create!(user: seller, analytics_code: "<script>1</script>", location: "all")
+      seller.update!(disable_third_party_analytics: true)
+
+      # The universal-snippets iframe has no shouldTrack() guard, so the opt-out
+      # must be honored server-side or the snippet fires on every visitor.
+      expect(seller_analytics_props["has_universal_third_party_analytics"]).to eq(false)
+    end
+
+    it "does not flag universal snippets outside production/staging" do
+      ThirdPartyAnalytic.create!(user: seller, analytics_code: "<script>1</script>", location: "all")
+      allow(Rails.env).to receive(:production?).and_return(false)
+      allow(Rails.env).to receive(:staging?).and_return(false)
 
       expect(seller_analytics_props["has_universal_third_party_analytics"]).to eq(false)
     end
