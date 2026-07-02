@@ -206,14 +206,41 @@ const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) 
   </components.Control>
 );
 
+const MENU_VIEWPORT_MARGIN = 8;
+// Never clamp below this; a shorter menu is harder to use than one that overflows the viewport.
+const MIN_MENU_HEIGHT = 140;
+
 const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>) => {
   const menuListId = React.useContext(CustomPropsContext).menuListId;
+  const listRef = React.useRef<HTMLDataListElement | null>(null);
+  const [maxHeight, setMaxHeight] = React.useState(props.maxHeight);
+
+  // The menu is absolutely positioned below the control with a fixed max height, so on short
+  // viewports it can run past the bottom of the window. Clamp it to the space available below
+  // the control (a long list then scrolls internally instead of clipping off-screen).
+  React.useLayoutEffect(() => {
+    const control = listRef.current?.offsetParent;
+    if (!(control instanceof HTMLElement)) return;
+    const spaceBelow = window.innerHeight - control.getBoundingClientRect().bottom - MENU_VIEWPORT_MARGIN;
+    setMaxHeight(Math.min(props.maxHeight, Math.max(spaceBelow, MIN_MENU_HEIGHT)));
+    // `props.children` is a dependency because the control can grow while the menu is open
+    // (multi-selects add value pills), moving the menu's top edge.
+  }, [props.maxHeight, props.children]);
+
+  const setRefs = React.useCallback(
+    (node: HTMLDataListElement | null) => {
+      listRef.current = node;
+      // react-select types innerRef as a div ref, but our menu is a <datalist>.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      (props.innerRef as unknown as ((instance: HTMLDataListElement | null) => void) | undefined)?.(node);
+    },
+    [props.innerRef],
+  );
 
   return (
     <datalist
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- react-select incorrectly types this as div
-      ref={props.innerRef as React.Ref<HTMLDataListElement>}
-      style={{ maxHeight: props.maxHeight }}
+      ref={setRefs}
+      style={{ maxHeight }}
       id={menuListId ?? undefined}
       className={classNames(
         "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)]",

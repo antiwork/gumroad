@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_02_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_03_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1518,6 +1518,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_02_000000) do
     t.integer "suggested_price_cents"
     t.index ["link_id"], name: "index_prices_on_link_id"
     t.index ["variant_id"], name: "index_prices_on_variant_id"
+  end
+
+  create_table "processed_stripe_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "event_id", null: false
+    t.string "event_type"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id"], name: "index_processed_stripe_events_on_event_id", unique: true
   end
 
   create_table "processor_payment_intents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

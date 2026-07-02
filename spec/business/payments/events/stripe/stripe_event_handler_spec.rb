@@ -66,6 +66,46 @@ describe StripeEventHandler do
       end
     end
 
+    describe "a payment intent succeeded event" do
+      let(:stripe_event) do
+        {
+          "id" => event_id,
+          "created" => "1406748559", # "2014-07-30T19:29:19+00:00"
+          "type" => "payment_intent.succeeded",
+          "data" => {
+            "object" => {
+              "object" => "payment_intent"
+            }
+          }
+        }
+      end
+
+      it "sends the event to StripeChargeProcessor" do
+        expect(StripeChargeProcessor).to receive(:handle_stripe_event).with(parsed(stripe_event))
+        described_class.new(stripe_event).handle_stripe_event
+      end
+    end
+
+    describe "a payment intent processing event" do
+      let(:stripe_event) do
+        {
+          "id" => event_id,
+          "created" => "1406748559", # "2014-07-30T19:29:19+00:00"
+          "type" => "payment_intent.processing",
+          "data" => {
+            "object" => {
+              "object" => "payment_intent"
+            }
+          }
+        }
+      end
+
+      it "sends the event to StripeChargeProcessor" do
+        expect(StripeChargeProcessor).to receive(:handle_stripe_event).with(parsed(stripe_event))
+        described_class.new(stripe_event).handle_stripe_event
+      end
+    end
+
     describe "a capital loan event" do
       let(:stripe_event) do
         {
@@ -313,6 +353,23 @@ describe StripeEventHandler do
         expect(StripeChargeProcessor).not_to receive(:handle_stripe_event)
         expect(StripeMerchantAccountManager).to receive(:handle_stripe_event).and_call_original
         described_class.new(@stripe_event).handle_stripe_event
+      end
+    end
+
+    describe "a payment intent lifecycle event" do
+      %w[payment_intent.succeeded payment_intent.processing].each do |event_type|
+        it "does not route #{event_type} to StripeChargeProcessor" do
+          stripe_event = {
+            "id" => event_id,
+            "created" => "1406748559",
+            "type" => event_type,
+            "account" => "acct_connected",
+            "user_id" => "acct_connected",
+            "data" => { "object" => { "object" => "payment_intent" } }
+          }
+          expect(StripeChargeProcessor).not_to receive(:handle_stripe_event)
+          described_class.new(stripe_event).handle_stripe_event
+        end
       end
     end
   end

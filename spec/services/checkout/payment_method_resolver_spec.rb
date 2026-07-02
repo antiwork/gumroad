@@ -1,0 +1,120 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe Checkout::PaymentMethodResolver do
+  let(:seller) { create(:user) }
+
+  def resolve(sellers: [seller], **opts)
+    described_class.new(sellers:, **opts).resolve
+  end
+
+  describe "#resolve" do
+    context "with a single-seller, one-time, platform-account cart" do
+      it "is client-confirm eligible with no fallback reason" do
+        resolution = resolve
+
+        expect(resolution.client_confirm_eligible?).to be(true)
+        expect(resolution.fallback_reason).to be_nil
+      end
+
+      it "resolves the full inline dynamic method set as eligible" do
+        expect(resolve.eligible_payment_method_types)
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp])
+      end
+
+      it "enables only the launched card method on Stripe, gating the rest behind later units" do
+        resolution = resolve
+
+        expect(resolution.payment_method_types).to eq(["card"])
+        # The launched set is always a subset of the eligible policy set.
+        expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+      end
+
+      it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
+        expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
+      end
+    end
+
+    context "with a recurring (subscription) lifecycle" do
+      it "disables Afterpay/Clearpay and Affirm in the eligible set" do
+        eligible = resolve(recurring: true).eligible_payment_method_types
+
+        expect(eligible).not_to include("afterpay_clearpay", "affirm")
+        expect(eligible).to include("card", "link")
+      end
+
+      it "stays on Lane A because subscription setup on the client-confirmed path is deferred" do
+        resolution = resolve(recurring: true)
+
+        expect(resolution.client_confirm_eligible?).to be(false)
+        expect(resolution.fallback_reason).to eq("recurring_charge")
+        expect(resolution.payment_method_types).to be_nil
+      end
+    end
+
+    context "with a multi-seller cart" do
+      let(:other_seller) { create(:user) }
+
+      it "resolves to card + PayPal only and keeps the cart on Lane A" do
+        resolution = resolve(sellers: [seller, other_seller])
+
+        expect(resolution.client_confirm_eligible?).to be(false)
+        expect(resolution.fallback_reason).to eq("multi_seller")
+        expect(resolution.eligible_payment_method_types).to eq(%w[card paypal])
+        expect(resolution.payment_method_types).to be_nil
+      end
+    end
+
+    context "with a connected-account (direct-charge) seller" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+      before { create(:merchant_account_stripe_connect, user: seller) }
+
+      it "keeps the cart on Lane A until connected-account scoping ships" do
+        resolution = resolve
+
+        expect(resolution.client_confirm_eligible?).to be(false)
+        expect(resolution.fallback_reason).to eq("direct_charge_seller")
+        expect(resolution.payment_method_types).to be_nil
+      end
+    end
+
+    context "with a commission product" do
+      it "keeps the cart on Lane A" do
+        resolution = resolve(commission: true)
+
+        expect(resolution.client_confirm_eligible?).to be(false)
+        expect(resolution.fallback_reason).to eq("commission")
+      end
+    end
+
+    context "with a future-charge setup cart (preorder / free trial)" do
+      it "keeps the cart on Lane A" do
+        resolution = resolve(setup_for_future: true)
+
+        expect(resolution.client_confirm_eligible?).to be(false)
+        expect(resolution.fallback_reason).to eq("setup_flow")
+      end
+    end
+
+    it "logs the decision with enough detail to explain why a buyer saw a method" do
+      resolver = described_class.new(sellers: [seller])
+      allow(Rails.logger).to receive(:info)
+
+      resolver.resolve
+
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_matching(/client_confirm_eligible=true.*enabled=\["card"\].*launch_gated_out=/)
+      )
+    end
+
+    it "memoizes so the decision is logged once per resolver" do
+      resolver = described_class.new(sellers: [seller])
+      allow(Rails.logger).to receive(:info)
+
+      2.times { resolver.resolve }
+
+      expect(Rails.logger).to have_received(:info).with(a_string_matching(/\[Checkout::PaymentMethodResolver\]/)).once
+    end
+  end
+end
