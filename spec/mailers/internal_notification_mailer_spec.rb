@@ -4,10 +4,6 @@ require "spec_helper"
 
 describe InternalNotificationMailer do
   describe "#notify" do
-    # Use the "risk" room, which maps to INTERNAL_NOTIFICATION_EMAIL — a recipient
-    # that is intentionally distinct from INTERNAL_NOTIFICATION_ALWAYS_CC. This keeps
-    # the `to` and `cc` assertions below meaningful even if PAYMENTS_NOTIFICATION_EMAIL
-    # and the always-CC address ever resolve to the same value in a shared config.
     subject(:mail) do
       described_class.notify(
         room_name: "risk",
@@ -20,12 +16,16 @@ describe InternalNotificationMailer do
       expect(mail.to).to eq([INTERNAL_NOTIFICATION_EMAIL])
     end
 
-    it "CCs Gumclaw on every notification in addition to the room recipient" do
-      # The mailer dedups the CC when it equals the room's own recipient, so this
-      # assertion is only meaningful while the two addresses are distinct. Assert the
-      # prerequisite explicitly rather than relying on it implicitly.
-      expect(INTERNAL_NOTIFICATION_ALWAYS_CC).not_to eq(mail.to.first)
-      expect(mail.cc).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
+    it "does not CC an additional recipient by default" do
+      expect(mail.cc).to be_nil
+    end
+
+    context "when a global CC address is explicitly configured" do
+      before { stub_const("INTERNAL_NOTIFICATION_ALWAYS_CC", "audit@example.com") }
+
+      it "CCs the configured recipient in addition to the room recipient" do
+        expect(mail.cc).to eq(["audit@example.com"])
+      end
     end
 
     it "sets the subject with room name and sender" do
@@ -66,17 +66,20 @@ describe InternalNotificationMailer do
         expect(mail.to).to be_nil
       end
 
-      it "does not CC Gumclaw when the room has no recipient" do
+      it "does not CC the configured global recipient when the room has no recipient" do
         expect(mail.cc).to be_nil
       end
     end
 
-    context "when the room recipient IS the always-CC address" do
-      before { stub_const("CHAT_ROOMS", CHAT_ROOMS.merge(gumclaw_room: { email: INTERNAL_NOTIFICATION_ALWAYS_CC })) }
+    context "when the room recipient IS the configured always-CC address" do
+      before do
+        stub_const("INTERNAL_NOTIFICATION_ALWAYS_CC", "audit@example.com")
+        stub_const("CHAT_ROOMS", CHAT_ROOMS.merge(audit_room: { email: INTERNAL_NOTIFICATION_ALWAYS_CC }))
+      end
 
       subject(:mail) do
         described_class.notify(
-          room_name: "gumclaw_room",
+          room_name: "audit_room",
           sender: "Test",
           message_text: "No duplicate"
         )

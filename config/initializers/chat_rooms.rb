@@ -3,10 +3,11 @@
 INTERNAL_NOTIFICATION_EMAIL = GlobalConfig.get("INTERNAL_NOTIFICATION_EMAIL", "hi@gumroad.com")
 PAYMENTS_NOTIFICATION_EMAIL = GlobalConfig.get("PAYMENTS_NOTIFICATION_EMAIL", "hi@gumroad.com")
 
-# Address CC'd on EVERY internal notification (all CHAT_ROOMS), in addition to each
-# room's own recipient. Lets Gumclaw ingest the full internal-notification stream
-# (risk alerts, payments, payouts, etc.) alongside the existing human recipients.
-INTERNAL_NOTIFICATION_ALWAYS_CC = GlobalConfig.get("INTERNAL_NOTIFICATION_ALWAYS_CC", "gumclaw@gumroad.com")
+# Optional address CC'd on every internal notification. This is intentionally
+# disabled by default: internal notifications can include sensitive risk,
+# payments, and payouts data, so a broad secondary recipient must be enabled
+# explicitly via configuration rather than hard-coded in source.
+INTERNAL_NOTIFICATION_ALWAYS_CC = GlobalConfig.get("INTERNAL_NOTIFICATION_ALWAYS_CC", nil)
 
 CHAT_ROOMS = {
   announcements: { email: INTERNAL_NOTIFICATION_EMAIL },
