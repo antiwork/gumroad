@@ -2931,7 +2931,7 @@ describe Purchase, :vcr do
   end
 
   describe "#buyer_presentment_price_cents" do
-    def purchase_with_presentment(was_tax_excluded_from_price:, quantity: 1)
+    def purchase_with_presentment(was_tax_excluded_from_price:, quantity: 1, presentment_price_cents: 11_25, presentment_tip_cents: 0)
       purchase = build(:purchase,
                        price_cents: 10_00,
                        total_transaction_cents: 10_00,
@@ -2944,8 +2944,8 @@ describe Purchase, :vcr do
       create(:purchase_presentment,
              purchase:,
              charge_presentment:,
-             presentment_price_cents: 11_25,
-             presentment_tip_cents: 0,
+             presentment_price_cents:,
+             presentment_tip_cents:,
              presentment_seller_tax_cents: 1_25,
              presentment_gumroad_tax_cents: 0,
              presentment_shipping_cents: 0,
@@ -2971,6 +2971,17 @@ describe Purchase, :vcr do
 
       expect(purchase.buyer_presentment_price_per_unit_cents).to eq(6_25)
       expect(purchase.formatted_buyer_presentment_price_per_unit).to eq("CAD$6.25")
+    end
+
+    it "includes the tip in the price line but not in the per-unit price" do
+      # The canonical displayed price is tip-inclusive and receipts render no separate tip
+      # row, so the presentment line must include it or line items stop summing to the total.
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: true,
+                                           presentment_price_cents: 10_00,
+                                           presentment_tip_cents: 1_25)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(11_25)
+      expect(purchase.buyer_presentment_price_per_unit_cents).to eq(10_00)
     end
   end
 
@@ -6142,6 +6153,37 @@ describe Purchase, :vcr do
 
       expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
       expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    end
+
+    it "defers presentment purchases when Stripe settlement data is missing after SCA" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      purchase = create(:purchase_in_progress,
+                        link: create(:product, user: seller),
+                        seller:,
+                        merchant_account:,
+                        is_part_of_combined_charge: true)
+      charge = create(:charge, order: create(:order), seller:, merchant_account:)
+      charge.purchases << purchase
+      create(:charge_presentment, charge:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_test")
+
+      processor_charge = BaseProcessorCharge.new
+      processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      processor_charge.id = "ch_presentment"
+      processor_charge.refunded = false
+      processor_charge.fee = 59
+      processor_charge.fee_currency = Currency::USD
+      processor_charge.card_fingerprint = "card_fp"
+      charge_intent = instance_double(StripeChargeIntent, succeeded?: true, charge: processor_charge)
+      allow(ChargeProcessor).to receive(:confirm_payment_intent!).and_return(charge_intent)
+
+      purchase.confirm_charge_intent!
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.reload).to be_in_progress
+      expect(purchase.stripe_transaction_id).to eq("ch_presentment")
+      expect(purchase.pending_buyer_presentment_settlement?).to be(true)
     end
   end
 

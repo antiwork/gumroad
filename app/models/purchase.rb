@@ -1388,6 +1388,12 @@ class Purchase < ApplicationRecord
     purchase_presentment.present?
   end
 
+  # True while a presentment purchase has been charged but Stripe settlement data has not
+  # arrived yet; FinalizeBuyerPresentmentChargeJob completes the purchase once it does.
+  def pending_buyer_presentment_settlement?
+    in_progress? && stripe_transaction_id.present? && charge&.charge_presentment.present?
+  end
+
   def buyer_presentment_currency
     purchase_presentment&.presentment_currency
   end
@@ -1395,7 +1401,10 @@ class Purchase < ApplicationRecord
   def buyer_presentment_price_cents
     return unless buyer_presentment?
 
-    price_cents = purchase_presentment.presentment_price_cents
+    # The canonical displayed price is tip-inclusive (tips make the price "customizable"),
+    # and receipts render no separate tip line — so the presentment price line must include
+    # the tip too, or line items no longer sum to the charged total.
+    price_cents = purchase_presentment.presentment_price_cents + purchase_presentment.presentment_tip_cents
     price_cents += purchase_presentment.presentment_seller_tax_cents unless was_tax_excluded_from_price
     price_cents
   end
@@ -1403,7 +1412,8 @@ class Purchase < ApplicationRecord
   def buyer_presentment_price_per_unit_cents
     return unless buyer_presentment?
 
-    buyer_presentment_price_cents / quantity
+    # Per-unit prices exclude the tip, mirroring formatted_total_display_price_per_unit.
+    (buyer_presentment_price_cents - purchase_presentment.presentment_tip_cents) / quantity
   end
 
   def buyer_presentment_tax_cents
@@ -1929,7 +1939,10 @@ class Purchase < ApplicationRecord
     self.charge_intent = ChargeProcessor.confirm_payment_intent!(merchant_account, processor_payment_intent_id)
 
     if charge_intent.succeeded?
-      save_charge_data(charge_intent.charge)
+      # Presentment charges may not have Stripe settlement data yet right after an SCA
+      # confirmation; defer like the create path does instead of crashing on a blank
+      # flow of funds. FinalizeBuyerPresentmentChargeJob completes the purchase later.
+      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: charge&.charge_presentment.present?)
     else
       errors.add :base, "Sorry, something went wrong."
     end
@@ -3146,6 +3159,9 @@ class Purchase < ApplicationRecord
   end
 
   private
+    # For presentment charges the processor-issued amount is in buyer currency, but the
+    # "issued amount" booked to balances must stay the canonical seller/accounting amount;
+    # this override is what the BalanceTransaction::Amount factories substitute in.
     def presentment_canonical_issued_amount
       return if purchase_presentment.blank?
 

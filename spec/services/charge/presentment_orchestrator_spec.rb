@@ -19,8 +19,16 @@ describe Charge::PresentmentOrchestrator do
   let(:eligibility_decision) do
     Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::CAD, fallback_reason: nil)
   end
-  let(:quote) do
-    StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+  let(:locked_quote) do
+    Checkout::BuyerCurrencyQuote::Result.new(
+      token: "locked-token",
+      currency: Currency::CAD,
+      canonical_total_cents: 10_00,
+      presentment_total_cents: 12_50,
+      fx_rate: BigDecimal("0.8"),
+      stripe_fx_quote_id: "fxq_locked",
+      stripe_fx_quote_expires_at: 30.minutes.from_now
+    )
   end
 
   subject(:result) do
@@ -29,25 +37,24 @@ describe Charge::PresentmentOrchestrator do
                         purchases: [purchase],
                         amount_cents: 10_00,
                         gumroad_amount_cents: 3_00,
-                        eligibility_decision:).perform
+                        eligibility_decision:,
+                        locked_quote:).perform
   end
 
-  before do
-    allow(StripeFxQuote).to receive(:create).and_return(quote)
-  end
+  it "creates charge and purchase presentments from the locked quote without minting a fresh one" do
+    expect(StripeFxQuote).not_to receive(:create)
 
-  it "creates charge and purchase presentments from the locked quote" do
     expect(result).to have_attributes(processor_amount_cents: 12_50,
                                       processor_currency: Currency::CAD,
                                       processor_gumroad_amount_cents: 3_75,
-                                      stripe_fx_quote_id: "fxq_test")
+                                      stripe_fx_quote_id: "fxq_locked")
 
     charge_presentment = charge.reload.charge_presentment
     expect(charge_presentment).to have_attributes(processor: StripeChargeProcessor.charge_processor_id,
                                                   presentment_currency: Currency::CAD,
                                                   presentment_total_cents: 12_50,
                                                   presentment_gumroad_amount_cents: 3_75,
-                                                  stripe_fx_quote_id: "fxq_test",
+                                                  stripe_fx_quote_id: "fxq_locked",
                                                   fx_rate: BigDecimal("0.8"))
 
     purchase_presentment = purchase.reload.purchase_presentment
@@ -59,30 +66,11 @@ describe Charge::PresentmentOrchestrator do
                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
-  it "uses a locked buyer quote total for the processor charge amount" do
-    locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
-      token: "locked-token",
-      currency: Currency::CAD,
-      canonical_total_cents: 10_00,
-      presentment_total_cents: 12_51,
-      fx_rate: BigDecimal("0.8"),
-      stripe_fx_quote_id: "fxq_locked",
-      stripe_fx_quote_expires_at: 30.minutes.from_now
-    )
-
-    expect(StripeFxQuote).not_to receive(:create)
-
-    result = described_class.new(charge:,
-                                 merchant_account:,
-                                 purchases: [purchase],
-                                 amount_cents: 10_00,
-                                 gumroad_amount_cents: 3_00,
-                                 eligibility_decision:,
-                                 locked_quote:).perform
+  it "charges the locked quote total verbatim rather than reconverting the canonical amount" do
+    locked_quote.presentment_total_cents = 12_51
 
     expect(result).to have_attributes(processor_amount_cents: 12_51,
                                       processor_currency: Currency::CAD,
-                                      processor_gumroad_amount_cents: 3_75,
                                       stripe_fx_quote_id: "fxq_locked")
     expect(charge.reload.charge_presentment).to have_attributes(presentment_total_cents: 12_51,
                                                                 presentment_gumroad_amount_cents: 3_75,
@@ -92,13 +80,13 @@ describe Charge::PresentmentOrchestrator do
                                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
-  it "falls back without creating presentment records when quote creation fails" do
+  it "falls back without leaving partial presentment records when persistence fails" do
     allow(ErrorNotifier).to receive(:notify)
-    allow(StripeFxQuote).to receive(:create).and_raise(ChargeProcessorUnavailableError.new)
+    allow_any_instance_of(Charge::PresentmentAllocator).to receive(:allocations).and_raise("allocation failed")
 
     expect(result).to be_nil
     expect(charge.reload.charge_presentment).to be_nil
     expect(purchase.reload.purchase_presentment).to be_nil
-    expect(ErrorNotifier).to have_received(:notify).with(instance_of(ChargeProcessorUnavailableError), context: hash_including(charge_id: charge.id))
+    expect(ErrorNotifier).to have_received(:notify).with(instance_of(RuntimeError), context: hash_including(charge_id: charge.id))
   end
 end

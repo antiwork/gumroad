@@ -217,6 +217,7 @@ class Order::ChargeService
 
       if charge_intent&.succeeded?
         charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
+        FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, charge.id) if charge_waiting_for_flow_of_funds
 
         purchases.each do |purchase|
           if purchases_to_charge.include?(purchase)
@@ -333,18 +334,6 @@ class Order::ChargeService
       charge_intent.is_a?(StripeChargeIntent) &&
       charge&.charge_presentment.present? &&
       charge_intent.charge.flow_of_funds.blank?
-  end
-
-  def purchase_pending_processor_settlement_response(purchase)
-    purchase.purchase_response.tap do |response|
-      response[:content_url] = nil
-      response[:redirect_token] = nil
-      response[:url_redirect_external_id] = nil
-      response[:should_show_receipt] = false
-      response[:show_view_content_button_on_product_page] = false
-      response[:has_third_party_analytics] = false
-      response[:bundle_products]&.each { _1[:content_url] = nil }
-    end
   end
 
   def mark_charged_purchase_successful(purchase)

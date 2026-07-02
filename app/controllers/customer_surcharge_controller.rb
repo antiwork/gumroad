@@ -57,7 +57,9 @@ class CustomerSurchargeController < ApplicationController
         currency: quote.currency,
         canonical_total_cents: quote.canonical_total_cents,
         presentment_total_cents: quote.presentment_total_cents,
-        rate: (quote.presentment_total_cents.to_d / quote.canonical_total_cents).to_f,
+        # Exact minor-unit rate from the locked quote, not a ratio of already-rounded
+        # totals — client-side line conversions inherit the ratio's rounding error.
+        rate: (BigDecimal(subunit_to_unit(quote.currency)) / (subunit_to_unit(Currency::USD) * quote.fx_rate)).to_f,
         subunit_to_unit: subunit_to_unit(quote.currency),
         expires_at: quote.stripe_fx_quote_expires_at.iso8601,
       }

@@ -58,7 +58,11 @@ class Charge::CreateService
                                                        mandate_options:,
                                                        **processor_args)
     end
-    clear_buyer_currency_presentments if charge_intent.blank?
+    # Ambiguous processor outcomes (timeouts, rate limits) may have created and even
+    # confirmed the presentment PaymentIntent at Stripe; keep the snapshots so support
+    # recovery (Purchase::SyncStatusWithChargeProcessorService) retains the presentment
+    # context it needs to book canonical seller/affiliate balances.
+    clear_buyer_currency_presentments if charge_intent.blank? && !@processor_outcome_unknown
 
     if charge_intent.present?
       charge.charge_intent = charge_intent
@@ -96,6 +100,9 @@ class Charge::CreateService
     end
     nil
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+    # ChargeProcessorUnavailableError wraps connection failures, where the PaymentIntent
+    # may have been created (or confirmed) before the response was lost.
+    @processor_outcome_unknown = e.is_a?(ChargeProcessorUnavailableError)
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
       purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."

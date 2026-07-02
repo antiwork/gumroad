@@ -2,8 +2,8 @@
 
 # Coordinates the buyer-presentment charge setup for the PR-1 test-mode path.
 #
-# The checkout flow first locks or creates a Stripe FX quote, then snapshots the
-# buyer-facing presentment amounts on the charge and purchases, and finally
+# Charge::CreateService verifies the signed locked quote, then this orchestrator
+# snapshots the buyer-facing presentment amounts on the charge and purchases and
 # returns processor arguments for the PaymentIntent. Persisting before processor
 # confirmation lets receipts and accounting read a single stored quote, but it
 # also means post-money-movement exceptions need explicit reconciliation in the
@@ -20,7 +20,7 @@ class Charge::PresentmentOrchestrator
 
   attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :eligibility_decision, :locked_quote
 
-  def initialize(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, eligibility_decision:, locked_quote: nil)
+  def initialize(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, eligibility_decision:, locked_quote:)
     @charge = charge
     @merchant_account = merchant_account
     @purchases = purchases
@@ -33,21 +33,18 @@ class Charge::PresentmentOrchestrator
   def perform
     return unless eligibility_decision.eligible?
 
-    quote = locked_quote || StripeFxQuote.create(
-      to_currency: Currency::USD,
-      from_currency: eligibility_decision.currency,
-      stripe_account_id: merchant_account.charge_processor_merchant_id
-    )
-    presentment_total_cents = locked_quote ? locked_quote.presentment_total_cents : presentment_cents_for(amount_cents, quote.fx_rate)
-    presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, quote.fx_rate)
+    # The buyer must be charged exactly the verified locked total they last saw; this
+    # orchestrator never mints a fresh quote of its own.
+    presentment_total_cents = locked_quote.presentment_total_cents
+    presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate)
 
-    persist_presentment!(quote:, presentment_total_cents:, presentment_gumroad_amount_cents:)
+    persist_presentment!(quote: locked_quote, presentment_total_cents:, presentment_gumroad_amount_cents:)
 
     Result.new(
       processor_amount_cents: presentment_total_cents,
       processor_currency: eligibility_decision.currency,
       processor_gumroad_amount_cents: presentment_gumroad_amount_cents,
-      stripe_fx_quote_id: quote.id
+      stripe_fx_quote_id: locked_quote.stripe_fx_quote_id
     )
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {

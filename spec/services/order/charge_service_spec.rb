@@ -565,6 +565,8 @@ describe Order::ChargeService, :vcr do
                                                                show_view_content_button_on_product_page: false,
                                                                buyer_presentment_currency: Currency::CAD,
                                                                buyer_presentment_total_cents: 12_50)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
     ensure
       Feature.deactivate_user(:buyer_local_currency, seller_1)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
