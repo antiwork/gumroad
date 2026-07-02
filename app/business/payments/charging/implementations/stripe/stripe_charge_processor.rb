@@ -18,6 +18,11 @@ class StripeChargeProcessor
   # https://docs.stripe.com/currencies#zero-decimal
   ZERO_DECIMAL_CURRENCIES = %w[bif clp djf gnf jpy kmf krw mga pyg rwf ugx vnd vuv xaf xof xpf].freeze
 
+  # Currencies Stripe only accepts in amounts evenly divisible by 100 (e.g. NT$310.50 is
+  # rejected); unrounded FX-quoted amounts cannot guarantee that.
+  # https://docs.stripe.com/currencies#special-cases
+  AMOUNT_DIVISIBLE_BY_100_CURRENCIES = %w[isk huf twd ugx].freeze
+
   REQUEST_MANUAL_3DS_PARAMS = {
     payment_method_options: {
       card: {
@@ -33,11 +38,14 @@ class StripeChargeProcessor
 
   # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
   # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
-  # passed to Stripe verbatim, so a charge is only safe when both conventions agree.
+  # passed to Stripe verbatim, so a charge is only safe when both conventions agree and
+  # Stripe accepts arbitrary amounts in the currency (TWD must be divisible by 100).
   def self.charge_minor_units_compatible?(currency)
     return false if currency.blank?
 
     currency = currency.to_s.downcase
+    return false if AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency)
+
     subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
   end
 

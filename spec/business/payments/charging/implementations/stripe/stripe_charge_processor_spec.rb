@@ -25,6 +25,11 @@ describe StripeChargeProcessor, :vcr do
       expect(described_class.charge_minor_units_compatible?(Currency::KRW)).to be(false)
     end
 
+    it "rejects TWD because Stripe only accepts amounts evenly divisible by 100" do
+      expect(described_class.charge_minor_units_compatible?("twd")).to be(false)
+      expect(described_class.charge_minor_units_compatible?(Currency::TWD)).to be(false)
+    end
+
     it "rejects blank currencies" do
       expect(described_class.charge_minor_units_compatible?(nil)).to be(false)
       expect(described_class.charge_minor_units_compatible?("")).to be(false)
@@ -654,6 +659,31 @@ describe StripeChargeProcessor, :vcr do
     it "passes on the description" do
       expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(description: "test description")).and_call_original
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
+    end
+
+    it "raises a quote-invalid error when Stripe rejects a drift-invalidated FX quote" do
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
+      quote_chargeable = instance_double(StripeChargeablePaymentMethod, stripe_charge_params: { payment_method: "pm_test" })
+
+      expect(Stripe::PaymentIntent).to receive(:create).and_raise(
+        Stripe::InvalidRequestError.new("The provided FX quote is no longer valid.", "fx_quote", code: "payment_intent_fx_quote_invalid")
+      )
+
+      expect do
+        subject.create_payment_intent_or_charge!(
+          merchant_account,
+          quote_chargeable,
+          10_00,
+          3_00,
+          "reference",
+          "test description",
+          off_session: false,
+          processor_amount_cents: 12_50,
+          processor_currency: Currency::CAD,
+          processor_gumroad_amount_cents: 3_75,
+          stripe_fx_quote_id: "fxq_test"
+        )
+      end.to raise_error(ChargeProcessorFxQuoteInvalidError)
     end
 
     it "uses buyer-presentment params for direct connected-account charges" do

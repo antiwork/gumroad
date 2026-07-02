@@ -6,11 +6,14 @@ class CreateBuyerPresentments < ActiveRecord::Migration[7.1]
       t.bigint :charge_id, null: false
       t.string :processor, null: false
       t.string :presentment_currency, null: false
-      t.integer :presentment_total_cents, null: false
-      t.integer :presentment_gumroad_amount_cents, null: false
-      t.string :stripe_fx_quote_id, null: false
-      t.datetime :stripe_fx_quote_expires_at, null: false
-      t.decimal :fx_rate, precision: 30, scale: 15, null: false
+      t.bigint :presentment_total_cents, null: false
+      t.bigint :presentment_gumroad_amount_cents, null: false
+      # Quote columns stay nullable at the database level: local payment methods where the
+      # quote cannot lock and Phase 3 PayPal create presentment rows without them. Presence
+      # for quote-backed Stripe rows is enforced by application validation.
+      t.string :stripe_fx_quote_id
+      t.datetime :stripe_fx_quote_expires_at
+      t.decimal :fx_rate, precision: 30, scale: 15
 
       t.timestamps
     end
@@ -25,13 +28,13 @@ class CreateBuyerPresentments < ActiveRecord::Migration[7.1]
       t.bigint :charge_presentment_id
       t.string :processor, null: false
       t.string :presentment_currency, null: false
-      t.integer :presentment_price_cents, null: false
-      t.integer :presentment_tip_cents, null: false, default: 0
-      t.integer :presentment_seller_tax_cents, null: false, default: 0
-      t.integer :presentment_gumroad_tax_cents, null: false, default: 0
-      t.integer :presentment_shipping_cents, null: false, default: 0
-      t.integer :presentment_total_cents, null: false
-      t.integer :presentment_gumroad_amount_cents, null: false
+      t.bigint :presentment_price_cents, null: false
+      t.bigint :presentment_tip_cents, null: false, default: 0
+      t.bigint :presentment_seller_tax_cents, null: false, default: 0
+      t.bigint :presentment_gumroad_tax_cents, null: false, default: 0
+      t.bigint :presentment_shipping_cents, null: false, default: 0
+      t.bigint :presentment_total_cents, null: false
+      t.bigint :presentment_gumroad_amount_cents, null: false
 
       t.timestamps
     end

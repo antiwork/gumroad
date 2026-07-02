@@ -6132,6 +6132,19 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#confirm_charge_intent!" do
+    it "asks the buyer to re-quote when Stripe invalidates the locked FX quote at confirmation" do
+      purchase = create(:purchase_in_progress)
+      purchase.create_processor_payment_intent!(intent_id: "pi_test")
+      allow(ChargeProcessor).to receive(:confirm_payment_intent!).and_raise(ChargeProcessorFxQuoteInvalidError)
+
+      purchase.confirm_charge_intent!
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    end
+  end
+
   describe "#save_charge_data" do
     it "saves all charge related info from the given charge on the purchase" do
       stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id, "ch_2OTlIf9e1RjUNIyY1adIdtGp")

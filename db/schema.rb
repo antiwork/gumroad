@@ -514,11 +514,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_02_000000) do
     t.bigint "charge_id", null: false
     t.string "processor", null: false
     t.string "presentment_currency", null: false
-    t.integer "presentment_total_cents", null: false
-    t.integer "presentment_gumroad_amount_cents", null: false
-    t.string "stripe_fx_quote_id", null: false
-    t.datetime "stripe_fx_quote_expires_at", null: false
-    t.decimal "fx_rate", precision: 30, scale: 15, null: false
+    t.bigint "presentment_total_cents", null: false
+    t.bigint "presentment_gumroad_amount_cents", null: false
+    t.string "stripe_fx_quote_id"
+    t.datetime "stripe_fx_quote_expires_at"
+    t.decimal "fx_rate", precision: 30, scale: 15
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["charge_id"], name: "index_charge_presentments_on_charge_id", unique: true
@@ -1808,13 +1808,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_02_000000) do
     t.bigint "charge_presentment_id"
     t.string "processor", null: false
     t.string "presentment_currency", null: false
-    t.integer "presentment_price_cents", null: false
-    t.integer "presentment_tip_cents", default: 0, null: false
-    t.integer "presentment_seller_tax_cents", default: 0, null: false
-    t.integer "presentment_gumroad_tax_cents", default: 0, null: false
-    t.integer "presentment_shipping_cents", default: 0, null: false
-    t.integer "presentment_total_cents", null: false
-    t.integer "presentment_gumroad_amount_cents", null: false
+    t.bigint "presentment_price_cents", null: false
+    t.bigint "presentment_tip_cents", default: 0, null: false
+    t.bigint "presentment_seller_tax_cents", default: 0, null: false
+    t.bigint "presentment_gumroad_tax_cents", default: 0, null: false
+    t.bigint "presentment_shipping_cents", default: 0, null: false
+    t.bigint "presentment_total_cents", null: false
+    t.bigint "presentment_gumroad_amount_cents", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["charge_presentment_id"], name: "index_purchase_presentments_on_charge_presentment_id"

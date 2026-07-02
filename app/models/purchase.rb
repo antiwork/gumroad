@@ -1934,6 +1934,13 @@ class Purchase < ApplicationRecord
       errors.add :base, "Sorry, something went wrong."
     end
 
+  rescue ChargeProcessorFxQuoteInvalidError => e
+    # SCA confirmation happens minutes after PaymentIntent creation, so the locked FX quote
+    # can expire or drift-invalidate in between; the buyer must re-quote and retry.
+    logger.info "Buyer currency quote invalidated while confirming charge intent: #{e.message} in purchase: #{external_id}"
+    errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+    self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+    nil
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."

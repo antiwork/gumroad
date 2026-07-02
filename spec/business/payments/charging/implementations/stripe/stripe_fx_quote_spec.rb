@@ -8,6 +8,7 @@ describe StripeFxQuote do
     response.data = {
       id: "fxq_test",
       lock_expires_at: 1.hour.from_now.to_i,
+      to_currency: "usd",
       rates: {
         cad: { exchange_rate: "0.800000000000000" }
       }
@@ -40,6 +41,7 @@ describe StripeFxQuote do
     response.data = {
       id: "fxq_test",
       lock_expires_at: 1.hour.from_now.to_i,
+      to_currency: "usd",
       rates: {
         cad: { exchange_rate: "0.800000000000000" }
       }
@@ -58,5 +60,25 @@ describe StripeFxQuote do
     quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: nil)
 
     expect(quote.id).to eq("fxq_test")
+  end
+
+  it "rejects quotes that settle in a different currency than requested" do
+    # Stripe can settle in a currency the connected account enabled through multi-currency
+    # settlement; converting against the wrong settlement currency would charge the buyer a
+    # different amount, so the mismatch must fall back to the canonical path.
+    response = Stripe::StripeResponse.new
+    response.data = {
+      id: "fxq_test",
+      lock_expires_at: 1.hour.from_now.to_i,
+      to_currency: "eur",
+      rates: {
+        cad: { exchange_rate: "0.680000000000000" }
+      }
+    }
+    allow(Stripe).to receive(:raw_request).and_return(response)
+
+    expect do
+      described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
+    end.to raise_error(StripeFxQuote::SettlementCurrencyMismatch, /settles in eur, expected usd/)
   end
 end

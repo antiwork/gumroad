@@ -90,6 +90,13 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
   end
 
+  it "falls back for buyer currencies Stripe only charges in amounts divisible by 100" do
+    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
+  end
+
   it "allows zero-decimal buyer currencies that Gumroad also stores in whole units" do
     allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)
 

@@ -69,6 +69,17 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "returns nil for buyer currencies Stripe only charges in amounts divisible by 100" do
+      # Stripe rejects TWD amounts that are not evenly divisible by 100, and unrounded
+      # FX-quoted amounts cannot guarantee that.
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "1.164.0.1")
+
+      expect(result).to be_nil
+    end
+
     it "quotes whole-unit presentment amounts for zero-decimal buyer currencies" do
       jpy_quote = StripeFxQuote::Quote.new(id: "fxq_jpy", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.00694"))
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)

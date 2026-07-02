@@ -3,6 +3,11 @@
 class StripeFxQuote
   include StripeErrorHandler
 
+  # Stripe can settle in a currency the connected account enabled through multi-currency
+  # settlement rather than the requested one, and the stored merchant_account.currency can
+  # be stale — so the quote response is the only trustworthy settlement-currency source.
+  SettlementCurrencyMismatch = Class.new(StandardError)
+
   API_VERSION = "2025-07-30.preview"
   LOCK_DURATION = "hour"
   OPEN_TIMEOUT_SECONDS = 2
@@ -34,7 +39,7 @@ class StripeFxQuote
       )
     end
 
-    build_quote(response.data, from_currency: from_currency.to_s.downcase)
+    build_quote(response.data, from_currency: from_currency.to_s.downcase, to_currency: to_currency.to_s.downcase)
   end
 
   private
@@ -46,7 +51,13 @@ class StripeFxQuote
       )
     end
 
-    def build_quote(data, from_currency:)
+    def build_quote(data, from_currency:, to_currency:)
+      actual_to_currency = (data[:to_currency] || data["to_currency"]).to_s.downcase
+      if actual_to_currency != to_currency
+        raise SettlementCurrencyMismatch,
+              "FX quote settles in #{actual_to_currency.presence || "unknown"}, expected #{to_currency}"
+      end
+
       Quote.new(
         id: data.fetch(:id),
         expires_at: parsed_expires_at(data.fetch(:lock_expires_at)),

@@ -287,6 +287,53 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    it "asks the buyer to re-quote and clears snapshots when Stripe invalidates the locked quote" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::CAD, fallback_reason: nil)
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::CAD,
+                                                              canonical_total_cents: 10_00,
+                                                              presentment_total_cents: 12_50,
+                                                              fx_rate: BigDecimal("0.8"),
+                                                              stripe_fx_quote_id: "fxq_test",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_quote)
+      # Stripe drift-invalidates the quote at PaymentIntent creation; the snapshots persisted
+      # before the call must be cleared and the buyer asked to re-quote.
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do
+        expect(ChargePresentment.count).to eq(1)
+        expect(PurchasePresentment.count).to eq(1)
+        raise ChargeProcessorFxQuoteInvalidError
+      end
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                params: { buyer_currency_quote: "locked-token" }).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      expect(ChargePresentment.count).to eq(0)
+      expect(PurchasePresentment.count).to eq(0)
+    end
+
     it "stops before Stripe and marks purchases when the locked buyer-currency quote is invalid" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
