@@ -63,6 +63,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.charges.count).to eq(1)
         charge = order.charges.last
         expect(charge.stripe_payment_intent_id).to be_present
+        expect(charge).to be_client_confirmed
         expect(charge.amount_cents).to eq(order.purchases.sum(&:total_transaction_cents))
 
         # Fee recomputation: resolving the Gumroad-managed merchant account adds the Stripe processor
