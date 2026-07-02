@@ -140,6 +140,41 @@ describe CustomerMailer do
       expect(mail.body.sanitized).to have_text("The charge will be listed as GUMRD.COM* on your credit card statement.")
     end
 
+    it "renders persisted buyer-presentment amounts" do
+      user = create(:user, email: "bob@gumroad.com", name: "bob walsh")
+      product = create(:product, user:, name: "Digital product")
+      merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+                         create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      purchase = create(:purchase,
+                        link: product,
+                        seller: product.user,
+                        merchant_account:,
+                        email: "to@example.org",
+                        price_cents: 1_744,
+                        displayed_price_cents: 1_744,
+                        tax_cents: 254,
+                        total_transaction_cents: 1_998,
+                        was_purchase_taxable: true)
+      purchase.create_url_redirect!
+      charge = create(:charge, seller: product.user, purchases: [purchase], amount_cents: 1_998)
+      charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 24_98)
+      create(:purchase_presentment,
+             purchase:,
+             charge_presentment:,
+             presentment_price_cents: 21_80,
+             presentment_tip_cents: 0,
+             presentment_seller_tax_cents: 0,
+             presentment_gumroad_tax_cents: 3_18,
+             presentment_shipping_cents: 0,
+             presentment_total_cents: 24_98)
+
+      mail = CustomerMailer.receipt(purchase.id)
+
+      expect(mail.body.sanitized).to have_text("CAD$21.80")
+      expect(mail.body.sanitized).to have_text("CAD$24.98")
+      expect(mail.body.sanitized).not_to have_text("All charges are processed in United States Dollars")
+    end
+
     it "has the right subject for a purchase" do
       expect(mail.subject).to match(/^You bought /)
     end

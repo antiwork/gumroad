@@ -13,6 +13,29 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".charge_minor_units_compatible?" do
+    it "allows currencies whose stored minor units match what Stripe charges" do
+      expect(described_class.charge_minor_units_compatible?("usd")).to be(true)
+      expect(described_class.charge_minor_units_compatible?("cad")).to be(true)
+      expect(described_class.charge_minor_units_compatible?("jpy")).to be(true)
+    end
+
+    it "rejects KRW because Gumroad stores 1/100 won while Stripe charges whole won" do
+      expect(described_class.charge_minor_units_compatible?("krw")).to be(false)
+      expect(described_class.charge_minor_units_compatible?(Currency::KRW)).to be(false)
+    end
+
+    it "rejects TWD because Stripe only accepts amounts evenly divisible by 100" do
+      expect(described_class.charge_minor_units_compatible?("twd")).to be(false)
+      expect(described_class.charge_minor_units_compatible?(Currency::TWD)).to be(false)
+    end
+
+    it "rejects blank currencies" do
+      expect(described_class.charge_minor_units_compatible?(nil)).to be(false)
+      expect(described_class.charge_minor_units_compatible?("")).to be(false)
+    end
+  end
+
   describe "#get_chargeable_for_params" do
     describe "with invalid params" do
       it "returns nil" do
@@ -636,6 +659,75 @@ describe StripeChargeProcessor, :vcr do
     it "passes on the description" do
       expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(description: "test description")).and_call_original
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
+    end
+
+    it "raises a quote-invalid error when Stripe rejects a drift-invalidated FX quote" do
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
+      quote_chargeable = instance_double(StripeChargeablePaymentMethod, stripe_charge_params: { payment_method: "pm_test" })
+
+      expect(Stripe::PaymentIntent).to receive(:create).and_raise(
+        Stripe::InvalidRequestError.new("The provided FX quote is no longer valid.", "fx_quote", code: "payment_intent_fx_quote_invalid")
+      )
+
+      expect do
+        subject.create_payment_intent_or_charge!(
+          merchant_account,
+          quote_chargeable,
+          10_00,
+          3_00,
+          "reference",
+          "test description",
+          off_session: false,
+          processor_amount_cents: 12_50,
+          processor_currency: Currency::CAD,
+          processor_gumroad_amount_cents: 3_75,
+          stripe_fx_quote_id: "fxq_test"
+        )
+      end.to raise_error(ChargeProcessorFxQuoteInvalidError)
+    end
+
+    it "uses buyer-presentment params for direct connected-account charges" do
+      stripe_account_id = "acct_presentment"
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: stripe_account_id)
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(
+          amount: 12_50,
+          currency: Currency::CAD,
+          application_fee_amount: 3_75,
+          fx_quote: "fxq_test"
+        ),
+        {
+          stripe_account: stripe_account_id,
+          stripe_version: StripeFxQuote::API_VERSION,
+          idempotency_key: "buyer-currency-charge-test-fxq_test",
+        }
+      ).and_return(payment_intent)
+      expect(StripeChargeIntent).to receive(:new)
+        .with(payment_intent:, merchant_account:)
+        .and_call_original
+
+      charge_intent = subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        stripe_fx_quote_id: "fxq_test",
+        idempotency_key: "buyer-currency-charge-test-fxq_test"
+      )
+
+      expect(charge_intent).to be_a(StripeChargeIntent)
+      expect(charge_intent.processing?).to eq(true)
     end
 
     context "for a card without SCA support" do

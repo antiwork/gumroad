@@ -37,6 +37,14 @@ class Purchase::ConfirmService < Purchase::BaseService
       return error_message
     end
 
+    if purchase.pending_buyer_presentment_settlement?
+      # The card was charged but Stripe settlement data is not available yet; leave the
+      # purchase in_progress and let the finalization job book balances and send the
+      # receipt once real settlement data exists.
+      FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, purchase.charge.id)
+      return
+    end
+
     if purchase.is_upgrade_purchase? || purchase.subscription&.is_resubscription_pending_confirmation?
       purchase.subscription.handle_purchase_success(purchase)
       if purchase.subscription.is_resubscription_pending_confirmation?

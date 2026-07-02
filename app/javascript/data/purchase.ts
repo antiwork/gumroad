@@ -106,6 +106,7 @@ export type StartCartPurchaseRequestPayload = {
   lineItems: PurchaseLineItemPayload[];
   recaptchaResponse: string | null;
   usedStripePaymentElement: boolean;
+  buyerCurrencyQuote: string | null;
 };
 
 export type PaymentDetailsSource = "card_element" | "payment_element" | "payment_request" | "saved_payment_method";
@@ -238,6 +239,7 @@ export const createPurchasesRequestData = (
     is_gift: payload.giftInfo != null,
     vat_id: payload.vatId || "",
     "g-recaptcha-response": payload.recaptchaResponse || "",
+    buyer_currency_quote: payload.buyerCurrencyQuote || "",
     purchase,
     line_items: payload.lineItems.map((lineItem) => ({
       uid: lineItem.uid,

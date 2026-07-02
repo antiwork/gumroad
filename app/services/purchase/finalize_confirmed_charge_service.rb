@@ -41,8 +41,9 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       purchase.save_charge_data(charge_intent.charge)
 
       if purchase.errors.present?
+        error_message = purchase.errors.full_messages[0]
         handle_purchase_failure
-        return purchase.errors.full_messages[0]
+        return error_message
       end
 
       handle_purchase_success

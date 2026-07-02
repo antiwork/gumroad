@@ -18,7 +18,11 @@ class ReceiptPresenter::ChargeInfo
   end
 
   def formatted_total_transaction_amount
-    formatted_dollar_amount(chargeable.charged_amount_cents)
+    if presentment_currency.present?
+      MoneyFormatter.format(presentment_total_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
+    else
+      formatted_dollar_amount(chargeable.charged_amount_cents)
+    end
   end
 
   def order_id
@@ -43,4 +47,13 @@ class ReceiptPresenter::ChargeInfo
 
   private
     attr_reader :for_email, :order_items_count, :chargeable, :seller
+
+    def presentment_currency
+      currencies = chargeable.successful_purchases.filter_map(&:buyer_presentment_currency).uniq
+      currencies.one? ? currencies.first : nil
+    end
+
+    def presentment_total_cents
+      chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents || _1.total_transaction_cents }
+    end
 end

@@ -23,41 +23,54 @@ class BalanceTransaction < ApplicationRecord
       @net_cents = net_cents
     end
 
-    def self.create_issued_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:)
+    # When canonical_issued_amount is supplied (buyer-presentment charges), "issued amount"
+    # here means the canonical seller/accounting issued amount, not the processor-issued
+    # presentment amount — the processor issued e.g. CAD, but balances stay canonical.
+    def self.create_issued_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
       new(
-        currency: flow_of_funds.gumroad_amount.currency,
+        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
         gross_cents: issued_affiliate_cents,
         net_cents: issued_affiliate_cents
       )
     end
 
-    def self.create_holding_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:)
+    def self.create_holding_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
       new(
-        currency: flow_of_funds.gumroad_amount.currency,
+        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
         gross_cents: issued_affiliate_cents,
         net_cents: issued_affiliate_cents
       )
     end
 
-    def self.create_issued_amount_for_seller(flow_of_funds:, issued_net_cents:)
+    def self.create_issued_amount_for_seller(flow_of_funds:, issued_net_cents:, canonical_issued_amount: nil)
+      issued_gross_amount = canonical_issued_amount || flow_of_funds.issued_amount
+
       new(
-        currency: flow_of_funds.issued_amount.currency,
-        gross_cents: flow_of_funds.issued_amount.cents,
+        currency: issued_gross_amount.currency,
+        gross_cents: issued_gross_amount.cents,
         net_cents: issued_net_cents
       )
     end
 
-    def self.create_holding_amount_for_seller(flow_of_funds:, issued_net_cents:)
+    def self.create_holding_amount_for_seller(flow_of_funds:, issued_net_cents:, canonical_issued_amount: nil)
       if flow_of_funds.merchant_account_gross_amount
         new(
           currency: flow_of_funds.merchant_account_gross_amount.currency,
           gross_cents: flow_of_funds.merchant_account_gross_amount.cents,
           net_cents: flow_of_funds.merchant_account_net_amount.cents
         )
-      else
+      elsif canonical_issued_amount && flow_of_funds.settled_amount
         new(
-          currency: flow_of_funds.issued_amount.currency,
-          gross_cents: flow_of_funds.issued_amount.cents,
+          currency: flow_of_funds.settled_amount.currency,
+          gross_cents: flow_of_funds.settled_amount.cents,
+          net_cents: issued_net_cents
+        )
+      else
+        issued_gross_amount = canonical_issued_amount || flow_of_funds.issued_amount
+
+        new(
+          currency: issued_gross_amount.currency,
+          gross_cents: issued_gross_amount.cents,
           net_cents: issued_net_cents
         )
       end

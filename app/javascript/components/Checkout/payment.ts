@@ -53,16 +53,19 @@ export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
+      disable_wallets: boolean;
       elements_options: null;
     }
   | {
       integration: "payment_element";
       fallback_reason: null;
+      disable_wallets: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
+      disable_wallets: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -119,6 +122,9 @@ export type State = {
     | { type: "loaded"; result: SurchargesResponse };
   availablePaymentMethods: PaymentMethod[];
   paymentMethod: PaymentMethodType;
+  // Card checkouts that save the card charge canonically in PR 1 (no buyer-presentment), so
+  // buyer-currency display and the quote token are suppressed while this is set.
+  willSaveCard: boolean;
   savedCreditCard: SavedCreditCard | null;
   checkoutPayment: CheckoutPaymentConfig;
   status:
@@ -160,6 +166,7 @@ type SimpleValue =
   | "zipCode"
   | "saveAddress"
   | "paymentMethod"
+  | "willSaveCard"
   | "gift"
   | "payLabel"
   | "warning"
@@ -397,6 +404,117 @@ export const loadSurcharges = (state: State) => {
   });
 };
 
+function validatePaymentMethodIndependentFields(state: State) {
+  const errors = new Set<string>();
+  const customFields = state.products.flatMap(({ permalink, customFields, bundleProductCustomFields }) => [
+    ...customFields.map((field) => ({ ...field, key: getCustomFieldKey(field, { permalink }) })),
+    ...bundleProductCustomFields.flatMap(({ product, customFields }) =>
+      customFields.map((field) => ({
+        ...field,
+        key: getCustomFieldKey(field, { permalink, bundleProductId: product.id }),
+      })),
+    ),
+  ]);
+  for (const field of customFields) {
+    if ((field.type === "terms" || field.required) && !state.customFieldValues[field.key])
+      errors.add(`customFields.${field.key}`);
+  }
+  if (isTippingEnabled(state) && state.tip.type === "fixed" && state.tip.amount === null) errors.add("tip");
+  if (
+    requiresPayment(state) &&
+    state.paymentMethod !== "stripePaymentRequest" &&
+    !hasShipping(state) &&
+    state.country === "US" &&
+    !state.zipCode
+  )
+    errors.add("zipCode");
+  if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
+  return errors;
+}
+
+// Exported so checkout state transitions can be unit-tested without rendering the checkout.
+export const reduceCheckoutState = produce((state: State, action: Action) => {
+  switch (action.type) {
+    case "set-value":
+      if (
+        ("country" in action && action.country !== state.country) ||
+        ("zipCode" in action &&
+          action.zipCode !== state.zipCode &&
+          state.country === "US" &&
+          action.zipCode?.length === 5) ||
+        ("state" in action && action.state !== state.state && state.country === "CA") ||
+        ("vatId" in action && action.vatId !== state.vatId) ||
+        ("gift" in action && action.gift?.type !== state.gift?.type) ||
+        "products" in action ||
+        "tip" in action
+      ) {
+        if (state.surcharges.type === "loading") state.surcharges.abort();
+        state.surcharges = { type: "pending" };
+      }
+      if (state.status.type === "input") {
+        for (const key in action) state.status.errors.delete(key);
+      }
+      if ("email" in action && action.email !== state.email) {
+        state.emailTypoSuggestion = null;
+      }
+      Object.assign(state, action);
+      break;
+    case "set-custom-field":
+      if (state.status.type !== "input") return;
+      state.customFieldValues[action.key] = action.value;
+      state.status.errors.delete(`customFields.${action.key}`);
+      break;
+    case "add-payment-method":
+      if (!state.availablePaymentMethods.some((method) => method.type === action.paymentMethod.type))
+        state.availablePaymentMethods.push(action.paymentMethod);
+      break;
+    case "offer": {
+      const errors = validatePaymentMethodIndependentFields(state);
+      state.status = errors.size ? { type: "input", errors } : { type: "offering" };
+      break;
+    }
+    case "validate": {
+      const errors = validatePaymentMethodIndependentFields(state);
+      state.status = errors.size ? { type: "input", errors } : { type: "validating" };
+      break;
+    }
+    case "start-payment":
+      state.status = { type: "starting" };
+      break;
+    case "acknowledge-email-typo":
+      state.acknowledgedEmails.add(action.email);
+      state.emailTypoSuggestion = null;
+      break;
+    case "cancel":
+      if (state.status.type === "input") return;
+      state.status = { type: "input", errors: new Set() };
+      break;
+    case "set-recaptcha-response": {
+      if (state.status.type !== "captcha") return;
+      const recaptchaData = action.recaptchaResponse ? { recaptchaResponse: action.recaptchaResponse } : {};
+      state.status = { ...state.status, type: "finished", ...recaptchaData };
+      break;
+    }
+    case "set-payment-method": {
+      if (state.status.type !== "starting") return;
+      const errors = validatePaymentMethodIndependentFields(state);
+      if (!isValidEmail(state.email)) errors.add("email");
+      if (hasShipping(state)) {
+        for (const field of addressFields) {
+          if (!state[field]) errors.add(field);
+        }
+      }
+      state.status = errors.size ? { type: "input", errors } : { type: "captcha", paymentMethod: action.paymentMethod };
+      break;
+    }
+    case "update-products":
+      state.products = action.products;
+      if (state.surcharges.type === "loading") state.surcharges.abort();
+      state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
+      break;
+  }
+});
+
 export function createReducer(initial: {
   countries: Record<string, string>;
   usStates: string[];
@@ -419,158 +537,47 @@ export function createReducer(initial: {
   checkoutPayment?: CheckoutPaymentConfig;
 }): readonly [State, React.Dispatch<PublicAction>] {
   const url = new URL(useOriginalLocation());
-  function validatePaymentMethodIndependentFields(state: State) {
-    const errors = new Set<string>();
-    const customFields = state.products.flatMap(({ permalink, customFields, bundleProductCustomFields }) => [
-      ...customFields.map((field) => ({ ...field, key: getCustomFieldKey(field, { permalink }) })),
-      ...bundleProductCustomFields.flatMap(({ product, customFields }) =>
-        customFields.map((field) => ({
-          ...field,
-          key: getCustomFieldKey(field, { permalink, bundleProductId: product.id }),
-        })),
-      ),
-    ]);
-    for (const field of customFields) {
-      if ((field.type === "terms" || field.required) && !state.customFieldValues[field.key])
-        errors.add(`customFields.${field.key}`);
+  const reducer = React.useReducer(reduceCheckoutState, null, (): State => {
+    const customFieldValues: Record<string, string> = {};
+    for (const product of initial.products) {
+      for (const customField of product.customFields) {
+        const value = url.searchParams.get(customField.name);
+        if (value) {
+          customFieldValues[getCustomFieldKey(customField, product)] = value;
+        }
+      }
     }
-    if (isTippingEnabled(state) && state.tip.type === "fixed" && state.tip.amount === null) errors.add("tip");
-    if (
-      requiresPayment(state) &&
-      state.paymentMethod !== "stripePaymentRequest" &&
-      !hasShipping(state) &&
-      state.country === "US" &&
-      !state.zipCode
-    )
-      errors.add("zipCode");
-    if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
-    return errors;
-  }
-  const reducer = React.useReducer(
-    produce((state: State, action: Action) => {
-      switch (action.type) {
-        case "set-value":
-          if (
-            ("country" in action && action.country !== state.country) ||
-            ("zipCode" in action &&
-              action.zipCode !== state.zipCode &&
-              state.country === "US" &&
-              action.zipCode?.length === 5) ||
-            ("state" in action && action.state !== state.state && state.country === "CA") ||
-            ("vatId" in action && action.vatId !== state.vatId) ||
-            ("gift" in action && action.gift?.type !== state.gift?.type) ||
-            "products" in action ||
-            "tip" in action
-          ) {
-            if (state.surcharges.type === "loading") state.surcharges.abort();
-            state.surcharges = { type: "pending" };
-          }
-          if (state.status.type === "input") {
-            for (const key in action) state.status.errors.delete(key);
-          }
-          if ("email" in action && action.email !== state.email) {
-            state.emailTypoSuggestion = null;
-          }
-          Object.assign(state, action);
-          break;
-        case "set-custom-field":
-          if (state.status.type !== "input") return;
-          state.customFieldValues[action.key] = action.value;
-          state.status.errors.delete(`customFields.${action.key}`);
-          break;
-        case "add-payment-method":
-          if (!state.availablePaymentMethods.some((method) => method.type === action.paymentMethod.type))
-            state.availablePaymentMethods.push(action.paymentMethod);
-          break;
-        case "offer": {
-          const errors = validatePaymentMethodIndependentFields(state);
-          state.status = errors.size ? { type: "input", errors } : { type: "offering" };
-          break;
-        }
-        case "validate": {
-          const errors = validatePaymentMethodIndependentFields(state);
-          state.status = errors.size ? { type: "input", errors } : { type: "validating" };
-          break;
-        }
-        case "start-payment":
-          state.status = { type: "starting" };
-          break;
-        case "acknowledge-email-typo":
-          state.acknowledgedEmails.add(action.email);
-          state.emailTypoSuggestion = null;
-          break;
-        case "cancel":
-          if (state.status.type === "input") return;
-          state.status = { type: "input", errors: new Set() };
-          break;
-        case "set-recaptcha-response": {
-          if (state.status.type !== "captcha") return;
-          const recaptchaData = action.recaptchaResponse ? { recaptchaResponse: action.recaptchaResponse } : {};
-          state.status = { ...state.status, type: "finished", ...recaptchaData };
-          break;
-        }
-        case "set-payment-method": {
-          if (state.status.type !== "starting") return;
-          const errors = validatePaymentMethodIndependentFields(state);
-          if (!isValidEmail(state.email)) errors.add("email");
-          if (hasShipping(state)) {
-            for (const field of addressFields) {
-              if (!state[field]) errors.add(field);
-            }
-          }
-          state.status = errors.size
-            ? { type: "input", errors }
-            : { type: "captcha", paymentMethod: action.paymentMethod };
-          break;
-        }
-        case "update-products":
-          state.products = action.products;
-          if (state.surcharges.type === "loading") state.surcharges.abort();
-          state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
-          break;
-      }
-    }),
-    null,
-    (): State => {
-      const customFieldValues: Record<string, string> = {};
-      for (const product of initial.products) {
-        for (const customField of product.customFields) {
-          const value = url.searchParams.get(customField.name);
-          if (value) {
-            customFieldValues[getCustomFieldKey(customField, product)] = value;
-          }
-        }
-      }
-      return {
-        fullName: "",
-        ...initial,
-        recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
-        country: initial.country ?? "US",
-        vatId: "",
-        address: initial.address?.street ?? "",
-        city: initial.address?.city ?? "",
-        state: initial.state ?? "",
-        email: url.searchParams.get("email") ?? initial.email,
-        zipCode: initial.address?.zip ?? "",
-        customFieldValues,
-        surcharges: { type: "pending" },
-        saveAddress: !!initial.address,
-        gift: initial.gift,
-        checkoutPayment: initial.checkoutPayment ?? {
-          integration: "card_element",
-          fallback_reason: "not_checkout",
-          elements_options: null,
-        },
-        paymentMethod: "card",
-        tip: { type: "percentage", percentage: initial.defaultTipOption },
-        status: { type: "input", errors: new Set() },
-        availablePaymentMethods: [],
-        emailTypoSuggestion: null,
-        acknowledgedEmails: new Set<string>(),
-        requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
-      };
-    },
-  );
+    return {
+      fullName: "",
+      ...initial,
+      recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
+      country: initial.country ?? "US",
+      vatId: "",
+      address: initial.address?.street ?? "",
+      city: initial.address?.city ?? "",
+      state: initial.state ?? "",
+      email: url.searchParams.get("email") ?? initial.email,
+      zipCode: initial.address?.zip ?? "",
+      customFieldValues,
+      surcharges: { type: "pending" },
+      saveAddress: !!initial.address,
+      gift: initial.gift,
+      checkoutPayment: initial.checkoutPayment ?? {
+        integration: "card_element",
+        fallback_reason: "not_checkout",
+        disable_wallets: false,
+        elements_options: null,
+      },
+      paymentMethod: "card",
+      willSaveCard: false,
+      tip: { type: "percentage", percentage: initial.defaultTipOption },
+      status: { type: "input", errors: new Set() },
+      availablePaymentMethods: [],
+      emailTypoSuggestion: null,
+      acknowledgedEmails: new Set<string>(),
+      requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
+    };
+  });
   const [state, dispatch] = reducer;
   useRunOnce(() => {
     const url = new URL(window.location.href);

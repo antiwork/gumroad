@@ -5,6 +5,7 @@ module StripeErrorHandler
     def with_stripe_error_handler
       yield
     rescue Stripe::InvalidRequestError => e
+      raise ChargeProcessorFxQuoteInvalidError.new(original_error: e) if e.code == "payment_intent_fx_quote_invalid"
       raise ChargeProcessorInvalidRequestError.new(original_error: e)
     rescue Stripe::APIConnectionError, Stripe::APIError => e
       raise ChargeProcessorUnavailableError.new(original_error: e)

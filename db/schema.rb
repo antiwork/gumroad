@@ -510,6 +510,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_03_000000) do
     t.index ["user_id"], name: "index_carts_on_user_id"
   end
 
+  create_table "charge_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "charge_id", null: false
+    t.string "processor", null: false
+    t.string "presentment_currency", null: false
+    t.bigint "presentment_total_cents", null: false
+    t.bigint "presentment_gumroad_amount_cents", null: false
+    t.string "stripe_fx_quote_id"
+    t.datetime "stripe_fx_quote_expires_at"
+    t.decimal "fx_rate", precision: 30, scale: 15
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["charge_id"], name: "index_charge_presentments_on_charge_id", unique: true
+    t.index ["stripe_fx_quote_id"], name: "index_charge_presentments_on_stripe_fx_quote_id"
+  end
+
   create_table "charge_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "charge_id", null: false
     t.bigint "purchase_id", null: false
@@ -1794,6 +1809,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_03_000000) do
     t.datetime "updated_at", null: false
     t.index ["payment_details_source"], name: "index_purchase_payment_flows_on_payment_details_source"
     t.index ["purchase_id"], name: "index_purchase_payment_flows_on_purchase_id", unique: true
+  end
+
+  create_table "purchase_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.bigint "charge_presentment_id"
+    t.string "processor", null: false
+    t.string "presentment_currency", null: false
+    t.bigint "presentment_price_cents", null: false
+    t.bigint "presentment_tip_cents", default: 0, null: false
+    t.bigint "presentment_seller_tax_cents", default: 0, null: false
+    t.bigint "presentment_gumroad_tax_cents", default: 0, null: false
+    t.bigint "presentment_shipping_cents", default: 0, null: false
+    t.bigint "presentment_total_cents", null: false
+    t.bigint "presentment_gumroad_amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["charge_presentment_id"], name: "index_purchase_presentments_on_charge_presentment_id"
+    t.index ["purchase_id"], name: "index_purchase_presentments_on_purchase_id", unique: true
   end
 
   create_table "purchase_refund_policies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
