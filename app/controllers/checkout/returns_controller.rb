@@ -24,12 +24,21 @@ class Checkout::ReturnsController < ApplicationController
     elsif responses.values.any? { _1[:success] }
       redirect_to success_redirect_url(order), allow_other_host: true
     else
+      restore_cart(order)
       flash[:alert] = failure_message(responses)
       redirect_to checkout_path
     end
   end
 
   private
+    def restore_cart(order)
+      cart = Cart.find_by(order:)
+      return if cart.nil? || cart.alive?
+      return if Cart.fetch_by(user: cart.user, browser_guid: cart.browser_guid).present?
+
+      cart.mark_undeleted!
+    end
+
     def success_redirect_url(order)
       purchases = order.purchases.select(&:successful?)
       purchase = purchases.first

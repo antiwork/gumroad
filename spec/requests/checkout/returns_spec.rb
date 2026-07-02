@@ -145,6 +145,28 @@ describe "Checkout return page", :vcr, type: :request do
       expect(response).to redirect_to(checkout_path)
       expect(flash[:alert]).to be_present
     end
+
+    it "restores the cart that was deleted when the order was created" do
+      cart = create(:cart, :guest, browser_guid: order_params[:browser_guid])
+      order, charge = build_client_confirmed_order
+      expect(cart.reload).not_to be_alive
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+      expect(cart.reload).to be_alive
+      expect(response).to redirect_to(checkout_path)
+    end
+
+    it "leaves the cart deleted when the buyer already has a newer alive cart" do
+      cart = create(:cart, :guest, browser_guid: order_params[:browser_guid])
+      order, charge = build_client_confirmed_order
+      newer_cart = create(:cart, :guest, browser_guid: order_params[:browser_guid])
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+      expect(cart.reload).not_to be_alive
+      expect(newer_cart.reload).to be_alive
+    end
   end
 
   context "when the order token is invalid" do
