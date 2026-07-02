@@ -98,12 +98,17 @@ class Gift::ConvertToNonGiftService
         # the sender flag alone would still route renewal/manage-subscription comms to the giftee
         # (whenever they have an account) AND leave renewals with no card for a guest payer. Point
         # the subscription at the payer and move the payer's saved card onto it (mirroring how a
-        # regular subscription stores the original purchase's card). When the payer is a guest with
-        # no reusable card, the subscription card stays nil and the payer adds one through the
-        # normal manage-subscription flow — same as any owner without a saved card.
-        updates = { user: gifter_purchase.purchaser }
-        updates[:credit_card] = gifter_purchase.credit_card if gifter_purchase.credit_card.present?
-        subscription.update!(updates)
+        # regular subscription stores the original purchase's card). The card is assigned
+        # UNCONDITIONALLY: a gift subscription's card can be non-nil if the giftee added their own
+        # card through the manage-subscription flow (Subscription::UpdaterService), and
+        # `Subscription#credit_card_to_charge` prefers `subscription.credit_card` over the owner's
+        # account card. Conditionally assigning would leave that giftee card silently billing a
+        # subscription now owned by and comms-routed to the payer. Overwriting with the payer's card
+        # — or nil when the payer is a guest with no reusable card — clears the stale giftee card;
+        # the guest payer then adds a card through the normal manage-subscription flow, same as any
+        # owner without a saved card. The idempotency guard prevents a later re-run from clobbering
+        # a card the payer adds afterward.
+        subscription.update!(user: gifter_purchase.purchaser, credit_card: gifter_purchase.credit_card)
       end
 
       log_audit_comments!(gifter_purchase, giftee_purchase)

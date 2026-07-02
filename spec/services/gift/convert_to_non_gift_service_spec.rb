@@ -186,6 +186,25 @@ describe Gift::ConvertToNonGiftService do
           expect(subscription.reload.credit_card).to eq(credit_card)
         end
       end
+
+      context "when the giftee added their own card and the payer has none", :vcr do
+        let(:giftee_card) { create(:credit_card) }
+        let!(:gifter_purchase) do
+          create(:membership_purchase, link: product, seller:, subscription:, purchaser: payer,
+                                       email: "payer@example.com",
+                                       is_gift_sender_purchase: true, gift_given: gift)
+        end
+
+        before { subscription.update!(credit_card: giftee_card) }
+
+        it "clears the stale giftee card so renewals do not keep billing the giftee" do
+          expect(subscription.reload.credit_card).to eq(giftee_card)
+
+          build_service.process!
+
+          expect(subscription.reload.credit_card).to be_nil
+        end
+      end
     end
 
     context "idempotency" do
