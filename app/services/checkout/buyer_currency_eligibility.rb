@@ -71,6 +71,7 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
     purchase = purchases.first
+    return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
     return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
 
     buyer_currency = buyer_currency_for_ip(purchase.ip_address)
@@ -104,5 +105,14 @@ class Checkout::BuyerCurrencyEligibility
 
     def wallet_type
       params[:wallet_type]
+    end
+
+    # Commission deposits and installment payments charge less than the locked cart total
+    # (issue #5419 excludes both from Phase 1), so they must fall back even when a valid
+    # quote token reaches the charge path.
+    def unsupported_product_type?(purchase)
+      purchase.is_commission_deposit_purchase? ||
+        purchase.is_installment_payment? ||
+        purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
     end
 end

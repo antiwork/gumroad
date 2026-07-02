@@ -415,6 +415,95 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
+    it "keeps commission checkouts on the canonical deposit charge even when a quote token is present" do
+      seller_1.update!(check_merchant_account_is_linked: true,
+                       disable_buyer_local_currency: false,
+                       created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      # Commission deposits persist the card for the completion charge, so this chargeable
+      # needs the card-persistence surface the shared presentment double leaves out.
+      commission_chargeable = instance_double(
+        Chargeable,
+        can_be_saved?: true,
+        card_type: CardType::VISA,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_ids: [StripeChargeProcessor.charge_processor_id],
+        country: Compliance::Countries::CAN.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        fingerprint: "card_fp",
+        funding_type: "credit",
+        get_chargeable_for: instance_double(StripeChargeablePaymentMethod),
+        payment_method_id: "pm_test",
+        prepare!: true,
+        requires_mandate?: false,
+        reusable_token_for!: "cus_test",
+        visual: "**** **** **** 4242",
+        zip_code: "H2X 1Y4"
+      )
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(commission_chargeable)
+
+      commission_product = create(:commission_product, user: seller_1, price_cents: 10_00)
+      expect(Checkout::BuyerCurrencyQuote.create(products: [commission_product],
+                                                 canonical_total_cents: 10_00,
+                                                 ip: "24.48.0.1")).to be_nil
+
+      # Commissions charge only the deposit, so a locked full-total quote can never match.
+      # Simulate a stale token (minted for a same-seller, same-total product) reaching the
+      # charge path to prove it falls back silently instead of dead-ending checkout on a
+      # total mismatch.
+      decoy_product = create(:product, user: seller_1, price_cents: 10_00)
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      quote = Checkout::BuyerCurrencyQuote.create(products: [decoy_product],
+                                                  canonical_total_cents: 10_00,
+                                                  ip: "24.48.0.1")
+
+      deposit_cents = (commission_product.price_cents * Commission::COMMISSION_DEPOSIT_PROPORTION).round
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: commission_product.unique_permalink,
+            # The frontend submits the deposit as the price to charge now.
+            perceived_price_cents: deposit_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      charge_processor_call = {}
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        charge_processor_call.replace(amount_cents:, options:)
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: amount_cents,
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchase = order.reload.purchases.sole
+      expect(charge_processor_call.fetch(:amount_cents)).to eq(deposit_cents)
+      expect(charge_processor_call.fetch(:options)).not_to include(:processor_amount_cents, :processor_currency, :stripe_fx_quote_id)
+      expect(purchase.error_code).not_to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(ChargePresentment.count).to eq(0)
+      expect(PurchasePresentment.count).to eq(0)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
     it "keeps buyer-presentment purchases in progress when Stripe settlement data is not available yet" do
       seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
       create(:merchant_account_stripe_connect,

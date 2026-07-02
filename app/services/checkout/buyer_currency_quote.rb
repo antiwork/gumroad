@@ -74,6 +74,12 @@ class Checkout::BuyerCurrencyQuote
     return unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
     return unless product.price_currency_type.to_s.downcase == Currency::USD
     return if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
+    # Commissions charge only a deposit now and installment plans charge only the first
+    # payment, so a quote locked against the full cart total can never match the charged
+    # amount; issue #5419 excludes both from Phase 1. Installment intent is not visible at
+    # quote time, so any product offering an installment plan falls back.
+    return if product.native_type == Link::NATIVE_TYPE_COMMISSION
+    return if product.installment_plan.present?
 
     merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)

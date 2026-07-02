@@ -58,6 +58,29 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "returns nil for commission products" do
+      # Commissions charge only the deposit now, so a quote locked against the full total
+      # could never match the charge amount and would dead-end checkout with a total mismatch.
+      seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      commission_product = create(:commission_product, user: seller, price_cents: 10_00)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [commission_product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil for products offering installment plans" do
+      # Installment intent is not visible at quote time, and an installment checkout
+      # charges only the first payment, so these products fall back entirely.
+      create(:product_installment_plan, link: product, number_of_installments: 3)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [product.reload], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
     it "returns nil for buyer currencies Gumroad stores in different minor units than Stripe charges" do
       # KRW is stored as 1/100 won (config/initializers/money.rb) but Stripe charges whole won,
       # so quoting it would charge buyers 100x the displayed amount.

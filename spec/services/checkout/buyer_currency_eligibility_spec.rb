@@ -83,6 +83,21 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:live_mode)
   end
 
+  it "falls back for commission deposit purchases even when a quote token is present" do
+    seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+    purchase.update!(link: create(:commission_product, user: seller), is_commission_deposit_purchase: true)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for installment payments" do
+    purchase.update!(is_installment_payment: true)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
   it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do
     allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 
