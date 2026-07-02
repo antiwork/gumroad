@@ -48,8 +48,9 @@ jobs:
             # cancelled, neutral, skipped — leave the status unset so the
             # required check stays pending instead of flipping to failure.
             # A concurrency-cancel is moot (the head has already moved to a
-            # new SHA); a manual cancel/timeout on the current head should
-            # not require a manual re-trigger to unblock auto-merge.
+            # new SHA); a manual cancel on the current head should not require
+            # a manual re-trigger to unblock auto-merge. (timed_out is treated
+            # as a genuine failure above and is intentionally not covered here.)
             echo "Workflow conclusion is '$CONCLUSION'; not reporting ci/green."
             exit 0
           fi
