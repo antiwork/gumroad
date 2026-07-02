@@ -1652,6 +1652,16 @@ describe StripeChargeProcessor, :vcr do
       end
     end
 
+    describe "a PaymentIntent lifecycle event without a payment_intent object" do
+      let(:stripe_event_type) { "payment_intent.succeeded" }
+      let(:stripe_event_object) { { "object" => "charge" } }
+
+      it "raises rather than mis-handling a malformed payload" do
+        expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+          .to raise_error(/does not contain a 'payment_intent' object/)
+      end
+    end
+
     describe "event object: charge" do
       let(:stripe_event_type) { "charge.happened" }
       let(:stripe_event_object) { { "object" => "charge", "metadata" => "hi", "id" => stripe_charge_id } }

@@ -163,7 +163,7 @@ class Order::PreparePaymentIntentService
     def build_charge
       charge = order.charges.create!(seller:)
       charge.update!(merchant_account:, processor: merchant_account.charge_processor_id,
-                     amount_cents:, gumroad_amount_cents:)
+                     amount_cents:, gumroad_amount_cents:, client_confirmed: true)
       # Add the seller's already-successful free/test purchases alongside the paid ones, so
       # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
       # a seller group to its charge). Scoped to this charge's seller so a free item from another
@@ -207,6 +207,11 @@ class Order::PreparePaymentIntentService
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
     # list. Single-seller is already enforced by block_multiple_sellers, so resolve for that one seller.
     def payment_method_resolution
+      # setup_for_future is intentionally omitted (defaults to false): purchases_to_charge already
+      # excludes is_free_trial_purchase? and is_preorder_authorization? items, so a setup-only cart
+      # surfaces here as empty and exits at the top-level empty guard before this runs — there is no
+      # setup_flow-eligible purchase left to resolve. If purchases_to_charge ever admits a
+      # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },

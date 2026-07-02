@@ -260,7 +260,7 @@ class ProductPresenter
           default: section.add_new_products,
         }
       end,
-      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
       earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(product.user.timezone).iso8601,
       custom_domain_verification_status:,
       sales_count_for_inventory: product.max_purchase_count? ? product.sales_count_for_inventory : 0,

@@ -15,6 +15,6 @@ export const sanitizeHtml = (dirtyHtml: string): string => {
 
   return DOMPurify.sanitize(dirtyHtml, {
     ADD_TAGS: ["iframe"],
-    ADD_ATTR: ["src", "allow", "width", "height", "title", "sandbox"],
+    ADD_ATTR: ["src", "allow", "allowfullscreen", "width", "height", "title", "sandbox"],
   });
 };

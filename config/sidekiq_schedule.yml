@@ -385,6 +385,10 @@ delete_old_sent_email_info_records:
   cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
   class: DeleteOldSentEmailInfoRecordsJob
   description: Deletes old records from the sent_email_infos table
+delete_old_processed_stripe_events:
+  cron: "30 1 * * *" # UTC 01:30
+  class: DeleteOldProcessedStripeEventsJob
+  description: Deletes processed_stripe_events rows older than Stripe's webhook redelivery window
 australia_backtax_transfer:
   cron: "0 10 7 * *" # UTC 10:00 on 7th of every month
   class: RecoverAusBacktaxesFromStripeAccountsJob

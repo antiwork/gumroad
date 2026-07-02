@@ -46,4 +46,35 @@ describe Discover::TaxonomyPresenter do
       end
     end
   end
+
+  describe "#taxonomies_for_category_picker" do
+    it "sorts taxonomies alphabetically by breadcrumb so each root is followed by its descendants" do
+      picker_taxonomies = presenter.taxonomies_for_category_picker
+
+      taxonomies_by_key = picker_taxonomies.index_by { |taxonomy| taxonomy[:key] }
+      breadcrumbs = picker_taxonomies.map do |taxonomy|
+        breadcrumb = [taxonomy[:label]]
+        current = taxonomy
+        while (current = taxonomies_by_key[current[:parent_key]])
+          breadcrumb.unshift(current[:label])
+        end
+        breadcrumb.join(" > ").downcase
+      end
+
+      expect(breadcrumbs).to eq(breadcrumbs.sort)
+    end
+
+    it "returns the same taxonomies as the nav, reordered" do
+      expect(presenter.taxonomies_for_category_picker).to match_array(presenter.taxonomies_for_nav)
+    end
+
+    it "places a parent immediately before its first child" do
+      picker_taxonomies = presenter.taxonomies_for_category_picker
+      three_d = Taxonomy.find_by(slug: "3d")
+      three_d_index = picker_taxonomies.index { |taxonomy| taxonomy[:key] == three_d.id.to_s }
+
+      expect(three_d_index).not_to be_nil
+      expect(picker_taxonomies[three_d_index + 1][:parent_key]).to eq(three_d.id.to_s)
+    end
+  end
 end
