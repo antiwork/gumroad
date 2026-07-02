@@ -206,10 +206,6 @@ class Order::PreparePaymentIntentService
       # surfaces here as empty and exits at the top-level empty guard before this runs — there is no
       # setup_flow-eligible purchase left to resolve. If purchases_to_charge ever admits a
       # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
-      # setup_for_future is intentionally omitted (defaults to false): this path only charges
-      # purchases_to_charge, which already excludes free-trial and preorder-authorization items —
-      # the only carts that would need the resolver's setup_flow. A pure setup-only cart surfaces
-      # as an empty purchases_to_charge and exits at the top-level empty guard before reaching here.
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
