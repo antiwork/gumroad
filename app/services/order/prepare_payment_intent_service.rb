@@ -201,6 +201,15 @@ class Order::PreparePaymentIntentService
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
     # list. Single-seller is already enforced by block_multiple_sellers, so resolve for that one seller.
     def payment_method_resolution
+      # setup_for_future is intentionally omitted (defaults to false): purchases_to_charge already
+      # excludes is_free_trial_purchase? and is_preorder_authorization? items, so a setup-only cart
+      # surfaces here as empty and exits at the top-level empty guard before this runs — there is no
+      # setup_flow-eligible purchase left to resolve. If purchases_to_charge ever admits a
+      # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
+      # setup_for_future is intentionally omitted (defaults to false): this path only charges
+      # purchases_to_charge, which already excludes free-trial and preorder-authorization items —
+      # the only carts that would need the resolver's setup_flow. A pure setup-only cart surfaces
+      # as an empty purchases_to_charge and exits at the top-level empty guard before reaching here.
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
