@@ -49,7 +49,17 @@ class Purchases::InvoicesController < ApplicationController
     )
 
     begin
-      @chargeable.refund_gumroad_taxes!(refunding_user_id: logged_in_user&.id, note: address_fields.to_json, business_vat_id: refundable_vat_id) if refundable_vat_id
+      if refundable_vat_id
+        tax_refunded = @chargeable.refund_gumroad_taxes!(
+          refunding_user_id: logged_in_user&.id,
+          note: address_fields.to_json,
+          business_vat_id: refundable_vat_id
+        )
+        if !tax_refunded && @chargeable.errors.present?
+          message = @chargeable.errors.full_messages.to_sentence.presence || "Sorry, something went wrong."
+          return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: message
+        end
+      end
 
       invoice_html = render_to_string(locals: { invoice_presenter: }, formats: [:pdf], layout: false)
       pdf = PDFKit.new(invoice_html, page_size: "Letter").to_pdf

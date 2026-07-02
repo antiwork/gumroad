@@ -2,7 +2,7 @@
 
 class ThirdPartyAnalyticsController < ApplicationController
   before_action { opt_out_of_header(:csp) } # Turn off CSP for this controller
-  before_action :fetch_product
+  before_action :fetch_product, except: :profile
 
   OVERRIDE_WINDOW_ACTIONS_CODE = "<script type=\"text/javascript\">
 try { window.alert = function() {}; } catch(error) { }
@@ -46,6 +46,23 @@ try { window.onabort = null; } catch(error) { }
     end
 
     render layout: false
+  end
+
+  # Serves the seller's universal raw snippets for the profile page (#5676),
+  # which has no product to hang the permalink-based index action on. Only
+  # "all"-located universal snippets run here: "product"/"receipt" scope a
+  # snippet to the purchase flow, and there is no purchase context for the
+  # $VALUE/$CURRENCY/$ORDER substitutions either.
+  def profile
+    user = User.alive.find_by(username: params[:username])
+    return e404 if user.nil?
+
+    @third_party_analytics = OVERRIDE_WINDOW_ACTIONS_CODE
+    snippets = user.third_party_analytics.universal.alive.where(location: "all").pluck(:analytics_code)
+    @third_party_analytics += snippets.join("\n") if snippets.present?
+    @third_party_analytics += OVERRIDE_ON_CLOSE_CODE
+
+    render :index, layout: false
   end
 
   private

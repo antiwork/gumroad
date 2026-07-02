@@ -22,6 +22,7 @@ describe CheckoutPresenter do
       {
         integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
         fallback_reason: "empty_cart",
+        disable_wallets: false,
         elements_options: nil,
       }
     end
@@ -255,6 +256,7 @@ describe CheckoutPresenter do
         checkout_payment: {
           integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
           fallback_reason: "stripe_payment_element_flag_disabled",
+          disable_wallets: false,
           elements_options: nil,
         },
       )
@@ -494,6 +496,27 @@ describe CheckoutPresenter do
         Feature.activate(:disable_paypal_sales)
 
         expect(@instance.checkout_props(params: { product: product.unique_permalink }, browser_guid:)[:add_products].first[:product][:supports_paypal]).to be_nil
+      end
+    end
+
+    context "when buyer-currency presentment is available" do
+      it "returns nil for supports_paypal because PR1 supports Stripe card checkout only" do
+        seller = create(:user, disable_buyer_local_currency: false)
+        create(:merchant_account_paypal, user: seller)
+        product = create(:product, user: seller)
+        buyer_currency_display = {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        allow(@instance).to receive(:buyer_currency_display_props).and_return(buyer_currency_display)
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+
+        expect(@instance.checkout_product(product, product.cart_item({}), {})[:product][:supports_paypal]).to be_nil
+      ensure
+        Feature.deactivate_user(:buyer_local_currency, seller) if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
       end
     end
 

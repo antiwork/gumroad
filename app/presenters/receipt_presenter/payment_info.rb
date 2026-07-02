@@ -58,12 +58,12 @@ class ReceiptPresenter::PaymentInfo
       return unless chargeable.shipping_cents > 0
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
-        purchase.is_free_trial_purchase? ? 0 : purchase.shipping_cents
+        purchase.is_free_trial_purchase? ? 0 : (purchase.purchase_presentment&.presentment_shipping_cents || purchase.shipping_cents)
       end
 
       {
         label: "Shipping",
-        value: formatted_dollar_amount(amount_cents),
+        value: format_today_amount(amount_cents),
       }
     end
   end
@@ -72,7 +72,7 @@ class ReceiptPresenter::PaymentInfo
     return unless chargeable.taxable?
 
     amount_cents = chargeable.successful_purchases.sum do |purchase|
-      purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_tax_amount
+      purchase.is_free_trial_purchase? ? 0 : (purchase.buyer_presentment_tax_cents || purchase.non_refunded_tax_amount)
     end
     # Show zero for free trials, single-item purchases
     return if amount_cents.zero? && chargeable.multi_item_charge?
@@ -90,12 +90,12 @@ class ReceiptPresenter::PaymentInfo
         label: "QST",
         value: calculate_tax_amount_cents(amount_cents:, tax_rate_field: :qst_tax_rate),
       },
-    ].select { _1[:value].positive? }.map { _1[:value] = formatted_dollar_amount(_1[:value]); _1 }
+    ].select { _1[:value].positive? }.map { _1[:value] = format_today_amount(_1[:value]); _1 }
 
     total_tax_attribute =
       {
         label: chargeable.tax_label_with_creator_tax_info,
-        value: formatted_dollar_amount(amount_cents),
+        value: format_today_amount(amount_cents),
       }
 
     canadian_sales_tax_attributes.presence || [total_tax_attribute]
@@ -145,6 +145,8 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def usd_currency_note
+      return if presentment_currency.present?
+
       "All charges are processed in United States Dollars. Your bank or financial institution may apply their own fees for currency conversion."
     end
 
@@ -174,16 +176,20 @@ class ReceiptPresenter::PaymentInfo
 
       amount_cents = 0
       if !purchase.is_free_trial_purchase?
-        amount_cents = get_usd_cents(
-          purchase.displayed_price_currency_type,
-          purchase.displayed_price_cents,
-          rate: purchase.rate_converted_to_usd
-        )
+        amount_cents = if purchase.buyer_presentment?
+          purchase.buyer_presentment_price_cents
+        else
+          get_usd_cents(
+            purchase.displayed_price_currency_type,
+            purchase.displayed_price_cents,
+            rate: purchase.rate_converted_to_usd
+          )
+        end
       end
 
       {
         label: price_attribute_label(purchase) + today_price_attribute_label_notes(purchase),
-        value: formatted_dollar_amount(amount_cents) + today_price_attribute_value_notes(purchase),
+        value: format_purchase_amount(purchase, amount_cents) + today_price_attribute_value_notes(purchase),
       }
     end
 
@@ -235,11 +241,11 @@ class ReceiptPresenter::PaymentInfo
         today_tax_price_attributes.blank?
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
-        purchase.is_free_trial_purchase? ? 0 : purchase.total_transaction_cents
+        purchase.is_free_trial_purchase? ? 0 : (purchase.buyer_presentment_total_cents || purchase.total_transaction_cents)
       end
       {
         label: "Amount paid",
-        value: formatted_dollar_amount(amount_cents),
+        value: format_today_amount(amount_cents),
       }
     end
 
@@ -347,6 +353,23 @@ class ReceiptPresenter::PaymentInfo
 
       tax_percent = tax_rate / taxjar_info.combined_tax_rate.to_f
       amount_cents * tax_percent
+    end
+
+    def presentment_currency
+      currencies = chargeable.successful_purchases.filter_map(&:buyer_presentment_currency).uniq
+      currencies.one? ? currencies.first : nil
+    end
+
+    def format_purchase_amount(purchase, amount_cents)
+      return MoneyFormatter.format(amount_cents, purchase.buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol: true) if purchase.buyer_presentment?
+
+      formatted_dollar_amount(amount_cents)
+    end
+
+    def format_today_amount(amount_cents)
+      return MoneyFormatter.format(amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true) if presentment_currency.present?
+
+      formatted_dollar_amount(amount_cents)
     end
 
     def subscription_charge_progress(purchase)

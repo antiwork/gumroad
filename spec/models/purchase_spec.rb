@@ -2930,6 +2930,61 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#buyer_presentment_price_cents" do
+    def purchase_with_presentment(was_tax_excluded_from_price:, quantity: 1, presentment_price_cents: 11_25, presentment_tip_cents: 0)
+      purchase = build(:purchase,
+                       price_cents: 10_00,
+                       total_transaction_cents: 10_00,
+                       was_purchase_taxable: true,
+                       was_tax_excluded_from_price:,
+                       tax_cents: 1_00,
+                       quantity:)
+      purchase.save!(validate: false)
+      charge_presentment = create(:charge_presentment, presentment_total_cents: 12_50)
+      create(:purchase_presentment,
+             purchase:,
+             charge_presentment:,
+             presentment_price_cents:,
+             presentment_tip_cents:,
+             presentment_seller_tax_cents: 1_25,
+             presentment_gumroad_tax_cents: 0,
+             presentment_shipping_cents: 0,
+             presentment_total_cents: 12_50)
+      purchase
+    end
+
+    it "returns the pre-tax presentment price for tax-exclusive purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: true)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(11_25)
+    end
+
+    it "includes seller tax in the buyer-facing price for tax-inclusive purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: false)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(12_50)
+      expect(purchase.formatted_buyer_presentment_price).to eq("CAD$12.50")
+    end
+
+    it "returns the per-unit buyer-facing price for quantity purchases" do
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: false, quantity: 2)
+
+      expect(purchase.buyer_presentment_price_per_unit_cents).to eq(6_25)
+      expect(purchase.formatted_buyer_presentment_price_per_unit).to eq("CAD$6.25")
+    end
+
+    it "includes the tip in the price line but not in the per-unit price" do
+      # The canonical displayed price is tip-inclusive and receipts render no separate tip
+      # row, so the presentment line must include it or line items stop summing to the total.
+      purchase = purchase_with_presentment(was_tax_excluded_from_price: true,
+                                           presentment_price_cents: 10_00,
+                                           presentment_tip_cents: 1_25)
+
+      expect(purchase.buyer_presentment_price_cents).to eq(11_25)
+      expect(purchase.buyer_presentment_price_per_unit_cents).to eq(10_00)
+    end
+  end
+
   describe "#purchase_response" do
     let(:user) { create(:user, username: "admin2") }
     let(:link) { create(:product, user:, unique_permalink: "unique", custom_permalink: "custom") }
@@ -6088,6 +6143,50 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#confirm_charge_intent!" do
+    it "asks the buyer to re-quote when Stripe invalidates the locked FX quote at confirmation" do
+      purchase = create(:purchase_in_progress)
+      purchase.create_processor_payment_intent!(intent_id: "pi_test")
+      allow(ChargeProcessor).to receive(:confirm_payment_intent!).and_raise(ChargeProcessorFxQuoteInvalidError)
+
+      purchase.confirm_charge_intent!
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    end
+
+    it "defers presentment purchases when Stripe settlement data is missing after SCA" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      purchase = create(:purchase_in_progress,
+                        link: create(:product, user: seller),
+                        seller:,
+                        merchant_account:,
+                        is_part_of_combined_charge: true)
+      charge = create(:charge, order: create(:order), seller:, merchant_account:)
+      charge.purchases << purchase
+      create(:charge_presentment, charge:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_test")
+
+      processor_charge = BaseProcessorCharge.new
+      processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      processor_charge.id = "ch_presentment"
+      processor_charge.refunded = false
+      processor_charge.fee = 59
+      processor_charge.fee_currency = Currency::USD
+      processor_charge.card_fingerprint = "card_fp"
+      charge_intent = instance_double(StripeChargeIntent, succeeded?: true, charge: processor_charge)
+      allow(ChargeProcessor).to receive(:confirm_payment_intent!).and_return(charge_intent)
+
+      purchase.confirm_charge_intent!
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.reload).to be_in_progress
+      expect(purchase.stripe_transaction_id).to eq("ch_presentment")
+      expect(purchase.pending_buyer_presentment_settlement?).to be(true)
+    end
+  end
+
   describe "#save_charge_data" do
     it "saves all charge related info from the given charge on the purchase" do
       stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id, "ch_2OTlIf9e1RjUNIyY1adIdtGp")
@@ -6138,6 +6237,39 @@ describe Purchase, :vcr do
       expect(charge.processor_fee_cents).to eq(stripe_charge.fee)
       expect(charge.processor_fee_currency).to eq(stripe_charge.fee_currency)
       expect(charge.payment_method_fingerprint).to eq(stripe_charge.card_fingerprint)
+    end
+
+    it "can save Stripe charge metadata without loading flow of funds" do
+      stripe_charge = BaseProcessorCharge.new
+      stripe_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      stripe_charge.id = "ch_pending_settlement"
+      stripe_charge.refunded = false
+      stripe_charge.card_fingerprint = "card-fingerprint"
+      stripe_charge.card_instance_id = "pm_card"
+      stripe_charge.card_expiry_month = 12
+      stripe_charge.card_expiry_year = 2030
+      stripe_charge.flow_of_funds = nil
+
+      charge = create(:charge)
+      purchase = create(:purchase_in_progress,
+                        charge_processor_id: nil,
+                        stripe_transaction_id: nil,
+                        processor_fee_cents_currency: nil,
+                        stripe_fingerprint: nil,
+                        stripe_card_id: nil,
+                        card_expiry_month: nil,
+                        card_expiry_year: nil,
+                        flow_of_funds: nil)
+      charge.purchases << purchase
+
+      expect(purchase.save_charge_data(stripe_charge, allow_missing_flow_of_funds: true)).to eq(false)
+
+      expect(purchase.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
+      expect(purchase.stripe_transaction_id).to eq("ch_pending_settlement")
+      expect(purchase.stripe_fingerprint).to eq("card-fingerprint")
+      expect(purchase.stripe_card_id).to eq("pm_card")
+      expect(purchase.flow_of_funds).to be_nil
+      expect(charge.reload.processor_transaction_id).to eq("ch_pending_settlement")
     end
   end
 

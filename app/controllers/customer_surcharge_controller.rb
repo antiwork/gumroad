@@ -11,9 +11,11 @@ class CustomerSurchargeController < ApplicationController
     tax_rate = 0
     tax_included_rate = 0
     subtotal = 0
+    quoted_products = []
     products.each do |item|
       product = Link.find_by_unique_permalink(item[:permalink])
       next unless product
+      quoted_products << product
       surcharges = calculate_surcharges(product, item[:quantity], item[:price].to_d.to_i, subscription_id: item[:subscription_id], recommended_by: item[:recommended_by])
       next unless surcharges
       tax_result = surcharges[:sales_tax_result]
@@ -33,11 +35,36 @@ class CustomerSurchargeController < ApplicationController
       shipping_rate_cents: shipping_rate,
       tax_cents: tax_rate.round.to_i,
       tax_included_cents: tax_included_rate.round.to_i,
-      subtotal: subtotal.round.to_i
+      subtotal: subtotal.round.to_i,
+      buyer_currency_quote: buyer_currency_quote_props(
+        products: quoted_products,
+        canonical_total_cents: subtotal + tax_rate + shipping_rate
+      )
     }
   end
 
   private
+    def buyer_currency_quote_props(products:, canonical_total_cents:)
+      quote = Checkout::BuyerCurrencyQuote.create(
+        products:,
+        canonical_total_cents: canonical_total_cents.round.to_i,
+        ip: request.remote_ip
+      )
+      return if quote.blank?
+
+      {
+        token: quote.token,
+        currency: quote.currency,
+        canonical_total_cents: quote.canonical_total_cents,
+        presentment_total_cents: quote.presentment_total_cents,
+        # Exact minor-unit rate from the locked quote, not a ratio of already-rounded
+        # totals — client-side line conversions inherit the ratio's rounding error.
+        rate: (BigDecimal(subunit_to_unit(quote.currency)) / (subunit_to_unit(Currency::USD) * quote.fx_rate)).to_f,
+        subunit_to_unit: subunit_to_unit(quote.currency),
+        expires_at: quote.stripe_fx_quote_expires_at.iso8601,
+      }
+    end
+
     def calculate_surcharges(product, quantity, price, subscription_id: nil, recommended_by: nil)
       if subscription_id.present?
         subscription = Subscription.find_by_external_id(subscription_id)

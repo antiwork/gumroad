@@ -193,6 +193,385 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[1]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "creates a buyer-presentment charge through the order path when the internal flag is enabled in test mode" do
+      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      merchant_account = create(:merchant_account_stripe_connect,
+                                user: seller_1,
+                                charge_processor_merchant_id: "acct_presentment",
+                                currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
+                                                  canonical_total_cents: product_1.price_cents,
+                                                  ip: "24.48.0.1")
+      one_line_item_params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          }
+        ]
+      }
+      params = one_line_item_params.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      order.purchases.sole
+      charge_processor_call = {}
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, chargeable_arg, amount_cents, gumroad_amount_cents, reference, description, **options|
+        charge_processor_call.replace(
+          merchant_account: merchant_account_arg,
+          chargeable: chargeable_arg,
+          amount_cents:,
+          gumroad_amount_cents:,
+          reference:,
+          description:,
+          options:
+        )
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      purchase = order.purchases.sole
+      processor_gumroad_amount_cents = ((BigDecimal(charge.gumroad_amount_cents.to_s) / 100) / BigDecimal("0.8") * 100).round
+      expect(charge_processor_call).to include(merchant_account:,
+                                               chargeable: chargeable_for_buyer_presentment,
+                                               amount_cents: purchase.total_transaction_cents,
+                                               gumroad_amount_cents: charge.gumroad_amount_cents,
+                                               reference: a_string_matching(/\ACH-/),
+                                               description: a_string_matching(/\AGumroad Charge /))
+      expect(charge_processor_call.fetch(:options)).to include(statement_description: seller_1.name_or_username,
+                                                               transfer_group: a_string_matching(/\ACH-/),
+                                                               off_session: false,
+                                                               setup_future_charges: false,
+                                                               metadata: { "purchases{0}" => purchase.external_id },
+                                                               mandate_options: nil,
+                                                               processor_amount_cents: quote.presentment_total_cents,
+                                                               processor_currency: Currency::CAD,
+                                                               processor_gumroad_amount_cents:,
+                                                               stripe_fx_quote_id: "fxq_test",
+                                                               idempotency_key: a_string_matching(/\Abuyer-currency-charge-.+-fxq_test\z/))
+      expect(purchase).to be_successful
+      expect(charge).to have_attributes(amount_cents: 10_00,
+                                        gumroad_amount_cents: charge_processor_call.fetch(:gumroad_amount_cents),
+                                        processor_transaction_id: "ch_presentment",
+                                        stripe_payment_intent_id: "pi_presentment")
+      expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                           presentment_total_cents: 12_50,
+                                                           presentment_gumroad_amount_cents: processor_gumroad_amount_cents,
+                                                           stripe_fx_quote_id: "fxq_test")
+      expect(purchase.purchase_presentment).to have_attributes(charge_presentment: charge.charge_presentment,
+                                                               presentment_currency: Currency::CAD,
+                                                               presentment_total_cents: 12_50,
+                                                               presentment_gumroad_amount_cents: processor_gumroad_amount_cents)
+      expect(charge_responses.fetch("unique-id-0")).to include(buyer_presentment_currency: Currency::CAD,
+                                                               buyer_presentment_total_cents: 12_50,
+                                                               total_price_including_tax_and_shipping: purchase.formatted_buyer_presentment_total)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "creates the presentment for the gifter purchase only on gift checkouts" do
+      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
+                                                  canonical_total_cents: product_1.price_cents,
+                                                  ip: "24.48.0.1")
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+        .merge(buyer_currency_quote: quote.token,
+               is_gift: "true",
+               giftee_email: "giftee@example.com",
+               gift_note: "Enjoy!")
+        .deep_merge(purchase: { email: "buyer@gumroad.com" })
+      order, = Order::CreateService.new(params:).perform
+      gifter_purchase = order.purchases.sole
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      # The 0-cent giftee purchase is created beside the gifter purchase but never joins the
+      # charge, so only the gifter purchase carries a presentment snapshot.
+      expect(charge.purchases).to eq([gifter_purchase])
+      expect(gifter_purchase.reload).to be_successful
+      expect(gifter_purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                                      presentment_total_cents: 12_50)
+      giftee_purchase = Gift.last.giftee_purchase
+      expect(giftee_purchase).to be_present
+      expect(giftee_purchase.purchase_presentment).to be_nil
+      expect(PurchasePresentment.count).to eq(1)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "creates the presentment only on the bundle parent purchase" do
+      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      bundle = create(:product, :bundle, user: seller_1, price_cents: 10_00)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = Checkout::BuyerCurrencyQuote.create(products: [bundle],
+                                                  canonical_total_cents: bundle.price_cents,
+                                                  ip: "24.48.0.1")
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: bundle.unique_permalink,
+            perceived_price_cents: bundle.price_cents,
+            quantity: 1,
+            bundle_products: bundle.bundle_products.map do |bundle_product|
+              {
+                product_id: bundle_product.product.external_id,
+                variant_id: bundle_product.variant&.external_id,
+                quantity: bundle_product.quantity,
+              }
+            end
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      parent_purchase = order.reload.purchases.sole
+      # Bundle child purchases are 0-cent rows created after the charge succeeds; the
+      # buyer-facing price lives on the parent, so only the parent carries the snapshot.
+      expect(parent_purchase).to be_successful
+      expect(parent_purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                                      presentment_total_cents: 12_50)
+      expect(parent_purchase.product_purchases).to be_present
+      parent_purchase.product_purchases.each do |child_purchase|
+        expect(child_purchase.purchase_presentment).to be_nil
+      end
+      expect(PurchasePresentment.count).to eq(1)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "keeps commission checkouts on the canonical deposit charge even when a quote token is present" do
+      seller_1.update!(check_merchant_account_is_linked: true,
+                       disable_buyer_local_currency: false,
+                       created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      # Commission deposits persist the card for the completion charge, so this chargeable
+      # needs the card-persistence surface the shared presentment double leaves out.
+      commission_chargeable = instance_double(
+        Chargeable,
+        can_be_saved?: true,
+        card_type: CardType::VISA,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_ids: [StripeChargeProcessor.charge_processor_id],
+        country: Compliance::Countries::CAN.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        fingerprint: "card_fp",
+        funding_type: "credit",
+        get_chargeable_for: instance_double(StripeChargeablePaymentMethod),
+        payment_method_id: "pm_test",
+        prepare!: true,
+        requires_mandate?: false,
+        reusable_token_for!: "cus_test",
+        visual: "**** **** **** 4242",
+        zip_code: "H2X 1Y4"
+      )
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(commission_chargeable)
+
+      commission_product = create(:commission_product, user: seller_1, price_cents: 10_00)
+      expect(Checkout::BuyerCurrencyQuote.create(products: [commission_product],
+                                                 canonical_total_cents: 10_00,
+                                                 ip: "24.48.0.1")).to be_nil
+
+      # Commissions charge only the deposit, so a locked full-total quote can never match.
+      # Simulate a stale token (minted for a same-seller, same-total product) reaching the
+      # charge path to prove it falls back silently instead of dead-ending checkout on a
+      # total mismatch.
+      decoy_product = create(:product, user: seller_1, price_cents: 10_00)
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      quote = Checkout::BuyerCurrencyQuote.create(products: [decoy_product],
+                                                  canonical_total_cents: 10_00,
+                                                  ip: "24.48.0.1")
+
+      deposit_cents = (commission_product.price_cents * Commission::COMMISSION_DEPOSIT_PROPORTION).round
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: commission_product.unique_permalink,
+            # The frontend submits the deposit as the price to charge now.
+            perceived_price_cents: deposit_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      charge_processor_call = {}
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        charge_processor_call.replace(amount_cents:, options:)
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: amount_cents,
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchase = order.reload.purchases.sole
+      expect(charge_processor_call.fetch(:amount_cents)).to eq(deposit_cents)
+      expect(charge_processor_call.fetch(:options)).not_to include(:processor_amount_cents, :processor_currency, :stripe_fx_quote_id)
+      expect(purchase.error_code).not_to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(ChargePresentment.count).to eq(0)
+      expect(PurchasePresentment.count).to eq(0)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "keeps buyer-presentment purchases in progress when Stripe settlement data is not available yet" do
+      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
+                                                  canonical_total_cents: product_1.price_cents,
+                                                  ip: "24.48.0.1")
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable_arg, amount_cents, gumroad_amount_cents, _reference, _description, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:,
+          flow_of_funds: false
+        )
+      end
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      purchase = order.purchases.sole
+      expect(purchase).to be_in_progress
+      expect(purchase.stripe_transaction_id).to eq("ch_presentment")
+      expect(purchase.processor_payment_intent_id).to eq("pi_presentment")
+      expect(purchase.purchase_success_balance_id).to be_nil
+      expect(charge).to have_attributes(processor_transaction_id: "ch_presentment",
+                                        stripe_payment_intent_id: "pi_presentment")
+      expect(charge.charge_presentment).to be_present
+      expect(purchase.purchase_presentment).to have_attributes(charge_presentment: charge.charge_presentment,
+                                                               presentment_currency: Currency::CAD,
+                                                               presentment_total_cents: 12_50)
+      expect(charge_responses.fetch("unique-id-0")).to include(success: true,
+                                                               content_url: nil,
+                                                               should_show_receipt: false,
+                                                               show_view_content_button_on_product_page: false,
+                                                               buyer_presentment_currency: Currency::CAD,
+                                                               buyer_presentment_total_cents: 12_50)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
     it "charges 2.9% + 30c of processor fee when seller has a Stripe merchant account and existing credit card is used for payment" do
       seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
@@ -730,6 +1109,58 @@ describe Order::ChargeService, :vcr do
         expect(mandate_options.interval).to eq("sporadic")
         expect(mandate_options.interval_count).to be nil
       end
+    end
+
+    def chargeable_for_buyer_presentment
+      @chargeable_for_buyer_presentment ||= instance_double(
+        Chargeable,
+        can_be_saved?: false,
+        card_type: CardType::VISA,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_ids: [StripeChargeProcessor.charge_processor_id],
+        country: Compliance::Countries::CAN.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        fingerprint: "card_fp",
+        get_chargeable_for: instance_double(StripeChargeablePaymentMethod),
+        prepare!: true,
+        requires_mandate?: false,
+        visual: "**** **** **** 4242",
+        zip_code: "H2X 1Y4"
+      )
+    end
+
+    def stripe_charge_intent_for_buyer_presentment(merchant_account:, canonical_total_cents:, presentment_total_cents:, gumroad_amount_cents:, flow_of_funds: true)
+      processor_charge = BaseProcessorCharge.new
+      processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      processor_charge.id = "ch_presentment"
+      processor_charge.refunded = false
+      processor_charge.fee = 59
+      processor_charge.fee_currency = Currency::USD
+      processor_charge.card_fingerprint = "card_fp"
+      processor_charge.card_expiry_month = 12
+      processor_charge.card_expiry_year = 2030
+      processor_charge.zip_check_result = "pass"
+      if flow_of_funds
+        processor_charge.flow_of_funds = FlowOfFunds.new(
+          issued_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: presentment_total_cents),
+          settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: canonical_total_cents),
+          gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: gumroad_amount_cents)
+        )
+      end
+
+      stripe_charge_processor = instance_double(StripeChargeProcessor)
+      allow(StripeChargeProcessor).to receive(:new).and_return(stripe_charge_processor)
+      allow(stripe_charge_processor).to receive(:get_charge).with(processor_charge.id, merchant_account:).and_return(processor_charge)
+
+      StripeChargeIntent.new(
+        payment_intent: Stripe::PaymentIntent.construct_from(
+          id: "pi_presentment",
+          status: StripeIntentStatus::SUCCESS,
+          latest_charge: processor_charge.id
+        ),
+        merchant_account:
+      )
     end
   end
 

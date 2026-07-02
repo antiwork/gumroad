@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class OrdersController < ApplicationController
-  include ValidateRecaptcha, Events, Order::ResponseHelpers
+  include ValidateRecaptcha, Events, Order::ResponseHelpers, ClientConfirmedOrderFinalization
 
   before_action :normalize_line_items, only: [:create, :prepare]
   before_action :validate_order_request, only: [:create, :prepare]
@@ -75,10 +75,7 @@ class OrdersController < ApplicationController
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
-    finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
-
-    record_purchase_events(order)
-    attribute_utm_link_sale(order, cookies[:_gumroad_guid])
+    finalize_responses, = finalize_client_confirmed_order(order)
 
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
   end
@@ -91,11 +88,6 @@ class OrdersController < ApplicationController
         ip_address: request.remote_ip,
         is_mobile: is_mobile?
       ).to_h
-    end
-
-    def attribute_utm_link_sale(order, browser_guid)
-      return unless order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid:).any?
-      UtmLinkSaleAttributionJob.perform_async(order.id, browser_guid)
     end
 
     def normalize_line_items
@@ -156,7 +148,7 @@ class OrdersController < ApplicationController
         :save_shipping_address, :card_expiry_month, :card_expiry_year, :stripe_status, :visual,
         :billing_agreement_id, :paypal_order_id, :stripe_payment_method_id, :stripe_customer_id, :stripe_setup_intent_id, :stripe_error,
         :braintree_transient_customer_store_key, :braintree_device_data, :use_existing_card, :paymentToken,
-        :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :referrer,
+        :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :referrer, :buyer_currency_quote,
         purchase: [:full_name, :street_address, :city, :state, :zip_code, :country],
         # Individual purchase params
         line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :is_preorder, :quantity, :call_start_time,
@@ -177,20 +169,6 @@ class OrdersController < ApplicationController
         affiliate = fetch_affiliate(product, line_item_params)
         line_item_params.delete(:affiliate_id)
         line_item_params[:affiliate_id] = affiliate.id if affiliate&.eligible_for_purchase_credit?(product:, was_recommended: line_item_params[:was_product_recommended] && line_item_params[:recommended_by] != RecommendationType::GUMROAD_MORE_LIKE_THIS_RECOMMENDATION, purchaser_email: params[:email])
-      end
-    end
-
-    def create_purchase_event_and_recommendation_info(purchase)
-      create_purchase_event(purchase)
-      purchase.handle_recommended_purchase if purchase.was_product_recommended
-    end
-
-    # Idempotent: each successful purchase gets one event, whether finalized in #prepare or #finalize.
-    def record_purchase_events(order)
-      order.purchases.each do |purchase|
-        next unless purchase.successful?
-        next if Event.purchase.exists?(purchase_id: purchase.id)
-        create_purchase_event_and_recommendation_info(purchase)
       end
     end
 

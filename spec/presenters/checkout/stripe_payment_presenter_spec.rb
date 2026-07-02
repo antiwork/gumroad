@@ -3,13 +3,14 @@
 describe Checkout::StripePaymentPresenter do
   def checkout_product_for(product, price: product.price_cents, recurrence: nil, pay_in_installments: false,
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
-                           native_type: product.native_type)
+                           native_type: product.native_type, buyer_currency_display: nil)
     {
       product: {
         creator: { id: product.user.external_id },
         is_preorder:,
         free_trial: free_trial ? { duration: { unit: "day", amount: 1 } } : nil,
         native_type:,
+        buyer_currency_display:,
       },
       price:,
       recurrence:,
@@ -33,13 +34,14 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def card_element_fallback(reason)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, elements_options: nil }
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, elements_options: nil }
   end
 
   def payment_element_client_confirm_props(stripe_link_enabled: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
+      disable_wallets: false,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: "usd",
@@ -53,6 +55,7 @@ describe Checkout::StripePaymentPresenter do
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
+      disable_wallets: false,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
@@ -98,6 +101,57 @@ describe Checkout::StripePaymentPresenter do
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+  end
+
+  it "falls back to CardElement when buyer-currency presentment is enabled for the checkout" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      elements_options: nil,
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "keeps the existing Payment Element and wallet path in live mode" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
   it "selects Stripe Payment Element for a multi-seller cart when every seller is flagged" do

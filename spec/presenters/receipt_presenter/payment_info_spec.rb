@@ -8,11 +8,13 @@ describe ReceiptPresenter::PaymentInfo do
 
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller, name: "Digital product") }
+  let!(:merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) || create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
   let(:purchase) do
     create(
       :purchase,
       link: product,
       seller:,
+      merchant_account:,
       price_cents: 1_499,
       created_at: DateTime.parse("January 1, 2023")
     )
@@ -437,6 +439,40 @@ describe ReceiptPresenter::PaymentInfo do
 
               it "returns empty upcoming payment attributes" do
                 expect(upcoming_payment_attributes).to eq([])
+              end
+            end
+
+            context "when the purchase has buyer-presentment amounts" do
+              before do
+                purchase.update!(
+                  was_purchase_taxable: true,
+                  tax_cents: 254,
+                  displayed_price_cents: 1_744,
+                  price_cents: 1_744,
+                  total_transaction_cents: 1_744 + 254
+                )
+                charge = create(:charge, seller:, purchases: [purchase])
+                charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 24_98)
+                create(:purchase_presentment,
+                       purchase:,
+                       charge_presentment:,
+                       presentment_price_cents: 21_80,
+                       presentment_tip_cents: 0,
+                       presentment_seller_tax_cents: 0,
+                       presentment_gumroad_tax_cents: 3_18,
+                       presentment_shipping_cents: 0,
+                       presentment_total_cents: 24_98)
+              end
+
+              it "returns today's pricing attributes in the buyer-presentment currency" do
+                expect(today_payment_attributes).to eq(
+                  [
+                    { label: "Digital product", value: "CAD$21.80" },
+                    { label: "Sales tax (included)", value: "CAD$3.18" },
+                    { label: "Amount paid", value: "CAD$24.98" },
+                    { label: nil, value: link_to("Generate invoice", invoice_url) },
+                  ]
+                )
               end
             end
           end

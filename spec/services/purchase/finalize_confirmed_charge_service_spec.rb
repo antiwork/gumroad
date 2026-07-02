@@ -41,6 +41,15 @@ describe Purchase::FinalizeConfirmedChargeService do
 
         expect(purchase.card_country).to eq("CA")
       end
+
+      it "returns the buyer-facing error message when saving charge data fails" do
+        allow(purchase).to receive(:save_charge_data) { purchase.errors.add(:base, "Something went wrong.") }
+
+        result = described_class.new(purchase:, charge_intent: charge_intent_double).perform
+
+        expect(result).to eq("Something went wrong.")
+        expect(purchase.reload).to be_failed
+      end
     end
 
     context "when the intent is still processing" do
