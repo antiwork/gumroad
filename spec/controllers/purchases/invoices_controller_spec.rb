@@ -276,7 +276,7 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(response).to redirect_to(new_purchase_invoice_path(@purchase.external_id, email: @purchase.email))
             expect(flash[:alert]).to eq(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
             expect(session["invoice_file_url_#{@purchase.external_id}"]).to be_nil
-            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund blocked: no presentment refund amount computable",
                                                                  context: hash_including(purchase_id: @purchase.id))
           end
 
