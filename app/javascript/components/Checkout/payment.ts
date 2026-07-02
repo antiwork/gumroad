@@ -65,6 +65,7 @@ export type CheckoutPaymentConfig =
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
+      disable_wallets: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 

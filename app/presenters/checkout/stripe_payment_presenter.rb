@@ -105,6 +105,10 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
+        # Presentment candidates never reach client-confirm (they fall back to CardElement
+        # above), so wallets stay enabled; emit the field so every integration variant
+        # carries the same wallet contract the frontend reads.
+        disable_wallets: false,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,
