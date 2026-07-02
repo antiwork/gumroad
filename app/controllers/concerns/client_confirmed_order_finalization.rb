@@ -10,7 +10,6 @@ module ClientConfirmedOrderFinalization
       responses = service.perform
 
       record_purchase_events(order)
-      order.send_charge_receipts
       attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
       [responses, service.charge_intent]
