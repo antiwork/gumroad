@@ -92,8 +92,13 @@ describe "Checkout return page", :vcr, type: :request do
 
       visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
       succeeded_at = purchase.reload.succeeded_at
+      # Simulate the enqueued receipt having been delivered before the buyer refreshes the
+      # return page: revisiting must not enqueue a second receipt for an already-receipted charge.
+      charge.reload.update!(receipt_sent: true)
 
-      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+      expect do
+        visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+      end.not_to change { SendChargeReceiptJob.jobs.size }
 
       expect(purchase.reload.succeeded_at).to eq(succeeded_at)
       expect(Event.purchase.where(purchase_id: purchase.id).count).to eq(1)
