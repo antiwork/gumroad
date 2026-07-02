@@ -69,21 +69,26 @@ class Gift::ConvertToNonGiftService
 
     raise NotConvertibleError, "Gift ##{gift.id} has no gifter purchase to convert" if gifter_purchase.nil?
 
-    # Idempotent: if the gift-sender flag is already cleared, there is nothing to do.
-    unless gifter_purchase.is_gift_sender_purchase?
-      return Result.new(
-        converted: false,
-        already_converted: true,
-        gift:,
-        gifter_purchase:,
-        giftee_purchase:,
-        subscription: gifter_purchase.subscription,
-      )
-    end
-
     subscription = gifter_purchase.subscription
 
     ActiveRecord::Base.transaction do
+      # Row-lock + re-check inside the transaction so two racing console invocations can't both
+      # pass the idempotency guard and double-write the audit comments. The lock serializes them;
+      # the loser re-reads the already-cleared flag and returns the already-converted result.
+      gifter_purchase.lock!
+
+      # Idempotent: if the gift-sender flag is already cleared, there is nothing to do.
+      unless gifter_purchase.is_gift_sender_purchase?
+        return Result.new(
+          converted: false,
+          already_converted: true,
+          gift:,
+          gifter_purchase:,
+          giftee_purchase:,
+          subscription:,
+        )
+      end
+
       gifter_purchase.update!(is_gift_sender_purchase: false)
 
       if subscription.present?
