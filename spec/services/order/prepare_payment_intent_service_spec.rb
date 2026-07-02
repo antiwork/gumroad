@@ -105,8 +105,9 @@ describe Order::PreparePaymentIntentService, :vcr do
 
     # The country that drives PPP verification must come from whichever preview block the chosen
     # method exposes: card carries it directly, inline wallets (Link) do not, so fall back to the
-    # method's typed block then billing details — otherwise a discounted Link purchase fails on a
-    # nil country even when the wallet's country matches the buyer's.
+    # method's typed block only — billing_details is intentionally excluded because it is
+    # buyer-supplied and spoofable. Without the typed-block fallback a discounted Link purchase
+    # fails on a nil country even when the wallet's country matches the buyer's.
     describe "previewed country extraction" do
       let(:service) { described_class.new(order: build_order.first, params: {}, confirmation_token: "ctoken_test") }
 
