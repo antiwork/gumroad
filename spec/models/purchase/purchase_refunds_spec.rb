@@ -115,6 +115,53 @@ describe "PurchaseRefunds", :vcr do
         expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund blocked: no presentment refund amount computable",
                                                              context: hash_including(purchase_id: @purchase.id))
       end
+
+      describe "direct refund_purchase! calls (processor-initiated refunds)" do
+        it "derives the canonical amount and snapshot from a presentment flow of funds" do
+          presentment_total = @purchase.purchase_presentment.presentment_total_cents
+          stripe_refund = double("stripe_refund", status: "succeeded", id: "re_direct_#{SecureRandom.hex(6)}")
+          flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -presentment_total)
+
+          expect(@purchase.refund_purchase!(flow_of_funds, @user.id, stripe_refund)).to be_truthy
+
+          @purchase.reload
+          refund = @purchase.refunds.last
+          expect(@purchase.stripe_refunded).to be(true)
+          expect(refund.total_transaction_cents).to eq(@purchase.total_transaction_cents)
+          expect(refund.presentment_currency).to eq(Currency::CAD)
+          expect(refund.presentment_amount_cents).to eq(presentment_total)
+          balance_transaction = refund.balance_transactions.where(user: @user).last
+          expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+          expect(balance_transaction.issued_amount_gross_cents).to eq(-1 * @purchase.total_transaction_cents)
+        end
+
+        it "derives a proportional canonical amount for a partial presentment flow of funds" do
+          presentment_total = @purchase.purchase_presentment.presentment_total_cents
+          presentment_partial = presentment_total / 2
+          stripe_refund = double("stripe_refund", status: "succeeded", id: "re_direct_#{SecureRandom.hex(6)}")
+          flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -presentment_partial)
+
+          expect(@purchase.refund_purchase!(flow_of_funds, @user.id, stripe_refund)).to be_truthy
+
+          @purchase.reload
+          refund = @purchase.refunds.last
+          expect(@purchase.stripe_partially_refunded).to be(true)
+          expect(refund.presentment_amount_cents).to eq(presentment_partial)
+          expect(refund.total_transaction_cents).to eq(@purchase.total_transaction_cents / 2)
+        end
+
+        it "fails closed when the flow of funds is not in the presentment currency" do
+          allow(ErrorNotifier).to receive(:notify)
+          stripe_refund = double("stripe_refund", status: "succeeded", id: "re_direct_#{SecureRandom.hex(6)}")
+          flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@purchase.total_transaction_cents)
+
+          expect(@purchase.refund_purchase!(flow_of_funds, @user.id, stripe_refund)).to be(false)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
+          expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund blocked: cannot derive canonical amount from flow of funds",
+                                                               context: hash_including(purchase_id: @purchase.id))
+          expect(@purchase.reload.refunds).to be_empty
+        end
+      end
     end
 
     it "updates refund status" do

@@ -30,6 +30,41 @@ class Purchase::PresentmentRefund
     presentment_shipping_cents
   ].freeze
 
+  DerivedRefund = Struct.new(:canonical_gross_refund_cents, :presentment_refund, keyword_init: true)
+
+  # Inverse mapping for refunds initiated at the processor (e.g. Stripe dashboard refunds
+  # arriving via webhook, settlement declines): given the buyer-presentment amount that was
+  # actually refunded, derive the canonical (USD) gross refund cents for the canonical
+  # refund/balance records plus the presentment snapshot to persist on the refund.
+  # Returns nil when no consistent derivation is possible, so callers fail closed.
+  def self.from_presentment_amount(purchase:, presentment_amount_cents:)
+    presentment = purchase.purchase_presentment
+    presentment_amount_cents = presentment_amount_cents.to_i
+    return nil if presentment.blank? || presentment_amount_cents <= 0 || presentment.presentment_total_cents.to_i <= 0
+
+    refunded_presentment_cents = purchase.refunds.sum { _1.presentment_amount_cents.to_i }
+    remaining_presentment_cents = presentment.presentment_total_cents - refunded_presentment_cents
+    return nil if presentment_amount_cents > remaining_presentment_cents
+
+    canonical_gross_refund_cents = if presentment_amount_cents == remaining_presentment_cents
+      purchase.gross_amount_refundable_cents
+    else
+      refunded_share = Charge.allocate_by_largest_remainder(
+        purchase.total_transaction_cents,
+        [presentment_amount_cents, presentment.presentment_total_cents - presentment_amount_cents],
+        presentment.presentment_total_cents
+      ).first
+      [refunded_share, purchase.gross_amount_refundable_cents].min
+    end
+    return nil if canonical_gross_refund_cents <= 0
+
+    presentment_refund = new(purchase:, canonical_gross_refund_cents:)
+                           .result_for_presentment_amount(presentment_amount_cents)
+    return nil if presentment_refund.blank?
+
+    DerivedRefund.new(canonical_gross_refund_cents:, presentment_refund:)
+  end
+
   attr_reader :purchase, :canonical_gross_refund_cents
 
   def initialize(purchase:, canonical_gross_refund_cents:)
@@ -47,6 +82,20 @@ class Purchase::PresentmentRefund
       amount_cents = partial_presentment_amount_cents
       build_result(amount_cents:,
                    component_cents: allocate_components(amount_cents))
+    end
+  end
+
+  # Builds a snapshot for a refund whose presentment amount is already known exactly
+  # (processor-initiated refunds); the components are allocated to match that amount.
+  def result_for_presentment_amount(presentment_amount_cents)
+    return nil if purchase_presentment.blank? || presentment_amount_cents.to_i <= 0
+
+    if presentment_amount_cents == remaining_presentment_amount_cents
+      build_result(amount_cents: presentment_amount_cents,
+                   component_cents: remaining_component_cents)
+    else
+      build_result(amount_cents: presentment_amount_cents,
+                   component_cents: allocate_components(presentment_amount_cents))
     end
   end
 

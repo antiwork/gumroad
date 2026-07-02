@@ -211,8 +211,19 @@ class Purchase
   # For buyer-presentment purchases, flow_of_funds.issued_amount is in the buyer's currency,
   # so callers must pass canonical_gross_refund_cents (the canonical USD gross refund) for the
   # canonical refund/balance records, plus the presentment_refund snapshot to persist on the refund.
+  # Direct callers that only have the processor flow of funds (refund webhooks, settlement
+  # declines) get the canonical amount + snapshot derived from the presentment amount; if no
+  # consistent derivation is possible the refund fails closed rather than booking buyer-currency
+  # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
                        canonical_gross_refund_cents: nil, presentment_refund: nil)
+    if buyer_presentment? && canonical_gross_refund_cents.nil?
+      derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
+      return false if derived.blank?
+
+      canonical_gross_refund_cents = derived.canonical_gross_refund_cents
+      presentment_refund ||= derived.presentment_refund
+    end
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
     partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
@@ -386,6 +397,33 @@ class Purchase
       }
     )
     true
+  end
+
+  # Derives the canonical refund amount + presentment snapshot for a refund that arrived with
+  # only a buyer-currency flow of funds (refund webhooks, settlement declines). Returns nil —
+  # and notifies — when the flow of funds is not in the presentment currency or no consistent
+  # derivation is possible, so the caller fails closed.
+  def derive_presentment_refund_from_flow_of_funds(flow_of_funds)
+    issued_amount = flow_of_funds&.issued_amount
+    derived = if issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
+      Purchase::PresentmentRefund.from_presentment_amount(purchase: self,
+                                                          presentment_amount_cents: issued_amount.cents.abs)
+    end
+    return derived if derived.present?
+
+    errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE
+    ErrorNotifier.notify(
+      "Buyer-presentment refund blocked: cannot derive canonical amount from flow of funds",
+      context: {
+        purchase_id: id,
+        purchase_external_id: external_id,
+        charge_id: charge&.id,
+        purchase_presentment_id: purchase_presentment.id,
+        flow_of_funds_issued_currency: issued_amount&.currency,
+        flow_of_funds_issued_cents: issued_amount&.cents,
+      }
+    )
+    nil
   end
 
   def formatted_refund_state

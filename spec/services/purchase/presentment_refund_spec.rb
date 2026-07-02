@@ -79,4 +79,48 @@ describe Purchase::PresentmentRefund do
     expect(result.presentment_gumroad_tax_cents).to eq(12)
     expect(result.presentment_shipping_cents).to eq(0)
   end
+
+  describe ".from_presentment_amount" do
+    it "returns nil for canonical purchases" do
+      purchase.purchase_presentment.destroy!
+      purchase.association(:purchase_presentment).reset
+
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 135)).to be_nil
+    end
+
+    it "derives the full canonical refund when the presentment amount equals the remaining total" do
+      derived = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 135)
+
+      expect(derived.canonical_gross_refund_cents).to eq(purchase.gross_amount_refundable_cents)
+      expect(derived.presentment_refund.presentment_amount_cents).to eq(135)
+      expect(derived.presentment_refund.currency).to eq(Currency::CAD)
+    end
+
+    it "derives a proportional canonical refund for a partial presentment amount" do
+      derived = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 54)
+
+      expect(derived.canonical_gross_refund_cents).to eq(40)
+      expect(derived.presentment_refund.presentment_amount_cents).to eq(54)
+      expect([
+        derived.presentment_refund.presentment_price_cents,
+        derived.presentment_refund.presentment_tip_cents,
+        derived.presentment_refund.presentment_seller_tax_cents,
+        derived.presentment_refund.presentment_gumroad_tax_cents,
+        derived.presentment_refund.presentment_shipping_cents,
+      ].sum).to eq(54)
+    end
+
+    it "returns nil when the presentment amount exceeds the remaining presentment cents" do
+      refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = 54
+      purchase.refunds << refund
+
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 100)).to be_nil
+    end
+
+    it "returns nil for a non-positive presentment amount" do
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 0)).to be_nil
+    end
+  end
 end
