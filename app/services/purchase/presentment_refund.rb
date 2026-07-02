@@ -42,7 +42,14 @@ class Purchase::PresentmentRefund
     presentment_amount_cents = presentment_amount_cents.to_i
     return nil if presentment.blank? || presentment_amount_cents <= 0 || presentment.presentment_total_cents.to_i <= 0
 
-    refunded_presentment_cents = purchase.refunds.sum { _1.presentment_amount_cents.to_i }
+    # A prior refund without a presentment snapshot makes the remaining presentment
+    # balance unknowable (its canonical cents already reduced gross_amount_refundable_cents
+    # but consumed zero presentment cents here), so fail closed rather than allocate the
+    # new refund against a skewed balance.
+    prior_refunds = purchase.refunds.to_a
+    return nil if prior_refunds.any? { _1.presentment_amount_cents.to_i <= 0 }
+
+    refunded_presentment_cents = prior_refunds.sum { _1.presentment_amount_cents.to_i }
     remaining_presentment_cents = presentment.presentment_total_cents - refunded_presentment_cents
     return nil if presentment_amount_cents > remaining_presentment_cents
 

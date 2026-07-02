@@ -145,6 +145,13 @@ describe Purchase::PresentmentRefund do
       expect(final.presentment_refund.presentment_amount_cents).to eq(1)
     end
 
+    it "returns nil when a prior refund has no presentment snapshot" do
+      refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+      purchase.refunds << refund
+
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 54)).to be_nil
+    end
+
     it "returns nil for a non-positive presentment amount" do
       expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 0)).to be_nil
     end
