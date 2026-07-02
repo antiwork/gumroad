@@ -203,6 +203,10 @@ Rails.application.routes.draw do
     resources :orders, only: [:create] do
       member do
         post :confirm
+        post :finalize
+      end
+      collection do
+        post :prepare
       end
     end
 
@@ -727,6 +731,10 @@ Rails.application.routes.draw do
     resources :orders, only: [:create] do
       member do
         post :confirm
+        post :finalize
+      end
+      collection do
+        post :prepare
       end
     end
 

@@ -145,6 +145,36 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
+      describe "client-confirm charge that succeeded but was never finalized" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller) }
+        let(:purchase) { create(:purchase_in_progress, link: product, merchant_account: create(:merchant_account, user: seller)) }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_confirmed") }
+        let(:succeeded_intent) { instance_double(StripeChargeIntent, succeeded?: true, canceled?: false) }
+
+        before do
+          charge.purchases << purchase
+          purchase.create_processor_payment_intent!(intent_id: "pi_confirmed")
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+
+          allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_confirmed")
+            .and_return(Stripe::PaymentIntent.construct_from(id: "pi_confirmed", status: "succeeded"))
+          allow_any_instance_of(Purchase).to receive(:cancel_charge_intent!)
+            .and_raise(ChargeProcessorError, "You cannot cancel this PaymentIntent because it has a status of succeeded.")
+          allow(ChargeProcessor).to receive(:get_charge_intent).and_return(succeeded_intent)
+        end
+
+        # Recovery of captured-but-abandoned client-confirm charges is deferred to the Phase 2 webhook;
+        # the worker must not finalize here, and must not raise on a succeeded intent it can't cancel.
+        it "leaves the purchase in_progress without finalizing" do
+          expect(Purchase::FinalizeConfirmedChargeService).not_to receive(:new)
+
+          expect { described_class.new.perform(purchase.id) }.not_to raise_error
+
+          expect(purchase.reload).to be_in_progress
+        end
+      end
+
       context "membership upgrade purchase" do
         let(:user) { create(:user) }
 

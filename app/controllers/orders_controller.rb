@@ -3,19 +3,12 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers
 
-  before_action :normalize_line_items, only: :create
-  before_action :validate_order_request, only: :create
-  before_action :fetch_affiliates, only: :create
+  before_action :normalize_line_items, only: [:create, :prepare]
+  before_action :validate_order_request, only: [:create, :prepare]
+  before_action :fetch_affiliates, only: [:create, :prepare]
 
   def create
-    order_params = permitted_order_params.merge!(
-      {
-        browser_guid: cookies[:_gumroad_guid],
-        session_id: session.id,
-        ip_address: request.remote_ip,
-        is_mobile: is_mobile?
-      }
-    ).to_h
+    order_params = build_order_params
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
@@ -24,9 +17,7 @@ class OrdersController < ApplicationController
 
     charge_responses = Order::ChargeService.new(order:, params: order_params).perform
 
-    if order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid: order_params[:browser_guid]).any?
-      UtmLinkSaleAttributionJob.perform_async(order.id, order_params[:browser_guid])
-    end
+    attribute_utm_link_sale(order, order_params[:browser_guid])
 
     purchase_responses.merge!(charge_responses)
 
@@ -55,7 +46,59 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
   end
 
+  # Starts client-confirm Payment Element checkout by returning an unconfirmed PaymentIntent.
+  def prepare
+    order_params = build_order_params
+
+    order, purchase_responses, offer_codes = Order::CreateService.new(
+      buyer: logged_in_user,
+      params: order_params
+    ).perform
+
+    prepare_responses = Order::PreparePaymentIntentService.new(
+      order:,
+      params: order_params,
+      confirmation_token: params[:confirmation_token]
+    ).perform
+
+    purchase_responses.merge!(prepare_responses)
+
+    record_purchase_events(order)
+
+    render json: { success: true, line_items: purchase_responses, offer_codes:, can_buyer_sign_up: }
+  end
+
+  # Finalizes a client-confirm PaymentIntent without re-charging.
+  def finalize
+    ActiveRecord::Base.connection.stick_to_primary!
+
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
+
+    finalize_responses = Order::FinalizeConfirmedChargeService.new(order:).perform
+
+    record_purchase_events(order)
+    order.send_charge_receipts
+    attribute_utm_link_sale(order, cookies[:_gumroad_guid])
+
+    render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
+  end
+
   private
+    def build_order_params
+      permitted_order_params.merge!(
+        browser_guid: cookies[:_gumroad_guid],
+        session_id: session.id,
+        ip_address: request.remote_ip,
+        is_mobile: is_mobile?
+      ).to_h
+    end
+
+    def attribute_utm_link_sale(order, browser_guid)
+      return unless order.persisted? && order.purchases.successful.any? && UtmLinkVisit.where(browser_guid:).any?
+      UtmLinkSaleAttributionJob.perform_async(order.id, browser_guid)
+    end
+
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
         params[:line_items] = params[:line_items].values
@@ -84,7 +127,7 @@ class OrdersController < ApplicationController
     def skip_recaptcha?
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
-      return true if action_name == "create" && all_free_products_without_captcha?
+      return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
       return true if valid_wallet_payment?
 
       false
@@ -141,6 +184,15 @@ class OrdersController < ApplicationController
     def create_purchase_event_and_recommendation_info(purchase)
       create_purchase_event(purchase)
       purchase.handle_recommended_purchase if purchase.was_product_recommended
+    end
+
+    # Idempotent: each successful purchase gets one event, whether finalized in #prepare or #finalize.
+    def record_purchase_events(order)
+      order.purchases.each do |purchase|
+        next unless purchase.successful?
+        next if Event.purchase.exists?(purchase_id: purchase.id)
+        create_purchase_event_and_recommendation_info(purchase)
+      end
     end
 
     def render_error(error_message, purchase: nil)
