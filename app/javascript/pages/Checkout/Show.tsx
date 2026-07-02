@@ -9,7 +9,7 @@ import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
-import { CurrencyCode, formatPriceCentsWithCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
+import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
@@ -17,6 +17,11 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
+import {
+  formatCheckoutPrice,
+  getCheckoutBuyerCurrencyDisplay,
+  getCheckoutBuyerCurrencyQuoteToken,
+} from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   type CartItem,
   type CartState,
@@ -83,6 +88,10 @@ type CheckoutIndexPageProps = {
     checkout_payment: CheckoutPaymentConfig;
   };
 };
+
+const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
+const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
+  "The local-currency price changed or expired. Please review the updated total and try again.";
 
 function getCartItemUid(item: CartItem) {
   return `${item.product.permalink} ${item.option_id ?? ""}`;
@@ -182,6 +191,10 @@ const CheckoutIndexPage = () => {
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
+  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
+    state.surcharges.type === "loaded" ? state.surcharges.result : null,
+    { willSaveCard: state.willSaveCard },
+  );
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -366,6 +379,10 @@ const CheckoutIndexPage = () => {
           locale: navigator.language,
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
+        buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
+          state.surcharges.type === "loaded" ? state.surcharges.result : null,
+          { willSaveCard: state.willSaveCard },
+        ),
         lineItems: cartForm.data.cart.items.map((item) => {
           const discounted = getDiscountedPrice(cartForm.data.cart, item);
 
@@ -441,6 +458,18 @@ const CheckoutIndexPage = () => {
         return item ? { item, result } : [];
       });
       assert(isOpenTuple(results, 1), "startCartPayment returned empty results");
+
+      if (
+        results.some(
+          ({ result }) =>
+            !result.success && "error_code" in result && result.error_code === BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE,
+        )
+      ) {
+        showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
+        dispatch({ type: "cancel" });
+        dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
+        return;
+      }
 
       const failedItems = cartForm.data.cart.items.flatMap((item) => {
         const lineItem = result.lineItems[getCartItemUid(item)];
@@ -694,13 +723,13 @@ const CheckoutIndexPage = () => {
       >
         <p>
           You're about to leave a tip of{" "}
-          {formatPriceCentsWithCurrencySymbol("usd", computeTip(state), {
-            symbolFormat: "short",
+          {formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
+            usdSymbolFormat: "short",
             noCentsIfWhole: true,
           })}{" "}
           on a{" "}
-          {formatPriceCentsWithCurrencySymbol("usd", getTotalPriceFromProducts(state), {
-            symbolFormat: "short",
+          {formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
+            usdSymbolFormat: "short",
             noCentsIfWhole: true,
           })}{" "}
           purchase. Are you sure?

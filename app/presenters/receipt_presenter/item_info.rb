@@ -160,7 +160,7 @@ class ReceiptPresenter::ItemInfo
 
       {
         label: purchase.link.native_type === Link::NATIVE_TYPE_COFFEE ? "Donation" : "Product price",
-        value: purchase.formatted_total_display_price_per_unit
+        value: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_price_per_unit : purchase.formatted_total_display_price_per_unit
       }
     end
 
@@ -169,7 +169,7 @@ class ReceiptPresenter::ItemInfo
 
       {
         label: "Tip",
-        value: format_just_price_in_cents(purchase.tip.value_cents, purchase.displayed_price_currency_type),
+        value: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_tip : format_just_price_in_cents(purchase.tip.value_cents, purchase.displayed_price_currency_type),
       }
     end
 

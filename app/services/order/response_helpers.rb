@@ -4,6 +4,21 @@ module Order::ResponseHelpers
   include CurrencyHelper
 
   private
+    # Buyer-presentment purchases stay in_progress until Stripe settlement data arrives, so
+    # the checkout/confirm response must withhold content and receipt affordances until
+    # FinalizeBuyerPresentmentChargeJob completes the purchase.
+    def purchase_pending_processor_settlement_response(purchase)
+      purchase.purchase_response.tap do |response|
+        response[:content_url] = nil
+        response[:redirect_token] = nil
+        response[:url_redirect_external_id] = nil
+        response[:should_show_receipt] = false
+        response[:show_view_content_button_on_product_page] = false
+        response[:has_third_party_analytics] = false
+        response[:bundle_products]&.each { _1[:content_url] = nil }
+      end
+    end
+
     def error_response(error_message, purchase: nil)
       card_country = purchase&.card_country
       card_country = "CN" if card_country == "C2" # PayPal (wrongly) returns CN2 for China users transacting with USD

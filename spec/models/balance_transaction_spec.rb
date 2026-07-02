@@ -197,6 +197,31 @@ describe BalanceTransaction, :vcr do
           expect(amount.net_cents).to eq(issued_net_cents)
         end
       end
+
+      describe "canonical issued amount is provided" do
+        let(:flow_of_funds) do
+          FlowOfFunds.new(
+            issued_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_00),
+            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
+            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
+            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
+            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
+          )
+        end
+        let(:amount) do
+          BalanceTransaction::Amount.create_issued_amount_for_seller(
+            flow_of_funds:,
+            issued_net_cents:,
+            canonical_issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00)
+          )
+        end
+
+        it "uses the canonical amount for issued gross money" do
+          expect(amount.currency).to eq(Currency::USD)
+          expect(amount.gross_cents).to eq(100_00)
+          expect(amount.net_cents).to eq(issued_net_cents)
+        end
+      end
     end
 
     describe "create_holding_amount_for_seller" do
@@ -261,6 +286,31 @@ describe BalanceTransaction, :vcr do
           expect(amount.currency).to eq(flow_of_funds.merchant_account_net_amount.currency)
           expect(amount.gross_cents).to eq(flow_of_funds.merchant_account_gross_amount.cents)
           expect(amount.net_cents).to eq(flow_of_funds.merchant_account_net_amount.cents)
+        end
+      end
+
+      describe "canonical issued amount is provided with merchant-account holding amounts" do
+        let(:flow_of_funds) do
+          FlowOfFunds.new(
+            issued_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 125_00),
+            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
+            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
+            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
+            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
+          )
+        end
+        let(:amount) do
+          BalanceTransaction::Amount.create_holding_amount_for_seller(
+            flow_of_funds:,
+            issued_net_cents:,
+            canonical_issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00)
+          )
+        end
+
+        it "keeps real merchant-account holding money" do
+          expect(amount.currency).to eq(Currency::USD)
+          expect(amount.gross_cents).to eq(100_00)
+          expect(amount.net_cents).to eq(70_00)
         end
       end
     end

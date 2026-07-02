@@ -18,6 +18,25 @@ describe Purchase::ConfirmService, :vcr do
     end
   end
 
+  context "when a buyer-presentment purchase is awaiting Stripe settlement data" do
+    it "schedules finalization instead of marking the purchase successful" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      purchase = create(:purchase_in_progress, seller:, link: create(:product, user: seller), merchant_account:)
+      charge = create(:charge, order: create(:order), seller:, merchant_account:)
+      charge.purchases << purchase
+      allow(purchase).to receive(:confirm_charge_intent!)
+      allow(purchase).to receive(:pending_buyer_presentment_settlement?).and_return(true)
+
+      error_message = Purchase::ConfirmService.new(purchase:, params: {}).perform
+
+      expect(error_message).to be_nil
+      expect(purchase.reload).to be_in_progress
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
+    end
+  end
+
   context "when SCA fails" do
     context "for a classic product" do
       let(:purchase) { create(:purchase_in_progress, chargeable:) }

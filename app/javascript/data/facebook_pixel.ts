@@ -39,6 +39,15 @@ export function trackProductEvent(config: AnalyticsConfig, data: FacebookProduct
   }
 }
 
+// startTrackingForSeller only inits the pixel — on product pages the first
+// event is ViewContent. A profile has no product, so it fires the standard
+// PageView instead.
+export function trackProfilePageView(config: AnalyticsConfig) {
+  if (!shouldTrack() || !config.facebookPixelId || typeof fbq === "undefined") return;
+
+  fbq("trackSingle", config.facebookPixelId, "PageView", {});
+}
+
 export function startTrackingForSeller(data: FacebookPixelConfig) {
   if (!shouldTrack() || !data.facebookPixelId || initializedPixels.has(data.facebookPixelId)) return;
 

@@ -1,5 +1,6 @@
 import typia from "typia";
 
+import type { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
 
 export type GetSurchargesRequest = {
@@ -22,6 +23,15 @@ export type SurchargesResponse = {
   tax_cents: number;
   tax_included_cents: number;
   subtotal: number;
+  buyer_currency_quote: {
+    token: string;
+    currency: CurrencyCode;
+    canonical_total_cents: number;
+    presentment_total_cents: number;
+    rate: number;
+    subunit_to_unit: number;
+    expires_at: string;
+  } | null;
 };
 
 export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: AbortSignal) => {

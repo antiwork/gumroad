@@ -36,6 +36,21 @@ describe "PurchaseRefunds", :vcr do
       @purchase.refund_and_save!(@user.id)
     end
 
+    describe "buyer-presentment purchases" do
+      let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+      it "blocks processor refunds before refund support ships" do
+        create(:purchase_presentment, purchase: @purchase)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(ChargeProcessor).not_to receive(:refund!)
+        expect(@purchase.refund_and_save!(@user.id)).to be(false)
+        expect(@purchase.errors[:base]).to include(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
+        expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+                                                             context: hash_including(purchase_id: @purchase.id))
+      end
+    end
+
     it "updates refund status" do
       expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
       expect(@purchase.stripe_refunded).to_not be(true)
@@ -571,6 +586,21 @@ describe "PurchaseRefunds", :vcr do
           expect(Refund.last.note).to eq "VAT_ID_1234_Dummy"
           expect(Refund.last.processor_refund_id).to be_present
           expect(@purchase.reload.stripe_refunded).to be(false)
+        end
+
+        describe "buyer-presentment purchases" do
+          let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+          it "blocks processor tax refunds before refund support ships" do
+            create(:purchase_presentment, purchase: @purchase)
+            allow(ErrorNotifier).to receive(:notify)
+
+            expect(ChargeProcessor).not_to receive(:refund!)
+            expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(false)
+            expect(@purchase.errors[:base]).to include(Purchase::Refundable::BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE)
+            expect(ErrorNotifier).to have_received(:notify).with("Buyer-presentment refund attempted before refund support shipped",
+                                                                 context: hash_including(purchase_id: @purchase.id))
+          end
         end
 
         it "does not deduct the refunded tax amount from the connect account" do

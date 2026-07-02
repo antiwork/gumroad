@@ -41,6 +41,8 @@ Rails.application.routes.draw do
 
   # third party analytics (near the top to matches constraint first)
   constraints(host: /#{THIRD_PARTY_ANALYTICS_DOMAIN}/o) do
+    # Two segments, so it can't shadow the single-segment permalink route below.
+    get "/profile/:username", to: "third_party_analytics#profile", as: :profile_third_party_analytics
     get "/:link_id", to: "third_party_analytics#index", as: :third_party_analytics
     get "/(*path)", to: "application#e404_page"
   end

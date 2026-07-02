@@ -125,6 +125,7 @@ class Purchase < ApplicationRecord
   has_one :order, through: :order_purchase, dependent: :destroy
   has_one :charge_purchase, dependent: :destroy
   has_one :charge, through: :charge_purchase, dependent: :destroy
+  has_one :purchase_presentment, dependent: :destroy
   has_one :early_fraud_warning, dependent: :destroy
   has_one :tip, dependent: :destroy
 
@@ -1160,7 +1161,7 @@ class Purchase < ApplicationRecord
       content_url: purchase.has_content? ? url_redirect.try(:download_page_url) : nil,
       redirect_token: url_redirect.try(:token),
       url_redirect_external_id: url_redirect.try(:external_id),
-      price: purchase.formatted_display_price,
+      price: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_price : purchase.formatted_display_price,
       id: ObfuscateIds.encrypt(purchase.id),
       email: purchase.try(:email),
       email_digest: purchase.try(:email_digest),
@@ -1169,7 +1170,7 @@ class Purchase < ApplicationRecord
       is_following: purchase.try(:is_following?),
       currency_type: link.price_currency_type,
       has_third_party_analytics: link.has_third_party_analytics?("receipt"),
-      non_formatted_price: Money.new(purchase.displayed_price_cents, purchase.displayed_price_currency_type).cents,
+      non_formatted_price: purchase.buyer_presentment? ? purchase.buyer_presentment_price_cents : Money.new(purchase.displayed_price_cents, purchase.displayed_price_currency_type).cents,
       subscription_has_lapsed: link.is_recurring_billing? && !purchase.subscription&.alive?,
       domain: DOMAIN,
       protocol: PROTOCOL,
@@ -1184,16 +1185,28 @@ class Purchase < ApplicationRecord
       json[:product_rating] = review.rating if review.present?
       json[:review] = ProductReviewPresenter.new(review).review_form_props if review.present?
       json[:has_shipping_to_show] = purchase.shipping_cents > 0
-      json[:shipping_amount] = purchase.formatted_shipping_amount
+      json[:shipping_amount] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_shipping : purchase.formatted_shipping_amount
       json[:has_sales_tax_to_show] = purchase.was_purchase_taxable && purchase.price_cents > 0
-      json[:sales_tax_amount] = Money.new(purchase.tax_in_purchase_currency,
-                                          purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-      json[:non_formatted_seller_tax_amount] = Money.new(purchase.seller_taxes_in_purchase_currency,
-                                                         purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: false)
+      json[:sales_tax_amount] = if purchase.buyer_presentment?
+        purchase.formatted_buyer_presentment_tax
+      else
+        Money.new(purchase.tax_in_purchase_currency,
+                  purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+      end
+      json[:non_formatted_seller_tax_amount] = if purchase.buyer_presentment?
+        purchase.formatted_buyer_presentment_seller_tax(symbol: false)
+      else
+        Money.new(purchase.seller_taxes_in_purchase_currency,
+                  purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: false)
+      end
       json[:was_tax_excluded_from_price] = purchase.was_tax_excluded_from_price
       json[:sales_tax_label] = purchase.tax_label
       json[:has_sales_tax_or_shipping_to_show] = (purchase.was_purchase_taxable && purchase.price_cents > 0) || purchase.shipping_cents > 0
-      json[:total_price_including_tax_and_shipping] = purchase.formatted_total_transaction_amount
+      json[:total_price_including_tax_and_shipping] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_total : purchase.formatted_total_transaction_amount
+      if purchase.buyer_presentment?
+        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency
+        json[:buyer_presentment_total_cents] = purchase.buyer_presentment_total_cents
+      end
       json[:quantity] = purchase.quantity
       json[:show_quantity] = purchase.quantity > 1
       json[:license_key] = purchase.license_key if purchase.license.present?
@@ -1371,6 +1384,76 @@ class Purchase < ApplicationRecord
     format_price_in_cents(amount_in_purchase_currency)
   end
 
+  def buyer_presentment?
+    purchase_presentment.present?
+  end
+
+  # True while a presentment purchase has been charged but Stripe settlement data has not
+  # arrived yet; FinalizeBuyerPresentmentChargeJob completes the purchase once it does.
+  def pending_buyer_presentment_settlement?
+    in_progress? && stripe_transaction_id.present? && charge&.charge_presentment.present?
+  end
+
+  def buyer_presentment_currency
+    purchase_presentment&.presentment_currency
+  end
+
+  def buyer_presentment_price_cents
+    return unless buyer_presentment?
+
+    # The canonical displayed price is tip-inclusive (tips make the price "customizable"),
+    # and receipts render no separate tip line — so the presentment price line must include
+    # the tip too, or line items no longer sum to the charged total.
+    price_cents = purchase_presentment.presentment_price_cents + purchase_presentment.presentment_tip_cents
+    price_cents += purchase_presentment.presentment_seller_tax_cents unless was_tax_excluded_from_price
+    price_cents
+  end
+
+  def buyer_presentment_price_per_unit_cents
+    return unless buyer_presentment?
+
+    # Per-unit prices exclude the tip, mirroring formatted_total_display_price_per_unit.
+    (buyer_presentment_price_cents - purchase_presentment.presentment_tip_cents) / quantity
+  end
+
+  def buyer_presentment_tax_cents
+    return unless buyer_presentment?
+
+    purchase_presentment.presentment_seller_tax_cents + purchase_presentment.presentment_gumroad_tax_cents
+  end
+
+  def buyer_presentment_total_cents
+    purchase_presentment&.presentment_total_cents
+  end
+
+  def formatted_buyer_presentment_price
+    format_buyer_presentment_amount(buyer_presentment_price_cents)
+  end
+
+  def formatted_buyer_presentment_price_per_unit
+    format_buyer_presentment_amount(buyer_presentment_price_per_unit_cents)
+  end
+
+  def formatted_buyer_presentment_tax
+    format_buyer_presentment_amount(buyer_presentment_tax_cents)
+  end
+
+  def formatted_buyer_presentment_tip
+    format_buyer_presentment_amount(purchase_presentment.presentment_tip_cents)
+  end
+
+  def formatted_buyer_presentment_seller_tax(symbol: true)
+    format_buyer_presentment_amount(purchase_presentment.presentment_seller_tax_cents, symbol:)
+  end
+
+  def formatted_buyer_presentment_shipping
+    format_buyer_presentment_amount(purchase_presentment.presentment_shipping_cents)
+  end
+
+  def formatted_buyer_presentment_total
+    format_buyer_presentment_amount(purchase_presentment.presentment_total_cents)
+  end
+
   def formatted_tax_amount
     format_price_in_cents(tax_in_purchase_currency)
   end
@@ -1424,6 +1507,10 @@ class Purchase < ApplicationRecord
   def format_price_in_currency(price_cents)
     price_cents_in_currency = usd_cents_to_currency(displayed_price_currency_type, price_cents, rate_converted_to_usd)
     format_price_in_cents(price_cents_in_currency)
+  end
+
+  def format_buyer_presentment_amount(amount_cents, symbol: true)
+    MoneyFormatter.format(amount_cents, buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol:)
   end
 
   def find_enabled_integration(integration_name)
@@ -1535,12 +1622,14 @@ class Purchase < ApplicationRecord
   def create_affiliate_balances!
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents
+      issued_affiliate_cents: affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
       flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents
+      issued_affiliate_cents: affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     affiliate_balance_transaction = BalanceTransaction.create!(
@@ -1580,12 +1669,14 @@ class Purchase < ApplicationRecord
 
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: payment_cents - affiliate_credit_cents
+      issued_net_cents: payment_cents - affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
       flow_of_funds:,
-      issued_net_cents: payment_cents - affiliate_credit_cents
+      issued_net_cents: payment_cents - affiliate_credit_cents,
+      canonical_issued_amount: presentment_canonical_issued_amount
     )
 
     seller_balance_transaction = BalanceTransaction.create!(
@@ -1848,11 +1939,21 @@ class Purchase < ApplicationRecord
     self.charge_intent = ChargeProcessor.confirm_payment_intent!(merchant_account, processor_payment_intent_id)
 
     if charge_intent.succeeded?
-      save_charge_data(charge_intent.charge)
+      # Presentment charges may not have Stripe settlement data yet right after an SCA
+      # confirmation; defer like the create path does instead of crashing on a blank
+      # flow of funds. FinalizeBuyerPresentmentChargeJob completes the purchase later.
+      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: charge&.charge_presentment.present?)
     else
       errors.add :base, "Sorry, something went wrong."
     end
 
+  rescue ChargeProcessorFxQuoteInvalidError => e
+    # SCA confirmation happens minutes after PaymentIntent creation, so the locked FX quote
+    # can expire or drift-invalidate in between; the buyer must re-quote and retry.
+    logger.info "Buyer currency quote invalidated while confirming charge intent: #{e.message} in purchase: #{external_id}"
+    errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+    self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+    nil
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
@@ -2850,7 +2951,7 @@ class Purchase < ApplicationRecord
     end
   end
 
-  def save_charge_data(processor_charge, chargeable: nil)
+  def save_charge_data(processor_charge, chargeable: nil, allow_missing_flow_of_funds: false)
     self.charge_processor_id = processor_charge.charge_processor_id
     self.stripe_refunded = processor_charge.refunded
     self.stripe_transaction_id = processor_charge.id
@@ -2864,7 +2965,10 @@ class Purchase < ApplicationRecord
     save!
 
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
+    return false if allow_missing_flow_of_funds && stripe_charge_processor? && processor_charge.flow_of_funds.blank?
+
     load_flow_of_funds(processor_charge)
+    true
   end
 
   def is_an_off_session_charge_on_indian_card?
@@ -3055,6 +3159,15 @@ class Purchase < ApplicationRecord
   end
 
   private
+    # For presentment charges the processor-issued amount is in buyer currency, but the
+    # "issued amount" booked to balances must stay the canonical seller/accounting amount;
+    # this override is what the BalanceTransaction::Amount factories substitute in.
+    def presentment_canonical_issued_amount
+      return if purchase_presentment.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
     def web_csv_parity_fields
       {
         utm_source: utm_link&.utm_source,

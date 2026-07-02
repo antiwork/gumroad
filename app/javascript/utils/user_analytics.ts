@@ -71,6 +71,20 @@ export function startTrackingForSeller(id: string, data: AnalyticsData) {
   TikTokPixel.startTrackingForSeller(config);
 }
 
+// Page-view-only tracking for profile pages, which have no product to attach
+// the usual "viewed" event to. TikTok is intentionally absent: its
+// startTrackingForSeller already fires ttq.page() on init, so firing it here
+// too would double-count — while GA registers the seller config with
+// send_page_view: false and Facebook only inits the pixel, so both need an
+// explicit page view.
+export function trackProfilePageView(id: string) {
+  const config = configs.get(id);
+  if (!config) return;
+
+  GoogleAnalytics.trackProfilePageView(config);
+  FacebookPixel.trackProfilePageView(config);
+}
+
 export function trackProductEvent(id: string | undefined, data: ProductAnalyticsEvent) {
   const config = id ? configs.get(id) : undefined;
 

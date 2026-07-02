@@ -103,6 +103,18 @@ export function trackProductEvent(config: AnalyticsConfig | undefined, data: Pro
   }
 }
 
+// The seller's GA config is registered with send_page_view: false (see
+// startTrackingForSeller), so a profile view — which has no product "viewed"
+// event to piggyback on — needs this explicit page_view.
+export function trackProfilePageView(config: AnalyticsConfig) {
+  if (!shouldTrack() || !config.googleAnalyticsId || typeof gtag === "undefined") return;
+
+  logSellerEvent(config.id, "page_view", {
+    page: window.location.pathname + window.location.search,
+    title: "viewed profile",
+  });
+}
+
 export function startTrackingForSeller(data: AnalyticsConfig) {
   if (!shouldTrack() || !data.googleAnalyticsId) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();

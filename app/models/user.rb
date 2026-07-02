@@ -621,6 +621,19 @@ class User < ApplicationRecord
     name.presence || username
   end
 
+  # Account-scoped pixel configuration in the shape the frontend's
+  # startTrackingForSeller expects. Link#analytics_data delegates here: the
+  # pixel ids live on the account, not the product, so profile surfaces (which
+  # have no product) can boot the same tracking.
+  def analytics_data
+    {
+      google_analytics_id:,
+      facebook_pixel_id:,
+      tiktok_pixel_id:,
+      free_sales: !skip_free_sale_analytics?,
+    }
+  end
+
   def custom_html=(value)
     if value.blank?
       page.custom_html = nil if page.present?
