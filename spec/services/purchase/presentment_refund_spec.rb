@@ -119,6 +119,32 @@ describe Purchase::PresentmentRefund do
       expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 100)).to be_nil
     end
 
+    it "allocates repeated partials against remaining balances so the final presentment cent stays recordable" do
+      purchase.purchase_presentment.update!(presentment_price_cents: 101,
+                                            presentment_tip_cents: 0,
+                                            presentment_seller_tax_cents: 0,
+                                            presentment_gumroad_tax_cents: 0,
+                                            presentment_total_cents: 101)
+      purchase.association(:purchase_presentment).reset
+
+      first = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 50)
+      expect(first.canonical_gross_refund_cents).to eq(50)
+      first_refund = build(:refund, purchase:, total_transaction_cents: 50, amount_cents: 50)
+      first.presentment_refund.json_data.each { |key, value| first_refund.public_send("#{key}=", value) }
+      purchase.refunds << first_refund
+
+      second = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 50)
+      expect(second.canonical_gross_refund_cents).to be < 50
+      second_refund = build(:refund, purchase:, total_transaction_cents: second.canonical_gross_refund_cents, amount_cents: second.canonical_gross_refund_cents)
+      second.presentment_refund.json_data.each { |key, value| second_refund.public_send("#{key}=", value) }
+      purchase.refunds << second_refund
+
+      final = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 1)
+      expect(final).to be_present
+      expect(final.canonical_gross_refund_cents).to eq(100 - 50 - second.canonical_gross_refund_cents)
+      expect(final.presentment_refund.presentment_amount_cents).to eq(1)
+    end
+
     it "returns nil for a non-positive presentment amount" do
       expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 0)).to be_nil
     end

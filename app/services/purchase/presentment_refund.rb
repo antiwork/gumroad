@@ -49,10 +49,13 @@ class Purchase::PresentmentRefund
     canonical_gross_refund_cents = if presentment_amount_cents == remaining_presentment_cents
       purchase.gross_amount_refundable_cents
     else
+      # Allocate against the REMAINING presentment/canonical balances (not the original
+      # totals) so repeated partial refunds cannot exhaust the canonical refundable amount
+      # through rounding before the presentment charge is fully refunded.
       refunded_share = Charge.allocate_by_largest_remainder(
-        purchase.total_transaction_cents,
-        [presentment_amount_cents, presentment.presentment_total_cents - presentment_amount_cents],
-        presentment.presentment_total_cents
+        purchase.gross_amount_refundable_cents,
+        [presentment_amount_cents, remaining_presentment_cents - presentment_amount_cents],
+        remaining_presentment_cents
       ).first
       [refunded_share, purchase.gross_amount_refundable_cents].min
     end
