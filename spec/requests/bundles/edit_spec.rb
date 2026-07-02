@@ -392,9 +392,6 @@ describe("Bundle edit page", type: :system, js: true) do
 
       within_fieldset "Category" do
         click_on "Clear value"
-        # Clearing refocuses the input and reopens the menu; close it so its options don't
-        # intercept the click below (the menu can flip above the field on short viewports).
-        find(:combo_box, "Category").send_keys(:escape)
       end
       # Unfocus input
       find("h2", text: "Gumroad Discover").click

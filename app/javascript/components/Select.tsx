@@ -22,22 +22,18 @@ import { Pill } from "$app/components/ui/Pill";
 export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
 export type CustomOption = (option: Option) => React.ReactNode;
-type MenuPlacement = "top" | "bottom";
 type CustomProps = {
   customOption: null | CustomOption;
   menuListId: null | string;
   focusedOptionId: null | string;
   setFocusedOptionId?: (id: null | string) => void;
   maxLength: number | null;
-  menuPlacement: MenuPlacement;
-  setMenuPlacement?: (placement: MenuPlacement) => void;
 };
 const CustomPropsContext = React.createContext<CustomProps>({
   customOption: null,
   menuListId: null,
   focusedOptionId: null,
   maxLength: null,
-  menuPlacement: "bottom",
 });
 
 export type Props<IsMulti extends boolean = boolean> = Omit<
@@ -64,7 +60,6 @@ const SelectInner = <IsMulti extends boolean>(
 ) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [focusedOptionId, setFocusedOptionId] = React.useState<null | string>(null);
-  const [menuPlacement, setMenuPlacement] = React.useState<MenuPlacement>("bottom");
 
   const handleMenuOpen = () => {
     setIsMenuOpen(true);
@@ -73,7 +68,6 @@ const SelectInner = <IsMulti extends boolean>(
   const handleMenuClose = () => {
     setIsMenuOpen(false);
     setFocusedOptionId(null);
-    setMenuPlacement("bottom");
   };
 
   const menuListId = React.useId();
@@ -84,10 +78,8 @@ const SelectInner = <IsMulti extends boolean>(
       focusedOptionId,
       setFocusedOptionId,
       maxLength: props.maxLength ?? null,
-      menuPlacement,
-      setMenuPlacement,
     }),
-    [props.customOption, focusedOptionId, menuPlacement],
+    [props.customOption, focusedOptionId],
   );
 
   return (
@@ -113,9 +105,6 @@ const SelectInner = <IsMulti extends boolean>(
         getOptionValue={(option) => option.id}
         openMenuOnFocus
         menuIsOpen={isMenuOpen}
-        // Placement is handled by our custom MenuList (see below); disable react-select's own
-        // scroll-into-view so it doesn't scroll the page to chase the custom-positioned menu.
-        menuShouldScrollIntoView={false}
         onMenuClose={handleMenuClose}
         onMenuOpen={() => ((props.allowMenuOpen?.() ?? true) ? handleMenuOpen() : null)}
         filterOption={filterOptionFn}
@@ -201,49 +190,42 @@ const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProp
     </components.DropdownIndicator>
   );
 
-const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) => {
-  const { menuPlacement } = React.useContext(CustomPropsContext);
-  return (
-    <components.Control
-      className={classNames(
-        "relative inline-flex min-h-12 w-full items-center gap-2 rounded border border-border px-4 py-0",
-        // Square whichever edge the open menu joins (below by default, above when flipped up).
-        props.menuIsOpen && (menuPlacement === "top" ? "rounded-t-none" : "rounded-b-none"),
-        "bg-background text-foreground",
-        "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
-        "[&>.icon]:text-muted",
-        props.isDisabled && "cursor-not-allowed opacity-30 [&_input]:opacity-100",
-      )}
-      {...props}
-    >
-      {props.children}
-    </components.Control>
-  );
-};
+const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) => (
+  <components.Control
+    className={classNames(
+      "relative inline-flex min-h-12 w-full items-center gap-2 rounded border border-border px-4 py-0",
+      props.menuIsOpen && "rounded-b-none",
+      "bg-background text-foreground",
+      "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
+      "[&>.icon]:text-muted",
+      props.isDisabled && "cursor-not-allowed opacity-30 [&_input]:opacity-100",
+    )}
+    {...props}
+  >
+    {props.children}
+  </components.Control>
+);
 
 const MENU_VIEWPORT_MARGIN = 8;
-// A downward menu shorter than this is too cramped to be useful, so flip it above the control.
-const MIN_MENU_HEIGHT_BELOW = 160;
+// Never clamp below this; a shorter menu is harder to use than one that overflows the viewport.
+const MIN_MENU_HEIGHT = 140;
 
 const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>) => {
-  const { menuListId, menuPlacement, setMenuPlacement } = React.useContext(CustomPropsContext);
+  const menuListId = React.useContext(CustomPropsContext).menuListId;
   const listRef = React.useRef<HTMLDataListElement | null>(null);
   const [maxHeight, setMaxHeight] = React.useState(props.maxHeight);
 
-  // Keep the menu on-screen. It is absolutely positioned relative to the control, so measure the
-  // space below it and clamp the menu to fit (a long list then scrolls internally instead of
-  // clipping off short viewports). The menu opens downward as expected; it only flips above the
-  // control when the room below is too small to be usable and there is more room above.
+  // The menu is absolutely positioned below the control with a fixed max height, so on short
+  // viewports it can run past the bottom of the window. Clamp it to the space available below
+  // the control (a long list then scrolls internally instead of clipping off-screen).
   React.useLayoutEffect(() => {
     const control = listRef.current?.offsetParent;
     if (!(control instanceof HTMLElement)) return;
-    const rect = control.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - MENU_VIEWPORT_MARGIN;
-    const spaceAbove = rect.top - MENU_VIEWPORT_MARGIN;
-    const flipUp = spaceBelow < MIN_MENU_HEIGHT_BELOW && spaceAbove > spaceBelow;
-    setMenuPlacement?.(flipUp ? "top" : "bottom");
-    setMaxHeight(Math.max(0, Math.min(props.maxHeight, flipUp ? spaceAbove : spaceBelow)));
-  }, [props.maxHeight, props.children, setMenuPlacement]);
+    const spaceBelow = window.innerHeight - control.getBoundingClientRect().bottom - MENU_VIEWPORT_MARGIN;
+    setMaxHeight(Math.min(props.maxHeight, Math.max(spaceBelow, MIN_MENU_HEIGHT)));
+    // `props.children` is a dependency because the control can grow while the menu is open
+    // (multi-selects add value pills), moving the menu's top edge.
+  }, [props.maxHeight, props.children]);
 
   const setRefs = React.useCallback(
     (node: HTMLDataListElement | null) => {
@@ -261,8 +243,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       style={{ maxHeight }}
       id={menuListId ?? undefined}
       className={classNames(
-        "absolute left-0 z-10 block w-full overflow-auto border border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)]",
-        menuPlacement === "top" ? "bottom-full rounded-t" : "top-full rounded-b",
+        "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)]",
       )}
     >
       {props.children}
