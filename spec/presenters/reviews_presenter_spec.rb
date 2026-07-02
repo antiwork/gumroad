@@ -133,6 +133,17 @@ describe ReviewsPresenter do
       end
     end
 
+    context "when the buyer's own review has been soft-deleted" do
+      let!(:deleted_review) do
+        purchase = create(:purchase, purchaser: user)
+        create(:product_review, purchase: purchase, link: purchase.link, deleted_at: 1.day.ago)
+      end
+
+      it "omits it from the reviews list" do
+        expect(presenter.reviews_props[:reviews].map { |r| r[:id] }).not_to include(deleted_review.external_id)
+      end
+    end
+
     context "when a purchase awaiting review is for a deleted product" do
       let!(:deleted_product) { create(:product, deleted_at: 1.day.ago) }
       let!(:purchase_on_deleted_product) { create(:purchase, purchaser: user, link: deleted_product) }
