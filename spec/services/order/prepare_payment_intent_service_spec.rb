@@ -189,8 +189,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
       end
 
-      it "gates Link out of the intent on a PPP checkout even when the seller has the Link flag" do
-        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+      it "gates Link out of the intent on a PPP checkout" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
@@ -198,7 +197,6 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
 
       it "does not gate the intent when the seller disabled PPP payment verification" do
-        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
         seller.update!(purchasing_power_parity_payment_verification_disabled: true)
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
@@ -348,7 +346,7 @@ describe Order::PreparePaymentIntentService, :vcr do
     context "the deferred intent method/currency contract" do
       before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
 
-      it "creates the intent with only card for a buyer whose country cannot be resolved (US-locked methods dropped)" do
+      it "creates the intent with card and Link for a buyer whose country cannot be resolved (US-locked methods dropped)" do
         order, params = build_order
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -364,7 +362,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
-        expect(create_args[:payment_method_types]).to eq(["card"])
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 
@@ -387,14 +385,13 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_us").perform
 
-        expect(create_args[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
       end
 
-      # The presenter derives the Element's Link config from the same resolver output, so a
-      # Link-flagged seller's Payment Element and deferred intent both carry "link". Without a
+      # The presenter derives the Element's Link config from the same resolver output, so the
+      # Payment Element and deferred intent both carry "link" with no per-seller flag. Without a
       # resolvable ip_country the US-locked methods stay dropped — Link is not region-gated.
-      it "includes Link in the intent's payment_method_types when the seller has the Link flag" do
-        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+      it "always includes Link in the intent's payment_method_types" do
         order, params = build_order
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })

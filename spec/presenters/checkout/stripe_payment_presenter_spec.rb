@@ -39,9 +39,9 @@ describe Checkout::StripePaymentPresenter do
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
-  # they move together; the US-locked methods (cashapp/us_bank_account) are passed explicitly by the
-  # region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: (stripe_link_enabled ? %w[card link] : ["card"]), stripe_connect_account_id: nil)
+  # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
+  # are passed explicitly by the region-gate specs.
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -56,7 +56,7 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: false)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
@@ -325,26 +325,59 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(cart:, add_products: [flagged_seller_product], clear_cart: true)).to eq(payment_element_props)
   end
 
-  it "keeps Link disabled in the Payment Element when only the Payment Element flag is enabled" do
-    expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props(stripe_link_enabled: false))
-  end
-
-  it "enables Link in the Payment Element when the seller has the Link flag enabled" do
+  it "always enables Link in the Payment Element (no per-seller flag)" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props(stripe_link_enabled: true))
   end
 
-  it "does not render the Payment Element when the Link flag is enabled but the Payment Element flag is not" do
-    seller = create(:user)
-    product = create(:product, user: seller, price_cents: 1234)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+  it "disables Link on a PPP-verified Payment Element checkout — its funding country is not verifiable pre-charge" do
+    stub_geoip_country("104.28.0.1", "United States")
+    ppp_details = { country: "Brazil", factor: 0.5, minimum_price: 99 }
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
-      .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+    props = stripe_payment_props(add_products: [flagged_seller_product(ppp_details:)], ip: "104.28.0.1")
+
+    expect(props).to eq(payment_element_props(stripe_link_enabled: false))
+  end
+
+  it "keeps Link on a PPP Payment Element checkout when the seller disabled PPP payment verification" do
+    stub_geoip_country("104.28.0.1", "United States")
+    ppp_details = { country: "Brazil", factor: 0.5, minimum_price: 99 }
+    item = flagged_seller_product(ppp_details:)
+    seller = User.find_by(external_id: item[:product][:creator][:id])
+    seller.update!(purchasing_power_parity_payment_verification_disabled: true)
+
+    props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
+
+    expect(props).to eq(payment_element_props(stripe_link_enabled: true))
+  end
+
+  it "gates Link item-scoped: another seller disabling PPP verification does not re-enable Link for a still-verified PPP item" do
+    stub_geoip_country("104.28.0.1", "United States")
+    ppp_details = { country: "Brazil", factor: 0.5, minimum_price: 99 }
+    verified_ppp_item = flagged_seller_product(ppp_details:)
+    unverified_seller_item = flagged_seller_product
+    unverified_seller = User.find_by(external_id: unverified_seller_item[:product][:creator][:id])
+    unverified_seller.update!(purchasing_power_parity_payment_verification_disabled: true)
+
+    props = stripe_payment_props(add_products: [verified_ppp_item, unverified_seller_item], ip: "104.28.0.1")
+
+    expect(props).to eq(payment_element_props(stripe_link_enabled: false))
+  end
+
+  it "keeps Link on a multi-seller cart when the only PPP item's own seller disabled verification" do
+    stub_geoip_country("104.28.0.1", "United States")
+    ppp_details = { country: "Brazil", factor: 0.5, minimum_price: 99 }
+    ppp_item = flagged_seller_product(ppp_details:)
+    ppp_seller = User.find_by(external_id: ppp_item[:product][:creator][:id])
+    ppp_seller.update!(purchasing_power_parity_payment_verification_disabled: true)
+    other_item = flagged_seller_product
+
+    props = stripe_payment_props(add_products: [ppp_item, other_item], ip: "104.28.0.1")
+
+    expect(props).to eq(payment_element_props(stripe_link_enabled: true))
   end
 
   describe "Payment Element confirm integration" do
@@ -357,21 +390,21 @@ describe Checkout::StripePaymentPresenter do
       stub_geoip_country("104.28.0.1", "United States")
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
-        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp us_bank_account]))
     end
 
-    it "offers card only for a non-US buyer (Cash App/ACH are US-locked)" do
+    it "offers card and Link only for a non-US buyer (Cash App/ACH are US-locked)" do
       stub_geoip_country("2.2.2.2", "United Kingdom")
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "2.2.2.2"))
-        .to eq(payment_element_client_confirm_props(payment_method_types: ["card"]))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
     end
 
-    it "offers card only when the buyer's country cannot be resolved" do
+    it "offers card and Link only when the buyer's country cannot be resolved" do
       allow(GeoIp).to receive(:lookup).and_return(nil)
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "0.0.0.0"))
-        .to eq(payment_element_client_confirm_props(payment_method_types: ["card"]))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
     end
 
     describe "PPP method matrix (U13)" do
@@ -381,16 +414,13 @@ describe Checkout::StripePaymentPresenter do
         stub_geoip_country("104.28.0.1", "United States")
 
         expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(ppp_details:)], ip: "104.28.0.1"))
-          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account], stripe_link_enabled: false))
       end
 
       it "gates Link out on a PPP checkout — its funding country is not verifiable pre-charge" do
         stub_geoip_country("104.28.0.1", "United States")
-        item = confirm_flagged_seller_product(ppp_details:)
-        seller = User.find_by(external_id: item[:product][:creator][:id])
-        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
-        props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
+        props = stripe_payment_props(add_products: [confirm_flagged_seller_product(ppp_details:)], ip: "104.28.0.1")
 
         expect(props[:elements_options][:payment_method_types]).to eq(%w[card cashapp us_bank_account])
         expect(props[:elements_options][:stripe_link_enabled]).to eq(false)
@@ -401,7 +431,6 @@ describe Checkout::StripePaymentPresenter do
         item = confirm_flagged_seller_product(ppp_details:)
         seller = User.find_by(external_id: item[:product][:creator][:id])
         seller.update!(purchasing_power_parity_payment_verification_disabled: true)
-        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
         props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
 
@@ -412,7 +441,7 @@ describe Checkout::StripePaymentPresenter do
         stub_geoip_country("104.28.0.1", "United States")
 
         expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
-          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp us_bank_account]))
       end
     end
 
@@ -467,12 +496,11 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props(stripe_connect_account_id: connect_account.charge_processor_merchant_id))
     end
 
-    it "enables Link in client-confirm mode when the seller has the Link flag" do
+    it "always enables Link in client-confirm mode (no per-seller flag)" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))

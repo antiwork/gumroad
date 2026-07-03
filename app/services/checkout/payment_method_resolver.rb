@@ -8,10 +8,10 @@
 # Two method sets are distinguished:
 #   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
-#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card is
-#     always launched; Link joins it per-seller behind the same :stripe_payment_element_link flag
-#     that ramps Link on Lane A, so one flag governs Link everywhere; and the US-locked first-launch
-#     methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP gate below.
+#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card and
+#     Link are always launched (Link is inline and auto-enables with the Payment Element itself); the
+#     US-locked first-launch methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP
+#     gate below.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -29,17 +29,15 @@ class Checkout::PaymentMethodResolver
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Launched on the client-confirmed path: card everywhere, plus the US-locked first-launch methods
+  # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
+  # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
+  # element flags themselves since Stripe's dashboard payment-method settings are the emergency
+  # kill switch, per-seller Flipper adds no useful lever); plus the US-locked first-launch methods
   # (region-gated below) — Cash App Pay (redirect; confirms via the #5664 return page) and ACH Direct
   # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
   # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card cashapp us_bank_account].freeze
-  # Link is inline (non-redirect), so it needs none of the return-page/webhook machinery the other
-  # gated methods wait on. It launches per-seller behind Lane A's existing Link flag (#5614) so the
-  # rollout ramps once for both integrations. This resolver is the ONLY place that widens the
-  # client-confirm method list — the presenter derives the Element's Link config from this output.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
-  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
@@ -122,21 +120,13 @@ class Checkout::PaymentMethodResolver
       methods
     end
 
-    # Order follows ONE_TIME_PAYMENT_METHOD_TYPES (the resolve intersection preserves the receiver's
-    # order), so card always renders as the first Payment Element tab.
-    def launched_payment_method_types
-      launched = LAUNCHED_PAYMENT_METHOD_TYPES
-      launched += [LINK_PAYMENT_METHOD_TYPE] if sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) }
-      launched
-    end
-
     # What Stripe actually receives: the eligible policy set intersected with the launched set, then
     # region-gated, then PPP-gated. A US-locked method (ACH, Cash App Pay) is only offered when the
     # buyer's GeoIP country is US, so a non-US buyer never sees a method they can't complete. When the
     # buyer country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
     # and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
-      launched = eligible & launched_payment_method_types
+      launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched
