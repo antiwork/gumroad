@@ -113,10 +113,14 @@ class Order::PreparePaymentIntentService
     end
 
     # Card carries country directly; inline wallet methods (e.g. Link) are non-card, so the card
-    # field is nil — fall back to the method-specific preview block's country. BOTH are Stripe-owned
-    # funding-source countries, safe to trust for PPP verification. We deliberately do NOT fall back
-    # to buyer-supplied billing_details: that is checkout-form input, so trusting it would let a buyer
-    # spoof the discounted country. When Stripe exposes no funding country the value stays nil and a
+    # field is nil — fall back to the method-specific preview block's country (this generic read is
+    # also the sepa_debit.country hook: it activates untouched when SEPA launches post-FX). BOTH are
+    # Stripe-owned funding-source countries, safe to trust for PPP verification. US-locked methods
+    # (Cash App Pay, ACH) expose no country in their preview blocks, but Stripe only lets a US Cash
+    # App account or US bank account fund them — the region lock IS the funding country, so verify
+    # them as US (U13's region-locked bucket). We deliberately do NOT fall back to buyer-supplied
+    # billing_details: that is checkout-form input, so trusting it would let a buyer spoof the
+    # discounted country. When Stripe exposes no funding country the value stays nil and a
     # PPP-discounted purchase fails closed. Uses [] access because a Stripe::StripeObject raises on a
     # missing attribute reader but returns nil for an absent key.
     def previewed_country(preview)
@@ -124,7 +128,13 @@ class Order::PreparePaymentIntentService
       return card_country if card_country.present?
 
       method_type = preview[:type]
-      method_type.present? ? preview[method_type.to_sym]&.[](:country) : nil
+      return nil if method_type.blank?
+
+      method_country = preview[method_type.to_sym]&.[](:country)
+      return method_country if method_country.present?
+      return Checkout::PaymentMethodResolver::US_ALPHA2 if Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
+
+      nil
     end
 
     def block_purchasing_power_parity_mismatches
@@ -231,8 +241,23 @@ class Order::PreparePaymentIntentService
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
-        buyer_country: buyer_country_alpha2
+        buyer_country: buyer_country_alpha2,
+        ppp_discounted: ppp_verification_applies?
       ).resolve
+    end
+
+    # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment
+    # Element's on a PPP checkout (the step-1 invariant). Keyed on discount AVAILABILITY for the
+    # buyer's server-owned GeoIP country — the same basis the presenter uses — NOT on whether the
+    # buyer took the discount: the Element is configured before that choice, so keying prepare on
+    # is_purchasing_power_parity_discounted would widen the intent past the Element whenever an
+    # offered discount goes unused. Skipped when the seller disables PPP payment verification
+    # (validate_purchasing_power_parity is a no-op then, so no method needs gating).
+    def ppp_verification_applies?
+      return false if seller.purchasing_power_parity_payment_verification_disabled?
+      return false if purchases_to_charge.none? { _1.link.purchasing_power_parity_enabled? }
+
+      PurchasingPowerParityService.new.get_factor(buyer_country_alpha2, seller) < 1
     end
 
     # The buyer's country as an alpha2, derived from server-owned GeoIP data (ip_country, a country

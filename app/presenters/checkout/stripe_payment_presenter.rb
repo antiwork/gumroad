@@ -104,7 +104,19 @@ class Checkout::StripePaymentPresenter
         commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
+        ppp_discounted: ppp_verification_applies?,
       )
+    end
+
+    # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
+    # country AND the seller enforces PPP payment verification — the case where prepare will run the
+    # funding-country check and a non-verifiable method would fail closed. Keyed on discount
+    # AVAILABILITY (ppp_details for this ip), the same server-owned basis
+    # Order::PreparePaymentIntentService recomputes from the purchase's ip_country, so the Payment
+    # Element and the deferred intent gate identically (the step-1 method-set invariant).
+    def ppp_verification_applies?
+      items.any? { _1[:ppp_discounted] } &&
+        sellers.none? { _1&.purchasing_power_parity_payment_verification_disabled? }
     end
 
     # GeoIP-detected country (never the user's profile country) so the resolver's US-locked-method
@@ -185,7 +197,8 @@ class Checkout::StripePaymentPresenter
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
           native_type: product.native_type,
-          buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:)
+          buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
+          ppp_discounted: product.ppp_details(ip).present?
         )
       end
     end
@@ -204,12 +217,13 @@ class Checkout::StripePaymentPresenter
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
           native_type: product[:native_type],
-          buyer_currency_display: product[:buyer_currency_display]
+          buyer_currency_display: product[:buyer_currency_display],
+          ppp_discounted: product[:ppp_details].present?
         )
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, ppp_discounted: false)
       {
         seller:,
         price_cents:,
@@ -219,6 +233,7 @@ class Checkout::StripePaymentPresenter
         has_free_trial:,
         native_type:,
         buyer_currency_display:,
+        ppp_discounted:,
       }
     end
 end

@@ -44,6 +44,19 @@ class Checkout::PaymentMethodResolver
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
   US_ALPHA2 = "US"
+  # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
+  # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
+  # region lock matches the discount country (Cash App Pay / ACH are US-locked, so US-only) may be
+  # offered. Methods with NO Stripe-owned funding country (Klarna/Afterpay/Affirm/PayPal/Link) are
+  # gated out on PPP checkouts: their preview yields nil country, so a PPP purchase would always
+  # fail closed at prepare — don't render a method that cannot complete.
+  # sepa_debit is wired but dormant until SEPA launches post-FX.
+  PPP_VERIFIABLE_PAYMENT_METHOD_TYPES = %w[card sepa_debit].freeze
+  # US-locked methods double as region-locked entries: allowed on a PPP checkout only when the
+  # buyer's (GeoIP) country — the basis of the discount — is the lock country. The resolver's US
+  # region gate already enforces buyer_country == US for these, so on a PPP checkout they stay
+  # offered exactly when the discount country is the lock country.
+  PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES = US_LOCKED_PAYMENT_METHOD_TYPES
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -51,12 +64,13 @@ class Checkout::PaymentMethodResolver
     def client_confirm_eligible? = client_confirm_eligible
   end
 
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil)
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
     @setup_for_future = setup_for_future
     @buyer_country = buyer_country
+    @ppp_discounted = ppp_discounted
   end
 
   def resolve
@@ -78,7 +92,7 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
@@ -117,15 +131,25 @@ class Checkout::PaymentMethodResolver
     end
 
     # What Stripe actually receives: the eligible policy set intersected with the launched set, then
-    # region-gated. A US-locked method (ACH, Cash App Pay) is only offered when the buyer's GeoIP
-    # country is US, so a non-US buyer never sees a method they can't complete. When the buyer
-    # country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
+    # region-gated, then PPP-gated. A US-locked method (ACH, Cash App Pay) is only offered when the
+    # buyer's GeoIP country is US, so a non-US buyer never sees a method they can't complete. When the
+    # buyer country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
     # and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & launched_payment_method_types
-      return launched if buyer_country == US_ALPHA2
+      launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
+      launched = ppp_method_matrix(launched) if ppp_discounted
+      launched
+    end
 
-      launched - US_LOCKED_PAYMENT_METHOD_TYPES
+    # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify
+    # (card/wallets, later sepa_debit) or whose region lock matches the buyer's country (Cash App
+    # Pay / ACH — already region-gated above, so surviving entries match by construction). Methods
+    # with no Stripe-owned funding country (Link today; Klarna/Afterpay/Affirm/PayPal when they
+    # launch) are dropped: `previewed_country` would return nil and the purchase would fail closed
+    # at prepare anyway — never render a method that cannot complete the discounted purchase.
+    def ppp_method_matrix(launched)
+      launched & (PPP_VERIFIABLE_PAYMENT_METHOD_TYPES + PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES)
     end
 
     def log_decision(resolution)
@@ -134,6 +158,7 @@ class Checkout::PaymentMethodResolver
         "[#{self.class.name}] client_confirm_eligible=#{resolution.client_confirm_eligible} " \
         "seller_ids=#{sellers.map { _1&.id }} recurring=#{recurring} commission=#{commission} " \
         "setup_for_future=#{setup_for_future} buyer_country=#{buyer_country.inspect} " \
+        "ppp_discounted=#{ppp_discounted} " \
         "fallback_reason=#{resolution.fallback_reason.inspect} " \
         "eligible=#{resolution.eligible_payment_method_types} enabled=#{resolution.payment_method_types.inspect} " \
         "launch_gated_out=#{launch_gated_out} stripe_connect_account_id=#{resolution.stripe_connect_account_id.inspect}"

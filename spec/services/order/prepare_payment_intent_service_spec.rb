@@ -134,6 +134,77 @@ describe Order::PreparePaymentIntentService, :vcr do
         preview = preview_from(type: "link", link: {})
         expect(service.send(:previewed_country, preview)).to be_nil
       end
+
+      # U13 region-locked bucket: Stripe exposes no country on cashapp/us_bank_account previews, but
+      # only a US Cash App account / US bank account can fund them — the lock IS the funding country.
+      it "verifies a Cash App Pay preview as US via the region lock" do
+        preview = preview_from(type: "cashapp", cashapp: {}, card: nil)
+        expect(service.send(:previewed_country, preview)).to eq("US")
+      end
+
+      it "verifies an ACH (us_bank_account) preview as US via the region lock" do
+        preview = preview_from(type: "us_bank_account", us_bank_account: { last4: "6789" }, card: nil)
+        expect(service.send(:previewed_country, preview)).to eq("US")
+      end
+
+      it "prefers an explicit method-block country over the region lock if Stripe ever exposes one" do
+        preview = preview_from(type: "us_bank_account", us_bank_account: { country: "US" }, card: nil)
+        expect(service.send(:previewed_country, preview)).to eq("US")
+      end
+    end
+
+    # U13: the deferred intent's method set must equal the Payment Element's on a PPP checkout, so
+    # prepare recomputes the same ppp_discounted input from server-owned data (product PPP config +
+    # the buyer's GeoIP-derived ip_country factor).
+    context "with a PPP-eligible checkout (U13 method matrix)" do
+      before do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test")
+        product.update!(purchasing_power_parity_disabled: false)
+        seller.update!(purchasing_power_parity_enabled: true)
+        PurchasingPowerParityService.new.set_factor("US", 0.5)
+      end
+
+      after { PurchasingPowerParityService.new.set_factor("US", 1) }
+
+      def create_args_for(order, params)
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_ppp").perform
+        create_args
+      end
+
+      it "keeps card and the US-locked methods for a US PPP buyer, matching the Payment Element" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+      end
+
+      it "gates Link out of the intent on a PPP checkout even when the seller has the Link flag" do
+        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+      end
+
+      it "does not gate the intent when the seller disabled PPP payment verification" do
+        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+        seller.update!(purchasing_power_parity_payment_verification_disabled: true)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+      end
     end
 
     context "when no confirmation token is supplied" do

@@ -65,6 +65,32 @@ describe Checkout::PaymentMethodResolver do
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
         expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end
+
+      context "with a PPP-discounted checkout (U13 method matrix)" do
+        it "keeps card and the US-locked methods for a US buyer — verifiable + region-matched" do
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+        end
+
+        it "resolves card-only for a non-US PPP buyer (region-locked methods already dropped)" do
+          expect(resolve(buyer_country: "BR", ppp_discounted: true).payment_method_types).to eq(["card"])
+        end
+
+        it "gates Link out — no Stripe-owned funding country to verify pre-charge" do
+          Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+          expect(resolve(ppp_discounted: false).payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
+        it "logs the PPP gate input" do
+          resolver = described_class.new(sellers: [seller], buyer_country: "US", ppp_discounted: true)
+          allow(Rails.logger).to receive(:info)
+
+          resolver.resolve
+
+          expect(Rails.logger).to have_received(:info).with(a_string_matching(/ppp_discounted=true/))
+        end
+      end
     end
 
     context "with a recurring (subscription) lifecycle" do

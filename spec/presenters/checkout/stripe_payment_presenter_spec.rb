@@ -3,7 +3,7 @@
 describe Checkout::StripePaymentPresenter do
   def checkout_product_for(product, price: product.price_cents, recurrence: nil, pay_in_installments: false,
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
-                           native_type: product.native_type, buyer_currency_display: nil)
+                           native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil)
     {
       product: {
         creator: { id: product.user.external_id },
@@ -11,6 +11,7 @@ describe Checkout::StripePaymentPresenter do
         free_trial: free_trial ? { duration: { unit: "day", amount: 1 } } : nil,
         native_type:,
         buyer_currency_display:,
+        ppp_details:,
       },
       price:,
       recurrence:,
@@ -371,6 +372,48 @@ describe Checkout::StripePaymentPresenter do
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "0.0.0.0"))
         .to eq(payment_element_client_confirm_props(payment_method_types: ["card"]))
+    end
+
+    describe "PPP method matrix (U13)" do
+      let(:ppp_details) { { country: "Brazil", factor: 0.5, minimum_price: 99 } }
+
+      it "keeps card and the US-locked methods on a PPP checkout for a US buyer" do
+        stub_geoip_country("104.28.0.1", "United States")
+
+        expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(ppp_details:)], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+      end
+
+      it "gates Link out on a PPP checkout — its funding country is not verifiable pre-charge" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = confirm_flagged_seller_product(ppp_details:)
+        seller = User.find_by(external_id: item[:product][:creator][:id])
+        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+        props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
+
+        expect(props[:elements_options][:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(props[:elements_options][:stripe_link_enabled]).to eq(false)
+      end
+
+      it "does not gate methods when the seller disabled PPP payment verification" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = confirm_flagged_seller_product(ppp_details:)
+        seller = User.find_by(external_id: item[:product][:creator][:id])
+        seller.update!(purchasing_power_parity_payment_verification_disabled: true)
+        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+
+        props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
+
+        expect(props[:elements_options][:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+      end
+
+      it "leaves a non-PPP checkout's method set untouched" do
+        stub_geoip_country("104.28.0.1", "United States")
+
+        expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+      end
     end
 
     it "keeps server-confirm Payment Element when only the base flag is enabled" do
