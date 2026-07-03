@@ -127,12 +127,27 @@ describe VerifyFinanceReportsDeliveryJob do
     end
   end
 
-  it "skips fires older than the lookback window instead of alerting on missing history" do
-    # Mid-month: the last monthly fire (June 1) is far outside the 48h lookback; only the
-    # daily TaxJar fire is within it.
+  it "still flags a missed fire when the verifier itself is delayed for days (no age-out)" do
+    # The monthly fire on July 1 was missed and the verifier didn't run until July 3 —
+    # the miss must still be caught, not aged out of a lookback window.
+    travel_to(Time.utc(2026, 7, 3, 18)) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      record_all_completions(Time.utc(2026, 7, 3, 18))
+      clear_completion_for_fire("SendFinancesReportWorker", monthly_fire)
+
+      described_class.new.perform
+
+      expect(SendFinancesReportWorker).to have_enqueued_sidekiq_job(6, 2026)
+      expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_triggered)
+        .with("SendFinancesReportWorker", [6, 2026], monthly_fire, nil)
+    end
+  end
+
+  it "does not re-flag old completed fires mid-month" do
+    # Mid-month, every job's most recent fire has a completion recorded — nothing alerts.
     travel_to(Time.utc(2026, 7, 15, 18)) do
       activate_backstop(at: Time.utc(2026, 6, 25))
-      record_completion_for_fire("UploadUsStatesSalesTaxToTaxjarJob", Time.utc(2026, 7, 15, 3), at: Time.current)
+      record_all_completions(Time.utc(2026, 7, 15, 18))
 
       described_class.new.perform
 
@@ -142,12 +157,34 @@ describe VerifyFinanceReportsDeliveryJob do
     end
   end
 
+  it "alerts and keeps verifying the remaining jobs when a re-enqueue raises (e.g. a pending-rerun lock conflict)" do
+    travel_to(backstop_run_time) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      record_all_completions(backstop_run_time)
+      clear_completion_for_fire("SendFinancesReportWorker", monthly_fire)
+      clear_completion_for_fire("UploadUsStatesSalesTaxToTaxjarJob", taxjar_fire)
+      # SendFinancesReportWorker's rerun conflicts with one still pending from yesterday.
+      allow(SendFinancesReportWorker).to receive(:perform_async).and_raise(RuntimeError, "lock conflict")
+
+      described_class.new.perform
+
+      # The gap is still alerted even though the re-enqueue was refused...
+      expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_triggered)
+        .with("SendFinancesReportWorker", [6, 2026], monthly_fire, nil)
+      # ...and the loop went on to check (and fix) the remaining jobs.
+      expect(UploadUsStatesSalesTaxToTaxjarJob).to have_enqueued_sidekiq_job("2026-06-30")
+    end
+  end
+
   it "leaves a recent fire inside the grace period unchecked" do
     # At 08:00 UTC the 03:00 TaxJar fire is only 5h old (< 6h grace): the checked fire is
     # yesterday's, which completed — so a still-running today's job isn't flagged.
     travel_to(Time.utc(2026, 7, 15, 8)) do
       activate_backstop(at: Time.utc(2026, 6, 25))
-      record_completion_for_fire("UploadUsStatesSalesTaxToTaxjarJob", Time.utc(2026, 7, 14, 3), at: Time.utc(2026, 7, 14, 3, 30))
+      # Every job's CHECKED fire (the last one older than the grace period) completed —
+      # for TaxJar that's yesterday's 03:00 fire; today's 03:00 fire has no completion
+      # but is inside the grace period, so it isn't checked.
+      record_all_completions(Time.utc(2026, 7, 15, 8))
 
       described_class.new.perform
 

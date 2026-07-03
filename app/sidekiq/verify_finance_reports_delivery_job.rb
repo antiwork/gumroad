@@ -21,11 +21,6 @@ class VerifyFinanceReportsDeliveryJob
   # Only fires older than this are checked, so a run that is merely slow (or scheduled
   # shortly before this backstop) isn't flagged as missing.
   GRACE_PERIOD = 6.hours
-  # Only fires within this window are checked. Keeps the first deploy (and any job whose
-  # last scheduled fire predates completion tracking) from alerting on missing history,
-  # while still checking every fire at least once — this job runs daily, so a miss is
-  # seen within ~30 hours of the fire.
-  LOOKBACK = 48.hours
   # Set on the backstop's first ever run (which only records the baseline and checks
   # nothing). Fires from before this moment predate completion tracking — the runs may
   # well have completed without leaving a Redis key — so they are skipped instead of
@@ -67,15 +62,31 @@ class VerifyFinanceReportsDeliveryJob
 
       # The schedule's cron expressions are documented (and fired in production) in UTC —
       # pin the parse to UTC explicitly so this doesn't drift with server TZ.
+      # The most recent fire is checked no matter how long ago it was (there is no
+      # lookback cutoff): a missed monthly or quarterly fire stays flagged on every
+      # verifier run until its completion is recorded, even if the verifier itself was
+      # down for days when the fire happened. Completion keys live 120 days
+      # (FinanceReportCompletionTracking::REDIS_KEY_TTL), longer than the longest cadence
+      # here (quarterly), so a completed run's key is always still present when its fire
+      # is checked. Fires from before activation are the one exception — they predate
+      # completion tracking entirely and are skipped as unknowable, not missing.
       fire_time = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC").previous_time(now - GRACE_PERIOD).to_t.utc
-      next if fire_time < now - LOOKBACK
       next if fire_time < active_since
 
       args = args_builder.call(fire_time)
       last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name, args)
       next if last_completed_at && last_completed_at >= fire_time
 
-      class_name.constantize.perform_async(*args)
+      # A duplicate enqueue can raise for unique jobs with on_conflict: :raise (e.g.
+      # yesterday's backstop re-run is still queued or running). The gap still gets
+      # alerted below, and one job's conflict must not stop the remaining jobs from
+      # being verified — so notify and carry on rather than let it bubble.
+      begin
+        class_name.constantize.perform_async(*args)
+      rescue => e
+        ErrorNotifier.notify(e, class_name:, fire_time: fire_time.iso8601)
+      end
+
       AccountingMailer.finance_report_delivery_backstop_triggered(
         class_name, args, fire_time, last_completed_at
       ).deliver_later
