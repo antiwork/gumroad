@@ -529,6 +529,25 @@ describe Checkout::DiscountsController do
       expect(offer_code.excluded_products).to eq([excluded_product])
     end
 
+    it "keeps exclusions for deleted products when their ids are resubmitted" do
+      excluded_product = create(:product, user: seller)
+      offer_code.update!(universal: true, products: [], excluded_products: [excluded_product])
+      excluded_product.mark_deleted!
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Discount 1",
+        amount_cents: 100,
+        currency_type: "usd",
+        universal: true,
+        selected_product_ids: [],
+        excluded_product_ids: [excluded_product.external_id],
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(offer_code.reload.excluded_products).to eq([excluded_product])
+    end
+
     it "clears the excluded products when the offer code is no longer universal" do
       excluded_product = create(:product, user: seller)
       subject_product = create(:product, user: seller)

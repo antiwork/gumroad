@@ -860,7 +860,10 @@ const Form = ({
   const [excludedProductIds, setExcludedProductIds] = React.useState<string[]>(
     offerCode?.excluded_products.map(({ id }) => id) ?? [],
   );
-  const excludedProducts = products.filter(({ id }) => excludedProductIds.includes(id));
+  const excludableProductsById = new Map(
+    [...(offerCode?.excluded_products ?? []), ...products].map((product) => [product.id, product]),
+  );
+  const excludedProducts = excludedProductIds.flatMap((id) => excludableProductsById.get(id) ?? []);
   const universalProducts = products.filter(({ id }) => !excludedProductIds.includes(id));
 
   const [limitQuantity, setLimitQuantity] = React.useState(!!offerCode?.limit);

@@ -405,6 +405,24 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
 
       context "when the offer code is universal" do
+        it "keeps exclusions for deleted products when editing unrelated fields" do
+          offer_code3.update!(excluded_products: [product1])
+          product1.mark_deleted!
+
+          visit checkout_discounts_path
+
+          find(:table_row, { "Discount" => "Discount 3" }).click
+          within_modal "Discount 3" do
+            click_on "Edit"
+          end
+
+          fill_in "Name", with: "Discount 3 renamed"
+          click_on "Save changes"
+
+          expect(page).to have_alert(text: "Successfully updated discount!")
+          expect(offer_code3.reload.excluded_products).to eq([product1])
+        end
+
         it "allows the selection of a currency type" do
           create(:product, name: "Product 3", user: seller, price_currency_type: "gbp")
           visit checkout_discounts_path
