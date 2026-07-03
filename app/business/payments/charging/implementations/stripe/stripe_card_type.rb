@@ -18,7 +18,8 @@ class StripeCardType
     "discover" => CardType::DISCOVER,
     "jcb" => CardType::JCB,
     "diners" => CardType::DINERS_CLUB,
-    "unionpay" => CardType::UNION_PAY
+    "unionpay" => CardType::UNION_PAY,
+    "link" => CardType::LINK
   }.freeze
 
   def self.to_card_type(stripe_card_type)

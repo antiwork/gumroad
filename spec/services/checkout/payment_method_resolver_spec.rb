@@ -43,6 +43,25 @@ describe Checkout::PaymentMethodResolver do
         expect(resolve(buyer_country: nil).payment_method_types).to eq(["card"])
       end
 
+      context "when the seller has the Stripe Link flag enabled" do
+        before { Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller) }
+
+        it "launches Link alongside the US set, keeping card as the first Payment Element tab" do
+          resolution = resolve
+
+          expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+        end
+
+        it "keeps Link for a non-US buyer — the region gate only drops the US-locked methods" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+
+        it "still gates the remaining redirect methods behind later units" do
+          expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact")
+        end
+      end
+
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
         expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end

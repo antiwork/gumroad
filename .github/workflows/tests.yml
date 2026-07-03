@@ -638,6 +638,26 @@ jobs:
               exit 0
             fi
 
+            # Deploy window block: no automatic production deploys between
+            # midnight and 6am ET. All the important nightly crons (report
+            # generation, payout runs, monthly closes) run in that window, and
+            # deploys recycle worker pods mid-run — long-running Sidekiq jobs
+            # (e.g. GenerateCanadaSalesReportJob, 1-2h) have been silently
+            # killed twice this way. This gates on DEPLOY time (when this
+            # unblock job runs), not on when the commit landed on main — a
+            # push at 5:30am whose tests finish at 6:15am deploys normally,
+            # because the deploy itself happens outside the window. A build
+            # whose unblock falls inside the window stays blocked in
+            # Buildkite; it can still be shipped manually by clicking
+            # require-approval, or its changes ship with the next in-window
+            # push (whose build at HEAD includes them) — the stale blocked
+            # build is queue noise, not a shipping gap.
+            ET_HOUR=$(TZ=America/New_York date +%-H)
+            if [ "$ET_HOUR" -lt 6 ]; then
+              echo "Inside overnight cron window (midnight-6am ET; current hour: $ET_HOUR). Skipping auto-unblock; deploy stays blocked until manually approved or next in-window push."
+              exit 0
+            fi
+
             echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
             # Fetch builds for the specific commit, including jobs
             BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \

@@ -187,11 +187,18 @@ describe "PurchaseRefunds", :vcr do
         end
 
         it "does not treat canonical USD cents as a full presentment refund" do
-          expect_any_instance_of(StripeChargeProcessor).not_to receive(:get_refund)
+          canonical_cents = @purchase.total_transaction_cents
+          charge_refund = build_presentment_charge_refund(presentment_cents: canonical_cents)
+          expect_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund)
 
-          @purchase.handle_event_refund_updated!(build_refund_updated_event(refunded_amount_cents: @purchase.total_transaction_cents))
+          @purchase.handle_event_refund_updated!(build_refund_updated_event(refunded_amount_cents: canonical_cents))
 
-          expect(@purchase.reload.refunds).to be_empty
+          # The amount is in the charge (presentment) currency, so it's a valid
+          # partial refund of that many presentment cents — never a full refund.
+          @purchase.reload
+          expect(@purchase.stripe_refunded).to be(false)
+          expect(@purchase.stripe_partially_refunded).to be(true)
+          expect(@purchase.refunds.last.presentment_amount_cents).to eq(canonical_cents)
         end
       end
     end

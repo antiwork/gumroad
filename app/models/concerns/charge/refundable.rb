@@ -21,7 +21,27 @@ module Charge::Refundable
       # Stripe reports refunded_amount_cents in the charge currency, which for
       # buyer-presentment charges is the buyer's currency, not canonical USD.
       expected_refunded_amount_cents = refundable.presentment_refundable_amount_cents || refundable.refundable_amount_cents
-      return unless event.extras[:refunded_amount_cents] == expected_refunded_amount_cents
+      refunded_amount_cents = event.extras[:refunded_amount_cents].to_i
+      return unless refunded_amount_cents > 0 && refunded_amount_cents <= expected_refunded_amount_cents
+
+      # A partial charge-level refund on a combined charge with multiple purchases
+      # cannot be reliably attributed: a proportional split across all purchases may
+      # not match the intent of a dashboard refund aimed at a single purchase. Surface
+      # it loudly instead of recording a possibly-wrong split or dropping it silently.
+      if refunded_amount_cents < expected_refunded_amount_cents && refundable.charged_purchases.size > 1
+        ErrorNotifier.notify(
+          "Processor-initiated partial refund on a combined charge with multiple purchases cannot be attributed automatically",
+          context: {
+            stripe_refund_id:,
+            stripe_charge_id:,
+            refundable_type: refundable.class.name,
+            refundable_id: refundable.id,
+            refunded_amount_cents:,
+            expected_refunded_amount_cents:,
+          }
+        )
+        return
+      end
 
       charge_refund = StripeChargeProcessor.new.get_refund(stripe_refund_id, merchant_account: refundable.merchant_account)
       refundable.charged_purchases.each do |purchase|

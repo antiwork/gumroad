@@ -950,8 +950,13 @@ const BankAccountSection = ({
     if (!holderNameTouched) return null;
     const name = bankAccount?.account_holder_full_name?.trim() ?? "";
     if (name === "") return null;
-    const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000 ]+$/u.test(name);
-    const isLatinOnly = /^[A-Za-z ]+$/u.test(name);
+    // Zengin-format account names also allow digits and the symbols ( ) . - / —
+    // Japanese corporate accounts are registered with an entity-type abbreviation
+    // and a parenthesis, e.g. カ)～ (株式会社), ド)～ (合同会社). Full-width variants
+    // are accepted here and normalized server-side (JapanBankAccount).
+    const isKatakanaOnly =
+      /^(?=.*[\p{Script=Katakana}])[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000 0-9().\-/０-９（）．－／]+$/u.test(name);
+    const isLatinOnly = /^(?=.*[A-Za-z])[A-Za-z 0-9().\-/０-９（）．－／]+$/u.test(name);
     if (isKatakanaOnly || isLatinOnly) return null;
     return "Use either katakana or Latin letters — not both.";
   })();

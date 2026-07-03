@@ -8,21 +8,20 @@
 # Two method sets are distinguished:
 #   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
-#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Only card
-#     is launched, because the other methods need machinery that isn't built yet: redirect methods need
-#     the server return page + allow_redirects, delayed-notification methods need the PaymentIntent
-#     webhook lifecycle, and inline wallets/Link need frontend verification. Widening
-#     LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
+#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card is
+#     always launched; Link joins it per-seller behind the same :stripe_payment_element_link flag
+#     that ramps Link on Lane A, so one flag governs Link everywhere; and the US-locked first-launch
+#     methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP gate below.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
 # confirmed against an automatic_payment_methods intent — hence an explicit array here, never
 # automatic_payment_methods). Both sides read this resolver, but they derive its lifecycle inputs
 # independently (the presenter from the cart, PreparePaymentIntentService from the persisted purchases).
-# Today that can't diverge because card survives every filter, so both land on ["card"]. When LAUNCHED
-# widens, those two derivations must be reconciled — and PreparePaymentIntentService hard-stops an
-# ineligible cart before creating the intent, so any residual mismatch fails closed rather than reaching
-# Stripe with the wrong method list.
+# Both derive buyer_country from the same GeoIP basis (the presenter from the request ip, the service
+# from the purchase's server-owned ip_country), so they resolve identical sets — and
+# PreparePaymentIntentService hard-stops an ineligible cart before creating the intent, so any residual
+# mismatch fails closed rather than reaching Stripe with the wrong method list.
 class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
@@ -35,6 +34,12 @@ class Checkout::PaymentMethodResolver
   # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
   # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card cashapp us_bank_account].freeze
+  # Link is inline (non-redirect), so it needs none of the return-page/webhook machinery the other
+  # gated methods wait on. It launches per-seller behind Lane A's existing Link flag (#5614) so the
+  # rollout ramps once for both integrations. This resolver is the ONLY place that widens the
+  # client-confirm method list — the presenter derives the Element's Link config from this output.
+  LINK_PAYMENT_METHOD_TYPE = "link"
+  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
@@ -103,12 +108,21 @@ class Checkout::PaymentMethodResolver
       methods
     end
 
+    # Order follows ONE_TIME_PAYMENT_METHOD_TYPES (the resolve intersection preserves the receiver's
+    # order), so card always renders as the first Payment Element tab.
+    def launched_payment_method_types
+      launched = LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += [LINK_PAYMENT_METHOD_TYPE] if sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) }
+      launched
+    end
+
     # What Stripe actually receives: the eligible policy set intersected with the launched set, then
-    # region-gated. A US-locked method (ACH now, Cash App later) is only offered when the buyer's
-    # GeoIP country is US, so a non-US buyer never sees a method they can't complete. When the buyer
-    # country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives.
+    # region-gated. A US-locked method (ACH, Cash App Pay) is only offered when the buyer's GeoIP
+    # country is US, so a non-US buyer never sees a method they can't complete. When the buyer
+    # country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
+    # and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
-      launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      launched = eligible & launched_payment_method_types
       return launched if buyer_country == US_ALPHA2
 
       launched - US_LOCKED_PAYMENT_METHOD_TYPES

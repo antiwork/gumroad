@@ -37,7 +37,10 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, elements_options: nil }
   end
 
-  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: ["card"], stripe_connect_account_id: nil)
+  # The Element's Link toggle and the intent's method list derive from the same resolver output, so
+  # they move together; the US-locked methods (cashapp/us_bank_account) are passed explicitly by the
+  # region-gate specs.
+  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: (stripe_link_enabled ? %w[card link] : ["card"]), stripe_connect_account_id: nil)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
