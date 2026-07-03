@@ -349,6 +349,31 @@ describe Charge::Disputable, :vcr do
         Purchase.handle_charge_event(event)
       end
 
+      describe "buyer-presentment purchases" do
+        let(:event) do
+          event = build(:charge_event_dispute_formalized, charge_id: "ch_zitkxbhds3zqlt")
+          # Stripe pulls the disputed amount in the buyer's (charge) currency.
+          event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -135)
+          event
+        end
+
+        before do
+          create(:purchase_presentment, purchase:, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+          purchase.association(:purchase_presentment).reset
+        end
+
+        it "books the dispute balance debit in canonical USD, not the buyer currency" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(balance_transaction).to be_present
+          expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+          expect(balance_transaction.issued_amount_gross_cents).to eq(-purchase.gross_amount_refundable_cents)
+          expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+        end
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }
@@ -593,6 +618,26 @@ describe Charge::Disputable, :vcr do
         it "sets the chargeback reversed flag" do
           Purchase.handle_charge_event(@e)
           expect(@p.reload.chargeback_reversed).to be(true)
+        end
+
+        describe "buyer-presentment purchases" do
+          before do
+            create(:purchase_presentment, purchase: @p, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+            @p.association(:purchase_presentment).reset
+            # Stripe returns the disputed amount in the buyer's (charge) currency.
+            @e.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, 135)
+          end
+
+          it "books the dispute-won re-credit in canonical USD, not the buyer currency" do
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(Credit.last.user).to eq @p.seller
+            expect(Credit.last.amount_cents).to eq @p.payment_cents
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
+          end
         end
 
         describe "purchase involves an affiliate" do

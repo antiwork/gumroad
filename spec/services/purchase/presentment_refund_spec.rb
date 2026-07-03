@@ -80,6 +80,51 @@ describe Purchase::PresentmentRefund do
     expect(result.presentment_shipping_cents).to eq(0)
   end
 
+  describe "#tax_only_result" do
+    it "returns nil for canonical purchases" do
+      purchase.purchase_presentment.destroy!
+      purchase.association(:purchase_presentment).reset
+
+      expect(described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result).to be_nil
+    end
+
+    it "builds a tax-only snapshot for the remaining presentment Gumroad tax" do
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result
+
+      expect(result.json_data).to eq(
+        presentment_currency: Currency::CAD,
+        presentment_amount_cents: 20,
+        presentment_price_cents: 0,
+        presentment_tip_cents: 0,
+        presentment_seller_tax_cents: 0,
+        presentment_gumroad_tax_cents: 20,
+        presentment_shipping_cents: 0
+      )
+    end
+
+    it "excludes presentment tax cents already refunded" do
+      refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = 54
+      refund.presentment_gumroad_tax_cents = 8
+      purchase.refunds << refund
+
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 12).tax_only_result
+
+      expect(result.presentment_amount_cents).to eq(12)
+      expect(result.presentment_gumroad_tax_cents).to eq(12)
+    end
+
+    it "returns nil when no presentment tax remains" do
+      purchase.purchase_presentment.update!(presentment_gumroad_tax_cents: 0,
+                                            presentment_price_cents: 120,
+                                            presentment_total_cents: 135)
+      purchase.association(:purchase_presentment).reset
+
+      expect(described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result).to be_nil
+    end
+  end
+
   describe ".from_presentment_amount" do
     it "returns nil for canonical purchases" do
       purchase.purchase_presentment.destroy!

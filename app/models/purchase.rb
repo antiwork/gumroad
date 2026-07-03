@@ -2058,7 +2058,7 @@ class Purchase < ApplicationRecord
   def process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
     return if affiliate_credit_cents == 0 || refund_cents == 0
 
-    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
 
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
       flow_of_funds:,
@@ -2110,7 +2110,7 @@ class Purchase < ApplicationRecord
     logger.info("process_refund_or_chargeback_for_purchase_balance::dispute::#{dispute.inspect}")
     return unless charged_using_gumroad_merchant_account?
 
-    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
 
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,
@@ -3183,6 +3183,32 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank? || refund.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * refund.total_transaction_cents)
+    end
+
+    # Dispute counterpart: the processor pulls the disputed amount in the buyer's
+    # currency, but the balance debit must be booked against the canonical gross that
+    # remains chargeable on this purchase (full canonical gross, or the unrefunded
+    # remainder when the purchase was partially refunded before the dispute).
+    def presentment_canonical_dispute_issued_amount
+      return if purchase_presentment.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * gross_amount_refundable_cents)
+    end
+
+    # Dispute-won counterpart: the re-credit mirrors the dispute debit, so it books the
+    # same canonical gross back with a positive sign.
+    def presentment_canonical_dispute_won_issued_amount
+      return if purchase_presentment.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: gross_amount_refundable_cents)
+    end
+
+    # Selects the canonical override for a refund-or-chargeback balance debit. Returns
+    # nil for non-presentment purchases so the processor flow of funds is used as-is.
+    def presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
+      return if purchase_presentment.blank?
+
+      dispute.present? ? presentment_canonical_dispute_issued_amount : presentment_canonical_refund_issued_amount(refund)
     end
 
     def web_csv_parity_fields
