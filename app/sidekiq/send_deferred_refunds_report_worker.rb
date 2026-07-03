@@ -7,8 +7,8 @@ class SendDeferredRefundsReportWorker
 
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the month the failed run was for (not whatever "last month" is then).
-  def self.default_alert_args
-    last_month = Time.current.last_month
+  def self.default_alert_args(reference_time = Time.current)
+    last_month = reference_time.last_month
     [last_month.month, last_month.year]
   end
 

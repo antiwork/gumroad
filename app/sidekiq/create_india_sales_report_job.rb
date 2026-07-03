@@ -7,8 +7,8 @@ class CreateIndiaSalesReportJob
 
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the month the failed run was for (not whatever "last month" is then).
-  def self.default_alert_args
-    previous_month = 1.month.ago
+  def self.default_alert_args(reference_time = Time.current)
+    previous_month = reference_time.last_month
     [previous_month.month, previous_month.year]
   end
 

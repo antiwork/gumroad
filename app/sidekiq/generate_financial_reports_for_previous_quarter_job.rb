@@ -7,8 +7,8 @@ class GenerateFinancialReportsForPreviousQuarterJob
 
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the quarter the failed run was for (not whatever "last quarter" is then).
-  def self.default_alert_args
-    prev_quarter_start = Date.current.prev_quarter.beginning_of_quarter
+  def self.default_alert_args(reference_time = Time.current)
+    prev_quarter_start = reference_time.to_date.prev_quarter.beginning_of_quarter
     [((prev_quarter_start.month - 1) / 3) + 1, prev_quarter_start.year]
   end
 

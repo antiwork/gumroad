@@ -7,8 +7,8 @@ class GenerateFinancialReportsForPreviousMonthJob
 
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the month the failed run was for (not whatever "last month" is then).
-  def self.default_alert_args
-    prev_month_date = Date.current.prev_month
+  def self.default_alert_args(reference_time = Time.current)
+    prev_month_date = reference_time.to_date.prev_month
     [prev_month_date.month, prev_month_date.year]
   end
 
