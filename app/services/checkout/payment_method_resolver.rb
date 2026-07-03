@@ -8,11 +8,12 @@
 # Two method sets are distinguished:
 #   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
-#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Only card
-#     is launched, because the other methods need machinery that isn't built yet: redirect methods need
-#     the server return page + allow_redirects, delayed-notification methods need the PaymentIntent
-#     webhook lifecycle, and inline wallets/Link need frontend verification. Widening
-#     LAUNCHED_PAYMENT_METHOD_TYPES is a later unit's job.
+#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card is
+#     always launched, and Link joins it per-seller behind the same :stripe_payment_element_link flag
+#     that ramps Link on Lane A, so one flag governs Link everywhere. The remaining methods need
+#     machinery that isn't built yet: redirect methods need the server return page + allow_redirects,
+#     and delayed-notification methods need the PaymentIntent webhook lifecycle. Widening the
+#     launched set is a later unit's job.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -29,8 +30,14 @@ class Checkout::PaymentMethodResolver
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Only card is launched on the client-confirmed path today; later units widen this (see class comment).
+  # Card is always launched on the client-confirmed path; later units widen this (see class comment).
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # Link is inline (non-redirect), so it needs none of the return-page/webhook machinery the other
+  # gated methods wait on. It launches per-seller behind Lane A's existing Link flag (#5614) so the
+  # rollout ramps once for both integrations. This resolver is the ONLY place that widens the
+  # client-confirm method list — the presenter derives the Element's Link config from this output.
+  LINK_PAYMENT_METHOD_TYPE = "link"
+  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -53,7 +60,7 @@ class Checkout::PaymentMethodResolver
         client_confirm_eligible: reason.nil?,
         # Nil on Lane A carts: they never mount the client-confirmed Payment Element, so there is no
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
-        payment_method_types: reason.nil? ? eligible & LAUNCHED_PAYMENT_METHOD_TYPES : nil,
+        payment_method_types: reason.nil? ? eligible & launched_payment_method_types : nil,
         eligible_payment_method_types: eligible,
         fallback_reason: reason,
         stripe_connect_account_id: reason.nil? ? stripe_connect_account_id : nil
@@ -75,6 +82,14 @@ class Checkout::PaymentMethodResolver
       return "commission" if commission
       return "setup_flow" if setup_for_future
       nil
+    end
+
+    # Order follows ONE_TIME_PAYMENT_METHOD_TYPES (the resolve intersection preserves the receiver's
+    # order), so card always renders as the first Payment Element tab.
+    def launched_payment_method_types
+      launched = LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += [LINK_PAYMENT_METHOD_TYPE] if sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) }
+      launched
     end
 
     def direct_charge_seller?

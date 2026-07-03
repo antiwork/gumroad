@@ -773,6 +773,14 @@ describe ReceiptPresenter::PaymentInfo do
           expect(payment_info.send(:credit_card_note)).to be_nil
         end
       end
+
+      context "when the card_type is link" do
+        before { purchase.update!(card_type: CardType::LINK) }
+
+        it "returns nil" do
+          expect(payment_info.send(:credit_card_note)).to be_nil
+        end
+      end
     end
 
     context "with a Purchase" do
@@ -831,6 +839,16 @@ describe ReceiptPresenter::PaymentInfo do
 
         it "returns nil" do
           expect(payment_info.payment_method_attribute).to be_nil
+        end
+      end
+
+      context "when the purchase was paid with an inline wallet method (no card visual)" do
+        before { purchase.update!(card_type: CardType::LINK, card_visual: nil) }
+
+        it "renders the method name alone without dereferencing a nil visual" do
+          expect(payment_info.payment_method_attribute).to eq(
+            { label: "Payment method", value: "LINK" }
+          )
         end
       end
     end

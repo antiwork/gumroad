@@ -35,6 +35,21 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
       end
 
+      context "when the seller has the Stripe Link flag enabled" do
+        before { Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller) }
+
+        it "launches Link alongside card, keeping card as the first Payment Element tab" do
+          resolution = resolve
+
+          expect(resolution.payment_method_types).to eq(%w[card link])
+          expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+        end
+
+        it "still gates the redirect and delayed-notification methods behind later units" do
+          expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "cashapp")
+        end
+      end
+
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
         expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end

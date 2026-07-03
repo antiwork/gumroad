@@ -103,6 +103,39 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # The country that drives PPP verification must come from whichever preview block the chosen
+    # method exposes: card carries it directly, inline wallets (Link) do not, so fall back to the
+    # method's typed block only — billing_details is intentionally excluded because it is
+    # buyer-supplied and spoofable. Without the typed-block fallback a discounted Link purchase
+    # fails on a nil country even when the wallet's country matches the buyer's.
+    describe "previewed country extraction" do
+      let(:service) { described_class.new(order: build_order.first, params: {}, confirmation_token: "ctoken_test") }
+
+      def preview_from(hash)
+        Stripe::StripeObject.construct_from(hash)
+      end
+
+      it "reads the country from the card block for a card preview" do
+        preview = preview_from(type: "card", card: { country: "US" })
+        expect(service.send(:previewed_country, preview)).to eq("US")
+      end
+
+      it "reads the country from the method-typed block for an inline wallet (Link) preview" do
+        preview = preview_from(type: "link", link: { country: "DE" }, card: nil)
+        expect(service.send(:previewed_country, preview)).to eq("DE")
+      end
+
+      it "does NOT trust buyer-supplied billing details (returns nil when only billing country is present)" do
+        preview = preview_from(type: "link", link: {}, billing_details: { address: { country: "FR" } })
+        expect(service.send(:previewed_country, preview)).to be_nil
+      end
+
+      it "returns nil when no Stripe-owned funding country is available" do
+        preview = preview_from(type: "link", link: {})
+        expect(service.send(:previewed_country, preview)).to be_nil
+      end
+    end
+
     context "when no confirmation token is supplied" do
       before { create(:merchant_account, user: seller) }
 
@@ -262,6 +295,28 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         expect(create_args[:payment_method_types]).to eq(["card"])
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+      end
+
+      # The presenter derives the Element's Link config from the same resolver output, so a
+      # Link-flagged seller's Payment Element and deferred intent both carry "link".
+      it "includes Link in the intent's payment_method_types when the seller has the Link flag" do
+        Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
+        order, params = build_order
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
       end
 
       # A key built only from the (database-id-derived) external_id collides in Stripe test mode,

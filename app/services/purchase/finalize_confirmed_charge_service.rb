@@ -54,7 +54,13 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
     # card_visual/type/country from the confirmed charge. Expiry, fingerprint, and
     # processor id are handled by #save_charge_data.
     def assign_confirmed_card_presentation(processor_charge)
-      return if processor_charge.card_last4.blank?
+      # Inline non-card methods (e.g. Link) expose no last4/visual, but still carry a
+      # card_type/country worth persisting for receipts and analytics.
+      if processor_charge.card_last4.blank?
+        purchase.card_type = processor_charge.card_type if processor_charge.card_type.present?
+        purchase.card_country = processor_charge.card_country if processor_charge.card_country.present?
+        return
+      end
 
       purchase.card_visual = ChargeableVisual.build_visual(processor_charge.card_last4, processor_charge.card_number_length)
       purchase.card_type = processor_charge.card_type

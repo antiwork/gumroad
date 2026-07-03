@@ -45,7 +45,9 @@ describe Checkout::StripePaymentPresenter do
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: "usd",
-        payment_method_types: ["card"],
+        # The Element's Link toggle and the intent's method list derive from the same resolver
+        # output, so they move together.
+        payment_method_types: stripe_link_enabled ? %w[card link] : ["card"],
         stripe_link_enabled:,
         stripe_connect_account_id:,
       },

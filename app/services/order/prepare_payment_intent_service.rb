@@ -105,11 +105,26 @@ class Order::PreparePaymentIntentService
     end
 
     def apply_previewed_card_country(preview)
-      card_country = preview.card&.country
+      country = previewed_country(preview)
       purchases_to_charge.each do |purchase|
-        purchase.card_country = card_country
+        purchase.card_country = country
         purchase.card_country_source = CARD_COUNTRY_SOURCE
       end
+    end
+
+    # Card carries country directly; inline wallet methods (e.g. Link) are non-card, so the card
+    # field is nil — fall back to the method-specific preview block's country. BOTH are Stripe-owned
+    # funding-source countries, safe to trust for PPP verification. We deliberately do NOT fall back
+    # to buyer-supplied billing_details: that is checkout-form input, so trusting it would let a buyer
+    # spoof the discounted country. When Stripe exposes no funding country the value stays nil and a
+    # PPP-discounted purchase fails closed. Uses [] access because a Stripe::StripeObject raises on a
+    # missing attribute reader but returns nil for an absent key.
+    def previewed_country(preview)
+      card_country = preview[:card]&.[](:country)
+      return card_country if card_country.present?
+
+      method_type = preview[:type]
+      method_type.present? ? preview[method_type.to_sym]&.[](:country) : nil
     end
 
     def block_purchasing_power_parity_mismatches

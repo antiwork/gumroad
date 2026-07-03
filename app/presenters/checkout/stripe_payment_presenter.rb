@@ -108,6 +108,7 @@ class Checkout::StripePaymentPresenter
 
     def client_confirm_props
       resolution = payment_method_resolver.resolve
+      payment_method_types = resolution.payment_method_types
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
@@ -118,8 +119,11 @@ class Checkout::StripePaymentPresenter
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,
-          payment_method_types: resolution.payment_method_types,
-          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+          payment_method_types:,
+          # Derived from the resolver's method list (not a second flag check) so the Element's Link
+          # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
+          # ConfirmationToken minted with Link against an intent whose method list omits it.
+          stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
           stripe_connect_account_id: resolution.stripe_connect_account_id,
         },
       }
