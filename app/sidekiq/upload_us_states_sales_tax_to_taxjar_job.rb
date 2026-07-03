@@ -13,6 +13,7 @@
 # or an overlap with a manual month re-push is safe.
 class UploadUsStatesSalesTaxToTaxjarJob
   include Sidekiq::Job
+  include FinanceReportCompletionTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   sidekiq_retries_exhausted do |job, exception|

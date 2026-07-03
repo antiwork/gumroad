@@ -189,6 +189,36 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#finance_report_delivery_backstop_triggered" do
+    let(:mail) do
+      AccountingMailer.finance_report_delivery_backstop_triggered(
+        "SendFinancesReportWorker", [6, 2026], Time.utc(2026, 7, 1, 11), nil
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "names the job in the subject" do
+      expect(mail.subject).to include("SendFinancesReportWorker scheduled run never completed")
+    end
+
+    it "includes the fire time, missing completion, and re-run command in the body" do
+      body = mail.body.encoded
+      expect(body).to include("2026-07-01 11:00:00")
+      expect(body).to include("never")
+      expect(body).to include("SendFinancesReportWorker.perform_async(6, 2026)")
+    end
+
+    it "shows the stale completion time when one exists" do
+      stale_mail = AccountingMailer.finance_report_delivery_backstop_triggered(
+        "SendDeferredRefundsReportWorker", [6, 2026], Time.utc(2026, 7, 1, 11), Time.utc(2026, 6, 1, 11, 5)
+      )
+      expect(stale_mail.body.encoded).to include("2026-06-01 11:05:00")
+    end
+  end
+
   describe "#global_sales_tax_summary_report_failed" do
     let(:mail) do
       AccountingMailer.global_sales_tax_summary_report_failed(
