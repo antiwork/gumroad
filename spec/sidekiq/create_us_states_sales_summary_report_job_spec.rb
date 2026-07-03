@@ -79,7 +79,7 @@ describe CreateUsStatesSalesSummaryReportJob do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
       expect_any_instance_of(TaxjarApi).to receive(:create_order_transaction).exactly(8).times.and_call_original
 
-      described_class.new.perform(subdivision_codes, month, year)
+      described_class.new.perform(subdivision_codes, month, year, true)
 
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
 
@@ -118,9 +118,9 @@ describe CreateUsStatesSalesSummaryReportJob do
         end
         original.call(**kwargs)
       end
-      allow_any_instance_of(described_class).to receive(:sleep)
+      allow_any_instance_of(UsStateSalesTaxUploader).to receive(:sleep)
 
-      expect { described_class.new.perform(subdivision_codes, month, year) }.not_to raise_error
+      expect { described_class.new.perform(subdivision_codes, month, year, true) }.not_to raise_error
 
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
     end
@@ -129,7 +129,7 @@ describe CreateUsStatesSalesSummaryReportJob do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
       expect_any_instance_of(TaxjarApi).not_to receive(:create_order_transaction)
 
-      described_class.new.perform(subdivision_codes, month, year, push_to_taxjar: false)
+      described_class.new.perform(subdivision_codes, month, year)
 
       expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
 

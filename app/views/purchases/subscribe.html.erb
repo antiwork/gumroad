@@ -1,8 +1,18 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
-  <header class="flex flex-col gap-4 p-4 text-center">
-    <h2>The creator can now contact you.</h2>
-    <p>You will start receiving posts again. They will appear in your email inbox as well as in your Gumroad library, if you have an account. If you have missed an important update, you can email the creator to receive it.</p>
-  </header>
+  <% if @subscribed %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>The creator can now contact you.</h2>
+      <p>You will start receiving posts again. They will appear in your email inbox as well as in your Gumroad library, if you have an account. If you have missed an important update, you can email the creator to receive it.</p>
+    </header>
+  <% else %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Resubscribe to this creator's emails?</h2>
+      <p>You previously unsubscribed from this creator's emails. Click the button below to start receiving their posts and updates again.</p>
+    </header>
+    <%= form_tag(subscribe_purchase_path(@purchase.external_id), method: "post", class: "flex flex-col gap-4 p-4") do %>
+      <%= button_tag "Resubscribe", type: "submit", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none px-4 py-3 text-base leading-snug bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground w-full", name: nil %>
+    <% end %>
+  <% end %>
 </main>
 <% content_for :footer do %>
   <%= default_footer_content %>

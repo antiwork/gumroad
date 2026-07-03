@@ -57,7 +57,12 @@ class StripeEventHandler
     end
 
     def handle_event_for_connected_account(stripe_connect_account_id:)
-      if stripe_event["type"].start_with?("charge.", "radar.", "payment_intent.payment_failed")
+      # payment_intent.processing/succeeded mirror the platform branch: a direct-charge (connected
+      # account) client-confirm PaymentIntent delivers its lifecycle events on the connect endpoint.
+      # StripeChargeProcessor scopes them to client-confirmed charges and ignores every other
+      # connected-account intent (sellers' non-Gumroad sales) by resolving the charge reference first.
+      if stripe_event["type"].start_with?("charge.", "radar.", "payment_intent.payment_failed",
+                                          "payment_intent.processing", "payment_intent.succeeded")
         StripeChargeProcessor.handle_stripe_event(stripe_event)
       elsif stripe_event["type"].start_with?("account.", "capability.")
         StripeMerchantAccountManager.handle_stripe_event(stripe_event)

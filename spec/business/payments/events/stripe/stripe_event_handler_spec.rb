@@ -358,7 +358,7 @@ describe StripeEventHandler do
 
     describe "a payment intent lifecycle event" do
       %w[payment_intent.succeeded payment_intent.processing].each do |event_type|
-        it "does not route #{event_type} to StripeChargeProcessor" do
+        it "routes #{event_type} to StripeChargeProcessor for direct-charge client-confirm coverage" do
           stripe_event = {
             "id" => event_id,
             "created" => "1406748559",
@@ -367,9 +367,24 @@ describe StripeEventHandler do
             "user_id" => "acct_connected",
             "data" => { "object" => { "object" => "payment_intent" } }
           }
-          expect(StripeChargeProcessor).not_to receive(:handle_stripe_event)
+          expect(StripeChargeProcessor).to receive(:handle_stripe_event) do |event|
+            expect(event["type"]).to eq(event_type)
+          end
           described_class.new(stripe_event).handle_stripe_event
         end
+      end
+
+      it "does not route other payment_intent.* types to StripeChargeProcessor" do
+        stripe_event = {
+          "id" => event_id,
+          "created" => "1406748559",
+          "type" => "payment_intent.created",
+          "account" => "acct_connected",
+          "user_id" => "acct_connected",
+          "data" => { "object" => { "object" => "payment_intent" } }
+        }
+        expect(StripeChargeProcessor).not_to receive(:handle_stripe_event)
+        described_class.new(stripe_event).handle_stripe_event
       end
     end
   end

@@ -55,12 +55,13 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     [order, charge]
   end
 
-  def payment_intent_event(type, charge, event_id:)
+  def payment_intent_event(type, charge, event_id:, account: nil)
     {
       "id" => event_id,
       "object" => "event",
       "created" => 1_406_748_559,
       "type" => type,
+      "account" => account,
       "data" => {
         "object" => {
           "object" => "payment_intent",
@@ -69,7 +70,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
           "metadata" => { "purchase" => charge.reference_id_for_charge_processors }
         }
       }
-    }
+    }.compact
   end
 
   def deliver_webhook(event)
@@ -250,6 +251,81 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       deliver_webhook(event)
 
       expect(ProcessedStripeEvent.processed?("evt_no_match")).to be(false)
+    end
+  end
+
+  context "for a direct-charge (connected account) client-confirmed charge" do
+    let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+    let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+    def confirm_on_connected_account(charge)
+      Stripe::PaymentIntent.confirm(
+        charge.stripe_payment_intent_id,
+        { payment_method: "pm_card_visa" },
+        { stripe_account: connect_account.charge_processor_merchant_id }
+      )
+    end
+
+    it "finalizes the order via the connect-endpoint webhook when the browser never returned" do
+      order, charge = build_client_confirmed_order
+      expect(charge.merchant_account).to eq(connect_account)
+      confirm_on_connected_account(charge)
+      purchase = order.purchases.first
+      event = payment_intent_event("payment_intent.succeeded", charge,
+                                   event_id: "evt_connect_succeeded_1",
+                                   account: connect_account.charge_processor_merchant_id)
+
+      expect do
+        deliver_webhook(event)
+      end.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
+        .and change { SendChargeReceiptJob.jobs.size }.by(1)
+
+      expect(purchase.reload).to be_successful
+      expect(purchase.stripe_transaction_id).to be_present
+      expect(purchase.merchant_account).to eq(connect_account)
+      expect(ProcessedStripeEvent.processed?("evt_connect_succeeded_1")).to be(true)
+
+      # Replay is a no-op.
+      expect do
+        deliver_webhook(event)
+      end.not_to change { ActivateIntegrationsWorker.jobs.size }
+    end
+
+    it "keeps the purchase in progress on payment_intent.processing and records the event" do
+      order, charge = build_client_confirmed_order
+      purchase = order.purchases.first
+      event = payment_intent_event("payment_intent.processing", charge,
+                                   event_id: "evt_connect_processing_1",
+                                   account: connect_account.charge_processor_merchant_id)
+
+      expect do
+        deliver_webhook(event)
+      end.not_to change { ActivateIntegrationsWorker.jobs.size }
+
+      expect(purchase.reload).to be_in_progress
+      expect(purchase.stripe_status).to eq("payment_intent.processing")
+      expect(ProcessedStripeEvent.processed?("evt_connect_processing_1")).to be(true)
+    end
+
+    it "ignores an unrelated connected-account PaymentIntent (a seller's non-Gumroad sale) without recording or notifying" do
+      # Connected accounts deliver payment_intent.* for every charge they process, including ones
+      # Gumroad never created. Those carry no Gumroad charge reference and must be a cheap no-op.
+      event = {
+        "id" => "evt_connect_unrelated",
+        "object" => "event",
+        "created" => 1_406_748_559,
+        "type" => "payment_intent.succeeded",
+        "account" => connect_account.charge_processor_merchant_id,
+        "data" => { "object" => { "object" => "payment_intent", "id" => "pi_not_ours", "transfer_group" => nil, "metadata" => {} } }
+      }
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        deliver_webhook(event)
+      end.not_to change { ActivateIntegrationsWorker.jobs.size }
+
+      expect(ProcessedStripeEvent.processed?("evt_connect_unrelated")).to be(false)
     end
   end
 end

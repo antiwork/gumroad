@@ -11,6 +11,9 @@ export const getStripeInstance = async () => {
 
 export const getConnectedAccountStripeInstance = async (stripeAccount: string) => loadStripeInstance(stripeAccount);
 
+export const getCheckoutStripeInstance = async (stripeConnectAccountId: string | null) =>
+  stripeConnectAccountId ? getConnectedAccountStripeInstance(stripeConnectAccountId) : getStripeInstance();
+
 const loadStripeInstance = async (stripeAccount?: string) => {
   const publicKeyTag = document.querySelector<HTMLElement>("meta[property='stripe:pk']");
   const apiVersionTag = document.querySelector<HTMLElement>("meta[property='stripe:api_version']");

@@ -8,7 +8,7 @@ import {
 } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { getStripeInstance } from "$app/utils/stripe_loader";
+import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
 import {
@@ -185,7 +185,11 @@ const StripePaymentElementProvider = ({
   elementsOptions: CheckoutPaymentElementOptions;
   children: React.ReactNode;
 }) => {
-  const [stripePromise] = React.useState(getStripeInstance);
+  const [stripePromise] = React.useState(() =>
+    getCheckoutStripeInstance(
+      "stripe_connect_account_id" in elementsOptions ? elementsOptions.stripe_connect_account_id : null,
+    ),
+  );
   const [initialAmount] = React.useState(amount);
   const font = useFont();
   const color = getCssVariable("color").split(" ").join(",");

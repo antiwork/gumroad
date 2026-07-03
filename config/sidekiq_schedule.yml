@@ -381,6 +381,10 @@ monthly_financial_reports:
   cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
   class: GenerateFinancialReportsForPreviousMonthJob
   description: Generate financial reports for the previous month
+upload_us_states_sales_tax_to_taxjar:
+  cron: "0 3 * * *" # UTC 03:00 every day (uploads the previous day's orders)
+  class: UploadUsStatesSalesTaxToTaxjarJob
+  description: Upload the previous day's taxable US-state order transactions to TaxJar
 delete_old_sent_email_info_records:
   cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
   class: DeleteOldSentEmailInfoRecordsJob

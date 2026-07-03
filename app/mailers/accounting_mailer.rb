@@ -111,6 +111,15 @@ class AccountingMailer < ApplicationMailer
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
+  def us_states_sales_tax_taxjar_upload_failed(date, error_class, error_message)
+    @date = date
+    @error_class = error_class
+    @error_message = error_message
+
+    mail subject: "#{SUBJECT_PREFIX}[TaxJar] US States Sales Tax daily upload failed - #{date}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def global_sales_tax_summary_report(month, year, s3_read_url)
     @subject_and_title = "Global Sales Tax Summary Report for #{month}/#{year}"
     @s3_url = s3_read_url

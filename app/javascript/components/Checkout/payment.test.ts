@@ -59,6 +59,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     currency: "usd",
     payment_method_types: ["card"],
     stripe_link_enabled: false,
+    stripe_connect_account_id: null,
   },
 };
 
