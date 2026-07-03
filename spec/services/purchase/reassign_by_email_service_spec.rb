@@ -169,6 +169,27 @@ describe Purchase::ReassignByEmailService do
         expect(original_purchase.reload.email).to eq("old_original@example.com")
       end
 
+      it "clears is_deleted_by_buyer so transferred purchases show in the new library" do
+        hidden_purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:, is_deleted_by_buyer: true)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(hidden_purchase.reload.is_deleted_by_buyer).to be(false)
+        expect(hidden_purchase.email).to eq(to_email)
+      end
+
+      it "clears is_deleted_by_buyer on an unmatched original subscription purchase" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:, is_deleted_by_buyer: true)
+        create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
+
+        described_class.new(from_email:, to_email:).perform
+
+        expect(original_purchase.reload.is_deleted_by_buyer).to be(false)
+        expect(original_purchase.email).to eq(to_email)
+      end
+
       it "enqueues a grouped receipt for all reassigned purchases" do
         expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([purchase1.id, purchase2.id])).and_call_original
 

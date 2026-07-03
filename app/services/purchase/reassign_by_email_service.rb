@@ -64,9 +64,14 @@ class Purchase::ReassignByEmailService
 
     purchases.each do |purchase|
       purchase.email = @to_email
+      # A purchase hidden from the old account's library (is_deleted_by_buyer)
+      # stays hidden after the move, so the buyer's new library looks empty.
+      # Transferring the library means the buyer wants these purchases visible
+      # again, so clear the flag as part of the reassignment.
+      purchase.is_deleted_by_buyer = false
 
       if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchase_id_set.include?(purchase.original_purchase.id)
-        if purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id)
+        if purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
           reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
           purchase.subscription.update(user: target_user)
         end
