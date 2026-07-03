@@ -209,6 +209,12 @@ describe AccountingMailer, :vcr do
       expect(paypal_mail.subject).to include("Weekly payout batch failed - PAYPAL")
     end
 
+    it "handles a single bank account type passed as a string" do
+      string_mail = AccountingMailer.payout_batch_failed("STRIPE", "AchAccount", "ActiveRecord::StatementTimeout", "timeout")
+      expect(string_mail.subject).to include("Weekly payout batch failed - AchAccount")
+      expect(string_mail.body.encoded).to include("AchAccount")
+    end
+
     it "includes the failure context and re-run command in the body" do
       body = mail.body.encoded
       expect(body).to include("STRIPE")

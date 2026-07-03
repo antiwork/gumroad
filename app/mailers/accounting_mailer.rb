@@ -135,11 +135,11 @@ class AccountingMailer < ApplicationMailer
 
   def payout_batch_failed(payout_processor_type, bank_account_types, error_class, error_message)
     @payout_processor_type = payout_processor_type
-    @bank_account_types = bank_account_types
+    @bank_account_types = Array.wrap(bank_account_types).presence
     @error_class = error_class
     @error_message = error_message
 
-    bucket = bank_account_types.present? ? bank_account_types.join(", ") : payout_processor_type
+    bucket = @bank_account_types.present? ? @bank_account_types.join(", ") : payout_processor_type
     mail subject: "#{SUBJECT_PREFIX}Weekly payout batch failed - #{bucket}",
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
