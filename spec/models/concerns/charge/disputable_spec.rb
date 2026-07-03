@@ -372,6 +372,14 @@ describe Charge::Disputable, :vcr do
           expect(balance_transaction.issued_amount_gross_cents).to eq(-purchase.gross_amount_refundable_cents)
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
         end
+
+        it "snapshots the canonical gross the debit booked so the dispute-won re-credit can reuse it" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(purchase.presentment_dispute_debited_gross_cents).to eq(-balance_transaction.issued_amount_gross_cents)
+        end
       end
 
       describe "purchase involves an affiliate" do
@@ -639,7 +647,27 @@ describe Charge::Disputable, :vcr do
             expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
           end
 
+          it "books the re-credit from the snapshotted debit gross when a refund lands after the debit" do
+            create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            # The debit snapshotted the gross it booked. A refund webhook arriving while
+            # the dispute is active then creates a refund row (no balance decrement) and
+            # shrinks gross_amount_refundable_cents — the re-credit must not follow it.
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+            expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
+          end
+
           it "books the same canonical gross as the dispute debit when a refund lands after the dispute was formalized" do
+            # Dispute debited before the snapshot existed: reconstruct from the
+            # formalization timestamp.
             dispute = create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
             # A refund webhook arriving while the dispute is active creates the refund row
             # but skips the balance decrement, so it was not part of the dispute debit.

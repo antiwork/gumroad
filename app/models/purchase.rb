@@ -70,6 +70,10 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :last_content_page_id
   attr_json_data_accessor :default_offer_code_id
+  # Buyer-presentment purchases only: the canonical USD gross the dispute-loss balance
+  # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
+  # exactly the same amount, even when refunds land between the debit and the win.
+  attr_json_data_accessor :presentment_dispute_debited_gross_cents
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -2144,6 +2148,7 @@ class Purchase < ApplicationRecord
 
   def decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund: nil, dispute: nil)
     return unless seller_balance_update_eligible?
+    snapshot_presentment_dispute_debited_gross! if dispute.present?
     if (dispute && !stripe_partially_refunded) || [price_cents, total_transaction_cents].include?(refund&.amount_cents)
       # Short circuit for full refund, or dispute
       seller_refund_cents = payment_cents - affiliate_credit_cents
@@ -3188,35 +3193,50 @@ class Purchase < ApplicationRecord
     # Dispute counterpart: the processor pulls the disputed amount in the buyer's
     # currency, but the balance debit must be booked against the canonical gross that
     # remains chargeable on this purchase (full canonical gross, or the unrefunded
-    # remainder when the purchase was partially refunded before the dispute).
+    # remainder when the purchase was partially refunded before the dispute). The gross
+    # is snapshotted right before the debit runs, so the debit and the eventual
+    # dispute-won re-credit always book the same number.
     def presentment_canonical_dispute_issued_amount
       return if purchase_presentment.blank?
 
-      FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * gross_amount_refundable_cents)
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * (presentment_dispute_debited_gross_cents || gross_amount_refundable_cents))
     end
 
     # Dispute-won counterpart: the re-credit mirrors the dispute debit, so it books the
-    # same canonical gross back with a positive sign. The refundable gross is re-read
-    # here, so any refund rows created after the dispute was formalized (webhook refunds
-    # create the row but skip the balance decrement while a dispute is active) are added
-    # back — otherwise the re-credit would book a smaller gross than the debit and the
-    # canonical rows would no longer cancel.
+    # same canonical gross back with a positive sign. It reads the gross that was
+    # snapshotted when the debit was booked, so refunds recorded between the debit and
+    # the win (webhook refunds create the row but skip the balance decrement while a
+    # dispute is active) cannot make the re-credit diverge from the debit.
     def presentment_canonical_dispute_won_issued_amount
       return if purchase_presentment.blank?
 
-      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_debited_gross_cents)
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_won_gross_cents)
     end
 
-    # The canonical gross that the dispute debit booked: today's refundable gross plus
-    # the gross of refunds recorded after the dispute was formalized (the debit ran
-    # immediately after formalization, so those refunds were not part of it).
-    def presentment_dispute_debited_gross_cents
+    # The canonical gross the dispute debit booked. The snapshot taken at debit time is
+    # the source of truth. Disputes debited before the snapshot existed fall back to
+    # reconstructing it: today's refundable gross plus refunds recorded after the dispute
+    # was formalized (the debit ran right after formalization, so those refunds were not
+    # part of it).
+    def presentment_dispute_won_gross_cents
+      return presentment_dispute_debited_gross_cents if presentment_dispute_debited_gross_cents.present?
+
       cents = gross_amount_refundable_cents
       formalized_at = (charge.present? ? charge.dispute : dispute)&.formalized_at
       if formalized_at.present?
         cents += refunds.where("created_at > ?", formalized_at).sum("amount_cents + gumroad_tax_cents")
       end
       cents
+    end
+
+    # Records, at dispute-debit time, the canonical gross the debit is about to book.
+    # Idempotent: a webhook re-fire keeps the first snapshot.
+    def snapshot_presentment_dispute_debited_gross!
+      return if purchase_presentment.blank?
+      return if presentment_dispute_debited_gross_cents.present?
+
+      self.presentment_dispute_debited_gross_cents = gross_amount_refundable_cents
+      save!
     end
 
     # Selects the canonical override for a refund-or-chargeback balance debit. Returns
