@@ -157,6 +157,7 @@ type CurrentPayoutsDataWithUserNotPayable = {
   status: "not_payable";
   should_be_shown_currencies_always: boolean;
   minimum_payout_amount_cents: number;
+  balance_cents: number;
   payout_note?: string | null;
   has_stripe_connect: boolean;
 };

@@ -10,9 +10,21 @@ class Payouts
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
+    amount_payable = user.unpaid_balance_cents_up_to_date(date)
+    account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+    below_minimum = account_balance < user.minimum_payout_amount_cents
+
     unless user.compliant? || from_admin
-      reason = user.not_reviewed? ? "under review" : "not compliant"
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.") if add_comment
+      if add_comment
+        if user.not_reviewed? && below_minimum && account_balance > 0
+          # A not-reviewed account isn't under any active review — the actual
+          # blocker for the seller is the below-minimum balance, so say that.
+          add_below_minimum_payout_note(user, payout_date, account_balance)
+        else
+          reason = user.not_reviewed? ? "under review" : "not compliant"
+          user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.")
+        end
+      end
       return false
     end
 
@@ -22,19 +34,12 @@ class Payouts
       return false
     end
 
-    amount_payable = user.unpaid_balance_cents_up_to_date(date)
-
-    account_balance = amount_payable + user.paid_payments_cents_for_date(date)
-    if account_balance < user.minimum_payout_amount_cents
+    if below_minimum
       is_payable_from_admin = from_admin && account_balance > 0 &&
         (bypass_minimum_payout || user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance)
 
       unless is_payable_from_admin
-        if add_comment && account_balance > 0
-          current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
-          minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
-          user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.")
-        end
+        add_below_minimum_payout_note(user, payout_date, account_balance) if add_comment && account_balance > 0
         return false
       end
     end
@@ -58,6 +63,13 @@ class Payouts
       ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:, payout_type:)
     end
   end
+
+  def self.add_below_minimum_payout_note(user, payout_date, account_balance)
+    current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
+    minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
+    user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.")
+  end
+  private_class_method :add_below_minimum_payout_note
 
   def self.create_payments_for_balances_up_to_date(date, processor_type)
     users = User.holding_balance

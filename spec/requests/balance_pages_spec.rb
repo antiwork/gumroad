@@ -468,6 +468,19 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
 
         describe "payout-skipped notes" do
+          context "when the balance is below the payout minimum" do
+            before do
+              create(:payment_completed, user: seller)
+              allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(59_72)
+            end
+
+            it "shows the current balance alongside the minimum-payout notice" do
+              visit balance_path
+
+              expect(page).to have_text("Your current balance is $59.72. Reach a balance of at least $100 to be paid out for your sales.")
+            end
+          end
+
           context "when the payout was skipped because the account was under review" do
             before do
               seller.update!(user_risk_state: "not_reviewed")

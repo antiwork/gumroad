@@ -66,6 +66,7 @@ module PayoutsHelper
       payout_period_data.merge!(payout_method_details(user:))
     else
       payout_period_data[:status] = "not_payable"
+      payout_period_data[:balance_cents] = user.unpaid_balance_cents
     end
 
     last_payout_note = user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last

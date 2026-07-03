@@ -517,7 +517,7 @@ describe Payouts do
       it "adds a comment if payout is skipped because the account is under review" do
         seller = create(:user, payment_address: "seller@example.com")
         create(:user_compliance_info, user: seller)
-        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000_00)
 
         expect do
           described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
@@ -526,6 +526,35 @@ describe Payouts do
         date = Time.current.to_fs(:formatted_date_full_month)
         content = "Payout on #{date} was skipped because the account was under review."
         expect(seller.comments.with_type_payout_note.count).to eq 1
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      it "adds a below-minimum comment instead of an under-review one when a not-reviewed account is below the payout minimum" do
+        seller = create(:user, payment_address: "seller@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 59_72)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because the account balance $59.72 USD was less than the minimum payout amount of $100 USD."
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      it "adds an under-review comment for a not-reviewed account with a zero balance" do
+        seller = create(:user, payment_address: "seller@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        create(:balance, user: seller, date: Date.today - 2, amount_cents: -1000)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because the account was under review."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
 
