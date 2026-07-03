@@ -234,6 +234,16 @@ describe Api::V2::OfferCodesController do
         # For compatibility reasons, `code` is returned as `name`
         expect(result[:offer_code][:name]).to eq("50_OFF")
       end
+
+      it "returns a universal offer code that excludes the product" do
+        universal_offer_code = create(:universal_offer_code, user: @user, code: "UNI", excluded_products: [@product])
+
+        get @action, params: @params.merge(id: universal_offer_code.external_id)
+
+        result = response.parsed_body.deep_symbolize_keys
+        expect(result[:success]).to eq(true)
+        expect(result[:offer_code][:id]).to eq(universal_offer_code.external_id)
+      end
     end
   end
 

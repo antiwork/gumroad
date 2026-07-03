@@ -870,7 +870,8 @@ class Link < ApplicationRecord
   end
 
   def find_offer_code_by_external_id(external_id)
-    offer_codes.alive.find_by_external_id(external_id) || universal_offer_codes.find_by_external_id(external_id)
+    offer_codes.alive.find_by_external_id(external_id) ||
+      user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_external_id(external_id)
   end
 
   # Public: Universal offer codes that apply to this product: matching currency and not excluding it.
