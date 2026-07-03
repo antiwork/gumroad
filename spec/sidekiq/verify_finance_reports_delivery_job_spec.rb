@@ -26,11 +26,18 @@ describe VerifyFinanceReportsDeliveryJob do
   let(:monthly_fire) { Time.utc(2026, 7, 1, 11) }
   let(:taxjar_fire) { Time.utc(2026, 7, 1, 3) }
 
+  # Records a completion for every fire the verifier will check: each job's fires from
+  # the most recent one (outside the grace period) back to the activation baseline.
   def record_all_completions(now)
+    active_since = Time.zone.at($redis.get(described_class::ACTIVE_SINCE_REDIS_KEY).to_i)
     described_class::VERIFIED_JOBS.each_key do |class_name|
       entry = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml")).values.find { _1["class"] == class_name }
-      fire_time = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC").previous_time(now - described_class::GRACE_PERIOD).to_t.utc
-      record_completion_for_fire(class_name, fire_time, at: now)
+      cron = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC")
+      fire_time = cron.previous_time(now - described_class::GRACE_PERIOD).to_t.utc
+      while fire_time >= active_since
+        record_completion_for_fire(class_name, fire_time, at: now)
+        fire_time = cron.previous_time(fire_time).to_t.utc
+      end
     end
   end
 
@@ -140,6 +147,28 @@ describe VerifyFinanceReportsDeliveryJob do
       expect(SendFinancesReportWorker).to have_enqueued_sidekiq_job(6, 2026)
       expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_triggered)
         .with("SendFinancesReportWorker", [6, 2026], monthly_fire, nil)
+    end
+  end
+
+  it "catches an older missed fire even after a newer fire of the same job completed" do
+    # The verifier was down across two monthly fires: June 1 was missed, July 1
+    # completed. When the verifier finally runs on July 15 it must not stop at the
+    # completed July fire — the June gap has its own period key and must still be
+    # re-enqueued and alerted.
+    june_fire = Time.utc(2026, 6, 1, 11)
+    travel_to(Time.utc(2026, 7, 15, 18)) do
+      activate_backstop(at: Time.utc(2026, 5, 20))
+      record_all_completions(Time.utc(2026, 7, 15, 18))
+      clear_completion_for_fire("SendFinancesReportWorker", june_fire)
+
+      described_class.new.perform
+
+      expect(SendFinancesReportWorker).to have_enqueued_sidekiq_job(5, 2026)
+      expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_triggered)
+        .with("SendFinancesReportWorker", [5, 2026], june_fire, nil)
+      # The completed July fire itself was not flagged.
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_triggered)
+        .with("SendFinancesReportWorker", [6, 2026], anything, anything)
     end
   end
 

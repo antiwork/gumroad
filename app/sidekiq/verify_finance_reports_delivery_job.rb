@@ -8,9 +8,9 @@
 # scheduler tick itself is missed — and then nothing raises, nothing retries, and no alert
 # goes out. This job closes that gap: every day it checks, for each scheduler-fired
 # finance report job, that a completion was recorded (FinanceReportCompletionTracking)
-# after the job's most recent scheduled fire time. If not, it re-enqueues the job with
-# arguments pinned to the period the missed run was for, and emails the payments
-# notification address so the gap is visible.
+# for every scheduled fire time since the backstop was activated. If a fire has no
+# completion, it re-enqueues the job with arguments pinned to the period the missed run
+# was for, and emails the payments notification address so the gap is visible.
 #
 # Re-enqueueing is safe: every verified job is a read-only aggregation (or, for the
 # TaxJar upload, idempotent — already-imported orders are skipped).
@@ -62,25 +62,48 @@ class VerifyFinanceReportsDeliveryJob
 
       # The schedule's cron expressions are documented (and fired in production) in UTC —
       # pin the parse to UTC explicitly so this doesn't drift with server TZ.
-      # The most recent fire is checked no matter how long ago it was (there is no
-      # lookback cutoff): a missed monthly or quarterly fire stays flagged on every
-      # verifier run until its completion is recorded, even if the verifier itself was
-      # down for days when the fire happened. Completion keys live 120 days
-      # (FinanceReportCompletionTracking::REDIS_KEY_TTL), longer than the longest cadence
-      # here (quarterly), so a completed run's key is always still present when its fire
-      # is checked. Fires from before activation are the one exception — they predate
-      # completion tracking entirely and are skipped as unknowable, not missing.
-      fire_time = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC").previous_time(now - GRACE_PERIOD).to_t.utc
-      next if fire_time < active_since
+      cron = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC")
 
-      args = args_builder.call(fire_time)
+      # EVERY fire since activation is checked, not just the most recent one. Checking
+      # only the latest fire loses older gaps: if the verifier is down while a monthly
+      # fire is missed and the NEXT month's fire then completes, a latest-only check sees
+      # that newer completion and the older missed month is never re-enqueued or alerted.
+      # Each period has its own completion key, so walking back through the fires reads
+      # each one independently and a newer completion can't mask an older gap.
+      #
+      # The walk is bounded (besides by activation) by the completion keys' own lifetime:
+      # keys expire after 120 days (FinanceReportCompletionTracking::REDIS_KEY_TTL), so a
+      # fire older than that may have completed and had its key expire — unknowable, not
+      # missing, same as pre-activation fires. The most recent fire alone is still
+      # checked with no age cutoff, so even after a very long outage the newest gap is
+      # always caught. Fires from before activation predate completion tracking entirely
+      # and are skipped as unknowable, not missing.
+      oldest_verifiable_fire = now - FinanceReportCompletionTracking::REDIS_KEY_TTL
+      fire_time = cron.previous_time(now - GRACE_PERIOD).to_t.utc
+      # Jobs without period args (their builder ignores the fire time) resolve every
+      # fire to the same completion key — checking that key once covers the whole walk,
+      # and skipping the repeats avoids re-enqueueing the identical job several times.
+      seen_period_keys = Set.new
+      while fire_time >= active_since
+        args = args_builder.call(fire_time)
+        if seen_period_keys.add?(FinanceReportCompletionTracking.redis_key(class_name, args))
+          verify_fire(class_name, args, fire_time)
+        end
+        fire_time = cron.previous_time(fire_time).to_t.utc
+        break if fire_time < oldest_verifiable_fire
+      end
+    end
+  end
+
+  private
+    def verify_fire(class_name, args, fire_time)
       last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name, args)
-      next if last_completed_at && last_completed_at >= fire_time
+      return if last_completed_at && last_completed_at >= fire_time
 
       # A duplicate enqueue can raise for unique jobs with on_conflict: :raise (e.g.
       # yesterday's backstop re-run is still queued or running). The gap still gets
-      # alerted below, and one job's conflict must not stop the remaining jobs from
-      # being verified — so notify and carry on rather than let it bubble.
+      # alerted below, and one fire's conflict must not stop the remaining fires and
+      # jobs from being verified — so notify and carry on rather than let it bubble.
       begin
         class_name.constantize.perform_async(*args)
       rescue => e
@@ -91,5 +114,4 @@ class VerifyFinanceReportsDeliveryJob
         class_name, args, fire_time, last_completed_at
       ).deliver_later
     end
-  end
 end
