@@ -5,7 +5,6 @@ class Checkout::StripePaymentPresenter
   include CurrencyHelper
 
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
-  STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
@@ -84,7 +83,13 @@ class Checkout::StripePaymentPresenter
           currency: "usd",
           payment_method_types: ["card"],
           payment_method_creation: "manual",
-          stripe_link_enabled: sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) },
+          # Link auto-enables with the Payment Element: it's inline (PaymentMethod-mode here, no
+          # return-page/webhook dependency), and Stripe's dashboard payment-method settings remain
+          # the emergency kill switch — a per-seller Flipper flag added no useful lever. The one
+          # exception mirrors the client-confirm PPP method matrix: Link's funding country can't be
+          # verified pre-charge, so on a PPP-verified checkout it would only fail the card-country
+          # check at purchase (Purchase#validate_purchasing_power_parity). Gate it out up front.
+          stripe_link_enabled: !ppp_verification_applies?,
         },
       }
     end
@@ -109,14 +114,17 @@ class Checkout::StripePaymentPresenter
     end
 
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
-    # country AND the seller enforces PPP payment verification — the case where prepare will run the
-    # funding-country check and a non-verifiable method would fail closed. Keyed on discount
+    # country AND that item's own seller enforces PPP payment verification — the case where prepare
+    # will run the funding-country check and a non-verifiable method would fail closed. Item-scoped
+    # (not cart-scoped): on a multi-seller Lane A cart, one seller disabling verification must not
+    # re-enable Link for another seller's still-verified PPP purchase. Keyed on discount
     # AVAILABILITY (ppp_details for this ip), the same server-owned basis
     # Order::PreparePaymentIntentService recomputes from the purchase's ip_country, so the Payment
     # Element and the deferred intent gate identically (the step-1 method-set invariant).
     def ppp_verification_applies?
-      items.any? { _1[:ppp_discounted] } &&
-        sellers.none? { _1&.purchasing_power_parity_payment_verification_disabled? }
+      items.any? do |item|
+        item[:ppp_discounted] && !item[:seller]&.purchasing_power_parity_payment_verification_disabled?
+      end
     end
 
     # GeoIP-detected country (never the user's profile country) so the resolver's US-locked-method

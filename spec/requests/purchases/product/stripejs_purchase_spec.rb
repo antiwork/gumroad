@@ -324,7 +324,6 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller)
     Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
-    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, product.user)
 
     visit("/checkout?product=#{product.unique_permalink}")
 
