@@ -749,12 +749,17 @@ export default function PayoutsIndex() {
                 past_payout_period_data.length > 0 ? (
                   <Alert variant="info" role="status">
                     <p>
-                      Your current balance is{" "}
-                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.balance_cents, {
-                        symbolFormat: "short",
-                        noCentsIfWhole: false,
-                      })}
-                      . Reach a balance of at least{" "}
+                      {next_payout_period_data.balance_cents != null ? (
+                        <>
+                          Your current balance is{" "}
+                          {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.balance_cents, {
+                            symbolFormat: "short",
+                            noCentsIfWhole: false,
+                          })}
+                          .{" "}
+                        </>
+                      ) : null}
+                      Reach a balance of at least{" "}
                       {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
                         symbolFormat: "short",
                       })}{" "}
