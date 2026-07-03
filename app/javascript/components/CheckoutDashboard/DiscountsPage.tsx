@@ -1185,11 +1185,11 @@ const Form = ({
                 value={excludedProducts.map(({ id, name: label }) => ({ id, label }))}
                 isMulti
                 isClearable
-                placeholder="Products this discount will not apply to"
+                placeholder="Select products to exclude"
                 onChange={(selectedIds) => setExcludedProductIds(selectedIds.map(({ id }) => id))}
               />
               <FieldsetDescription>
-                The discount applies to all current and future products except the ones excluded here.
+                The discount applies to all current and future products except the ones you exclude here.
               </FieldsetDescription>
             </Fieldset>
           ) : null}
