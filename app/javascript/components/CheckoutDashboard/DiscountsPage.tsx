@@ -864,7 +864,6 @@ const Form = ({
     [...(offerCode?.excluded_products ?? []), ...products].map((product) => [product.id, product]),
   );
   const excludedProducts = excludedProductIds.flatMap((id) => excludableProductsById.get(id) ?? []);
-  const universalProducts = products.filter(({ id }) => !excludedProductIds.includes(id));
 
   const [limitQuantity, setLimitQuantity] = React.useState(!!offerCode?.limit);
   const [maxQuantity, setMaxQuantity] = React.useState<{ value: number | null; error?: boolean }>({
@@ -894,7 +893,7 @@ const Form = ({
     offerCode?.currency_type ?? selectedProducts[0]?.currency_type ?? products[0]?.currency_type ?? "usd",
   );
 
-  const canSetDuration = (universal ? universalProducts : selectedProducts).some(
+  const canSetDuration = (universal ? products : selectedProducts).some(
     ({ is_recurring_billing }) => is_recurring_billing,
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
