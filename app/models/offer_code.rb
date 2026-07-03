@@ -184,7 +184,8 @@ class OfferCode < ApplicationRecord
   def applicable_products
     if universal?
       scope = currency_type.present? ? user.links.alive.where(price_currency_type: currency_type) : user.links.alive
-      excluded_product_ids.any? ? scope.where.not(id: excluded_product_ids) : scope
+      excluded_ids = excluded_product_ids
+      excluded_ids.any? ? scope.where.not(id: excluded_ids) : scope
     else
       products
     end
