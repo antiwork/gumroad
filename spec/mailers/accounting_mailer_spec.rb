@@ -219,6 +219,42 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#payout_batch_failed" do
+    let(:mail) do
+      AccountingMailer.payout_batch_failed(
+        "STRIPE", ["AchAccount"], "ActiveRecord::StatementTimeout", "maximum statement execution time exceeded"
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "includes the bank account types in the subject" do
+      expect(mail.subject).to include("Weekly payout batch failed - AchAccount")
+    end
+
+    it "falls back to the processor type in the subject when there are no bank account types" do
+      paypal_mail = AccountingMailer.payout_batch_failed("PAYPAL", nil, "ActiveRecord::StatementTimeout", "timeout")
+      expect(paypal_mail.subject).to include("Weekly payout batch failed - PAYPAL")
+    end
+
+    it "handles a single bank account type passed as a string" do
+      string_mail = AccountingMailer.payout_batch_failed("STRIPE", "AchAccount", "ActiveRecord::StatementTimeout", "timeout")
+      expect(string_mail.subject).to include("Weekly payout batch failed - AchAccount")
+      expect(string_mail.body.encoded).to include("AchAccount")
+    end
+
+    it "includes the failure context and re-run command in the body" do
+      body = mail.body.encoded
+      expect(body).to include("STRIPE")
+      expect(body).to include("AchAccount")
+      expect(body).to include("ActiveRecord::StatementTimeout")
+      expect(body).to include("maximum statement execution time exceeded")
+      expect(body).to include("PerformPayoutsUpToDelayDaysAgoWorker.perform_async")
+    end
+  end
+
   describe "#global_sales_tax_summary_report_failed" do
     let(:mail) do
       AccountingMailer.global_sales_tax_summary_report_failed(
