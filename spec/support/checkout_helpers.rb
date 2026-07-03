@@ -225,8 +225,13 @@ end
 # With Link always enabled, the Payment Element may render Link's pre-checked
 # "Save my information for faster checkout" pane, whose required mobile-number
 # field would block confirm. Specs pay as a plain card guest, so uncheck it.
+#
+# Stripe renders the Link pane asynchronously after the card fields are filled,
+# so we wait a few seconds for the checkbox to appear. We deliberately don't use
+# Capybara's default wait (25s here) because layouts without the Link pane never
+# render the checkbox at all, and every spec would stall for the full timeout.
 def uncheck_link_save_in_payment_element
-  save_checkbox = first(:checkbox, "Save my information for faster checkout", visible: false, wait: 0)
+  save_checkbox = first(:checkbox, "Save my information for faster checkout", visible: false, wait: 5)
   save_checkbox.click if save_checkbox&.checked?
 rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::ElementNotInteractableError
   # Older Element layouts (no Link pane) simply don't render the checkbox.
