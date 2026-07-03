@@ -90,7 +90,8 @@ class Purchase::CreateService < Purchase::BaseService
       if purchase.offer_code&.minimum_amount_cents.present?
         valid_items = params[:cart_items]
         valid_items = if purchase.offer_code.universal
-          valid_items.reject { purchase.offer_code.excluded_products.find_by(unique_permalink: _1[:permalink]).present? }
+          excluded_permalinks = purchase.offer_code.excluded_products.pluck(:unique_permalink)
+          valid_items.reject { excluded_permalinks.include?(_1[:permalink]) }
         else
           valid_items.filter { purchase.offer_code.products.find_by(unique_permalink: _1[:permalink]).present? }
         end
