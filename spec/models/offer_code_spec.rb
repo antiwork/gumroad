@@ -800,6 +800,19 @@ describe OfferCode do
     end
   end
 
+  describe "excluded product cache invalidation" do
+    let(:creator) { create(:user) }
+    let!(:product) { create(:product, user: creator) }
+
+    it "invalidates the product's cache when it is excluded and when it is un-excluded" do
+      universal_offer_code = create(:universal_offer_code, user: creator)
+
+      expect(product).to receive(:invalidate_cache).twice
+      universal_offer_code.update!(excluded_products: [product])
+      universal_offer_code.update!(excluded_products: [])
+    end
+  end
+
   describe "reindexing products" do
     let(:creator) { create(:user) }
     let(:product1) { create(:product, user: creator) }

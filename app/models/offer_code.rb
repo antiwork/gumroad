@@ -20,7 +20,7 @@ class OfferCode < ApplicationRecord
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
-  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id"
+  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: :invalidate_excluded_product_cache, after_remove: :invalidate_excluded_product_cache
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -380,7 +380,11 @@ class OfferCode < ApplicationRecord
     end
 
     def invalidate_product_cache
-      (products + excluded_products).each(&:invalidate_cache)
+      products.each(&:invalidate_cache)
+    end
+
+    def invalidate_excluded_product_cache(product)
+      product.invalidate_cache
     end
 
     def validate_cancellation_discount_uniqueness
