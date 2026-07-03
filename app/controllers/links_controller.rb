@@ -844,15 +844,11 @@ class LinksController < ApplicationController
       offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
 
       raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
-      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
+      raise Link::LinkInvalid, "Offer code must apply to this product" unless offer_code.applicable?(@product)
 
       @product.default_offer_code = offer_code
     rescue ActiveRecord::RecordNotFound
       raise Link::LinkInvalid, "Invalid offer code"
-    end
-
-    def valid_for_product?(offer_code)
-      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)

@@ -246,6 +246,15 @@ describe OfferCode do
       expect(offer_code).not_to be_valid
       expect(offer_code.errors.full_messages).to include("Products can only be excluded from discounts that apply to all products.")
     end
+
+    it "disallows excluding a product whose default discount is this offer code" do
+      offer_code = create(:universal_offer_code, user: @product.user)
+      excluded_product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(excluded_products: [excluded_product])).to eq(false)
+      expect(offer_code.errors.full_messages).to include("This discount code is the default discount for one or more of the excluded products. Please remove it from those products before excluding them.")
+      expect(offer_code.reload.excluded_products).to eq([])
+    end
   end
 
   describe "validity dates validation" do

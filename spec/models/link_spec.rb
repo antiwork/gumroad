@@ -4260,6 +4260,18 @@ describe Link, :vcr do
     end
   end
 
+  describe "default offer code validation" do
+    let(:product) { create(:product) }
+
+    it "rejects a universal offer code that excludes the product" do
+      offer_code = create(:universal_offer_code, user: product.user, excluded_products: [product])
+
+      product.default_offer_code = offer_code
+      expect(product).not_to be_valid
+      expect(product.errors.full_messages).to include("Default offer code must apply to this product")
+    end
+  end
+
   describe "#find_offer_code" do
     let(:product) { create(:product) }
     let(:other_product) { create(:product, user: product.user) }

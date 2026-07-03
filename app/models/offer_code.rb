@@ -446,9 +446,12 @@ class OfferCode < ApplicationRecord
     def validate_excluded_products
       return if deleted_at.present?
       return if excluded_products.empty?
-      return if universal?
+      return errors.add(:base, "Products can only be excluded from discounts that apply to all products.") unless universal?
+      return unless persisted?
 
-      errors.add(:base, "Products can only be excluded from discounts that apply to all products.")
+      if Link.visible.where(default_offer_code_id: id, id: excluded_products.map(&:id)).exists?
+        errors.add(:base, "This discount code is the default discount for one or more of the excluded products. Please remove it from those products before excluding them.")
+      end
     end
 
     def validate_ownership_duration_tiers

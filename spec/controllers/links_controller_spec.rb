@@ -1099,6 +1099,14 @@ describe LinksController, :vcr, inertia: true do
             expect(@product.reload.default_offer_code).to be_nil
           end
 
+          it "does not set the default offer code when a universal offer code excludes the product" do
+            universal_offer_code.update!(excluded_products: [@product])
+            @params[:default_offer_code_id] = universal_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
           it "does not set the default offer code when offer code is not associated with the product" do
             unassociated_offer_code = create(:offer_code, user: @product.user)
             @params[:default_offer_code_id] = unassociated_offer_code.external_id

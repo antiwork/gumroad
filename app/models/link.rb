@@ -1315,8 +1315,8 @@ class Link < ApplicationRecord
         errors.add(:default_offer_code, "must belong to your offer codes")
       elsif default_offer_code.inactive?
         errors.add(:default_offer_code, "cannot be expired")
-      elsif !offer_codes.where(id: default_offer_code.id).exists? && !default_offer_code.universal?
-        errors.add(:default_offer_code, "must be associated with this product or be universal")
+      elsif !default_offer_code.applicable?(self)
+        errors.add(:default_offer_code, "must apply to this product")
       end
     end
 
