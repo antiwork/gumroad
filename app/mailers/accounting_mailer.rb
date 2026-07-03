@@ -111,6 +111,19 @@ class AccountingMailer < ApplicationMailer
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
+  # Generic retry-exhaustion alert for the finance report jobs (see FinanceReportFailureAlert).
+  def finance_report_job_failed(job_name, args, error_class, error_message)
+    @job_name = job_name
+    @args = Array(args)
+    @error_class = error_class
+    @error_message = error_message
+    @rerun_command = "#{job_name}.perform_async(#{@args.map(&:inspect).join(', ')})"
+
+    args_suffix = @args.present? ? " - #{@args.join('/')}" : ""
+    mail subject: "#{SUBJECT_PREFIX}#{job_name} failed#{args_suffix}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def us_states_sales_tax_taxjar_upload_failed(date, error_class, error_message)
     @date = date
     @error_class = error_class

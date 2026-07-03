@@ -2,6 +2,8 @@
 
 class GenerateCanadaSalesReportJob
   include Sidekiq::Job
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
   def perform(month, year)
     raise ArgumentError, "Invalid month" unless month.in?(1..12)

@@ -2,7 +2,8 @@
 
 class GenerateFinancialReportsForPreviousMonthJob
   include Sidekiq::Worker
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   def perform
     return unless Rails.env.production?

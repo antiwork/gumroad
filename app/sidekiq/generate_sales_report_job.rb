@@ -2,7 +2,8 @@
 
 class GenerateSalesReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
   ALL_SALES = "all_sales"
   DISCOVER_SALES = "discover_sales"

@@ -2,8 +2,11 @@
 
 class SendStripeCurrencyBalancesReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # The balances are read live from Stripe (point-in-time, no reporting-period args), so a
+  # re-run is always safe and needs no arguments.
   def perform
     return unless Rails.env.production?
 

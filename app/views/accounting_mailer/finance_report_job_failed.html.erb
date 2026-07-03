@@ -1,0 +1,10 @@
+<%= header_section("#{@job_name} failed") %>
+<div>
+  <p><code><%= @job_name %></code> exhausted Sidekiq retries and did not produce its report.</p>
+  <ul>
+    <li>Arguments: <%= @args.present? ? @args.map(&:inspect).join(", ") : "(none)" %></li>
+    <li>Error: <%= @error_class %>: <%= @error_message %></li>
+  </ul>
+  <p>Re-run once the underlying issue clears: <code><%= @rerun_command %></code> (safe — these reports are read-only aggregations, and the arguments above pin the reporting period so a late re-run computes the right one).</p>
+  <p>See Sentry and the Sidekiq dead set for more details.</p>
+</div>

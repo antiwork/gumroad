@@ -2,7 +2,8 @@
 
 class CreateVatReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
   DEFAULT_VAT_RATE_TYPE = "Standard"
   REDUCED_VAT_RATE_TYPE = "Reduced"

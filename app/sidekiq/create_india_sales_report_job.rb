@@ -2,7 +2,15 @@
 
 class CreateIndiaSalesReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+
+  # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
+  # late re-run reports the month the failed run was for (not whatever "last month" is then).
+  def self.default_alert_args
+    previous_month = 1.month.ago
+    [previous_month.month, previous_month.year]
+  end
 
   def perform(month = nil, year = nil)
     if month.nil? || year.nil?

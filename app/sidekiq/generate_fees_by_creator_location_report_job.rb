@@ -2,7 +2,8 @@
 
 class GenerateFeesByCreatorLocationReportJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  include FinanceReportFailureAlert
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   def perform(month, year)
     raise ArgumentError, "Invalid month" unless month.in?(1..12)

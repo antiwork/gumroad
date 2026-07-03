@@ -149,6 +149,46 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#finance_report_job_failed" do
+    let(:mail) do
+      AccountingMailer.finance_report_job_failed(
+        "SendFinancesReportWorker", [6, 2026], "ActiveRecord::StatementTimeout", "maximum statement execution time exceeded"
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "includes the job name and args in the subject" do
+      expect(mail.subject).to include("SendFinancesReportWorker failed - 6/2026")
+    end
+
+    it "includes the failure context and an idempotent re-run command in the body" do
+      body = mail.body.encoded
+      expect(body).to include("ActiveRecord::StatementTimeout")
+      expect(body).to include("maximum statement execution time exceeded")
+      expect(body).to include("SendFinancesReportWorker.perform_async(6, 2026)")
+    end
+
+    it "handles jobs without args" do
+      no_args_mail = AccountingMailer.finance_report_job_failed(
+        "SendStripeCurrencyBalancesReportJob", [], "Stripe::APIConnectionError", "Connection reset by peer"
+      )
+      expect(no_args_mail.subject).to include("SendStripeCurrencyBalancesReportJob failed")
+      expect(no_args_mail.body.encoded).to include("SendStripeCurrencyBalancesReportJob.perform_async()")
+    end
+
+    it "quotes string args in the re-run command" do
+      string_args_mail = AccountingMailer.finance_report_job_failed(
+        "GenerateSalesReportJob", ["GB", "2026-04-01", "2026-06-30", "all_sales"], "Aws::S3::Errors::ServiceError", "upload failed"
+      )
+      expect(string_args_mail.body.encoded).to include(
+        "GenerateSalesReportJob.perform_async(&quot;GB&quot;, &quot;2026-04-01&quot;, &quot;2026-06-30&quot;, &quot;all_sales&quot;)"
+      )
+    end
+  end
+
   describe "#global_sales_tax_summary_report_failed" do
     let(:mail) do
       AccountingMailer.global_sales_tax_summary_report_failed(
