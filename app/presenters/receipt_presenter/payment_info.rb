@@ -161,7 +161,7 @@ class ReceiptPresenter::PaymentInfo
 
     def credit_card_note
       return if orderable.card_type.blank?
-      return if orderable.card_type == CardType::PAYPAL
+      return if orderable.card_type.in?([CardType::PAYPAL, CardType::LINK])
 
       # TODO: Update when multiple charges per receipt are supported
       "The charge will be listed as GUMRD.COM* on your credit card statement."
