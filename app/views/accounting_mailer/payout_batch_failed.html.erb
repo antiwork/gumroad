@@ -1,0 +1,12 @@
+<%= header_section("Weekly payout batch failed") %>
+<div>
+  <p><code>PerformPayoutsUpToDelayDaysAgoWorker</code> exhausted Sidekiq retries. Sellers in this bucket have NOT had payouts created for this week's run.</p>
+  <ul>
+    <li>Processor: <%= @payout_processor_type %></li>
+    <li>Bank account types: <%= @bank_account_types.present? ? @bank_account_types.join(", ") : "(all)" %></li>
+    <li>Error: <%= @error_class %>: <%= @error_message %></li>
+  </ul>
+  <p>Re-run once the underlying issue is resolved (safe to re-run — users whose payouts were already created are skipped):</p>
+  <p><code>PerformPayoutsUpToDelayDaysAgoWorker.perform_async(<%= @payout_processor_type.inspect %><%= @bank_account_types.present? ? ", #{@bank_account_types.inspect}" : "" %>)</code></p>
+  <p>See Sentry and the Sidekiq dead set for the full backtrace. Verify recovery by comparing the day's <code>payments</code> count for this bucket against recent weeks' runs.</p>
+</div>

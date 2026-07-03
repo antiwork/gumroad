@@ -158,7 +158,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
   end
 
   context "payment_intent.processing then payment_intent.payment_failed for a client-confirmed charge" do
-    it "leaves the purchase in progress; payment_failed is outside the new lifecycle scope" do
+    it "keeps the purchase in progress while processing, then fails it to a resubmittable state on payment_failed" do
       seller = create(:user)
       charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_proc_fail")
       purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
@@ -168,9 +168,28 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       expect(purchase.reload).to be_in_progress
       expect(ProcessedStripeEvent.processed?("evt_pf_processing")).to be(true)
 
+      # A delayed-notification method (ACH) whose debit later fails must return the buyer to a
+      # resubmittable cart, so the client-confirmed charge's in_progress purchases are marked failed.
       deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_pf_failed"))
-      expect(purchase.reload).to be_in_progress
+      expect(purchase.reload).to be_failed
+      # payment_failed is deliberately NOT recorded in ProcessedStripeEvent: recording is scoped to
+      # PAYMENT_INTENT_LIFECYCLE_EVENTS (processing/succeeded), where it gates exactly-once
+      # fulfillment. The failed path's idempotency is the in_progress? guard in the handler.
       expect(ProcessedStripeEvent.processed?("evt_pf_failed")).to be(false)
+    end
+
+    it "is a no-op when the purchase already reached a terminal state (re-delivered payment_failed)" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_fail_terminal")
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+      expect(purchase).to be_successful
+
+      deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_pf_terminal"))
+      expect(purchase.reload).to be_successful
+      # Not recorded (see above) — a re-delivery is safe because the in_progress? guard skips
+      # terminal purchases, not because the event is deduplicated.
+      expect(ProcessedStripeEvent.processed?("evt_pf_terminal")).to be(false)
     end
   end
 

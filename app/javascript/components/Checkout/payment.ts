@@ -44,11 +44,12 @@ export type PaymentElementConfig = {
 // Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
 // payment_method_creation and stays in one-time payment mode. The method list is
 // server-resolved (Checkout::PaymentMethodResolver) and must match the deferred intent's;
-// the browser never widens it. "link" is present iff stripe_link_enabled is true.
+// the browser never widens it — card everywhere, "link" iff stripe_link_enabled, plus the
+// US-locked methods (cashapp, us_bank_account) for US buyers.
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: "usd";
-  payment_method_types: ("card" | "link")[];
+  payment_method_types: string[];
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };

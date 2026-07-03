@@ -37,7 +37,10 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, elements_options: nil }
   end
 
-  def payment_element_client_confirm_props(stripe_link_enabled: false, stripe_connect_account_id: nil)
+  # The Element's Link toggle and the intent's method list derive from the same resolver output, so
+  # they move together; the US-locked methods (cashapp/us_bank_account) are passed explicitly by the
+  # region-gate specs.
+  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: (stripe_link_enabled ? %w[card link] : ["card"]), stripe_connect_account_id: nil)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -45,9 +48,7 @@ describe Checkout::StripePaymentPresenter do
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: "usd",
-        # The Element's Link toggle and the intent's method list derive from the same resolver
-        # output, so they move together.
-        payment_method_types: stripe_link_enabled ? %w[card link] : ["card"],
+        payment_method_types:,
         stripe_link_enabled:,
         stripe_connect_account_id:,
       },
@@ -69,8 +70,12 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil)
-    described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:).props
+  def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil, ip: nil)
+    described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:, ip:).props
+  end
+
+  def stub_geoip_country(ip, country_name)
+    allow(GeoIp).to receive(:lookup).with(ip).and_return(double(country_name:))
   end
 
   it "selects Stripe Payment Element for a flagged single-seller charged checkout without a saved card" do
@@ -345,6 +350,27 @@ describe Checkout::StripePaymentPresenter do
     it "selects the confirm integration for a single-seller one-time card cart with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product]))
         .to eq(payment_element_client_confirm_props)
+    end
+
+    it "launches Cash App Pay and ACH Direct Debit alongside card for a US buyer" do
+      stub_geoip_country("104.28.0.1", "United States")
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account]))
+    end
+
+    it "offers card only for a non-US buyer (Cash App/ACH are US-locked)" do
+      stub_geoip_country("2.2.2.2", "United Kingdom")
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "2.2.2.2"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: ["card"]))
+    end
+
+    it "offers card only when the buyer's country cannot be resolved" do
+      allow(GeoIp).to receive(:lookup).and_return(nil)
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "0.0.0.0"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: ["card"]))
     end
 
     it "keeps server-confirm Payment Element when only the base flag is enabled" do

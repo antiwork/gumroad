@@ -33,6 +33,7 @@ describe BalanceController, type: :controller, inertia: true do
                                                               minimum_payout_amount_cents: 10_000,
                                                               is_user_payable: false,
                                                               status: "not_payable",
+                                                              balance_cents: 0,
                                                               payout_note: nil,
                                                               has_stripe_connect: false
                                                             })

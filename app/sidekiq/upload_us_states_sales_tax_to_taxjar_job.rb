@@ -13,7 +13,15 @@
 # or an overlap with a manual month re-push is safe.
 class UploadUsStatesSalesTaxToTaxjarJob
   include Sidekiq::Job
+  include FinanceReportCompletionTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
+
+  # Resolved default for a no-arg scheduled run (mirrors #perform's default). Used to key
+  # completion tracking so the backstop can distinguish the scheduled day's upload from a
+  # manual re-push of another day/month.
+  def self.default_alert_args(reference_time = Time.current)
+    [(reference_time.to_date - 1).iso8601]
+  end
 
   sidekiq_retries_exhausted do |job, exception|
     # The scheduler fires with no args (see config/sidekiq_schedule.yml), so job["args"].first is

@@ -9,35 +9,41 @@
 #   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card is
-#     always launched, and Link joins it per-seller behind the same :stripe_payment_element_link flag
-#     that ramps Link on Lane A, so one flag governs Link everywhere. The remaining methods need
-#     machinery that isn't built yet: redirect methods need the server return page + allow_redirects,
-#     and delayed-notification methods need the PaymentIntent webhook lifecycle. Widening the
-#     launched set is a later unit's job.
+#     always launched; Link joins it per-seller behind the same :stripe_payment_element_link flag
+#     that ramps Link on Lane A, so one flag governs Link everywhere; and the US-locked first-launch
+#     methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP gate below.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
 # confirmed against an automatic_payment_methods intent — hence an explicit array here, never
 # automatic_payment_methods). Both sides read this resolver, but they derive its lifecycle inputs
 # independently (the presenter from the cart, PreparePaymentIntentService from the persisted purchases).
-# Today that can't diverge because card survives every filter, so both land on ["card"]. When LAUNCHED
-# widens, those two derivations must be reconciled — and PreparePaymentIntentService hard-stops an
-# ineligible cart before creating the intent, so any residual mismatch fails closed rather than reaching
-# Stripe with the wrong method list.
+# Both derive buyer_country from the same GeoIP basis (the presenter from the request ip, the service
+# from the purchase's server-owned ip_country), so they resolve identical sets — and
+# PreparePaymentIntentService hard-stops an ineligible cart before creating the intent, so any residual
+# mismatch fails closed rather than reaching Stripe with the wrong method list.
 class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
-  # Element, so they are not separate types here.
-  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp].freeze
+  # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
+  # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
+  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account].freeze
   # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
-  # Card is always launched on the client-confirmed path; later units widen this (see class comment).
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # Launched on the client-confirmed path: card everywhere, plus the US-locked first-launch methods
+  # (region-gated below) — Cash App Pay (redirect; confirms via the #5664 return page) and ACH Direct
+  # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
+  # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card cashapp us_bank_account].freeze
   # Link is inline (non-redirect), so it needs none of the return-page/webhook machinery the other
   # gated methods wait on. It launches per-seller behind Lane A's existing Link flag (#5614) so the
   # rollout ramps once for both integrations. This resolver is the ONLY place that widens the
   # client-confirm method list — the presenter derives the Element's Link config from this output.
   LINK_PAYMENT_METHOD_TYPE = "link"
   STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME = :stripe_payment_element_link
+  # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
+  # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
+  US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
+  US_ALPHA2 = "US"
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -45,11 +51,12 @@ class Checkout::PaymentMethodResolver
     def client_confirm_eligible? = client_confirm_eligible
   end
 
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false)
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
     @setup_for_future = setup_for_future
+    @buyer_country = buyer_country
   end
 
   def resolve
@@ -60,7 +67,7 @@ class Checkout::PaymentMethodResolver
         client_confirm_eligible: reason.nil?,
         # Nil on Lane A carts: they never mount the client-confirmed Payment Element, so there is no
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
-        payment_method_types: reason.nil? ? eligible & launched_payment_method_types : nil,
+        payment_method_types: reason.nil? ? launched_method_set(eligible) : nil,
         eligible_payment_method_types: eligible,
         fallback_reason: reason,
         stripe_connect_account_id: reason.nil? ? stripe_connect_account_id : nil
@@ -71,7 +78,7 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
@@ -82,14 +89,6 @@ class Checkout::PaymentMethodResolver
       return "commission" if commission
       return "setup_flow" if setup_for_future
       nil
-    end
-
-    # Order follows ONE_TIME_PAYMENT_METHOD_TYPES (the resolve intersection preserves the receiver's
-    # order), so card always renders as the first Payment Element tab.
-    def launched_payment_method_types
-      launched = LAUNCHED_PAYMENT_METHOD_TYPES
-      launched += [LINK_PAYMENT_METHOD_TYPE] if sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) }
-      launched
     end
 
     def direct_charge_seller?
@@ -109,12 +108,33 @@ class Checkout::PaymentMethodResolver
       methods
     end
 
+    # Order follows ONE_TIME_PAYMENT_METHOD_TYPES (the resolve intersection preserves the receiver's
+    # order), so card always renders as the first Payment Element tab.
+    def launched_payment_method_types
+      launched = LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += [LINK_PAYMENT_METHOD_TYPE] if sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, _1) }
+      launched
+    end
+
+    # What Stripe actually receives: the eligible policy set intersected with the launched set, then
+    # region-gated. A US-locked method (ACH, Cash App Pay) is only offered when the buyer's GeoIP
+    # country is US, so a non-US buyer never sees a method they can't complete. When the buyer
+    # country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
+    # and Link (inline, not US-locked) is unaffected by the region gate.
+    def launched_method_set(eligible)
+      launched = eligible & launched_payment_method_types
+      return launched if buyer_country == US_ALPHA2
+
+      launched - US_LOCKED_PAYMENT_METHOD_TYPES
+    end
+
     def log_decision(resolution)
       launch_gated_out = resolution.eligible_payment_method_types - Array(resolution.payment_method_types)
       Rails.logger.info(
         "[#{self.class.name}] client_confirm_eligible=#{resolution.client_confirm_eligible} " \
         "seller_ids=#{sellers.map { _1&.id }} recurring=#{recurring} commission=#{commission} " \
-        "setup_for_future=#{setup_for_future} fallback_reason=#{resolution.fallback_reason.inspect} " \
+        "setup_for_future=#{setup_for_future} buyer_country=#{buyer_country.inspect} " \
+        "fallback_reason=#{resolution.fallback_reason.inspect} " \
         "eligible=#{resolution.eligible_payment_method_types} enabled=#{resolution.payment_method_types.inspect} " \
         "launch_gated_out=#{launch_gated_out} stripe_connect_account_id=#{resolution.stripe_connect_account_id.inspect}"
       )

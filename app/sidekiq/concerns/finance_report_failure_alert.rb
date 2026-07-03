@@ -20,6 +20,8 @@
 # period the failed run was actually for.
 module FinanceReportFailureAlert
   def self.included(base)
+    base.include(FinanceReportCompletionTracking)
+
     base.sidekiq_retries_exhausted do |job, exception|
       args = job["args"]
       if args.blank? && base.respond_to?(:default_alert_args)

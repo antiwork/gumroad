@@ -124,12 +124,36 @@ class AccountingMailer < ApplicationMailer
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
+  # Backstop alert: a scheduled finance report run never completed and was re-enqueued
+  # (see VerifyFinanceReportsDeliveryJob).
+  def finance_report_delivery_backstop_triggered(job_name, args, fire_time, last_completed_at)
+    @job_name = job_name
+    @args = Array(args)
+    @fire_time = fire_time
+    @last_completed_at = last_completed_at
+    @rerun_command = "#{job_name}.perform_async(#{@args.map(&:inspect).join(', ')})"
+
+    mail subject: "#{SUBJECT_PREFIX}#{job_name} scheduled run never completed - re-enqueued by backstop",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def us_states_sales_tax_taxjar_upload_failed(date, error_class, error_message)
     @date = date
     @error_class = error_class
     @error_message = error_message
 
     mail subject: "#{SUBJECT_PREFIX}[TaxJar] US States Sales Tax daily upload failed - #{date}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
+  def payout_batch_failed(payout_processor_type, bank_account_types, error_class, error_message)
+    @payout_processor_type = payout_processor_type
+    @bank_account_types = Array.wrap(bank_account_types).presence
+    @error_class = error_class
+    @error_message = error_message
+
+    bucket = @bank_account_types.present? ? @bank_account_types.join(", ") : payout_processor_type
+    mail subject: "#{SUBJECT_PREFIX}Weekly payout batch failed - #{bucket}",
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 

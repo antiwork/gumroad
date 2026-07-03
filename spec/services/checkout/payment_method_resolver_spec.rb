@@ -5,8 +5,8 @@ require "spec_helper"
 describe Checkout::PaymentMethodResolver do
   let(:seller) { create(:user) }
 
-  def resolve(sellers: [seller], **opts)
-    described_class.new(sellers:, **opts).resolve
+  def resolve(sellers: [seller], buyer_country: "US", **opts)
+    described_class.new(sellers:, buyer_country:, **opts).resolve
   end
 
   describe "#resolve" do
@@ -24,29 +24,41 @@ describe Checkout::PaymentMethodResolver do
 
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
-          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp])
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account])
       end
 
-      it "enables only the launched card method on Stripe, gating the rest behind later units" do
-        resolution = resolve
+      it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
+        resolution = resolve(buyer_country: "US")
 
-        expect(resolution.payment_method_types).to eq(["card"])
+        expect(resolution.payment_method_types).to eq(%w[card cashapp us_bank_account])
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+      end
+
+      it "drops US-locked methods (Cash App/ACH) for a non-US buyer, leaving card only" do
+        expect(resolve(buyer_country: "GB").payment_method_types).to eq(["card"])
+      end
+
+      it "drops US-locked methods when the buyer country is unknown, failing safe to card only" do
+        expect(resolve(buyer_country: nil).payment_method_types).to eq(["card"])
       end
 
       context "when the seller has the Stripe Link flag enabled" do
         before { Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller) }
 
-        it "launches Link alongside card, keeping card as the first Payment Element tab" do
+        it "launches Link alongside the US set, keeping card as the first Payment Element tab" do
           resolution = resolve
 
-          expect(resolution.payment_method_types).to eq(%w[card link])
+          expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
           expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
         end
 
-        it "still gates the redirect and delayed-notification methods behind later units" do
-          expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "cashapp")
+        it "keeps Link for a non-US buyer — the region gate only drops the US-locked methods" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+
+        it "still gates the remaining redirect methods behind later units" do
+          expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact")
         end
       end
 
@@ -96,6 +108,13 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.client_confirm_eligible?).to be(true)
         expect(resolution.fallback_reason).to be_nil
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
+        expect(resolution.payment_method_types).to eq(%w[card cashapp us_bank_account])
+      end
+
+      it "drops US-locked methods for a non-US buyer while keeping the connected-account scope" do
+        resolution = resolve(buyer_country: "GB")
+
+        expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
         expect(resolution.payment_method_types).to eq(["card"])
       end
 
@@ -120,7 +139,7 @@ describe Checkout::PaymentMethodResolver do
 
         expect(resolution.client_confirm_eligible?).to be(true)
         expect(resolution.stripe_connect_account_id).to be_nil
-        expect(resolution.payment_method_types).to eq(["card"])
+        expect(resolution.payment_method_types).to eq(%w[card cashapp us_bank_account])
       end
     end
 
@@ -150,6 +169,17 @@ describe Checkout::PaymentMethodResolver do
 
       expect(Rails.logger).to have_received(:info).with(
         a_string_matching(/client_confirm_eligible=true.*enabled=\["card"\].*launch_gated_out=.*stripe_connect_account_id=nil/)
+      )
+    end
+
+    it "logs the buyer country and the US-locked method launch for a US buyer" do
+      resolver = described_class.new(sellers: [seller], buyer_country: "US")
+      allow(Rails.logger).to receive(:info)
+
+      resolver.resolve
+
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_matching(/buyer_country="US".*enabled=\["card", "cashapp", "us_bank_account"\]/)
       )
     end
 

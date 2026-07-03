@@ -241,6 +241,35 @@ describe PayoutsHelper do
       expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(10000)
     end
 
+    describe "below-minimum payout notes" do
+      let(:user) { create(:user) }
+
+      it "folds the current below-minimum note into skipped_payout_date instead of payout_note" do
+        user.add_payout_note(content: "Your payout on June 12, 2026 was skipped because your balance of $59.72 was below the $100 minimum. You'll be paid out automatically once your balance reaches $100.")
+
+        data = self.payout_period_data(user)
+        expect(data[:status]).to eq("not_payable")
+        expect(data[:payout_note]).to be_nil
+        expect(data[:skipped_payout_date]).to eq("June 12, 2026")
+      end
+
+      it "folds the legacy below-minimum note into skipped_payout_date instead of payout_note" do
+        user.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account balance $59.72 USD was less than the minimum payout amount of $100 USD.")
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_note]).to be_nil
+        expect(data[:skipped_payout_date]).to eq("June 12, 2026")
+      end
+
+      it "keeps other payout notes verbatim" do
+        user.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_note]).to eq("Payout on June 12, 2026 was skipped because the account was under review.")
+        expect(data[:skipped_payout_date]).to be_nil
+      end
+    end
+
     it "shows payout data without payout given and no previous payouts" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)

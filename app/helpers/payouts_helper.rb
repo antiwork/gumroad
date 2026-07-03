@@ -5,6 +5,11 @@ module PayoutsHelper
   # Payments before this date don't have balances associated with them (pre rolling payouts)
   OLDEST_DISPLAYABLE_PAYOUT_PERIOD_END_DATE = Date.parse("2013-01-04")
 
+  # Matches both the current and the legacy below-minimum payout notes so the
+  # Payouts page can fold the skip date into its own notice instead of
+  # rendering the stored note verbatim.
+  BELOW_MINIMUM_PAYOUT_NOTE_REGEX = /\A(?:Your payout|Payout) on (?<date>\w+ \d{1,2}, \d{4}) was skipped because (?:your balance of .+ was below|the account balance .+ was less than the minimum payout amount)/
+
   def formatted_payout_date(payout_date)
     return "" if payout_date.nil?
     payout_date.strftime("%B #{payout_date.day.ordinalize}, %Y")
@@ -66,15 +71,25 @@ module PayoutsHelper
       payout_period_data.merge!(payout_method_details(user:))
     else
       payout_period_data[:status] = "not_payable"
+      payout_period_data[:balance_cents] = user.unpaid_balance_cents
     end
 
     last_payout_note = user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
-    payout_period_data[:payout_note] = \
+    payout_note = \
       if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
         last_payout_note.content.gsub("via Stripe ", "")
       else
         nil
       end
+
+    below_minimum_note_match = payout_note&.match(BELOW_MINIMUM_PAYOUT_NOTE_REGEX)
+    if payout_period_data[:status] == "not_payable" && below_minimum_note_match
+      # The below-minimum skip is folded into the not-payable notice (with the
+      # current balance) instead of rendering the stored note verbatim.
+      payout_period_data[:skipped_payout_date] = below_minimum_note_match[:date]
+      payout_note = nil
+    end
+    payout_period_data[:payout_note] = payout_note
 
     payout_period_data
   end

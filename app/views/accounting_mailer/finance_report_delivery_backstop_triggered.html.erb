@@ -1,0 +1,10 @@
+<%= header_section("#{@job_name} scheduled run never completed") %>
+<div>
+  <p>The daily backstop (<code>VerifyFinanceReportsDeliveryJob</code>) found no recorded completion for <code><%= @job_name %></code> after its scheduled fire time. This usually means the run was lost entirely (e.g. a Sidekiq process died mid-deploy), so no retries — and no retry-exhaustion alert — ever fired.</p>
+  <ul>
+    <li>Scheduled fire time: <%= @fire_time %></li>
+    <li>Last recorded completion: <%= @last_completed_at || "never" %></li>
+  </ul>
+  <p><strong>The job has been re-enqueued automatically</strong> with the period pinned to the missed run: <code><%= @rerun_command %></code> (safe — these reports are read-only aggregations / idempotent uploads).</p>
+  <p>No action needed unless this alert repeats for the same job tomorrow — that means the re-enqueued run also failed to complete and needs investigation.</p>
+</div>

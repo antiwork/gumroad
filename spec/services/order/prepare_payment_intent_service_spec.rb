@@ -277,7 +277,7 @@ describe Order::PreparePaymentIntentService, :vcr do
     context "the deferred intent method/currency contract" do
       before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test") }
 
-      it "creates the intent with the resolver's launched payment_method_types and currency" do
+      it "creates the intent with only card for a buyer whose country cannot be resolved (US-locked methods dropped)" do
         order, params = build_order
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -297,8 +297,31 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
       end
 
+      # The launched set must equal the Payment Element's for the buyer's country, so Cash App Pay and
+      # ACH Direct Debit ride the deferred intent only when the server-owned ip_country is the US.
+      it "launches Cash App Pay and ACH Direct Debit for a US buyer, matching the Payment Element's method set" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_us").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+      end
+
       # The presenter derives the Element's Link config from the same resolver output, so a
-      # Link-flagged seller's Payment Element and deferred intent both carry "link".
+      # Link-flagged seller's Payment Element and deferred intent both carry "link". Without a
+      # resolvable ip_country the US-locked methods stay dropped — Link is not region-gated.
       it "includes Link in the intent's payment_method_types when the seller has the Link flag" do
         Feature.activate_user(Checkout::PaymentMethodResolver::STRIPE_PAYMENT_ELEMENT_LINK_FEATURE_NAME, seller)
         order, params = build_order

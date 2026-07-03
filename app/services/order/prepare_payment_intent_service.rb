@@ -230,8 +230,18 @@ class Order::PreparePaymentIntentService
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
-        commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION }
+        commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
+        buyer_country: buyer_country_alpha2
       ).resolve
+    end
+
+    # The buyer's country as an alpha2, derived from server-owned GeoIP data (ip_country, a country
+    # name set at order creation) — never a client-supplied field. Must key on the same location basis
+    # the presenter used so the deferred intent's US-locked methods (ACH) match the Payment Element's;
+    # a divergence fails closed at Stripe (the payment_method_types-scoped ConfirmationToken is rejected)
+    # rather than charging with the wrong method list.
+    def buyer_country_alpha2
+      Compliance::Countries.find_by_name(purchases_to_charge.first.ip_country)&.alpha2
     end
 
     # Persist the mapping before responding so a webhook arriving before the browser returns can
