@@ -638,6 +638,24 @@ describe Charge::Disputable, :vcr do
             expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
             expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
           end
+
+          it "books the same canonical gross as the dispute debit when a refund lands after the dispute was formalized" do
+            dispute = create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            # A refund webhook arriving while the dispute is active creates the refund row
+            # but skips the balance decrement, so it was not part of the dispute debit.
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+            debited_gross_cents = @p.gross_amount_refundable_cents + 30
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(dispute.reload.state).to eq("won")
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(debited_gross_cents)
+            expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
+          end
         end
 
         describe "purchase involves an affiliate" do

@@ -3196,11 +3196,27 @@ class Purchase < ApplicationRecord
     end
 
     # Dispute-won counterpart: the re-credit mirrors the dispute debit, so it books the
-    # same canonical gross back with a positive sign.
+    # same canonical gross back with a positive sign. The refundable gross is re-read
+    # here, so any refund rows created after the dispute was formalized (webhook refunds
+    # create the row but skip the balance decrement while a dispute is active) are added
+    # back — otherwise the re-credit would book a smaller gross than the debit and the
+    # canonical rows would no longer cancel.
     def presentment_canonical_dispute_won_issued_amount
       return if purchase_presentment.blank?
 
-      FlowOfFunds::Amount.new(currency: Currency::USD, cents: gross_amount_refundable_cents)
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_debited_gross_cents)
+    end
+
+    # The canonical gross that the dispute debit booked: today's refundable gross plus
+    # the gross of refunds recorded after the dispute was formalized (the debit ran
+    # immediately after formalization, so those refunds were not part of it).
+    def presentment_dispute_debited_gross_cents
+      cents = gross_amount_refundable_cents
+      formalized_at = (charge.present? ? charge.dispute : dispute)&.formalized_at
+      if formalized_at.present?
+        cents += refunds.where("created_at > ?", formalized_at).sum("amount_cents + gumroad_tax_cents")
+      end
+      cents
     end
 
     # Selects the canonical override for a refund-or-chargeback balance debit. Returns
