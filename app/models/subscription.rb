@@ -1015,10 +1015,7 @@ class Subscription < ApplicationRecord
       return nil if reuse_original_discount_on_next_charge?
 
       product_codes = link.offer_codes.alive.renewal_eligible.includes(:ownership_products)
-      universal_codes = link.user.offer_codes.alive
-        .universal_with_matching_currency(link.price_currency_type)
-        .renewal_eligible
-        .includes(:ownership_products)
+      universal_codes = link.universal_offer_codes.renewal_eligible.includes(:ownership_products)
       original_tiered_offer_code = original_renewal_offer_code if original_renewal_offer_code&.tiered?
       candidates = (product_codes.to_a + universal_codes.to_a + [original_tiered_offer_code].compact).uniq
       return nil if candidates.empty?

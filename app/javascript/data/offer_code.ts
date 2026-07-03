@@ -75,6 +75,7 @@ type DiscountPayload = {
   code: string;
   discount: { type: "cents" | "percent"; value: number };
   selectedProductIds: string[];
+  excludedProductIds: string[];
   universal: boolean;
   currencyCode: CurrencyCode | null;
   maxQuantity: number | null;
@@ -111,6 +112,7 @@ const buildDiscountPayload = (payload: DiscountPayload) => ({
   amount_percentage: payload.discount.type === "percent" ? payload.discount.value : null,
   amount_cents: payload.discount.type === "cents" ? payload.discount.value : null,
   selected_product_ids: payload.universal ? null : payload.selectedProductIds,
+  excluded_product_ids: payload.universal ? payload.excludedProductIds : [],
   universal: payload.universal,
   max_purchase_count: payload.maxQuantity,
   currency_type: payload.currencyCode,

@@ -161,6 +161,13 @@ describe OfferCode do
         expect { create(:universal_offer_code, user: @product.user, amount_percentage: 99, amount_cents: nil) rescue nil }.to_not change { OfferCode.count }
       end
 
+      it "persists offer codes whose discount is only invalid for excluded products" do
+        cheap_product = create(:product, user: @product.user, price_cents: 100)
+
+        expect { create(:universal_offer_code, code: "oc6", user: @product.user, amount_percentage: 50, amount_cents: nil) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:universal_offer_code, code: "oc7", user: @product.user, amount_percentage: 50, amount_cents: nil, excluded_products: [cheap_product]) }.to change { OfferCode.count }.by(1)
+      end
+
       context "different currencies for products" do
         before do
           @euro_product = create(:product, user: @product.user, price_cents: 500, price_currency_type: "eur")
@@ -223,6 +230,21 @@ describe OfferCode do
           end
         end
       end
+    end
+  end
+
+  describe "excluded products validation" do
+    let(:excluded_product) { create(:product, user: @product.user) }
+
+    it "allows excluded products on universal offer codes" do
+      offer_code = build(:universal_offer_code, user: @product.user, excluded_products: [excluded_product])
+      expect(offer_code).to be_valid
+    end
+
+    it "disallows excluded products on product-specific offer codes" do
+      offer_code = build(:offer_code, user: @product.user, products: [@product], excluded_products: [excluded_product])
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Products can only be excluded from discounts that apply to all products.")
     end
   end
 
@@ -557,6 +579,26 @@ describe OfferCode do
         )
       end
     end
+
+    context "when the discount is universal with excluded products" do
+      let(:excluded_product) { create(:product, user: seller) }
+      let(:offer_code) { create(:universal_offer_code, user: seller, amount_cents: 100, excluded_products: [excluded_product]) }
+
+      it "returns the discount with the excluded product ids" do
+        expect(offer_code.discount).to eq(
+          {
+            type: "fixed",
+            cents: 100,
+            product_ids: nil,
+            excluded_product_ids: [excluded_product.external_id],
+            expires_at: nil,
+            minimum_quantity: nil,
+            duration_in_billing_cycles: nil,
+            minimum_amount_cents: nil,
+          }
+        )
+      end
+    end
   end
 
   describe "#is_amount_valid?" do
@@ -703,6 +745,16 @@ describe OfferCode do
       end
     end
 
+    context "when the offer code is universal with excluded products" do
+      let(:excluded_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
+      let(:offer_code) { create(:universal_offer_code, user: @product.user, amount_percentage: 10, amount_cents: nil, currency_type: nil, excluded_products: [excluded_product]) }
+
+      it "returns false for excluded products and true otherwise" do
+        expect(offer_code.applicable?(@product)).to eq(true)
+        expect(offer_code.applicable?(excluded_product)).to eq(false)
+      end
+    end
+
     context "when the offer code applies to specific products" do
       let(:other_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
       let(:offer_code) { create(:offer_code, products: [@product], amount_cents: 100, currency_type: "usd") }
@@ -714,6 +766,31 @@ describe OfferCode do
     end
   end
 
+  describe "#applicable_products" do
+    let(:seller) { create(:user) }
+    let!(:product1) { create(:product, user: seller) }
+    let!(:product2) { create(:product, user: seller) }
+
+    context "when the offer code is universal" do
+      let(:offer_code) { create(:universal_offer_code, user: seller) }
+
+      it "returns the seller's alive products minus the excluded products" do
+        expect(offer_code.applicable_products).to match_array([product1, product2])
+
+        offer_code.update!(excluded_products: [product2])
+        expect(offer_code.applicable_products).to match_array([product1])
+      end
+    end
+
+    context "when the offer code applies to specific products" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [product1]) }
+
+      it "returns the selected products" do
+        expect(offer_code.applicable_products).to match_array([product1])
+      end
+    end
+  end
+
   describe "reindexing products" do
     let(:creator) { create(:user) }
     let(:product1) { create(:product, user: creator) }
@@ -721,6 +798,13 @@ describe OfferCode do
     let!(:offer_code) { create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2]) }
 
     describe "after_save callback" do
+      it "reindexes products when they are excluded from a universal offer code" do
+        universal_offer_code = create(:universal_offer_code, user: creator)
+
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        universal_offer_code.update!(excluded_products: [product1])
+      end
+
       it "reindexes associated products when offer code is updated" do
         expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
         expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])

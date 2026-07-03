@@ -356,6 +356,53 @@ describe("Checkout discounts page", type: :system, js: true) do
       end
 
       context "when the offer code is universal" do
+        it "creates the offer code with excluded products" do
+          visit checkout_discounts_path
+
+          click_on "New discount"
+          fill_in "Name", with: "Almost everything"
+          check "All products"
+          select_combo_box_option search: "Product 2", from: "Excluded products"
+          fill_in "Percentage", with: "50"
+          click_on "Add discount"
+
+          expect(page).to have_alert(text: "Successfully created discount!")
+
+          within find(:table_row, { "Discount" => "Almost everything" }) do
+            expect(page).to have_text("50% off of all products except Product 2")
+          end
+
+          offer_code = OfferCode.last
+          expect(offer_code.universal).to eq(true)
+          expect(offer_code.products).to eq([])
+          expect(offer_code.excluded_products).to eq([product2])
+        end
+
+        it "updates the excluded products of the offer code" do
+          offer_code3.update!(excluded_products: [product1])
+
+          visit checkout_discounts_path
+
+          find(:table_row, { "Discount" => "Discount 3" }).click
+          within_modal "Discount 3" do
+            expect(page).to have_text("Excluded products")
+            expect(page).to have_text("Product 1")
+            click_on "Edit"
+          end
+
+          expect(page).to have_checked_field("All products")
+          select_combo_box_option search: "Product 2", from: "Excluded products"
+          click_on "Save changes"
+
+          expect(page).to have_alert(text: "Successfully updated discount!")
+
+          within find(:table_row, { "Discount" => "Discount 3" }) do
+            expect(page).to have_text("50% off of all products except Product 1, Product 2")
+          end
+
+          expect(offer_code3.reload.excluded_products).to match_array([product1, product2])
+        end
+
         it "allows the selection of a currency type" do
           create(:product, name: "Product 3", user: seller, price_currency_type: "gbp")
           visit checkout_discounts_path

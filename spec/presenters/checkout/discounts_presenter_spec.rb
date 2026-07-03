@@ -46,6 +46,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     excluded_products: [],
                      products: [
                        {
                          id: product1.external_id,
@@ -83,6 +84,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     excluded_products: [],
                      products: [
                        {
                          id: product2.external_id,
@@ -111,6 +113,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     excluded_products: [],
                      products: nil,
                    },
                  ],
@@ -174,6 +177,7 @@ describe Checkout::DiscountsPresenter do
             existing_customers_only: false,
             ownership_products: [],
             ownership_duration_tiers: nil,
+            excluded_products: [],
             products: [
               {
                 id: product1.external_id,
@@ -195,6 +199,26 @@ describe Checkout::DiscountsPresenter do
               },
             ],
           }
+        )
+      end
+
+      it "exposes the excluded products of universal offer codes" do
+        offer_code3.update!(excluded_products: [product2])
+
+        props = presenter.offer_code_props(offer_code3)
+        expect(props[:products]).to be_nil
+        expect(props[:excluded_products]).to eq(
+          [
+            {
+              id: product2.external_id,
+              name: "The Works of Edgar Gumstein",
+              archived: false,
+              currency_type: "usd",
+              url: product2.long_url,
+              is_tiered_membership: false,
+              is_recurring_billing: false,
+            },
+          ]
         )
       end
 

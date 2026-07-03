@@ -4089,6 +4089,24 @@ describe Subscription, :vcr do
       expect(auto.resolved_percent).to eq(50)
     end
 
+    it "ignores universal renewal discounts that exclude the product" do
+      tiered_code.mark_deleted!
+      universal_code = create(:universal_offer_code,
+                              user: seller,
+                              amount_cents: nil,
+                              amount_percentage: 0,
+                              currency_type: nil,
+                              ownership_duration_tiers: [
+                                { "months" => 0, "amount_percentage" => 0 },
+                                { "months" => 12, "amount_percentage" => 100 },
+                              ])
+
+      expect(subscription.auto_renewal_offer_code.offer_code).to eq(universal_code)
+
+      universal_code.update!(excluded_products: [product])
+      expect(Subscription.find(subscription.id).auto_renewal_offer_code).to be_nil
+    end
+
     it "discovers a standalone tiered renewal discount without existing_customers_only" do
       tiered_code.mark_deleted!
       standalone_code = create(:offer_code,

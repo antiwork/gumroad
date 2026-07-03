@@ -866,13 +866,16 @@ class Link < ApplicationRecord
   end
 
   def find_offer_code(code:)
-    offer_codes.alive.find_by_code(code) ||
-      user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_code(code)
+    offer_codes.alive.find_by_code(code) || universal_offer_codes.find_by_code(code)
   end
 
   def find_offer_code_by_external_id(external_id)
-    offer_codes.alive.find_by_external_id(external_id) ||
-      user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_external_id(external_id)
+    offer_codes.alive.find_by_external_id(external_id) || universal_offer_codes.find_by_external_id(external_id)
+  end
+
+  # Public: Universal offer codes that apply to this product: matching currency and not excluding it.
+  def universal_offer_codes
+    user.offer_codes.universal_with_matching_currency(price_currency_type).alive.not_excluding_product(self)
   end
 
   # Public: Find all alive offer codes associated with product and user in order of created at.
@@ -880,7 +883,7 @@ class Link < ApplicationRecord
   # Returns list of offer codes.
   def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false)
     product_codes = offer_codes.alive
-    universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
+    universal_codes = universal_offer_codes
 
     if query.present?
       product_codes = product_codes.search_by_name(query, reverse:)
@@ -1027,7 +1030,7 @@ class Link < ApplicationRecord
   end
 
   def has_offer_codes?
-    user.display_offer_code_field && (offer_codes.alive.present? || user.offer_codes.universal_with_matching_currency(price_currency_type).alive.present?)
+    user.display_offer_code_field && (offer_codes.alive.present? || universal_offer_codes.present?)
   end
 
   def statement_description

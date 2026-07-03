@@ -160,7 +160,11 @@ export function getDiscountedPrice(cart: CartState, item: CartItem): DiscountedP
     if (
       discount.minimum_amount_cents &&
       cart.items
-        .filter(({ product }) => !discount.product_ids || discount.product_ids.includes(product.id))
+        .filter(
+          ({ product }) =>
+            (!discount.product_ids || discount.product_ids.includes(product.id)) &&
+            !discount.excluded_product_ids?.includes(product.id),
+        )
         .reduce((acc, item) => acc + item.price * item.quantity, 0) < discount.minimum_amount_cents
     )
       continue;

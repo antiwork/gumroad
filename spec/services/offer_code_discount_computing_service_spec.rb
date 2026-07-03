@@ -79,6 +79,38 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(nil)
   end
 
+  it "applies offer code on the other products when the offer code is universal with excluded products" do
+    universal_offer_code.update!(excluded_products: [product2])
+    result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
+
+    expect(result[:products_data]).to eq(
+      product.unique_permalink => {
+        discount: {
+          type: "percent",
+          percents: universal_offer_code.amount,
+          product_ids: nil,
+          excluded_product_ids: [product2.external_id],
+          expires_at: nil,
+          minimum_quantity: nil,
+          duration_in_billing_cycles: nil,
+          minimum_amount_cents: nil,
+        },
+      },
+    )
+    expect(result[:error_code]).to eq(nil)
+  end
+
+  it "returns invalid error_code when the universal offer code excludes the only product" do
+    universal_offer_code.update!(excluded_products: [product])
+    result = OfferCodeDiscountComputingService.new(
+      universal_offer_code.code,
+      { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+    ).process
+
+    expect(result[:products_data]).to eq({})
+    expect(result[:error_code]).to eq(:invalid_offer)
+  end
+
   it "rejects product with quantity greater than the offer code limit when offer code is universal" do
     universal_offer_code.update_attribute(:max_purchase_count, 2)
     result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process

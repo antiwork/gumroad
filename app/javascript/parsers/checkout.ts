@@ -10,6 +10,7 @@ export type Discount =
 
 type DiscountConditions = {
   product_ids: string[] | null;
+  excluded_product_ids?: string[] | null;
   expires_at: string | null;
   minimum_quantity: number | null;
   duration_in_billing_cycles: 1 | null;

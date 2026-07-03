@@ -4246,6 +4246,45 @@ describe Link, :vcr do
         end
       end
     end
+
+    context "when the only universal offer code excludes the product" do
+      let!(:offer_code) { create(:universal_offer_code, user: product.user, excluded_products: [product]) }
+
+      before do
+        product.user.update!(display_offer_code_field: true)
+      end
+
+      it "returns false" do
+        expect(product.has_offer_codes?).to eq(false)
+      end
+    end
+  end
+
+  describe "#find_offer_code" do
+    let(:product) { create(:product) }
+    let(:other_product) { create(:product, user: product.user) }
+    let!(:universal_offer_code) { create(:universal_offer_code, user: product.user, code: "uni") }
+
+    it "returns the universal offer code unless it excludes the product" do
+      expect(product.find_offer_code(code: "uni")).to eq(universal_offer_code)
+      expect(other_product.find_offer_code(code: "uni")).to eq(universal_offer_code)
+
+      universal_offer_code.update!(excluded_products: [product])
+      expect(product.find_offer_code(code: "uni")).to be_nil
+      expect(other_product.find_offer_code(code: "uni")).to eq(universal_offer_code)
+    end
+  end
+
+  describe "#product_and_universal_offer_codes" do
+    let(:product) { create(:product) }
+    let(:other_product) { create(:product, user: product.user) }
+    let!(:product_offer_code) { create(:offer_code, user: product.user, products: [product], code: "prod") }
+    let!(:universal_offer_code) { create(:universal_offer_code, user: product.user, code: "uni", excluded_products: [other_product]) }
+
+    it "omits universal offer codes that exclude the product" do
+      expect(product.product_and_universal_offer_codes).to match_array([product_offer_code, universal_offer_code])
+      expect(other_product.product_and_universal_offer_codes).to eq([])
+    end
   end
 
   describe "#available_cross_sells" do

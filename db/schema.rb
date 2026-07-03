@@ -1375,6 +1375,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_03_000000) do
     t.index ["user_id"], name: "index_offer_codes_on_user_id"
   end
 
+  create_table "offer_codes_excluded_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "offer_code_id", null: false
+    t.bigint "product_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["offer_code_id", "product_id"], name: "index_offer_codes_excluded_products_on_code_and_product", unique: true
+    t.index ["product_id"], name: "index_offer_codes_excluded_products_on_product_id"
+  end
+
   create_table "offer_codes_ownership_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "offer_code_id", null: false
     t.bigint "product_id", null: false

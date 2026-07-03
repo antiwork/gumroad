@@ -89,7 +89,11 @@ class Purchase::CreateService < Purchase::BaseService
 
       if purchase.offer_code&.minimum_amount_cents.present?
         valid_items = params[:cart_items]
-        valid_items = valid_items.filter { purchase.offer_code.products.find_by(unique_permalink: _1[:permalink]).present? } unless purchase.offer_code.universal
+        valid_items = if purchase.offer_code.universal
+          valid_items.reject { purchase.offer_code.excluded_products.find_by(unique_permalink: _1[:permalink]).present? }
+        else
+          valid_items.filter { purchase.offer_code.products.find_by(unique_permalink: _1[:permalink]).present? }
+        end
         if valid_items.map { _1[:price_cents].to_i }.sum < purchase.offer_code.minimum_amount_cents
           raise Purchase::PurchaseInvalid, "Sorry, you have not met the offer code's minimum amount."
         end

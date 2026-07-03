@@ -43,6 +43,7 @@ class Checkout::DiscountsPresenter
       code: offer_code.code,
       discount: offer_code.amount_cents.present? ? { type: "cents", value: offer_code.amount_cents } : { type: "percent", value: offer_code.amount_percentage },
       products: offer_code.universal ? nil : offer_code.products.map { product_props_for(_1) },
+      excluded_products: offer_code.universal ? offer_code.excluded_products.map { product_props_for(_1) } : [],
       limit: offer_code.max_purchase_count,
       currency_type: offer_code.currency_type || Currency::USD,
       valid_at: offer_code.valid_at,

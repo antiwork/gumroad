@@ -20,6 +20,7 @@ class OfferCode < ApplicationRecord
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
+  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id"
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -39,6 +40,7 @@ class OfferCode < ApplicationRecord
   validate :validate_not_used_as_default_discount
   validate :validate_existing_customer_settings
   validate :validate_ownership_duration_tiers
+  validate :validate_excluded_products
 
 
   after_save :invalidate_product_cache
@@ -63,6 +65,9 @@ class OfferCode < ApplicationRecord
   }
   scope :universal, -> { where(universal: true) }
   scope :renewal_eligible, -> { where("existing_customers_only = ? OR JSON_LENGTH(ownership_duration_tiers) > 0", true) }
+  scope :not_excluding_product, ->(product) {
+    where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
+  }
 
   def is_valid_for_purchase?(purchase_quantity: 1)
     return true if max_purchase_count.nil?
@@ -178,7 +183,8 @@ class OfferCode < ApplicationRecord
 
   def applicable_products
     if universal?
-      currency_type.present? ? user.links.alive.where(price_currency_type: currency_type) : user.links.alive
+      scope = currency_type.present? ? user.links.alive.where(price_currency_type: currency_type) : user.links.alive
+      excluded_product_ids.any? ? scope.where.not(id: excluded_product_ids) : scope
     else
       products
     end
@@ -186,6 +192,7 @@ class OfferCode < ApplicationRecord
 
   def applicable?(link)
     if universal?
+      return false if excluded_products.include?(link)
       currency_type.present? ? link.price_currency_type == currency_type : true
     else
       products.include?(link)
@@ -197,7 +204,7 @@ class OfferCode < ApplicationRecord
   end
 
   def discount
-    (
+    json = (
       is_cents? ?
         { type: "fixed", cents: amount_cents } :
         { type: "percent", percents: amount_percentage }
@@ -210,6 +217,8 @@ class OfferCode < ApplicationRecord
         minimum_amount_cents:,
       }
     )
+    json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
+    json
   end
 
   def discount_for_display(buyer: nil, product: nil, fallback_purchase: nil)
@@ -371,7 +380,7 @@ class OfferCode < ApplicationRecord
     end
 
     def invalidate_product_cache
-      products.each(&:invalidate_cache)
+      (products + excluded_products).each(&:invalidate_cache)
     end
 
     def validate_cancellation_discount_uniqueness
@@ -402,7 +411,7 @@ class OfferCode < ApplicationRecord
       end
     end
 
-    def reindex_associated_products(products_to_reindex: applicable_products)
+    def reindex_associated_products(products_to_reindex: applicable_products + excluded_products)
       products_to_reindex.each do |product|
         product.enqueue_index_update_for(["offer_codes"])
       end
@@ -432,6 +441,14 @@ class OfferCode < ApplicationRecord
       if ownership_products.empty?
         errors.add(:base, "Pick at least one product the customer must already own.")
       end
+    end
+
+    def validate_excluded_products
+      return if deleted_at.present?
+      return if excluded_products.empty?
+      return if universal?
+
+      errors.add(:base, "Products can only be excluded from discounts that apply to all products.")
     end
 
     def validate_ownership_duration_tiers
