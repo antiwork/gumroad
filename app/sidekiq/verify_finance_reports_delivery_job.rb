@@ -26,6 +26,11 @@ class VerifyFinanceReportsDeliveryJob
   # while still checking every fire at least once — this job runs daily, so a miss is
   # seen within ~30 hours of the fire.
   LOOKBACK = 48.hours
+  # Set on the backstop's first ever run (which only records the baseline and checks
+  # nothing). Fires from before this moment predate completion tracking — the runs may
+  # well have completed without leaving a Redis key — so they are skipped instead of
+  # being replayed as false positives right after the first deploy.
+  ACTIVE_SINCE_REDIS_KEY = "finance_report_backstop_active_since"
 
   # Scheduler-fired jobs to verify, mapped to a builder for the re-run args pinned to the
   # period the missed fire was for. Fanned-out report jobs (Canada, VAT, fees, ...) are
@@ -47,6 +52,13 @@ class VerifyFinanceReportsDeliveryJob
 
     now = Time.current
 
+    active_since_raw = $redis.get(ACTIVE_SINCE_REDIS_KEY)
+    if active_since_raw.nil?
+      $redis.set(ACTIVE_SINCE_REDIS_KEY, now.to_i)
+      return
+    end
+    active_since = Time.zone.at(active_since_raw.to_i)
+
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
     schedule.each_value do |entry|
       class_name = entry["class"]
@@ -57,11 +69,12 @@ class VerifyFinanceReportsDeliveryJob
       # pin the parse to UTC explicitly so this doesn't drift with server TZ.
       fire_time = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC").previous_time(now - GRACE_PERIOD).to_t.utc
       next if fire_time < now - LOOKBACK
-
-      last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name)
-      next if last_completed_at && last_completed_at >= fire_time
+      next if fire_time < active_since
 
       args = args_builder.call(fire_time)
+      last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name, args)
+      next if last_completed_at && last_completed_at >= fire_time
+
       class_name.constantize.perform_async(*args)
       AccountingMailer.finance_report_delivery_backstop_triggered(
         class_name, args, fire_time, last_completed_at
