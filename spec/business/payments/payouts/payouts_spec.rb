@@ -437,6 +437,17 @@ describe Payouts do
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name, CanadianBankAccount.name])
     end
+
+    it "looks up bank accounts in chunks of holding-balance user ids" do
+      stub_const("Payouts::BANK_ACCOUNT_LOOKUP_BATCH_SIZE", 1)
+
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u1_2, u2_2], perform_async: true, bank_account_type: "AustralianBankAccount").and_call_original
+
+      expect(BankAccount).to receive(:alive).at_least(:twice).and_call_original
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
+    end
   end
 
   describe "create_payments_for_balances_up_to_date_for_users" do

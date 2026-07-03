@@ -6,6 +6,7 @@ class Payouts
   MIN_AMOUNT_CENTS = 100_00
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
+  BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -73,11 +74,20 @@ class Payouts
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
+    # Materialize the holding-balance user ids first, then look up bank accounts in
+    # chunks by user_id (indexed). The previous single statement joined
+    # users × balances × bank_accounts, and MySQL drove it from a full scan of
+    # bank_accounts (no index on `type`), repeatedly blowing the 5-minute statement
+    # cap at the scheduled slot and aborting entire payout batches. Splitting the
+    # query leaves no join for the optimizer to get wrong, and each piece stays far
+    # under the statement cap.
+    holding_balance_user_ids = User.holding_balance.ids
+
     bank_account_types.each do |bank_account_type|
-      users = User.holding_balance
-                  .joins("inner join bank_accounts on bank_accounts.user_id = users.id")
-                  .where("bank_accounts.type = ?", bank_account_type)
-                  .where("bank_accounts.deleted_at is null")
+      user_ids = holding_balance_user_ids.each_slice(BANK_ACCOUNT_LOOKUP_BATCH_SIZE).flat_map do |user_ids_batch|
+        BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
+      end
+      users = User.where(id: user_ids)
       self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
     end
   end
