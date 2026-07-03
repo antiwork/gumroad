@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Sell your stuff. See what sticks.</strong>
+  <strong>See what sticks.</strong>
 </p>
 
 <p align="center">
