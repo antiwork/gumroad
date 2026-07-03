@@ -636,7 +636,10 @@ describe Charge::Disputable, :vcr do
             @e.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, 135)
           end
 
-          it "books the dispute-won re-credit in canonical USD, not the buyer currency" do
+          it "books the dispute-won re-credit from the snapshotted debit gross in canonical USD, not the buyer currency" do
+            # The dispute debit snapshots the canonical gross right before it books.
+            @p.update!(presentment_dispute_debited_gross_cents: @p.gross_amount_refundable_cents)
+
             Purchase.handle_charge_event(@e)
             @p.reload
 
@@ -665,24 +668,24 @@ describe Charge::Disputable, :vcr do
             expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
           end
 
-          it "books the same canonical gross as the dispute debit when a refund lands after the dispute was formalized" do
-            # Dispute debited before the snapshot existed: reconstruct from the
-            # formalization timestamp.
+          it "mirrors the processor flow of funds when the dispute predates the debit snapshot" do
+            # Disputes debited before the snapshot existed had their debit booked straight
+            # from the processor flow of funds, so the re-credit must mirror the same flow
+            # of funds — reconstructing a canonical amount could diverge from what was
+            # actually debited (e.g. when a refund landed after formalization but before
+            # the debit read the refundable gross).
             dispute = create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
-            # A refund webhook arriving while the dispute is active creates the refund row
-            # but skips the balance decrement, so it was not part of the dispute debit.
             create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
             @p.update!(stripe_partially_refunded: true)
-            debited_gross_cents = @p.gross_amount_refundable_cents + 30
+            expect(@p.presentment_dispute_debited_gross_cents).to be_nil
 
             Purchase.handle_charge_event(@e)
             @p.reload
 
             expect(dispute.reload.state).to eq("won")
             balance_transaction = Credit.last.balance_transaction
-            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
-            expect(balance_transaction.issued_amount_gross_cents).to eq(debited_gross_cents)
-            expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::CAD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
           end
         end
 

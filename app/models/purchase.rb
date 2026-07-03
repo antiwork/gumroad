@@ -3207,26 +3207,16 @@ class Purchase < ApplicationRecord
     # snapshotted when the debit was booked, so refunds recorded between the debit and
     # the win (webhook refunds create the row but skip the balance decrement while a
     # dispute is active) cannot make the re-credit diverge from the debit.
+    #
+    # Disputes debited before the snapshot existed get no override: their debit was
+    # booked straight from the processor flow of funds (in the buyer's currency), so the
+    # re-credit mirrors the same flow of funds and returns exactly what was taken.
+    # Reconstructing a canonical amount here could only diverge from that debit.
     def presentment_canonical_dispute_won_issued_amount
       return if purchase_presentment.blank?
+      return if presentment_dispute_debited_gross_cents.blank?
 
-      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_won_gross_cents)
-    end
-
-    # The canonical gross the dispute debit booked. The snapshot taken at debit time is
-    # the source of truth. Disputes debited before the snapshot existed fall back to
-    # reconstructing it: today's refundable gross plus refunds recorded after the dispute
-    # was formalized (the debit ran right after formalization, so those refunds were not
-    # part of it).
-    def presentment_dispute_won_gross_cents
-      return presentment_dispute_debited_gross_cents if presentment_dispute_debited_gross_cents.present?
-
-      cents = gross_amount_refundable_cents
-      formalized_at = (charge.present? ? charge.dispute : dispute)&.formalized_at
-      if formalized_at.present?
-        cents += refunds.where("created_at > ?", formalized_at).sum("amount_cents + gumroad_tax_cents")
-      end
-      cents
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_debited_gross_cents)
     end
 
     # Records, at dispute-debit time, the canonical gross the debit is about to book.
