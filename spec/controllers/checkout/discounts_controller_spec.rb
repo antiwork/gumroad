@@ -508,6 +508,27 @@ describe Checkout::DiscountsController do
       expect(offer_code.excluded_products).to eq([])
     end
 
+    it "preserves the excluded products when a partial update omits them" do
+      excluded_product = create(:product, user: seller)
+      offer_code.update!(universal: true, products: [], excluded_products: [excluded_product])
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Renamed discount",
+        amount_cents: 100,
+        currency_type: "usd",
+        selected_product_ids: [],
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      offer_code.reload
+      expect(offer_code.name).to eq("Renamed discount")
+      expect(offer_code.universal).to eq(true)
+      expect(offer_code.excluded_products).to eq([excluded_product])
+    end
+
     it "clears the excluded products when the offer code is no longer universal" do
       excluded_product = create(:product, user: seller)
       subject_product = create(:product, user: seller)

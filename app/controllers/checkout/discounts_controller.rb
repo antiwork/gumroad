@@ -85,7 +85,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       **update_params,
       products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]),
       ownership_products: current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids]),
-      excluded_products:
+      excluded_products: excluded_products(offer_code)
     )
       pagination, offer_codes = fetch_offer_codes
       presenter = Checkout::DiscountsPresenter.new(pundit_user:)
@@ -117,8 +117,10 @@ class Checkout::DiscountsController < Sellers::BaseController
       )
     end
 
-    def excluded_products
-      return Link.none unless ActiveModel::Type::Boolean.new.cast(offer_code_params[:universal])
+    def excluded_products(offer_code = nil)
+      universal = params.key?(:universal) ? ActiveModel::Type::Boolean.new.cast(offer_code_params[:universal]) : offer_code&.universal?
+      return Link.none unless universal
+      return offer_code.excluded_products if offer_code && !params.key?(:excluded_product_ids)
 
       current_seller.products.by_external_ids(offer_code_params[:excluded_product_ids])
     end
