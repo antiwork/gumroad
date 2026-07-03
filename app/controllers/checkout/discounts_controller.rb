@@ -56,8 +56,8 @@ class Checkout::DiscountsController < Sellers::BaseController
 
     parse_date_times
     offer_code = current_seller.offer_codes.build(
-      products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]),
-      ownership_products: current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids]),
+      products: selected_products,
+      ownership_products:,
       excluded_products:,
       **offer_code_params.except(:selected_product_ids, :ownership_product_ids, :excluded_product_ids)
     )
@@ -83,8 +83,8 @@ class Checkout::DiscountsController < Sellers::BaseController
 
     if offer_code.update(
       **update_params,
-      products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]),
-      ownership_products: current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids]),
+      products: selected_products(offer_code),
+      ownership_products: ownership_products(offer_code),
       excluded_products: excluded_products(offer_code)
     )
       pagination, offer_codes = fetch_offer_codes
@@ -115,6 +115,25 @@ class Checkout::DiscountsController < Sellers::BaseController
         selected_product_ids: [], ownership_product_ids: [], excluded_product_ids: [],
         ownership_duration_tiers: [[:months, :amount_percentage]]
       )
+    end
+
+    # Each of these resolves the products for one many-to-many association from the
+    # submitted *_ids. On update, a request may omit a key entirely (e.g. a client
+    # patching only the name): assigning `by_external_ids(nil)` would resolve to an
+    # empty set and silently wipe the saved rows, so when the key is absent we keep
+    # whatever is already persisted. The dashboard form always sends every key, so
+    # this only guards partial or programmatic updates. On create there is no record
+    # to fall back to, so the id list (possibly empty) is always used.
+    def selected_products(offer_code = nil)
+      return offer_code.products if offer_code && !params.key?(:selected_product_ids)
+
+      current_seller.products.by_external_ids(offer_code_params[:selected_product_ids])
+    end
+
+    def ownership_products(offer_code = nil)
+      return offer_code.ownership_products if offer_code && !params.key?(:ownership_product_ids)
+
+      current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids])
     end
 
     def excluded_products(offer_code = nil)

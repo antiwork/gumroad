@@ -529,6 +529,55 @@ describe Checkout::DiscountsController do
       expect(offer_code.excluded_products).to eq([excluded_product])
     end
 
+    it "preserves the selected products when a partial update omits them" do
+      subject_product = create(:product, user: seller)
+      offer_code.update!(universal: false, products: [subject_product])
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Renamed discount",
+        amount_cents: 100,
+        currency_type: "usd",
+        universal: false,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      offer_code.reload
+      expect(offer_code.name).to eq("Renamed discount")
+      expect(offer_code.universal).to eq(false)
+      expect(offer_code.products).to eq([subject_product])
+    end
+
+    it "preserves the ownership products when a partial update omits them" do
+      owned_product = create(:product, user: seller)
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(
+        products: [subject_product],
+        ownership_products: [owned_product],
+        existing_customers_only: true,
+        amount_cents: nil,
+        amount_percentage: 25,
+        duration_in_billing_cycles: nil,
+      )
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Renamed discount",
+        amount_percentage: 25,
+        existing_customers_only: true,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      offer_code.reload
+      expect(offer_code.name).to eq("Renamed discount")
+      expect(offer_code.existing_customers_only?).to eq(true)
+      expect(offer_code.ownership_products).to eq([owned_product])
+    end
+
     it "keeps exclusions for deleted products when their ids are resubmitted" do
       excluded_product = create(:product, user: seller)
       offer_code.update!(universal: true, products: [], excluded_products: [excluded_product])
