@@ -58,7 +58,15 @@ module Purchase::DisputeWinCredits
   end
 
   def create_credit_for_dispute_won!(flow_of_funds)
-    unless stripe_partially_refunded?
+    if presentment_dispute_debited_seller_cents.present?
+      # Buyer-presentment purchases snapshot the split the dispute debit actually booked.
+      # Recomputing here from the refund state can diverge: a processor refund webhook
+      # arriving while the dispute is active creates a refund row (no balance decrement)
+      # and shrinks amount_refundable_cents, so the win would credit a different
+      # seller/affiliate split than the loss debited. Reuse the debited split instead.
+      seller_disputed_cents = presentment_dispute_debited_seller_cents
+      affiliate_disputed_cents = presentment_dispute_debited_affiliate_cents.to_i
+    elsif !stripe_partially_refunded?
       # Short circuit for full refund, or dispute
       seller_disputed_cents = payment_cents - affiliate_credit_cents
       affiliate_disputed_cents = affiliate_credit_cents

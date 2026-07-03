@@ -74,6 +74,12 @@ class Purchase < ApplicationRecord
   # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
   # exactly the same amount, even when refunds land between the debit and the win.
   attr_json_data_accessor :presentment_dispute_debited_gross_cents
+  # Buyer-presentment purchases only: the seller and affiliate portions the dispute-loss
+  # balance debit actually booked. Snapshotted with the gross so the dispute-won
+  # re-credit returns the exact split that was taken, instead of recomputing it from a
+  # refund state that may have changed while the dispute was active.
+  attr_json_data_accessor :presentment_dispute_debited_seller_cents
+  attr_json_data_accessor :presentment_dispute_debited_affiliate_cents
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -2177,6 +2183,7 @@ class Purchase < ApplicationRecord
       end
     end
 
+    snapshot_presentment_dispute_debited_split!(seller_cents: seller_refund_cents, affiliate_cents: affiliate_refund_cents) if dispute.present?
     process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund:, dispute:, refund_cents: affiliate_refund_cents, fee_cents: affiliate_refund_fee_cents)
     process_refund_or_chargeback_for_purchase_balance(flow_of_funds, refund:, dispute:, refund_cents: seller_refund_cents)
   end
@@ -3226,6 +3233,20 @@ class Purchase < ApplicationRecord
       return if presentment_dispute_debited_gross_cents.present?
 
       self.presentment_dispute_debited_gross_cents = gross_amount_refundable_cents
+      save!
+    end
+
+    # Records, at dispute-debit time, the seller and affiliate portions the debit booked.
+    # The dispute-won path recomputes the split from the refund state at win time, and
+    # refunds recorded while the dispute is active (webhook refunds create the row but
+    # skip the balance decrement) shift that state — so the win must reuse the debited
+    # split, not recompute it. Idempotent: a webhook re-fire keeps the first snapshot.
+    def snapshot_presentment_dispute_debited_split!(seller_cents:, affiliate_cents:)
+      return if purchase_presentment.blank?
+      return if presentment_dispute_debited_seller_cents.present?
+
+      self.presentment_dispute_debited_seller_cents = seller_cents
+      self.presentment_dispute_debited_affiliate_cents = affiliate_cents
       save!
     end
 
