@@ -14,11 +14,23 @@ class JapanBankAccount < BankAccount
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{4,8}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
-  KATAKANA_NAME_FORMAT_REGEX = /\A[\p{Katakana}ー・\uFF65-\uFF9F\u3000]+\z/
+  # Zengin-format account names allow katakana, digits, and the symbols ( ) . - /
+  # (plus space). Japanese corporate accounts are registered with the entity-type
+  # abbreviation and a parenthesis — e.g. カ)～ (株式会社), ド)～ (合同会社) — so the
+  # symbol set is required, not optional. Full-width variants are normalized to the
+  # half-width forms Zengin/Stripe expect (see stripped_fields transform below).
+  ZENGIN_SYMBOLS_AND_DIGITS = "0-9().\\-\\/"
+  private_constant :ZENGIN_SYMBOLS_AND_DIGITS
+
+  KATAKANA_NAME_FORMAT_REGEX = /\A(?=.*[\p{Katakana}\uFF66-\uFF9F])[\p{Katakana}ー・\uFF65-\uFF9F\u3000#{ZENGIN_SYMBOLS_AND_DIGITS}]+\z/
   private_constant :KATAKANA_NAME_FORMAT_REGEX
 
-  LATIN_NAME_FORMAT_REGEX = /\A[A-Za-z ]+\z/
+  LATIN_NAME_FORMAT_REGEX = /\A(?=.*[A-Za-z])[A-Za-z #{ZENGIN_SYMBOLS_AND_DIGITS}]+\z/
   private_constant :LATIN_NAME_FORMAT_REGEX
+
+  # Full-width digits/symbols → the half-width equivalents Zengin uses.
+  FULL_WIDTH_TO_HALF_WIDTH = ["０-９（）．－／", "0-9().-/"].freeze
+  private_constant :FULL_WIDTH_TO_HALF_WIDTH
 
   alias_attribute :bank_code, :bank_number
 
@@ -26,8 +38,15 @@ class JapanBankAccount < BankAccount
                   remove_duplicate_spaces: false,
                   nilify_blanks: false,
                   transform: ->(value) {
-                    full_width = value.tr(" ", "　")
-                    KATAKANA_NAME_FORMAT_REGEX.match?(full_width) ? full_width : value
+                    normalized = value.tr(*FULL_WIDTH_TO_HALF_WIDTH)
+                    full_width = normalized.tr(" ", "　")
+                    if KATAKANA_NAME_FORMAT_REGEX.match?(full_width)
+                      full_width
+                    elsif LATIN_NAME_FORMAT_REGEX.match?(normalized)
+                      normalized
+                    else
+                      value
+                    end
                   }
 
   validate :validate_bank_code

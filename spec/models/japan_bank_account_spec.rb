@@ -110,6 +110,36 @@ describe JapanBankAccount do
       expect(account.account_holder_full_name).to eq("Masashi Haruna")
     end
 
+    it "accepts Zengin corporate-abbreviation names with parentheses (the incident case)" do
+      expect(build(:japan_bank_account, account_holder_full_name: "ド)エイチケー")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "カ)テスト")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "エイチケー(ド")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "ﾄﾞ)ｴｲﾁｹｰ")).to be_valid
+    end
+
+    it "accepts Zengin digits and symbols alongside katakana or Latin letters" do
+      expect(build(:japan_bank_account, account_holder_full_name: "テスト2ゴウ")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "シャ)テスト.コー-1/2")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "HK LLC.")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "Test-Co / 2")).to be_valid
+    end
+
+    it "normalizes full-width parentheses, digits, and symbols to the half-width forms Zengin uses" do
+      account = build(:japan_bank_account, account_holder_full_name: "ド）エイチケー")
+      expect(account).to be_valid
+      expect(account.account_holder_full_name).to eq("ド)エイチケー")
+
+      account = build(:japan_bank_account, account_holder_full_name: "テスト２ゴウ")
+      expect(account).to be_valid
+      expect(account.account_holder_full_name).to eq("テスト2ゴウ")
+    end
+
+    it "rejects names that are only digits or symbols with no katakana or Latin letters" do
+      expect(build(:japan_bank_account, account_holder_full_name: ")")).to_not be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "123")).to_not be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "().-/")).to_not be_valid
+    end
+
     it "rejects scripts outside the two allowed variants" do
       expect(build(:japan_bank_account, account_holder_full_name: "Haruna マサシ")).to_not be_valid
       expect(build(:japan_bank_account, account_holder_full_name: "春奈 正志")).to_not be_valid
