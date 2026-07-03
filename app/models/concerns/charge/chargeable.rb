@@ -64,6 +64,17 @@ module Charge::Chargeable
     is_a?(Charge) ? purchases.successful.sum(&:total_transaction_cents) : total_transaction_cents
   end
 
+  # Full refundable amount in the buyer-presentment currency, or nil for canonical
+  # charges. Stripe denominates charge.refund.updated amounts in the charge currency,
+  # so buyer-presentment refunds must be compared against this, not canonical USD cents.
+  def presentment_refundable_amount_cents
+    if is_a?(Charge)
+      charge_presentment&.presentment_total_cents
+    else
+      purchase_presentment&.presentment_total_cents
+    end
+  end
+
   def purchaser
     is_a?(Charge) ? order.purchaser : super
   end

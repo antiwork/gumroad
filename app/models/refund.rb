@@ -25,6 +25,13 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
   attr_json_data_accessor :retained_fee_cents
+  attr_json_data_accessor :presentment_currency
+  attr_json_data_accessor :presentment_amount_cents
+  attr_json_data_accessor :presentment_price_cents
+  attr_json_data_accessor :presentment_tip_cents
+  attr_json_data_accessor :presentment_seller_tax_cents
+  attr_json_data_accessor :presentment_gumroad_tax_cents
+  attr_json_data_accessor :presentment_shipping_cents
 
   private
     def assign_product

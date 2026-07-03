@@ -116,9 +116,16 @@ class PurchasesController < ApplicationController
 
   def subscribe
     (@purchase = Purchase.find_by_external_id(params[:id])) || e404
+
+    # GET renders a confirmation page; the state change only happens on POST.
+    # Mail clients and security scanners prefetch GET links in emails, which used to
+    # silently re-opt buyers back into a creator's emails after they unsubscribed.
+    return unless request.post?
+
     Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
       purchase.update!(can_contact: true)
     end
+    @subscribed = true
   end
 
   def charge_preorder

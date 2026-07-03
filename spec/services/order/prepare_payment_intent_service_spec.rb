@@ -148,23 +148,71 @@ describe Order::PreparePaymentIntentService, :vcr do
     end
 
     # #prepare is directly callable and only re-checks multi-seller; the charge path must re-check the
-    # rest of the client-confirm cart shape server-side so a recurring/commission/connect cart the
-    # presenter never mounts can't slip through and hand Stripe a nil payment_method_types.
-    context "with a connected-account seller the charge path deems client-confirm ineligible" do
-      before { create(:merchant_account_stripe_connect, user: seller) }
+    # rest of the client-confirm cart shape server-side so a cart the presenter never mounts can't
+    # slip through and hand Stripe a nil payment_method_types.
+    context "with a cart the charge path deems client-confirm ineligible" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+
+      before do
+        create(:merchant_account_stripe_connect, user: seller).update_column(:charge_processor_merchant_id, nil)
+      end
 
       it "blocks pre-charge with a logged reason instead of building an intent with no method list" do
         order, params = build_order
-        allow(Rails.logger).to receive(:error).and_call_original
 
         expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
         expect(StripeDeferredPaymentIntent).not_to receive(:create)
 
         responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
 
-        expect(Rails.logger).to have_received(:error).with(/Client-confirm ineligible cart blocked for order #{order.id}/)
         expect(responses["unique-id-0"][:success]).to eq(false)
-        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
+    context "with a direct-charge (Stripe Connect) seller" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      it "retrieves the ConfirmationToken and creates the intent on the connected account" do
+        order, params = build_order
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        expect(Stripe::ConfirmationToken).to receive(:retrieve)
+          .with("ctoken_test", { stripe_account: connect_account.charge_processor_merchant_id })
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(create_args[:merchant_account]).to eq(connect_account)
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(true)
+        expect(response[:requires_payment_confirmation]).to eq(true)
+        expect(response[:order][:stripe_connect_account_id]).to eq(connect_account.charge_processor_merchant_id)
+      end
+
+      it "fails every purchase when the resolved merchant account rejects the cart instead of charging anyway" do
+        order, params = build_order
+        affiliate = create(:direct_affiliate, seller:)
+        order.purchases.each { _1.update!(affiliate:) }
+        connect_account.update!(country: "BR")
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
         expect(order.charges).to be_empty
         expect(order.purchases.first.reload).to be_failed
       end

@@ -1370,16 +1370,24 @@ describe PurchasesController, :vcr do
     describe "subscribe" do
       it "404s on bad subscribe" do
         expect { get :subscribe, params: { id: "notreal" } }.to raise_error(ActionController::RoutingError)
+        expect { post :subscribe, params: { id: "notreal" } }.to raise_error(ActionController::RoutingError)
+      end
+
+      it "does not change can_contact on GET and renders a confirmation page" do
+        purchase = create(:purchase, can_contact: false)
+        get :subscribe, params: { id: purchase.external_id }
+        expect(response).to be_successful
+        expect(purchase.reload.can_contact).to eq false
       end
 
       it "only sets can_contact to true" do
         purchase = create(:purchase, can_contact: false)
-        get :subscribe, params: { id: purchase.external_id }
+        post :subscribe, params: { id: purchase.external_id }
         expect(response).to be_successful
         expect(purchase.reload.can_contact).to eq true
 
         purchase2 = create(:purchase, can_contact: true)
-        get :subscribe, params: { id: purchase2.external_id }
+        post :subscribe, params: { id: purchase2.external_id }
         expect(response).to be_successful
         expect(purchase2.reload.can_contact).to eq true
       end
@@ -1387,7 +1395,7 @@ describe PurchasesController, :vcr do
       it "sets can_contact to true for all purchases" do
         purchase = create(:purchase, can_contact: true)
         purchase2 = create(:purchase, seller_id: purchase.seller.id, link: create(:product, user: purchase.seller), email: purchase.email, can_contact: true)
-        get :subscribe, params: { id: purchase.external_id }
+        post :subscribe, params: { id: purchase.external_id }
         expect(response).to be_successful
         expect(purchase.reload.can_contact).to eq true
         expect(purchase2.reload.can_contact).to eq true

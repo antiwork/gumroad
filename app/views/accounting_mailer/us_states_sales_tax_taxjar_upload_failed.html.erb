@@ -1,0 +1,10 @@
+<%= header_section("US States Sales Tax daily upload failed - #{@date}") %>
+<div>
+  <p><code>UploadUsStatesSalesTaxToTaxjarJob</code> exhausted Sidekiq retries and did not upload the day's order transactions to TaxJar.</p>
+  <ul>
+    <li>Date: <%= @date %></li>
+    <li>Error: <%= @error_class %>: <%= @error_message %></li>
+  </ul>
+  <p>Re-run the day once TaxJar is reachable: <code>UploadUsStatesSalesTaxToTaxjarJob.perform_async("<%= @date %>")</code> (idempotent — already-imported orders are skipped).</p>
+  <p>See Sentry and the Sidekiq dead set for more details.</p>
+</div>

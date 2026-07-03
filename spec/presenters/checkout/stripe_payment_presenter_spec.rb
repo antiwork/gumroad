@@ -37,7 +37,7 @@ describe Checkout::StripePaymentPresenter do
     { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, elements_options: nil }
   end
 
-  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: ["card"])
+  def payment_element_client_confirm_props(stripe_link_enabled: false, payment_method_types: ["card"], stripe_connect_account_id: nil)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -47,6 +47,7 @@ describe Checkout::StripePaymentPresenter do
         currency: "usd",
         payment_method_types:,
         stripe_link_enabled:,
+        stripe_connect_account_id:,
       },
     }
   end
@@ -409,14 +410,15 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
     end
 
-    it "keeps server-confirm Payment Element for a direct-charge seller even with both flags" do
+    it "selects the confirm integration for a direct-charge seller with Elements scoped to the connected account" do
       seller = create(:user, check_merchant_account_is_linked: true)
       product = create(:product, user: seller, price_cents: 1234)
-      create(:merchant_account_stripe_connect, user: seller)
+      connect_account = create(:merchant_account_stripe_connect, user: seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
 
-      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props(stripe_connect_account_id: connect_account.charge_processor_merchant_id))
     end
 
     it "enables Link in client-confirm mode when the seller has the Link flag" do

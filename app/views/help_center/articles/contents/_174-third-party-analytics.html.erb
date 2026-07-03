@@ -31,6 +31,7 @@
     <li>purchase: A purchase. </li>
   </ul>
   <p>The three pageviews are for the same actions and are titled accordingly.</p>
+  <p>Your Google Analytics, Meta Pixel, and TikTok Pixel also record a page view when someone visits your Gumroad profile page (both the standard profile and a custom HTML profile). A profile has no checkout, so only the page view fires there, not the add to cart or purchase events.</p>
   <p>Once the setup is complete, the data usually appears quickly on GA’s Realtime dashboard even if the "Data Streams" table suggests that no data has been received in the last 48 hours.</p>
   <p>You’ll see the Google Analytics conversion events in the Events tab of the Reports page.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b6a1211660f0912d4da/file-Rai50RULAo.png" %></figure>
@@ -129,11 +130,11 @@
   <p><b>Troubleshoot</b></p>
   <p>If you don't see events going through, try turning off your browser extensions or ad-blockers as they can block TikTok Pixel requests. You can also use the <a href="https://chromewebstore.google.com/detail/tiktok-pixel-helper/aelgobmabdmlfmiblddjfnjodalhidnn" target="_blank">TikTok Pixel Helper Chrome extension</a> to verify your setup.</p>
   <h3 id="Snippets-j1elc">Snippets</h3>
-  <p>You can add snippets provided by services like Google, Facebook, Twitter, and others to track conversions, set up retargeting, and measure ad performance. This code will be triggered based on your Location selection - on a product page, after a purchase is completed, or both.</p>
+  <p>You can add snippets provided by services like Google, Facebook, Twitter, and others to track conversions, set up retargeting, and measure ad performance. This code will be triggered based on your Location selection - on a product page, after a purchase is completed, on your Gumroad profile page, or a combination of these.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816ecd7f8c2575e354488b/file-TUF4ntqLfY.png" %></figure>
   <p>These third-party services will provide you with a block of code to insert between &lt;head&gt; and &lt;/head&gt; on your website. Copy that block of code and paste it into the code box. Additionally, you can include your own custom JavaScript in a snippet. For example, the following snippet will log “Hello Gumroad!” to the browser console:</p>
   <pre>&lt;script&gt;console.log(“Hello Gumroad!”);&lt;/script&gt; </pre>
-  <p>The ‘Location’ field controls where the snippet runs. If you select ‘Product page’, the snippet will run on the product page. If you select ‘Receipt’, it will run after a successful purchase. If you select ‘All pages’, it will run on the product page, and after a successful purchase of the product.</p>
+  <p>The ‘Location’ field controls where the snippet runs. If you select ‘Product page’, the snippet will run on the product page. If you select ‘Receipt’, it will run after a successful purchase. If you select ‘All pages’, it will run on the product page, after a successful purchase of the product, and on your Gumroad profile page (both the standard profile and a custom HTML profile).</p>
   <p>The 'Products' field determines the specific products to which the snippet is applicable. If ‘All Products’ is selected, the snippet will apply to all of your products.</p>
   <p>Some services allow you to include the sale's value, currency, and/or order number. We can enter those values for you if you add $VALUE, $CURRENCY, and $ORDER in place of the set price, currency, and order number, respectively. </p>
   <p>For example, if the URL reads:</p>

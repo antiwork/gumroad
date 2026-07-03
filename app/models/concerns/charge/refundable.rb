@@ -18,7 +18,10 @@ module Charge::Refundable
       stripe_charge_id = event.charge_id
       refundable = Charge.find_by(processor_transaction_id: stripe_charge_id) || Purchase.find_by(stripe_transaction_id: stripe_charge_id)
       return unless refundable.present?
-      return unless event.extras[:refunded_amount_cents] == refundable.refundable_amount_cents
+      # Stripe reports refunded_amount_cents in the charge currency, which for
+      # buyer-presentment charges is the buyer's currency, not canonical USD.
+      expected_refunded_amount_cents = refundable.presentment_refundable_amount_cents || refundable.refundable_amount_cents
+      return unless event.extras[:refunded_amount_cents] == expected_refunded_amount_cents
 
       charge_refund = StripeChargeProcessor.new.get_refund(stripe_refund_id, merchant_account: refundable.merchant_account)
       refundable.charged_purchases.each do |purchase|
