@@ -956,7 +956,7 @@ const BankAccountSection = ({
     // are accepted here and normalized server-side (JapanBankAccount).
     const isKatakanaOnly =
       /^(?=.*[\p{Script=Katakana}])[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000 0-9().\-/０-９（）．－／]+$/u.test(name);
-    const isLatinOnly = /^(?=.*[A-Za-z])[A-Za-z 0-9().\-/]+$/u.test(name);
+    const isLatinOnly = /^(?=.*[A-Za-z])[A-Za-z 0-9().\-/０-９（）．－／]+$/u.test(name);
     if (isKatakanaOnly || isLatinOnly) return null;
     return "Use either katakana or Latin letters — not both.";
   })();
