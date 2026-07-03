@@ -65,9 +65,9 @@ class Payouts
   end
 
   def self.add_below_minimum_payout_note(user, payout_date, account_balance)
-    current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
-    minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
-    user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.")
+    current_balance = user.formatted_dollar_amount(account_balance)
+    minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents)
+    user.add_payout_note(content: "Your payout on #{payout_date} was skipped because your balance of #{current_balance} was below the #{minimum_balance} minimum. You'll be paid out automatically once your balance reaches #{minimum_balance}.")
   end
   private_class_method :add_below_minimum_payout_note
 

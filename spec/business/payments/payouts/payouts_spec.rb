@@ -510,7 +510,7 @@ describe Payouts do
         end.not_to change { seller3.comments.count }
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because the account balance $99 USD was less than the minimum payout amount of $100 USD."
+        content = "Your payout on #{date} was skipped because your balance of $99 was below the $100 minimum. You'll be paid out automatically once your balance reaches $100."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
 
@@ -539,7 +539,7 @@ describe Payouts do
         end.to change { seller.comments.with_type_payout_note.count }.by(1)
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because the account balance $59.72 USD was less than the minimum payout amount of $100 USD."
+        content = "Your payout on #{date} was skipped because your balance of $59.72 was below the $100 minimum. You'll be paid out automatically once your balance reaches $100."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
 
