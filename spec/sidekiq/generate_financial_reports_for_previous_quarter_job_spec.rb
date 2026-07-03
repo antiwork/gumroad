@@ -1,45 +1,38 @@
 # frozen_string_literal: true
 
-require "spec_helper"
-
 describe GenerateFinancialReportsForPreviousQuarterJob do
-  describe ".perform" do
-    it "does not generate any reports when the Rails environment is not production" do
+  before do
+    allow(Rails.env).to receive(:production?).and_return(true)
+  end
+
+  it "fans out the quarterly report jobs for the previous quarter by default" do
+    travel_to(Time.utc(2026, 7, 5, 11)) do
       described_class.new.perform
 
-      expect(CreateVatReportJob.jobs.size).to eq(0)
-      expect(GenerateSalesReportJob.jobs.size).to eq(0)
+      expect(CreateVatReportJob).to have_enqueued_sidekiq_job(2, 2026)
+      %w[GB AU SG NO].each do |alpha2|
+        expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job(alpha2, "2026-04-01", "2026-06-30", GenerateSalesReportJob::ALL_SALES)
+      end
     end
+  end
 
-    it "generates reports when the Rails environment is production" do
-      allow(Rails.env).to receive(:production?).and_return(true)
+  it "fans out for the given quarter when quarter and year are passed explicitly" do
+    described_class.new.perform(1, 2026)
 
-      described_class.new.perform
-
-      expect(CreateVatReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
-
-      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job("GB", an_instance_of(String), an_instance_of(String), GenerateSalesReportJob::ALL_SALES)
-      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job("AU", an_instance_of(String), an_instance_of(String), GenerateSalesReportJob::ALL_SALES)
-      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job("SG", an_instance_of(String), an_instance_of(String), GenerateSalesReportJob::ALL_SALES)
-      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job("NO", an_instance_of(String), an_instance_of(String), GenerateSalesReportJob::ALL_SALES)
+    expect(CreateVatReportJob).to have_enqueued_sidekiq_job(1, 2026)
+    %w[GB AU SG NO].each do |alpha2|
+      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job(alpha2, "2026-01-01", "2026-03-31", GenerateSalesReportJob::ALL_SALES)
     end
+  end
 
-    [[2017,  1, 2016, 4],
-     [2017,  2, 2016, 4],
-     [2017,  3, 2016, 4],
-     [2017,  4, 2017, 1],
-     [2017,  5, 2017, 1],
-     [2017,  6, 2017, 1],
-     [2017,  7, 2017, 2],
-     [2017, 10, 2017, 3]].each do |current_year, current_month, expected_year, expected_quarter|
-      it "sets the quarter and year correctly for year #{current_year} and month #{current_month}" do
-        allow(Rails.env).to receive(:production?).and_return(true)
+  it "raises on an invalid quarter" do
+    expect { described_class.new.perform(5, 2026) }.to raise_error(ArgumentError, "Invalid quarter")
+  end
 
-        travel_to(Time.current.change(year: current_year, month: current_month, day: 2)) do
-          described_class.new.perform
-        end
-
-        expect(CreateVatReportJob).to have_enqueued_sidekiq_job(expected_quarter, expected_year)
+  describe ".default_alert_args" do
+    it "resolves to the previous quarter" do
+      travel_to(Time.utc(2026, 7, 5, 11)) do
+        expect(described_class.default_alert_args).to eq([2, 2026])
       end
     end
   end
