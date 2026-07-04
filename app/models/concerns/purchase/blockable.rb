@@ -183,6 +183,11 @@ module Purchase::Blockable
         author_name: User::REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR
       )
     end
+
+    # Let the creator know their refund policy changed and why — a silent policy
+    # change would be confusing and unfair. Enqueued after the transaction block
+    # so the email can't go out if the enforcement writes roll back.
+    ContactingCreatorMailer.refund_policy_enforced_notification(seller.id).deliver_later
   end
 
   private

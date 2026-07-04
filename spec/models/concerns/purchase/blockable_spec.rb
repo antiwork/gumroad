@@ -1167,6 +1167,12 @@ describe Purchase::Blockable do
         end.to_not change { seller.comments.count }
       end
 
+      it "does not email the seller again" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not have_enqueued_mail(ContactingCreatorMailer, :refund_policy_enforced_notification)
+      end
+
       it "does not modify the refund policy" do
         seller.refund_policy.update!(max_refund_period_in_days: 7)
 
@@ -1243,6 +1249,12 @@ describe Purchase::Blockable do
         expect(comment.content).to include("3 disputes / 100 settled sales")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("enforce_refund_policy_for_seller_based_on_dispute_rate")
+      end
+
+      it "emails the seller about the policy change" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to have_enqueued_mail(ContactingCreatorMailer, :refund_policy_enforced_notification).with(seller.id)
       end
 
       context "when the seller's refund policy is 'No refunds allowed' (0 days)" do

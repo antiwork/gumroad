@@ -204,6 +204,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.refund_policy_enabled_email(SellerRefundPolicy.where(product_id: nil).last&.seller_id)
   end
 
+  def refund_policy_enforced_notification
+    ContactingCreatorMailer.refund_policy_enforced_notification(SellerRefundPolicy.where(product_id: nil).last&.seller_id)
+  end
+
   def product_level_refund_policies_reverted
     ContactingCreatorMailer.product_level_refund_policies_reverted(User.last&.id)
   end

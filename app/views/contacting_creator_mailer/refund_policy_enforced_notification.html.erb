@@ -1,0 +1,22 @@
+<div>
+  <p>Hey <%= @seller.name_or_username %>,</p>
+  <p>
+    We've noticed a high rate of chargebacks on your account. When customers can't get a refund,
+    they often go to their bank instead — and every chargeback costs you the sale plus a dispute fee,
+    and puts your account at risk with payment processors.
+  </p>
+  <p>
+    To help bring your dispute rate down, we've updated your account's refund policy to
+    <strong><%= @seller.refund_policy.title %></strong>. All new purchases will follow this policy,
+    and the "No refunds allowed" option is unavailable on your account for now.
+  </p>
+  <p>
+    You can still choose a different refund period of at least 7 days anytime in
+    <%= link_to "Settings", settings_main_url %>.
+  </p>
+  <p>
+    Offering refunds directly is almost always cheaper than a chargeback, and it keeps your
+    customers happier too. Once your dispute rate improves, we can restore full control over
+    your refund policy — just reply to this email if you have questions.
+  </p>
+</div>

@@ -1995,6 +1995,28 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "refund_policy_enforced_notification" do
+    let(:seller) { create(:user) }
+
+    it "sends the email correctly" do
+      mail = ContactingCreatorMailer.refund_policy_enforced_notification(seller.id)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Important: Your refund policy has been updated"
+      expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
+      expect(mail.body.encoded).to include seller.refund_policy.title
+      expect(mail.body.encoded).to include "high rate of chargebacks"
+    end
+
+    it "does not send when the seller's account is not active" do
+      seller.update!(user_risk_state: "suspended_for_fraud")
+
+      mail = ContactingCreatorMailer.refund_policy_enforced_notification(seller.id)
+
+      expect(mail.to).to be_nil
+    end
+  end
+
   describe "ping_endpoint_failure" do
     let(:seller) { create(:user, email: "seller@example.com") }
     let(:ping_url) { "https://example.com/webhook" }
