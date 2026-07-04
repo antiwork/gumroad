@@ -135,6 +135,51 @@ module Purchase::Blockable
     )
   end
 
+  # Called when a dispute (chargeback) lands on one of this seller's purchases.
+  # If the seller's lifetime dispute COUNT rate — disputed purchases divided by settled
+  # successful purchases — crosses 1%, we force a buyer-friendly refund policy on their
+  # account: their seller-level refund policy is bumped to at least a 30-day money-back
+  # guarantee and they can no longer pick "No refunds allowed" (the guard lives in
+  # RefundPolicy's validation) until an admin clears the enforcement with
+  # User#clear_refund_policy_enforcement!.
+  #
+  # Why: a large share of disputes are "credit_not_processed" — buyers who asked for a
+  # refund, were stonewalled by a no-refunds policy, and went to their bank instead.
+  # Forcing a refund path is cheaper for everyone than eating the chargeback + fee.
+  def enforce_refund_policy_for_seller_based_on_dispute_rate!
+    return unless seller.present?
+    # Idempotent: once enforcement is on, a later dispute shouldn't re-bump the policy
+    # or spam duplicate admin comments.
+    return if seller.refund_policy_enforced?
+
+    stats = seller.dispute_rate_stats
+    # Volume gates: don't act on statistical noise from small accounts.
+    return if stats[:settled_count] < User::MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT
+    return if stats[:disputed_count] < User::MIN_DISPUTES_FOR_REFUND_POLICY_ENFORCEMENT
+
+    dispute_count_rate = stats[:rate]
+    return if dispute_count_rate.nil? || dispute_count_rate <= User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY
+
+    seller.update!(refund_policy_enforced: true)
+
+    # A "No refunds allowed" (0-day) policy is the one that drives buyers to their bank,
+    # so bump it to the enforced minimum. Longer periods the seller already offers are fine.
+    refund_policy = seller.refund_policy
+    if refund_policy.present? && refund_policy.max_refund_period_in_days.zero?
+      refund_policy.update!(max_refund_period_in_days: User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS)
+    end
+
+    seller.comments.create(
+      content: "Refund policy enforcement applied: dispute rate #{format("%.1f%%", dispute_count_rate)} " \
+               "(#{stats[:disputed_count]} disputes / #{stats[:settled_count]} settled sales) exceeded " \
+               "#{User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY}% by count. Seller-level refund policy " \
+               "is now at least a #{User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS}-day money-back guarantee and " \
+               "\"No refunds allowed\" is unavailable until an admin clears the enforcement.",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR
+    )
+  end
+
   private
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint

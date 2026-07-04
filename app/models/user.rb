@@ -305,6 +305,7 @@ class User < ApplicationRecord
             50 => :paypal_payout_fee_waived,
             51 => :dismissed_create_products_with_ai_promo_alert,
             52 => :disable_affiliate_requests,
+            53 => :refund_policy_enforced, # Set automatically when a seller's dispute rate is too high; forces a buyer-friendly refund policy. See Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

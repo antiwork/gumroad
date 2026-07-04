@@ -10,6 +10,33 @@ module User::Risk
   PROBATION_REVIEW_DAYS = 2
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
+  # Thresholds for automatically forcing a buyer-friendly refund policy on a seller.
+  # The dispute rate here is a COUNT rate (disputed purchases / settled purchases), not a
+  # dollar-volume rate: a seller stonewalling many small refund requests shows up in counts.
+  MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY = 1.0
+  # Volume gates so a single unlucky dispute on a brand-new account doesn't trigger enforcement.
+  MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT = 25
+  MIN_DISPUTES_FOR_REFUND_POLICY_ENFORCEMENT = 3
+  # When enforcement bumps a "No refunds allowed" policy, this is the period it becomes.
+  ENFORCED_MIN_REFUND_PERIOD_IN_DAYS = 30
+
+  REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR = "enforce_refund_policy_for_seller_based_on_dispute_rate"
+
+  # Lifetime dispute stats by COUNT (not dollar volume). Used to decide whether to
+  # auto-enforce a buyer-friendly refund policy on the seller — see
+  # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!.
+  # A dispute counts only while it stands: reversed (won) chargebacks are excluded,
+  # matching how #lost_chargebacks measures the rate.
+  def dispute_rate_stats
+    settled_count = sales.successful.count
+    disputed_count = sales.successful
+                          .where.not(chargeback_date: nil)
+                          .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
+                          .count
+    rate = settled_count > 0 ? disputed_count * 100.0 / settled_count : nil
+    { settled_count:, disputed_count:, rate: }
+  end
+
   def enable_refunds!
     self.refunds_disabled = false
     save!
@@ -245,6 +272,22 @@ module User::Risk
     high_chargeback_rate: "pause_payouts_for_seller_based_on_chargeback_rate",
     recent_failed_purchases: "pause_payouts_for_seller_based_on_recent_failures",
   }.freeze
+
+  # Admin-callable: lifts an automatic refund-policy enforcement (see
+  # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
+  # The seller keeps whatever refund period they currently have, but can pick
+  # "No refunds allowed" again. Leaves an audit comment so admins can see when
+  # and why enforcement was cleared.
+  def clear_refund_policy_enforcement!
+    return unless refund_policy_enforced?
+
+    update!(refund_policy_enforced: false)
+    comments.create!(
+      content: "Refund policy enforcement cleared — seller can customize their refund policy again.",
+      comment_type: Comment::COMMENT_TYPE_NOTE,
+      author_name: REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR
+    )
+  end
 
   class_methods do
   end

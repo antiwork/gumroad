@@ -137,6 +137,7 @@ module Charge::Disputable
       purchase.mark_product_purchases_as_chargedback!
 
       purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+      purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
       purchase.block_buyer_based_on_chargeback_count!
     end
 

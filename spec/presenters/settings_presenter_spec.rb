@@ -131,6 +131,16 @@ describe SettingsPresenter do
       )
     end
 
+    context "when a refund policy is enforced on the seller's account" do
+      before { seller.update!(refund_policy_enforced: true) }
+
+      it "excludes the 'No refunds allowed' option" do
+        allowed_periods = presenter.main_props[:user][:seller_refund_policy][:allowed_refund_periods_in_days]
+
+        expect(allowed_periods.map { _1[:key] }).to eq([7, 14, 30, 183])
+      end
+    end
+
     context "when support emails exist" do
       before { product.update!(support_email: "support@example.com") }
 

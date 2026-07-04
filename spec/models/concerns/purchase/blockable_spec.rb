@@ -1144,4 +1144,146 @@ describe Purchase::Blockable do
       end
     end
   end
+
+  describe "#enforce_refund_policy_for_seller_based_on_dispute_rate!" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product) }
+
+    def stub_dispute_stats(settled_count:, disputed_count:)
+      rate = settled_count > 0 ? disputed_count * 100.0 / settled_count : nil
+      allow(seller).to receive(:dispute_rate_stats).and_return({ settled_count:, disputed_count:, rate: })
+    end
+
+    context "when the seller already has an enforced refund policy" do
+      before do
+        seller.update!(refund_policy_enforced: true)
+        stub_dispute_stats(settled_count: 100, disputed_count: 50)
+      end
+
+      it "does not create additional comments" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.comments.count }
+      end
+
+      it "does not modify the refund policy" do
+        seller.refund_policy.update!(max_refund_period_in_days: 7)
+
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.refund_policy.reload.max_refund_period_in_days }
+      end
+    end
+
+    context "when the seller has fewer settled purchases than the minimum" do
+      before do
+        stub_dispute_stats(settled_count: 24, disputed_count: 10)
+      end
+
+      it "does not enforce the refund policy" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect(seller.reload.refund_policy_enforced?).to be(false)
+      end
+
+      it "does not create a comment" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.comments.count }
+      end
+    end
+
+    context "when the seller has fewer disputes than the minimum" do
+      before do
+        stub_dispute_stats(settled_count: 100, disputed_count: 2)
+      end
+
+      it "does not enforce the refund policy" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect(seller.reload.refund_policy_enforced?).to be(false)
+      end
+    end
+
+    context "when the dispute rate is exactly 1.0%" do
+      before do
+        stub_dispute_stats(settled_count: 300, disputed_count: 3)
+      end
+
+      it "does not enforce the refund policy" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect(seller.reload.refund_policy_enforced?).to be(false)
+      end
+
+      it "does not create a comment" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.comments.count }
+      end
+    end
+
+    context "when the dispute rate exceeds 1.0%" do
+      before do
+        stub_dispute_stats(settled_count: 100, disputed_count: 3)
+      end
+
+      it "sets the refund_policy_enforced flag" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect(seller.reload.refund_policy_enforced?).to be(true)
+      end
+
+      it "creates a comment with the dispute rate" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        comment = seller.comments.last
+        expect(comment.content).to include("dispute rate 3.0%")
+        expect(comment.content).to include("3 disputes / 100 settled sales")
+        expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
+        expect(comment.author_name).to eq("enforce_refund_policy_for_seller_based_on_dispute_rate")
+      end
+
+      context "when the seller's refund policy is 'No refunds allowed' (0 days)" do
+        before do
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
+        end
+
+        it "bumps the refund period to 30 days" do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+          expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
+        end
+      end
+
+      context "when the seller's refund policy already allows refunds" do
+        before do
+          seller.refund_policy.update!(max_refund_period_in_days: 183)
+        end
+
+        it "keeps the existing refund period" do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+          expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(183)
+        end
+      end
+
+      it "is idempotent when called twice" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.comments.count }
+      end
+    end
+
+    context "when the purchase has no seller" do
+      it "does nothing" do
+        allow(purchase).to receive(:seller).and_return(nil)
+
+        expect { purchase.enforce_refund_policy_for_seller_based_on_dispute_rate! }.to_not raise_error
+      end
+    end
+  end
 end

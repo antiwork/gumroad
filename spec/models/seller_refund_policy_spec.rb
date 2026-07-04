@@ -35,6 +35,35 @@ describe SellerRefundPolicy do
 
       expect(refund_policy.fine_print).to eq "This is a account-level refund policy"
     end
+
+    context "when the seller has an enforced refund policy" do
+      before do
+        seller.update!(refund_policy_enforced: true)
+      end
+
+      it "does not allow setting the refund period to 0 days" do
+        refund_policy.max_refund_period_in_days = 0
+
+        expect(refund_policy.valid?).to be false
+        expect(refund_policy.errors[:max_refund_period_in_days].first).to include("at least 7 days")
+      end
+
+      it "allows refund periods of 7 days or more" do
+        RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.excluding(0).each do |days|
+          refund_policy.max_refund_period_in_days = days
+
+          expect(refund_policy.valid?).to be true
+        end
+      end
+    end
+
+    context "when the seller does not have an enforced refund policy" do
+      it "allows setting the refund period to 0 days" do
+        refund_policy.max_refund_period_in_days = 0
+
+        expect(refund_policy.valid?).to be true
+      end
+    end
   end
 
   describe "stripped_fields" do

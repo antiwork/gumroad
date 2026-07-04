@@ -126,4 +126,66 @@ describe User::Risk do
       expect(email_block.reload.blocked_at).to be_present
     end
   end
+
+  describe "#dispute_rate_stats" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+
+    it "returns a nil rate when the seller has no settled sales" do
+      expect(seller.dispute_rate_stats).to eq({ settled_count: 0, disputed_count: 0, rate: nil })
+    end
+
+    it "computes the dispute count rate from settled sales, excluding reversed chargebacks" do
+      create_list(:purchase, 2, link: product)
+      create(:purchase, link: product, chargeback_date: Time.current)
+      create(:purchase, link: product, chargeback_date: Time.current, chargeback_reversed: true)
+
+      stats = seller.dispute_rate_stats
+      expect(stats[:settled_count]).to eq(4)
+      expect(stats[:disputed_count]).to eq(1)
+      expect(stats[:rate]).to eq(25.0)
+    end
+  end
+
+  describe "#clear_refund_policy_enforcement!" do
+    let(:seller) { create(:user) }
+
+    context "when a refund policy is enforced" do
+      before do
+        seller.update!(refund_policy_enforced: true)
+      end
+
+      it "turns the flag off" do
+        seller.clear_refund_policy_enforcement!
+
+        expect(seller.reload.refund_policy_enforced?).to be(false)
+      end
+
+      it "creates an audit comment" do
+        expect do
+          seller.clear_refund_policy_enforcement!
+        end.to change { seller.comments.count }.by(1)
+
+        comment = seller.comments.last
+        expect(comment.content).to include("Refund policy enforcement cleared")
+        expect(comment.author_name).to eq("enforce_refund_policy_for_seller_based_on_dispute_rate")
+      end
+
+      it "allows the seller to pick a no-refunds policy again" do
+        seller.clear_refund_policy_enforcement!
+
+        refund_policy = seller.reload.refund_policy
+        refund_policy.max_refund_period_in_days = 0
+        expect(refund_policy.valid?).to be true
+      end
+    end
+
+    context "when no refund policy is enforced" do
+      it "does nothing" do
+        expect do
+          seller.clear_refund_policy_enforcement!
+        end.to_not change { seller.comments.count }
+      end
+    end
+  end
 end

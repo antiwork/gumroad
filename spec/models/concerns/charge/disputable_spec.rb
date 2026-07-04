@@ -344,6 +344,12 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "calls enforce_refund_policy_for_seller_based_on_dispute_rate! for each purchase" do
+        expect_any_instance_of(Purchase).to receive(:enforce_refund_policy_for_seller_based_on_dispute_rate!)
+        Purchase.handle_charge_event(event)
+        expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+      end
+
       it "calls block_buyer_based_on_chargeback_count! for each purchase" do
         expect_any_instance_of(Purchase).to receive(:block_buyer_based_on_chargeback_count!)
         Purchase.handle_charge_event(event)
