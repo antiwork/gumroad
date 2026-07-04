@@ -119,6 +119,63 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "gating bank payouts by country" do
+      context "when the seller signed up from a country where new Stripe accounts are blocked" do
+        let(:user) { create(:named_user) }
+        let!(:compliance_info) { create(:user_compliance_info, user:, country: "India") }
+
+        let(:params) do
+          ActionController::Parameters.new(
+            bank_account: {
+              type: IndianBankAccount.name,
+              account_holder_full_name: "Indian Creator",
+              account_number: "000123456789",
+              account_number_confirmation: "000123456789",
+              ifsc: "HDFC0004051",
+            }
+          )
+        end
+
+        it "returns bank_payouts_not_supported and does not persist a bank account" do
+          result = described_class.new(user_params: params, seller: user).process
+
+          expect(result).to eq(error: :bank_payouts_not_supported)
+          expect(user.bank_accounts.alive.count).to eq(0)
+        end
+
+        it "still allows the save when the seller already has a live Stripe merchant account" do
+          create(:merchant_account, user:)
+
+          result = described_class.new(user_params: params, seller: user).process
+
+          expect(result).to eq(success: true)
+          expect(user.active_bank_account).to be_a(IndianBankAccount)
+        end
+      end
+
+      context "when the seller signed up from a country where bank payouts are supported" do
+        let(:user) { create(:named_user) }
+        let!(:compliance_info) { create(:user_compliance_info, user:, country: "United States") }
+
+        it "persists the bank account" do
+          params = ActionController::Parameters.new(
+            bank_account: {
+              type: AchAccount.name,
+              account_holder_full_name: "Named User",
+              account_number: "123456789",
+              account_number_confirmation: "123456789",
+              routing_number: "110000000",
+            }
+          )
+
+          result = described_class.new(user_params: params, seller: user).process
+
+          expect(result).to eq(success: true)
+          expect(user.bank_accounts.alive.count).to eq(1)
+        end
+      end
+    end
+
     describe "replacing the active bank account" do
       let(:user) { create(:named_user) }
       let!(:existing_bank_account) { create(:ach_account, user:) }

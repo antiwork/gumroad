@@ -247,6 +247,8 @@ class Settings::PaymentsController < Settings::BaseController
                         "Email address cannot contain non-ASCII characters"
                       when :paypal_payouts_not_supported
                         "PayPal payouts are not supported in your country."
+                      when :bank_payouts_not_supported
+                        "Bank payouts are not supported in your country yet. Please use PayPal instead."
                       when :concurrent_payout_method_change
                         "Another change was submitted at the same time. Please try again."
       end

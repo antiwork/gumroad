@@ -196,6 +196,8 @@ class UpdatePayoutMethod
     ACCOUNT_NUMBER_SEPARATOR_CHARACTERS = /[[:space:]\p{Cf}-]/
 
     def process_full_bank_account_replacement
+      return { error: :bank_payouts_not_supported } unless bank_payouts_supported?
+
       account_number = normalize_account_number(params[:bank_account][:account_number])
       account_number_confirmation = normalize_account_number(params[:bank_account][:account_number_confirmation])
       return { error: :account_number_does_not_match } if account_number != account_number_confirmation
@@ -292,6 +294,30 @@ class UpdatePayoutMethod
 
     def paypal_payouts_supported?
       user.can_setup_paypal_payouts? || switching_to_uae_individual_account?
+    end
+
+    # Guards the bank-account branch the same way process_payment_address_params guards the
+    # PayPal branch. A bank account is only useful if it can link to a Stripe merchant
+    # account, and StripeMerchantAccountManager refuses to create one for countries in
+    # NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES (currently India). Without this gate, a seller
+    # from a blocked country can save bank details that persist but never link
+    # (stripe_bank_account_id stays NULL, no merchant_accounts row is ever created), so
+    # every weekly payout silently skips with "the payout bank account was not correctly
+    # set up" while the dashboard keeps showing a next-payout date.
+    #
+    # Sellers who already have a working Stripe merchant account (e.g. India accounts
+    # grandfathered in before the block) are allowed through so they can keep updating
+    # their bank details. When the country isn't known yet we allow the save and let the
+    # downstream merchant-account creation surface the error, matching prior behavior.
+    def bank_payouts_supported?
+      return true if user.stripe_account.present?
+
+      country_code = user.alive_user_compliance_info&.legal_entity_country_code
+      return true if country_code.blank?
+      return true if country_code == Compliance::Countries::ARE.alpha2
+
+      user.native_payouts_supported?(country_code:) &&
+        StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.exclude?(country_code)
     end
 
     def switching_to_uae_individual_account?
