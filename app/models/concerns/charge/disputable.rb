@@ -99,7 +99,18 @@ module Charge::Disputable
 
     dispute = find_or_build_dispute(event)
 
-    return unless dispute.initiated? || dispute.created?
+    unless dispute.initiated? || dispute.created?
+      # The dispute is already past its initial state, which means this event is a replay —
+      # the payment processor re-delivers the webhook when an earlier attempt failed partway
+      # through. Refund-policy enforcement is enqueued late in the first attempt (after the
+      # dispute is marked formalized), so a failure at that point — say, a Redis outage during
+      # the Sidekiq enqueue — would otherwise leave the seller's enforcement check unscheduled
+      # forever, because the replay returns here without reaching that code. Re-enqueueing on
+      # every replay is safe: the job no-ops once the seller is already enforced (or doesn't
+      # cross the dispute-rate thresholds), so duplicates do nothing.
+      disputed_purchases.each { |purchase| EnforceRefundPolicyForSellerJob.perform_async(purchase.id) }
+      return
+    end
 
     mark_as_disputed!(disputed_at: event.created_at)
 
