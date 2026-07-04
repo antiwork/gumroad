@@ -494,6 +494,36 @@ describe "Balance Pages Scenario", js: true, type: :system do
                 expect(page).not_to have_text("was skipped because your balance of")
               end
             end
+
+            context "when a stale under-review payout note was recorded for a not-reviewed account" do
+              before do
+                seller.payments.last.update!(created_at: 1.hour.ago)
+                seller.update!(user_risk_state: "not_reviewed")
+                # Pre-fix payout notes blamed a review that doesn't exist; the page
+                # folds them into the below-minimum notice for not-reviewed sellers.
+                seller.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
+              end
+
+              it "folds the stale note into the below-minimum notice instead of showing it" do
+                visit balance_path
+
+                expect(page).to have_text("Your balance is $59.72, below the $100 minimum — so your June 12, 2026 payout was skipped. You'll be paid out automatically once your balance reaches $100.")
+                expect(page).not_to have_text("was skipped because the account was under review")
+              end
+            end
+          end
+
+          context "when a below-minimum seller has never been paid out" do
+            before do
+              allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(59_72)
+            end
+
+            it "shows the balance notice instead of the empty state" do
+              visit balance_path
+
+              expect(page).to have_text("Your balance is $59.72, below the $100 minimum. You'll be paid out automatically once your balance reaches $100.")
+              expect(page).not_to have_content("Let's get you paid.")
+            end
           end
 
           context "when the payout was skipped because the account was under review" do

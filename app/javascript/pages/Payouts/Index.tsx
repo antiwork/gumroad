@@ -746,52 +746,44 @@ export default function PayoutsIndex() {
                 </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
-                past_payout_period_data.length > 0 ? (
+                // Sellers with a positive balance below the payout minimum get the
+                // balance notice even before their first payout — otherwise a
+                // first-time seller whose payout was skipped would only see the
+                // generic empty state and have no way to see their balance or the
+                // reason the payout didn't go out.
+                next_payout_period_data.balance_cents != null &&
+                next_payout_period_data.balance_cents > 0 &&
+                next_payout_period_data.balance_cents < next_payout_period_data.minimum_payout_amount_cents ? (
                   <Alert variant="info" role="status">
                     <p>
-                      {next_payout_period_data.balance_cents != null &&
-                      next_payout_period_data.balance_cents < next_payout_period_data.minimum_payout_amount_cents ? (
-                        <>
-                          Your balance is{" "}
-                          {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.balance_cents, {
-                            symbolFormat: "short",
-                            noCentsIfWhole: false,
-                          })}
-                          , below the{" "}
-                          {formatPriceCentsWithCurrencySymbol(
-                            "usd",
-                            next_payout_period_data.minimum_payout_amount_cents,
-                            {
-                              symbolFormat: "short",
-                            },
-                          )}{" "}
-                          minimum
-                          {next_payout_period_data.skipped_payout_date != null
-                            ? ` — so your ${next_payout_period_data.skipped_payout_date} payout was skipped`
-                            : ""}
-                          . You'll be paid out automatically once your balance reaches{" "}
-                          {formatPriceCentsWithCurrencySymbol(
-                            "usd",
-                            next_payout_period_data.minimum_payout_amount_cents,
-                            {
-                              symbolFormat: "short",
-                            },
-                          )}
-                          .
-                        </>
-                      ) : (
-                        <>
-                          Reach a balance of at least{" "}
-                          {formatPriceCentsWithCurrencySymbol(
-                            "usd",
-                            next_payout_period_data.minimum_payout_amount_cents,
-                            {
-                              symbolFormat: "short",
-                            },
-                          )}{" "}
-                          to be paid out for your sales.
-                        </>
-                      )}
+                      Your balance is{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.balance_cents, {
+                        symbolFormat: "short",
+                        noCentsIfWhole: false,
+                      })}
+                      , below the{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                        symbolFormat: "short",
+                      })}{" "}
+                      minimum
+                      {next_payout_period_data.skipped_payout_date != null
+                        ? ` — so your ${next_payout_period_data.skipped_payout_date} payout was skipped`
+                        : ""}
+                      . You'll be paid out automatically once your balance reaches{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                        symbolFormat: "short",
+                      })}
+                      .
+                    </p>
+                  </Alert>
+                ) : past_payout_period_data.length > 0 ? (
+                  <Alert variant="info" role="status">
+                    <p>
+                      Reach a balance of at least{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                        symbolFormat: "short",
+                      })}{" "}
+                      to be paid out for your sales.
                     </p>
                   </Alert>
                 ) : (

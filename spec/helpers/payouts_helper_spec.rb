@@ -261,11 +261,28 @@ describe PayoutsHelper do
         expect(data[:skipped_payout_date]).to eq("June 12, 2026")
       end
 
-      it "keeps other payout notes verbatim" do
+      it "folds a stale under-review note into skipped_payout_date when the user is not reviewed" do
+        user.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_note]).to be_nil
+        expect(data[:skipped_payout_date]).to eq("June 12, 2026")
+      end
+
+      it "keeps the under-review note verbatim when the account is under an actual review" do
+        user.update!(user_risk_state: "flagged_for_fraud")
         user.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
 
         data = self.payout_period_data(user)
         expect(data[:payout_note]).to eq("Payout on June 12, 2026 was skipped because the account was under review.")
+        expect(data[:skipped_payout_date]).to be_nil
+      end
+
+      it "keeps other payout notes verbatim" do
+        user.add_payout_note(content: "Payout on June 12, 2026 was skipped because a bank account wasn't added at the time.")
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_note]).to eq("Payout on June 12, 2026 was skipped because a bank account wasn't added at the time.")
         expect(data[:skipped_payout_date]).to be_nil
       end
     end

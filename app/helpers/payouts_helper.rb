@@ -10,6 +10,13 @@ module PayoutsHelper
   # rendering the stored note verbatim.
   BELOW_MINIMUM_PAYOUT_NOTE_REGEX = /\A(?:Your payout|Payout) on (?<date>\w+ \d{1,2}, \d{4}) was skipped because (?:your balance of .+ was below|the account balance .+ was less than the minimum payout amount)/
 
+  # Notes written before the below-minimum fix attributed a skipped payout to a
+  # review that doesn't exist ("not_reviewed" is the default state, not an
+  # active review). For a not-reviewed seller whose balance is below the
+  # minimum, the real cause of the skip is the balance, so these stale notes
+  # are folded into the same below-minimum notice instead of being shown.
+  UNDER_REVIEW_PAYOUT_NOTE_REGEX = /\APayout on (?<date>\w+ \d{1,2}, \d{4}) was skipped because the account was under review\.\z/
+
   def formatted_payout_date(payout_date)
     return "" if payout_date.nil?
     payout_date.strftime("%B #{payout_date.day.ordinalize}, %Y")
@@ -82,11 +89,15 @@ module PayoutsHelper
         nil
       end
 
-    below_minimum_note_match = payout_note&.match(BELOW_MINIMUM_PAYOUT_NOTE_REGEX)
-    if payout_period_data[:status] == "not_payable" && below_minimum_note_match
+    skipped_note_match = payout_note&.match(BELOW_MINIMUM_PAYOUT_NOTE_REGEX)
+    # A "not_payable" status here always means the balance is below the payout
+    # minimum, so for a not-reviewed seller a stale "under review" note is
+    # really a below-minimum skip and gets folded the same way.
+    skipped_note_match ||= payout_note&.match(UNDER_REVIEW_PAYOUT_NOTE_REGEX) if user.not_reviewed?
+    if payout_period_data[:status] == "not_payable" && skipped_note_match
       # The below-minimum skip is folded into the not-payable notice (with the
       # current balance) instead of rendering the stored note verbatim.
-      payout_period_data[:skipped_payout_date] = below_minimum_note_match[:date]
+      payout_period_data[:skipped_payout_date] = skipped_note_match[:date]
       payout_note = nil
     end
     payout_period_data[:payout_note] = payout_note
