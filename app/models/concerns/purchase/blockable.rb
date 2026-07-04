@@ -160,24 +160,29 @@ module Purchase::Blockable
     dispute_count_rate = stats[:rate]
     return if dispute_count_rate.nil? || dispute_count_rate <= User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY
 
-    seller.update!(refund_policy_enforced: true)
+    # All three writes happen together or not at all. If the flag were saved first and the
+    # policy bump or audit comment then failed, the seller would be stuck marked as enforced
+    # (the guard above skips retries) without the promised policy change or paper trail.
+    seller.transaction do
+      seller.update!(refund_policy_enforced: true)
 
-    # A "No refunds allowed" (0-day) policy is the one that drives buyers to their bank,
-    # so bump it to the enforced minimum. Longer periods the seller already offers are fine.
-    refund_policy = seller.refund_policy
-    if refund_policy.present? && refund_policy.max_refund_period_in_days.zero?
-      refund_policy.update!(max_refund_period_in_days: User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS)
+      # A "No refunds allowed" (0-day) policy is the one that drives buyers to their bank,
+      # so bump it to the enforced minimum. Longer periods the seller already offers are fine.
+      refund_policy = seller.refund_policy
+      if refund_policy.present? && refund_policy.max_refund_period_in_days.zero?
+        refund_policy.update!(max_refund_period_in_days: User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS)
+      end
+
+      seller.comments.create!(
+        content: "Refund policy enforcement applied: dispute rate #{format("%.1f%%", dispute_count_rate)} " \
+                 "(#{stats[:disputed_count]} disputes / #{stats[:settled_count]} settled sales) exceeded " \
+                 "#{User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY}% by count. Seller-level refund policy " \
+                 "is now at least a #{User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS}-day money-back guarantee and " \
+                 "\"No refunds allowed\" is unavailable until an admin clears the enforcement.",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name: User::REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR
+      )
     end
-
-    seller.comments.create(
-      content: "Refund policy enforcement applied: dispute rate #{format("%.1f%%", dispute_count_rate)} " \
-               "(#{stats[:disputed_count]} disputes / #{stats[:settled_count]} settled sales) exceeded " \
-               "#{User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY}% by count. Seller-level refund policy " \
-               "is now at least a #{User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS}-day money-back guarantee and " \
-               "\"No refunds allowed\" is unavailable until an admin clears the enforcement.",
-      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-      author_name: User::REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR
-    )
   end
 
   private

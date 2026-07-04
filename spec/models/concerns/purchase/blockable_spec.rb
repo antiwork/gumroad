@@ -1276,6 +1276,22 @@ describe Purchase::Blockable do
           purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
         end.to_not change { seller.comments.count }
       end
+
+      context "when the audit comment fails to save" do
+        before do
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
+          allow(seller.comments).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+        end
+
+        it "rolls back the enforcement flag and the policy bump so a retry can run the handler again" do
+          expect do
+            purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+          end.to raise_error(ActiveRecord::RecordInvalid)
+
+          expect(seller.reload.refund_policy_enforced?).to be(false)
+          expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(0)
+        end
+      end
     end
 
     context "when the purchase has no seller" do
