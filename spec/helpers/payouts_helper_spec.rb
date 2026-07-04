@@ -261,12 +261,14 @@ describe PayoutsHelper do
         expect(data[:skipped_payout_date]).to eq("June 12, 2026")
       end
 
-      it "folds a stale under-review note into skipped_payout_date when the user is not reviewed" do
+      it "hides a stale under-review note when the user is not reviewed, without claiming a balance skip" do
         user.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
 
         data = self.payout_period_data(user)
         expect(data[:payout_note]).to be_nil
-        expect(data[:skipped_payout_date]).to eq("June 12, 2026")
+        # The stale note doesn't record the balance at the time of the skip, so
+        # we don't attribute the old skip to the current below-minimum balance.
+        expect(data[:skipped_payout_date]).to be_nil
       end
 
       it "keeps the under-review note verbatim when the account is under an actual review" do

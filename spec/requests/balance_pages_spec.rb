@@ -504,11 +504,15 @@ describe "Balance Pages Scenario", js: true, type: :system do
                 seller.add_payout_note(content: "Payout on June 12, 2026 was skipped because the account was under review.")
               end
 
-              it "folds the stale note into the below-minimum notice instead of showing it" do
+              it "hides the stale note and shows the plain below-minimum notice" do
                 visit balance_path
 
-                expect(page).to have_text("Your balance is $59.72, below the $100 minimum — so your June 12, 2026 payout was skipped. You'll be paid out automatically once your balance reaches $100.")
+                # The old note doesn't record what the balance was at the time,
+                # so the page doesn't claim that payout was skipped for the
+                # current balance — it just shows the current below-minimum state.
+                expect(page).to have_text("Your balance is $59.72, below the $100 minimum. You'll be paid out automatically once your balance reaches $100.")
                 expect(page).not_to have_text("was skipped because the account was under review")
+                expect(page).not_to have_text("so your June 12, 2026 payout was skipped")
               end
             end
           end
