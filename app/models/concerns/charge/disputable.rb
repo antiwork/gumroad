@@ -137,7 +137,11 @@ module Charge::Disputable
       purchase.mark_product_purchases_as_chargedback!
 
       purchase.pause_payouts_for_seller_based_on_chargeback_rate!
-      purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+      # Enforcement runs as a background job rather than inline: the dispute was already
+      # marked formalized above, so an inline failure here would be skipped forever on
+      # webhook retry (the handler returns early for formalized disputes). The job gets
+      # its own Sidekiq retries and the enforcement method is idempotent.
+      EnforceRefundPolicyForSellerJob.perform_async(purchase.id)
       purchase.block_buyer_based_on_chargeback_count!
     end
 
