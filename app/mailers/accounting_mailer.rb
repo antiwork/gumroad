@@ -17,7 +17,7 @@ class AccountingMailer < ApplicationMailer
     attachments["funds-received-report-#{month}-#{year}.csv"] = { data: report_csv }
     mail subject: "#{SUBJECT_PREFIX}Funds Received Report – #{month}/#{year}",
          to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com ndelgado@earlygrowthfinancialservices.com chhabra.harbaksh@gmail.com]
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def deferred_refunds_report(month, year)
@@ -27,7 +27,7 @@ class AccountingMailer < ApplicationMailer
     attachments["deferred-refunds-report-#{month}-#{year}.csv"] = { data: report_csv }
     mail subject: "#{SUBJECT_PREFIX}Deferred Refunds Report – #{month}/#{year}",
          to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com ndelgado@earlygrowthfinancialservices.com chhabra.harbaksh@gmail.com]
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def stripe_currency_balances_report(balances_csv)
@@ -37,7 +37,7 @@ class AccountingMailer < ApplicationMailer
 
     attachments["stripe_currency_balances_#{month}_#{year}.csv"] = { data: ::Base64.encode64(balances_csv), encoding: "base64" }
     mail to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com chhabra.harbaksh@gmail.com],
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com],
          subject: "Stripe currency balances report for #{month}/#{year}"
   end
 
@@ -47,7 +47,7 @@ class AccountingMailer < ApplicationMailer
 
     mail subject: @subject_and_title,
          to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com chhabra.harbaksh@gmail.com]
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def gst_report(country_code, quarter, year, s3_read_url)
@@ -57,7 +57,7 @@ class AccountingMailer < ApplicationMailer
 
     mail subject: @subject_and_title,
          to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com chhabra.harbaksh@gmail.com]
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def payable_report(csv_url, year)
@@ -65,7 +65,8 @@ class AccountingMailer < ApplicationMailer
     @csv_url = csv_url
 
     mail subject: @subject_and_title,
-         to: %w[payments@gumroad.com chhabra.harbaksh@gmail.com]
+         to: PAYMENTS_EMAIL,
+         cc: %w[chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def email_outstanding_balances_csv
@@ -95,7 +96,7 @@ class AccountingMailer < ApplicationMailer
 
     attachments["outstanding_balances.csv"] = { data: ::Base64.encode64(balances_csv), encoding: "base64" }
     mail to: PAYMENTS_EMAIL,
-         cc: %w[solson@earlygrowthfinancialservices.com ndelgado@earlygrowthfinancialservices.com],
+         cc: %w[steven.olson@gumroad.com gumclaw@gumroad.com],
          subject: "Outstanding balances"
   end
 

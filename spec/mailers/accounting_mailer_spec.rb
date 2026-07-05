@@ -104,7 +104,7 @@ describe AccountingMailer, :vcr do
 
     it "goes to payments and accounting" do
       expect(@mail.to).to eq [ApplicationMailer::PAYMENTS_EMAIL]
-      expect(@mail.cc).to eq %w{solson@earlygrowthfinancialservices.com ndelgado@earlygrowthfinancialservices.com}
+      expect(@mail.cc).to eq %w{steven.olson@gumroad.com gumclaw@gumroad.com}
     end
 
     it "includes the outstanding balance totals" do
