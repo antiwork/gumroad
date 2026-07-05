@@ -37,7 +37,15 @@ class ShipmentsController < ApplicationController
     else
       render_error("We are unable to verify your shipping address. Is your address correct?")
     end
-  rescue EasyPost::Errors::EasyPostError
+  rescue EasyPost::Errors::EasyPostError => e
+    # Auth/config-class failures (dead or unauthorized API key, billing lockout on the
+    # EasyPost account) mean address verification is broken for every buyer, not that
+    # this buyer's address is wrong. Report those to Sentry so a dead vendor key alerts
+    # us instead of silently blocking all physical-product checkouts behind a generic
+    # "is your address correct?" message (see gumroad-private#916, where a deactivated
+    # key blocked physical checkout platform-wide with zero error-tracker visibility).
+    # Buyers still get the same generic message either way.
+    ErrorNotifier.notify(e) if easypost_config_error?(e)
     render_error("We are unable to verify your shipping address. Is your address correct?")
   end
 
@@ -65,6 +73,15 @@ class ShipmentsController < ApplicationController
   private
     def render_error(error_message)
       render json: { success: false, error_message: }
+    end
+
+    # True for EasyPost failures caused by OUR configuration/account rather than the
+    # buyer's input: 401 Unauthorized, 403 Forbidden (deactivated key), and 402 Payment
+    # Required (EasyPost billing lockout). These affect every request platform-wide.
+    def easypost_config_error?(error)
+      error.is_a?(EasyPost::Errors::UnauthorizedError) ||
+        error.is_a?(EasyPost::Errors::ForbiddenError) ||
+        error.is_a?(EasyPost::Errors::PaymentError)
     end
 
     def render_address_response(address)

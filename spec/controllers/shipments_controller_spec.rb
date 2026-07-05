@@ -84,6 +84,60 @@ describe ShipmentsController, :vcr  do
       end
     end
 
+    describe "EasyPost errors" do
+      before do
+        @params = {
+          street_address: "1640 17th St",
+          city: "San Francisco",
+          state: "CA",
+          zip_code: "94107",
+          country: "United States"
+        }
+      end
+
+      def stub_easypost_error(error)
+        allow_any_instance_of(EasyPost::Services::Address).to receive(:create).and_raise(error)
+      end
+
+      it "reports deactivated-key (forbidden) errors to Sentry and renders the generic error" do
+        stub_easypost_error(EasyPost::Errors::ForbiddenError.new("This api key is no longer active.", 403))
+
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(EasyPost::Errors::ForbiddenError))
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq "We are unable to verify your shipping address. Is your address correct?"
+      end
+
+      it "reports unauthorized-key errors to Sentry" do
+        stub_easypost_error(EasyPost::Errors::UnauthorizedError.new("Unauthorized", 401))
+
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(EasyPost::Errors::UnauthorizedError))
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "reports billing-lockout errors to Sentry" do
+        stub_easypost_error(EasyPost::Errors::PaymentError.new("Payment required", 402))
+
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(EasyPost::Errors::PaymentError))
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "does not report buyer-input-class errors to Sentry" do
+        stub_easypost_error(EasyPost::Errors::InvalidRequestError.new("Invalid address", 422))
+
+        expect(ErrorNotifier).not_to receive(:notify)
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq "We are unable to verify your shipping address. Is your address correct?"
+      end
+    end
+
     describe "international address" do
       before do
         @params = {
