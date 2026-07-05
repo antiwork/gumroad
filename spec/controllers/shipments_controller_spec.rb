@@ -142,9 +142,9 @@ describe ShipmentsController, :vcr  do
 
       it "accepts the buyer's address as entered so checkout is not blocked, and reports the error" do
         expect_any_instance_of(EasyPost::Services::Address).to receive(:create)
-          .and_raise(EasyPost::Errors::EasyPostError.new("This api key is no longer active. Please use a different api key or reactivate this key."))
+          .and_raise(EasyPost::Errors::ForbiddenError.new("This api key is no longer active. Please use a different api key or reactivate this key.", 403))
         expect(ErrorNotifier).to receive(:notify).with(
-          an_instance_of(EasyPost::Errors::EasyPostError),
+          an_instance_of(EasyPost::Errors::ForbiddenError),
           context: { action: "verify_shipping_address" }
         )
 
@@ -155,6 +155,17 @@ describe ShipmentsController, :vcr  do
         expect(response.parsed_body["city"]).to eq "San Francisco"
         expect(response.parsed_body["state"]).to eq "CA"
         expect(response.parsed_body["zip_code"]).to eq "94107"
+      end
+
+      it "still asks the buyer to correct their address when EasyPost rejects the request as invalid" do
+        expect_any_instance_of(EasyPost::Services::Address).to receive(:create)
+          .and_raise(EasyPost::Errors::BadRequestError.new("Unable to parse address", 400))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq "We are unable to verify your shipping address. Is your address correct?"
       end
     end
   end

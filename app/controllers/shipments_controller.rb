@@ -37,12 +37,17 @@ class ShipmentsController < ApplicationController
     else
       render_error("We are unable to verify your shipping address. Is your address correct?")
     end
+  rescue EasyPost::Errors::BadRequestError, EasyPost::Errors::InvalidRequestError,
+         EasyPost::Errors::InvalidParameterError, EasyPost::Errors::MissingParameterError
+    # EasyPost rejected the request itself (malformed or missing address fields), which means
+    # the buyer's input is the problem — keep asking them to correct it.
+    render_error("We are unable to verify your shipping address. Is your address correct?")
   rescue EasyPost::Errors::EasyPostError => e
-    # If EasyPost itself fails (deactivated API key, outage, timeout), the problem is on our
-    # side, not the buyer's. Returning an error here blocks every physical-product checkout
-    # platform-wide, so we accept the address exactly as the buyer entered it and let the
-    # purchase proceed. We still report the failure so a broken EasyPost integration pages us
-    # instead of silently degrading address verification.
+    # Any other EasyPost failure (deactivated API key, outage, timeout, rate limit) is a
+    # problem on our side, not the buyer's. Returning an error here blocks every
+    # physical-product checkout platform-wide, so we accept the address exactly as the buyer
+    # entered it and let the purchase proceed. We still report the failure so a broken
+    # EasyPost integration pages us instead of silently degrading address verification.
     ErrorNotifier.notify(e, context: { action: "verify_shipping_address" })
     render json: { success: true,
                    street_address: params[:street_address],
