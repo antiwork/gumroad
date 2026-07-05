@@ -96,6 +96,20 @@ describe "Profile custom HTML rendering", type: :request do
       json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
       expect(JSON.parse(json)).not_to include("other.example.com")
     end
+
+    it "only adds the seller's custom domain once it is active (verified with a valid certificate)" do
+      # Browsing on the subdomain, an unverified/stale custom-domain record
+      # must not become a top-navigation target — it can point anywhere.
+      get "http://#{seller.subdomain}/landing/embed"
+      hosts = JSON.parse(response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1])
+      expect(hosts).not_to include("seller.example.com")
+
+      custom_domain.mark_verified!
+      custom_domain.set_ssl_certificate_issued_at!
+      get "http://#{seller.subdomain}/landing/embed"
+      hosts = JSON.parse(response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1])
+      expect(hosts).to include("seller.example.com")
+    end
   end
 
   describe "owner live-reload poll" do

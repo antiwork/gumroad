@@ -200,16 +200,20 @@ module RendersCustomHtmlPages
 
     # The hosts the bridge may navigate to: the host currently being browsed
     # (subdomain or verified custom domain), plus the seller's subdomain and
-    # VERIFIED custom domain, so product URLs generated for either surface
-    # work on both. An unverified custom-domain record must never qualify: a
-    # seller could save an arbitrary external domain and use the bridge to
+    # currently ACTIVE custom domain, so product URLs generated for either
+    # surface work on both. `active?` (verified + valid certificate) is the
+    # same eligibility check the rest of the app uses before emitting
+    # custom-domain URLs (UrlService, ContentExtractor). An unverified or
+    # stale record must never qualify: a saved-but-unverified domain can be
+    # any arbitrary external site, and a previously-verified domain may have
+    # since been pointed off-platform — either would let the bridge
     # top-navigate the visitor's tab there, which is exactly what the missing
     # allow-top-navigation sandbox token is meant to prevent. request.host is
     # safe as-is — it is only ever a host Gumroad actually served this page on.
     def custom_html_navigation_allowed_hosts(user)
       custom_domain = user.custom_domain
-      verified_custom_domain = custom_domain&.verified? ? custom_domain.domain : nil
-      hosts = [request.host, user.subdomain, verified_custom_domain]
+      active_custom_domain = custom_domain&.active? ? custom_domain.domain : nil
+      hosts = [request.host, user.subdomain, active_custom_domain]
       hosts.compact.map { _1.to_s.downcase.strip }.reject(&:empty?).uniq
     end
 
