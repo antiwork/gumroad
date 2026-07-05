@@ -10,6 +10,7 @@ class ApplicationMailer < ActionMailer::Base
   {
     ADMIN_EMAIL: "hi@#{DEFAULT_EMAIL_DOMAIN}",
     DEVELOPERS_EMAIL: "developers@#{DEFAULT_EMAIL_DOMAIN}",
+    FINANCE_EMAIL: "finance@#{DEFAULT_EMAIL_DOMAIN}",
     NOREPLY_EMAIL: "noreply@#{DEFAULT_EMAIL_DOMAIN}",
     PAYMENTS_EMAIL: "payments@#{DEFAULT_EMAIL_DOMAIN}",
     RISK_EMAIL: "risk@#{DEFAULT_EMAIL_DOMAIN}",
