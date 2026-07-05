@@ -180,9 +180,11 @@ class UsersController < ApplicationController
 
   private
     # The profile is authored entirely through the seller's agent + CLI, so the
-    # custom HTML never carries a buy affordance — there's no checkout bridge or
-    # ?wanted=true fall-through like the product landing page has. The wrapper is
-    # a display-only sandboxed iframe.
+    # custom HTML never carries a native buy affordance — there's no checkout
+    # bridge or ?wanted=true fall-through like the product landing page has.
+    # Product links in the seller's HTML open in a new tab (see
+    # RendersCustomHtmlPages#custom_html_same_store_links_new_tab_script) so
+    # checkout happens on a real origin, never inside the sandboxed iframe.
     def render_custom_html_if_present
       return unless custom_html_visible?
       # The public profile also answers JSON (GET /:username.json) with the
@@ -224,6 +226,7 @@ class UsersController < ApplicationController
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
+            #{custom_html_same_store_links_new_tab_script(allowed_hosts: custom_html_same_store_hosts(@user))}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>

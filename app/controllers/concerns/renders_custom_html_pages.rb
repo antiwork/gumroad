@@ -108,6 +108,58 @@ module RendersCustomHtmlPages
   end
 
   private
+    # --- Same-store links open in a new tab ---------------------------------
+    #
+    # The seller's HTML lives in an opaque-origin sandboxed iframe. A plain
+    # product link (<a href="/l/xyz">) therefore navigates the IFRAME itself,
+    # loading the full product page + checkout on an origin where cookies and
+    # storage are unavailable — checkout hangs, and Safari won't render the
+    # page at all. The seller can't fix it with target="_top" either: the
+    # sanitizer strips it and the sandbox omits allow-top-navigation on
+    # purpose (seller HTML must never be able to redirect the visitor's tab
+    # to an arbitrary site).
+    #
+    # The sandbox already grants allow-popups + allow-popups-to-escape-sandbox,
+    # so a target="_blank" link opens the product page in a NEW tab with a
+    # real origin where checkout works. This script retargets clicks on links
+    # that point at the seller's own store hosts (whether the anchor was in
+    # the served HTML or built later by the seller's scripts) to _blank at
+    # click time. Links to other hosts keep their default in-frame behavior,
+    # so nothing about the sandbox guarantee changes.
+    def custom_html_same_store_links_new_tab_script(allowed_hosts:)
+      hosts_js = ERB::Util.json_escape(allowed_hosts.to_json)
+      <<~HTML
+        <script data-cfasync="false" data-gumroad-store-links>
+          (function () {
+            var ALLOWED_HOSTS = #{hosts_js};
+            document.addEventListener("click", function (e) {
+              if (e.defaultPrevented) return;
+              var anchor = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+              if (!anchor) return;
+              // A seller who set an explicit target (e.g. their own _blank) keeps it.
+              var target = (anchor.getAttribute("target") || "").trim();
+              if (target !== "" && target.toLowerCase() !== "_self") return;
+              var url;
+              try { url = new URL(anchor.getAttribute("href"), window.location.href); } catch (_e) { return; }
+              if (url.protocol !== "https:" && url.protocol !== "http:") return;
+              if (ALLOWED_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return;
+              anchor.target = "_blank";
+              anchor.rel = "noopener";
+            }, true);
+          })();
+        </script>
+      HTML
+    end
+
+    # The hosts whose links get the new-tab treatment: the host currently
+    # being browsed (subdomain or verified custom domain), plus the seller's
+    # subdomain and custom domain, so product URLs generated for either
+    # surface work on both.
+    def custom_html_same_store_hosts(user)
+      hosts = [request.host, user.subdomain, user.custom_domain&.domain]
+      hosts.compact.map { _1.to_s.downcase.strip }.reject(&:empty?).uniq
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end

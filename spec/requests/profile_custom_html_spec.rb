@@ -55,6 +55,28 @@ describe "Profile custom HTML rendering", type: :request do
     expect(response.body).not_to include("wanted=true")
   end
 
+  describe "same-store links open in a new tab" do
+    it "injects the retargeting script into the embed with the seller's own hosts" do
+      get "http://seller.example.com/landing/embed"
+
+      expect(response.body).to include("data-gumroad-store-links")
+      json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
+      hosts = JSON.parse(json)
+      expect(hosts).to include("seller.example.com")
+      expect(hosts).to include(seller.subdomain)
+    end
+
+    it "never includes another seller's domain in the host allowlist" do
+      other = create(:user, username: "otherseller")
+      create(:custom_domain, user: other, domain: "other.example.com")
+
+      get "http://seller.example.com/landing/embed"
+
+      json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
+      expect(JSON.parse(json)).not_to include("other.example.com")
+    end
+  end
+
   describe "owner live-reload poll" do
     it "injects the version poll into the wrapper only for the signed-in owner" do
       sign_in seller
