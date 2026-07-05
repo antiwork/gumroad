@@ -108,6 +108,53 @@ module RendersCustomHtmlPages
   end
 
   private
+    # Injected into the sandboxed landing document at serve time (never authored
+    # by the seller) so plain store links work without any seller HTML changes.
+    # Clicking a link inside the sandboxed iframe would otherwise navigate the
+    # IFRAME itself: the destination page then renders on the opaque origin,
+    # where cookies and storage are unavailable, so checkout hangs or the page
+    # fails to render entirely. The sandbox deliberately omits
+    # allow-top-navigation (and the sanitizer strips target="_top"), so the only
+    # safe way out is this bridge: intercept clicks on the store's own links and
+    # ask the trusted parent wrapper to navigate the top-level window instead.
+    # The parent re-validates the URL against the same hostname allowlist — the
+    # iframe content is untrusted, so nothing here is load-bearing for security.
+    # Links to foreign hosts and target="_blank" links keep their default
+    # behavior.
+    def custom_html_navigation_bridge_script(allowed_hostnames:)
+      hostnames_json = ERB::Util.json_escape(allowed_hostnames.to_json)
+      <<~HTML
+        <script data-cfasync="false" data-gumroad-navigation-bridge>
+          (function () {
+            var STORE_HOSTNAMES = #{hostnames_json};
+            document.addEventListener("click", function (e) {
+              // Only plain left-clicks: modified clicks (new tab, etc.) keep
+              // the browser's default handling.
+              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              // Viewed directly (not framed) there is no trusted parent to ask,
+              // so leave the click alone.
+              if (window.parent === window) return;
+              var link = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+              if (!link) return;
+              var target = (link.getAttribute("target") || "").toLowerCase();
+              if (target && target !== "_self") return;
+              if (link.hasAttribute("download")) return;
+              var url;
+              try { url = new URL(link.getAttribute("href"), document.baseURI); } catch (_err) { return; }
+              if (url.protocol !== "https:" && url.protocol !== "http:") return;
+              if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
+              // Same-page fragment links should scroll within the iframe, not
+              // reload the profile at the top level.
+              var here = new URL(document.baseURI);
+              if (url.hash && url.pathname === here.pathname && url.search === here.search && url.hostname === here.hostname) return;
+              e.preventDefault();
+              parent.postMessage({ type: "gumroad:navigate", url: url.href }, "*");
+            }, true);
+          })();
+        </script>
+      HTML
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end

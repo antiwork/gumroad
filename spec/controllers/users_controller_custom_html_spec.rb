@@ -34,7 +34,12 @@ describe UsersController, :vcr, type: :controller do
       get :show
       expect(response.body).not_to include("gumroad:checkout")
       expect(response.body).not_to include("wanted=true")
-      expect(response.body).not_to include("postMessage")
+    end
+
+    it "embeds the gumroad:navigate listener so store links can reach the top-level window" do
+      get :show
+      expect(response.body).to include("gumroad:navigate")
+      expect(response.body).to include("STORE_HOSTNAMES")
     end
 
     it "falls back to the default profile page when custom_html is blank" do
@@ -114,8 +119,14 @@ describe UsersController, :vcr, type: :controller do
       get :landing_iframe_content
 
       expect(response.body).not_to include("gumroad:checkout")
-      expect(response.body).not_to include("postMessage")
       expect(response.body).not_to include("wanted=true")
+    end
+
+    it "embeds the store navigation bridge in the iframe document" do
+      get :landing_iframe_content
+
+      expect(response.body).to include("data-gumroad-navigation-bridge")
+      expect(response.body).to include("gumroad:navigate")
     end
 
     it "resolves the seller by username on the root domain" do

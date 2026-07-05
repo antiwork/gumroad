@@ -45,6 +45,7 @@ class UsersController < ApplicationController
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
       live_fields: params[:preview].present? && current_seller_owns_profile?,
+      navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
     ).html_safe, layout: false
   end
 
@@ -181,8 +182,10 @@ class UsersController < ApplicationController
   private
     # The profile is authored entirely through the seller's agent + CLI, so the
     # custom HTML never carries a buy affordance — there's no checkout bridge or
-    # ?wanted=true fall-through like the product landing page has. The wrapper is
-    # a display-only sandboxed iframe.
+    # ?wanted=true fall-through like the product landing page has. Store links
+    # inside the sandboxed iframe reach the top-level window through the
+    # gumroad:navigate postMessage bridge (see
+    # profile_custom_html_wrapper_document).
     def render_custom_html_if_present
       return unless custom_html_visible?
       # The public profile also answers JSON (GET /:username.json) with the
@@ -211,7 +214,23 @@ class UsersController < ApplicationController
       @is_user_custom_domain ? "/landing/#{suffix}" : "/#{user.username}/landing/#{suffix}"
     end
 
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false)
+    # Hostnames the navigation bridge accepts as "this seller's own store":
+    # the host serving the current request (subdomain or custom domain), the
+    # seller's canonical subdomain, and their live custom domain. Product URLs
+    # in the injected gumroad-data JSON are built on the subdomain
+    # (Link#long_url), so a visitor browsing the custom domain still needs the
+    # subdomain host allowlisted for those links to bridge. Both the injected
+    # child script and the parent wrapper validate against this same list —
+    # the parent-side check is the one that matters for security, since the
+    # sandboxed child is seller-authored and untrusted.
+    def profile_store_hostnames(user)
+      hostnames = [request.host]
+      hostnames << URI("#{PROTOCOL}://#{user.subdomain}").host if user.subdomain.present?
+      hostnames << user.custom_domain.domain if user.custom_domain&.domain.present?
+      hostnames.compact.uniq
+    end
+
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "")
       <<~HTML
         <!doctype html>
         <html>
@@ -224,6 +243,7 @@ class UsersController < ApplicationController
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
+            #{navigation_bridge}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>
@@ -233,17 +253,24 @@ class UsersController < ApplicationController
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin —
     # no access to gumroad.com cookies or the parent DOM. We also omit
     # `allow-top-navigation` so the seller's HTML can never navigate the
-    # visitor's tab away from gumroad.com. Unlike the product wrapper there is no
-    # checkout postMessage bridge: a profile has no native buy button.
+    # visitor's tab away from gumroad.com. Like the product wrapper's checkout
+    # bridge, store navigation instead goes through a postMessage handshake:
+    # the sandboxed page posts `gumroad:navigate` and this trusted wrapper
+    # validates the URL against the seller's own store hostnames before
+    # navigating the top-level window. Without the bridge, clicking a product
+    # link navigates the sandboxed IFRAME to the product page, which then runs
+    # on the opaque origin with no cookies/storage and checkout breaks.
     def profile_custom_html_wrapper_document(user)
       iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
+      store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
+      nonce = SecureHeaders.content_security_policy_script_nonce(request)
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
       live_reload = if current_seller_owns_profile?
-        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce: SecureHeaders.content_security_policy_script_nonce(request))
+        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce:)
       else
         ""
       end
@@ -269,6 +296,26 @@ class UsersController < ApplicationController
               title="#{title}"
               sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
+            <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
+              (function () {
+                var frame = document.getElementById("gumroad-landing-frame");
+                var STORE_HOSTNAMES = #{store_hostnames_json};
+                window.addEventListener("message", function (e) {
+                  // Only the sandboxed landing iframe (opaque origin, so
+                  // e.origin is the literal string "null") may drive this.
+                  if (e.source !== frame.contentWindow || e.origin !== "null") return;
+                  if (!e.data || typeof e.data !== "object" || e.data.type !== "gumroad:navigate") return;
+                  var url;
+                  try { url = new URL(String(e.data.url), window.location.href); } catch (_err) { return; }
+                  // The iframe content is seller-authored and untrusted: only
+                  // navigate the visitor's tab to this seller's own store, and
+                  // only over http(s) — never javascript:/data:/etc.
+                  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+                  if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
+                  window.location.href = url.href;
+                });
+              })();
+            </script>
             #{live_reload}
           </body>
         </html>

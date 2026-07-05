@@ -39,7 +39,7 @@ Gumroad fills in live values server-side, so the page stays current without you 
 
 Your live catalog is injected server-side as JSON in <script id="gumroad-data" type="application/json">, so prefer rendering products/posts/pages dynamically from it (it updates automatically as you add or remove them) instead of hardcoding. Read it with:
   const data = JSON.parse(document.getElementById("gumroad-data").textContent);
-Shape: { products: [{ name, url, price, native_type, thumbnail_url, description }], posts: [{ name, url, published_at }], pages: [{ name }] }. Link products via product.url (their public product page). The page can't fetch anything at runtime (it's sandboxed), so this injected data is the source of truth.
+Shape: { products: [{ name, url, price, native_type, thumbnail_url, description }], posts: [{ name, url, published_at }], pages: [{ name }] }. Link products via product.url (their public product page) using plain <a> tags with no target attribute — Gumroad injects a navigation bridge that opens store links in the visitor's tab (target="_top"/"_parent" are stripped by the sanitizer, so don't use them). The page can't fetch anything at runtime (it's sandboxed), so this injected data is the source of truth.
 
 Then preview, publish, and verify it with the Gumroad CLI:
 - Run the real server-side sanitizer WITHOUT publishing and read what it changed: gumroad user page preview ./profile.html --json --no-input --non-interactive — inspect .sanitization_report. If it stripped tags or attributes your page needs, fix the HTML and preview again. Do this until the report is clean so you never publish a broken page.
