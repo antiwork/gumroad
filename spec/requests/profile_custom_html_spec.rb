@@ -77,6 +77,22 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(URI(seller.subdomain_with_protocol).host)
     end
 
+    it "never allowlists a shared Gumroad host — only hosts the seller controls" do
+      # Viewed via a shared root-domain route (gumroad.com/:username), the
+      # request host is NOT the seller's own; allowlisting it would let the
+      # seller's sandboxed HTML navigate the visitor's tab to arbitrary
+      # gumroad.com paths. The allowlist must contain only the seller's
+      # subdomain and custom domain.
+      get "http://#{VALID_REQUEST_HOSTS.last}/#{seller.username}/landing/embed"
+
+      expect(response).to be_successful
+      expect(response.body).to include(URI(seller.subdomain_with_protocol).host)
+      expect(response.body).to include("seller.example.com")
+      VALID_REQUEST_HOSTS.each do |shared_host|
+        expect(response.body).not_to include("\"#{shared_host}\"")
+      end
+    end
+
     it "keeps the iframe sandbox unchanged — still no allow-same-origin or allow-top-navigation" do
       get "http://seller.example.com/"
 

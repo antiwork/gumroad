@@ -224,7 +224,14 @@ class UsersController < ApplicationController
     # the parent-side check is the one that matters for security, since the
     # sandboxed child is seller-authored and untrusted.
     def profile_store_hostnames(user)
-      hostnames = [request.host]
+      hostnames = []
+      # Only trust the request host when it is one of the seller's OWN hosts
+      # (their subdomain or custom domain). When the profile is viewed on a
+      # shared Gumroad host (e.g. gumroad.com/:username before the subdomain
+      # redirect), adding request.host would let the seller's sandboxed HTML
+      # navigate the visitor's tab to arbitrary gumroad.com paths — the
+      # allowlist must only ever contain hosts this seller controls.
+      hostnames << request.host unless VALID_REQUEST_HOSTS.include?(request.host)
       hostnames << URI("#{PROTOCOL}://#{user.subdomain}").host if user.subdomain.present?
       hostnames << user.custom_domain.domain if user.custom_domain&.domain.present?
       hostnames.compact.uniq
