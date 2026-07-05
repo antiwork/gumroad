@@ -307,9 +307,15 @@ export default function LibraryPage() {
   const RESULTS_PER_PAGE = 15;
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageCount = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_PAGE));
-  // Filters/search can shrink the result set below the current page; snap back
-  // into range (and to page 1 on any filter change, since the memo re-creates).
-  React.useEffect(() => setCurrentPage(1), [filteredResults]);
+  // Any change to the filtered results (search, filters, archiving, deleting)
+  // sends the buyer back to page 1. This happens synchronously during render —
+  // not in an effect — so a later page never briefly renders against a smaller
+  // result set (which would show an empty grid and a range like "31-15 of 15").
+  const [prevFilteredResults, setPrevFilteredResults] = React.useState(filteredResults);
+  if (filteredResults !== prevFilteredResults) {
+    setPrevFilteredResults(filteredResults);
+    setCurrentPage(1);
+  }
   const pagedResults = React.useMemo(
     () => filteredResults.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE),
     [filteredResults, currentPage],
