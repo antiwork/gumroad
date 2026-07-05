@@ -108,6 +108,93 @@ module RendersCustomHtmlPages
   end
 
   private
+    # --- Same-store navigation bridge ---------------------------------------
+    #
+    # The seller's HTML lives in an opaque-origin sandboxed iframe. A plain
+    # product link (<a href="/l/xyz">) therefore navigates the IFRAME itself,
+    # loading the full product page + checkout on an origin where cookies and
+    # storage are unavailable — checkout hangs, and Safari won't render the
+    # page at all. The seller can't use target="_top" either: the sanitizer
+    # strips it and the sandbox omits allow-top-navigation on purpose (seller
+    # HTML must never be able to redirect the visitor's tab to an arbitrary
+    # site).
+    #
+    # So, mirroring the product wrapper's gumroad:checkout pattern, clicks on
+    # links that point at the seller's OWN store are turned into a postMessage
+    # to the trusted parent wrapper, which re-validates the destination host
+    # and performs the top-level navigation itself. Links to any other host
+    # keep the browser's default in-frame behavior, and the parent ignores any
+    # message whose URL isn't on the seller's own hosts — the sandbox
+    # guarantee is unchanged for everything except the seller's own store
+    # pages.
+
+    # Runs inside the sandboxed (untrusted) document. It only decides which
+    # clicks to FORWARD; the parent independently re-validates the URL, so a
+    # compromised copy of this script gains nothing.
+    def custom_html_navigation_bridge_child_script(allowed_hosts:)
+      hosts_js = ERB::Util.json_escape(allowed_hosts.to_json)
+      <<~HTML
+        <script data-cfasync="false" data-gumroad-nav-bridge>
+          (function () {
+            var ALLOWED_HOSTS = #{hosts_js};
+            document.addEventListener("click", function (e) {
+              if (e.defaultPrevented) return;
+              // Respect modified clicks (open in new tab/window) and non-left buttons.
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+              var anchor = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+              if (!anchor) return;
+              // A seller who set an explicit target (e.g. _blank) keeps it.
+              var target = (anchor.getAttribute("target") || "").trim();
+              if (target !== "" && target.toLowerCase() !== "_self") return;
+              var url;
+              try { url = new URL(anchor.getAttribute("href"), window.location.href); } catch (_e) { return; }
+              if (url.protocol !== "https:" && url.protocol !== "http:") return;
+              if (ALLOWED_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return;
+              e.preventDefault();
+              parent.postMessage({ type: "gumroad:navigate", url: url.href }, "*");
+            }, true);
+          })();
+        </script>
+      HTML
+    end
+
+    # Runs in the trusted parent wrapper (real origin, nonce'd under the
+    # global CSP). Validates that the message came from our iframe and that
+    # the destination is one of the seller's own hosts before navigating
+    # top-level.
+    def custom_html_navigation_bridge_parent_script(allowed_hosts:, nonce:)
+      hosts_js = ERB::Util.json_escape(allowed_hosts.to_json)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var ALLOWED_HOSTS = #{hosts_js};
+            window.addEventListener("message", function (e) {
+              // Opaque-origin iframes report origin "null"; also require the
+              // message to come from our own frame, not a nested one.
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:navigate") return;
+              var url;
+              try { url = new URL(String(d.url), window.location.origin); } catch (_e) { return; }
+              if (url.protocol !== "https:" && url.protocol !== "http:") return;
+              if (ALLOWED_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return;
+              window.location.href = url.href;
+            });
+          })();
+        </script>
+      HTML
+    end
+
+    # The hosts the bridge may navigate to: the host currently being browsed
+    # (subdomain or verified custom domain), plus the seller's subdomain and
+    # custom domain, so product URLs generated for either surface work on
+    # both.
+    def custom_html_navigation_allowed_hosts(user)
+      hosts = [request.host, user.subdomain, user.custom_domain&.domain]
+      hosts.compact.map { _1.to_s.downcase.strip }.reject(&:empty?).uniq
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end

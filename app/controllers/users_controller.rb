@@ -180,9 +180,11 @@ class UsersController < ApplicationController
 
   private
     # The profile is authored entirely through the seller's agent + CLI, so the
-    # custom HTML never carries a buy affordance — there's no checkout bridge or
-    # ?wanted=true fall-through like the product landing page has. The wrapper is
-    # a display-only sandboxed iframe.
+    # custom HTML never carries a native buy affordance — there's no checkout
+    # bridge or ?wanted=true fall-through like the product landing page has.
+    # Product links in the seller's HTML top-navigate through the
+    # gumroad:navigate bridge (RendersCustomHtmlPages) so checkout happens on a
+    # real origin, never inside the sandboxed iframe.
     def render_custom_html_if_present
       return unless custom_html_visible?
       # The public profile also answers JSON (GET /:username.json) with the
@@ -224,6 +226,7 @@ class UsersController < ApplicationController
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
+            #{custom_html_navigation_bridge_child_script(allowed_hosts: custom_html_navigation_allowed_hosts(@user))}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>
@@ -233,17 +236,20 @@ class UsersController < ApplicationController
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin —
     # no access to gumroad.com cookies or the parent DOM. We also omit
     # `allow-top-navigation` so the seller's HTML can never navigate the
-    # visitor's tab away from gumroad.com. Unlike the product wrapper there is no
-    # checkout postMessage bridge: a profile has no native buy button.
+    # visitor's tab away from gumroad.com. Product links in the seller's HTML
+    # escape the sandbox via the gumroad:navigate postMessage bridge (see
+    # RendersCustomHtmlPages), which only follows destinations on the seller's
+    # own store hosts.
     def profile_custom_html_wrapper_document(user)
       iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
+      nonce = SecureHeaders.content_security_policy_script_nonce(request)
       # avatar_url always returns a value (it falls back to the default avatar),
       # so only advertise og:image when the seller uploaded a real one.
       og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
       live_reload = if current_seller_owns_profile?
-        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce: SecureHeaders.content_security_policy_script_nonce(request))
+        custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce:)
       else
         ""
       end
@@ -269,6 +275,7 @@ class UsersController < ApplicationController
               title="#{title}"
               sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
+            #{custom_html_navigation_bridge_parent_script(allowed_hosts: custom_html_navigation_allowed_hosts(user), nonce:)}
             #{live_reload}
           </body>
         </html>

@@ -55,6 +55,41 @@ describe "Profile custom HTML rendering", type: :request do
     expect(response.body).not_to include("wanted=true")
   end
 
+  describe "same-store navigation bridge" do
+    it "injects the click-forwarding script into the embed with the seller's own hosts" do
+      get "http://seller.example.com/landing/embed"
+
+      expect(response.body).to include("data-gumroad-nav-bridge")
+      expect(response.body).to include("gumroad:navigate")
+      json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
+      hosts = JSON.parse(json)
+      expect(hosts).to include("seller.example.com")
+      expect(hosts).to include(seller.subdomain)
+    end
+
+    it "injects the validating listener into the wrapper with the same host allowlist" do
+      get "http://seller.example.com/"
+
+      expect(response.body).to include("gumroad:navigate")
+      json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
+      hosts = JSON.parse(json)
+      expect(hosts).to include("seller.example.com")
+      expect(hosts).to include(seller.subdomain)
+      # The wrapper script must carry the CSP nonce to run under the global policy.
+      expect(response.body).to match(/<script nonce="[^"]+" data-cfasync="false">\s*\(function \(\) \{\s*var frame = document\.getElementById\("gumroad-landing-frame"\);\s*var ALLOWED_HOSTS/)
+    end
+
+    it "never includes another seller's domain in the allowlist" do
+      other = create(:user, username: "otherseller")
+      create(:custom_domain, user: other, domain: "other.example.com")
+
+      get "http://seller.example.com/"
+
+      json = response.body[/var ALLOWED_HOSTS = (\[.*?\]);/, 1]
+      expect(JSON.parse(json)).not_to include("other.example.com")
+    end
+  end
+
   describe "owner live-reload poll" do
     it "injects the version poll into the wrapper only for the signed-in owner" do
       sign_in seller
