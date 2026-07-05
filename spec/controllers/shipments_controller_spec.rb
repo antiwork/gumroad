@@ -128,6 +128,35 @@ describe ShipmentsController, :vcr  do
         end
       end
     end
+
+    describe "EasyPost API failure" do
+      before do
+        @params = {
+          street_address: "1640 17th St",
+          city: "San Francisco",
+          state: "CA",
+          zip_code: "94107",
+          country: "United States"
+        }
+      end
+
+      it "accepts the buyer's address as entered so checkout is not blocked, and reports the error" do
+        expect_any_instance_of(EasyPost::Services::Address).to receive(:create)
+          .and_raise(EasyPost::Errors::EasyPostError.new("This api key is no longer active. Please use a different api key or reactivate this key."))
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(EasyPost::Errors::EasyPostError),
+          context: { action: "verify_shipping_address" }
+        )
+
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["street_address"]).to eq "1640 17th St"
+        expect(response.parsed_body["city"]).to eq "San Francisco"
+        expect(response.parsed_body["state"]).to eq "CA"
+        expect(response.parsed_body["zip_code"]).to eq "94107"
+      end
+    end
   end
 
   describe "POST mark_as_shipped" do
