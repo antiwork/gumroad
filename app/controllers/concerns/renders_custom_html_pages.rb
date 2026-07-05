@@ -139,10 +139,20 @@ module RendersCustomHtmlPages
               // A seller who set an explicit target (e.g. their own _blank) keeps it.
               var target = (anchor.getAttribute("target") || "").trim();
               if (target !== "" && target.toLowerCase() !== "_self") return;
+              var rawHref = (anchor.getAttribute("href") || "").trim();
+              // Hash-only and empty hrefs are same-document navigations (section
+              // jumps, "#"-placeholder buttons wired up by the seller's own JS).
+              // They resolve against the iframe's own /landing/embed URL, so
+              // without this guard they would pass the host check and open the
+              // raw embed endpoint in a new tab instead of scrolling in place.
+              if (rawHref === "" || rawHref.charAt(0) === "#") return;
               var url;
-              try { url = new URL(anchor.getAttribute("href"), window.location.href); } catch (_e) { return; }
+              try { url = new URL(rawHref, window.location.href); } catch (_e) { return; }
               if (url.protocol !== "https:" && url.protocol !== "http:") return;
               if (ALLOWED_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return;
+              // Same-document by resolution too (e.g. href="?x#y" or the page's
+              // own URL): leave those to the browser, never a new tab.
+              if (url.pathname === window.location.pathname && url.hostname === window.location.hostname) return;
               anchor.target = "_blank";
               anchor.rel = "noopener";
             }, true);
@@ -153,10 +163,18 @@ module RendersCustomHtmlPages
 
     # The hosts whose links get the new-tab treatment: the host currently
     # being browsed (subdomain or verified custom domain), plus the seller's
-    # subdomain and custom domain, so product URLs generated for either
-    # surface work on both.
+    # subdomain and currently ACTIVE custom domain, so product URLs generated
+    # for either surface work on both. `active?` (verified + valid
+    # certificate) is the same eligibility check the rest of the app uses
+    # before emitting custom-domain URLs (UrlService, ContentExtractor). An
+    # unverified or stale record never qualifies: it can be any arbitrary
+    # domain the seller typed in (or one that has since been pointed
+    # off-platform), and only hosts Gumroad actually serves this store on
+    # belong in the allowlist.
     def custom_html_same_store_hosts(user)
-      hosts = [request.host, user.subdomain, user.custom_domain&.domain]
+      custom_domain = user.custom_domain
+      active_custom_domain = custom_domain&.active? ? custom_domain.domain : nil
+      hosts = [request.host, user.subdomain, active_custom_domain]
       hosts.compact.map { _1.to_s.downcase.strip }.reject(&:empty?).uniq
     end
 
