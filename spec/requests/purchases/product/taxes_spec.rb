@@ -156,11 +156,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("Total US$658.85", normalize_ws: true)
 
         click_on "Pay"
-        if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
-          click_on "Yes, it is"
-        elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
-          click_on "No, continue"
-        end
+        confirm_shipping_address_if_prompted
         expect(page).to have_alert(text: "Your purchase was successful!")
 
         purchase = Purchase.last

@@ -10,8 +10,9 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
     end
 
     it "shows that the address is not valid but will let the purchase through if user says yes" do
-      # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
-      exception = EasyPost::Errors::EasyPostError.new
+      # Mock EasyPost rejecting the address as unparseable — an input-class error, which keeps
+      # the "Is your address correct?" prompt (service-side EasyPost failures fail open instead).
+      exception = EasyPost::Errors::InvalidRequestError.new("Unable to verify address", 422)
       expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_raise(exception)
 
       visit "/l/#{@product.unique_permalink}"
@@ -191,14 +192,45 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
       @product.shipping_destinations << ShippingDestination.new(country_code: "CA", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
       @product.save!
 
-      # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
-      exception = EasyPost::Errors::EasyPostError.new
+      # Mock EasyPost rejecting the address as unparseable — an input-class error, which keeps
+      # the "Is your address correct?" prompt (service-side EasyPost failures fail open instead
+      # and are covered by the spec below).
+      exception = EasyPost::Errors::InvalidRequestError.new("Unable to verify address", 422)
       expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_raise(exception)
 
       visit "/l/#{@product.unique_permalink}"
 
       add_to_cart(@product)
       check_out(@product, address: { city: "Burnaby", state: "BC", zip_code: "V3N 4H4" }, country: "Canada", should_verify_address: true)
+
+      expect(page).to have_alert("Your purchase was successful!")
+
+      purchase = Purchase.last
+      expect(purchase.street_address).to eq("1640 17th St")
+      expect(purchase.city).to eq("Burnaby")
+      expect(purchase.state).to eq("BC")
+      expect(purchase.zip_code).to eq("V3N 4H4")
+      expect(purchase.country).to eq("Canada")
+    end
+
+    it "lets the purchase through without a confirmation prompt when EasyPost itself is unavailable" do
+      @user = create(:user)
+
+      @product = create(:physical_product, user: @user, require_shipping: true, price_cents: 100_00)
+      @product.shipping_destinations << ShippingDestination.new(country_code: "CA", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
+      @product.save!
+
+      # A service-side EasyPost failure (outage, bad API key) fails open: the address is accepted
+      # as entered so checkout isn't blocked, and no confirmation dialog is shown.
+      exception = EasyPost::Errors::ForbiddenError.new("This api key is no longer active.", 403)
+      expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_raise(exception)
+
+      visit "/l/#{@product.unique_permalink}"
+
+      add_to_cart(@product)
+      check_out(@product, address: { city: "Burnaby", state: "BC", zip_code: "V3N 4H4" }, country: "Canada")
+
+      expect(page).not_to have_text("We are unable to verify your shipping address. Is your address correct?")
 
       expect(page).to have_alert("Your purchase was successful!")
 

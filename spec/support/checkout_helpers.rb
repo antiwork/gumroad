@@ -156,15 +156,7 @@ module CheckoutHelpers
       click_on is_free ? "Get" : "Pay", exact: true
 
       if should_verify_address
-        begin
-          if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
-            click_on "Yes, it is"
-          elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
-            click_on "No, continue"
-          end
-        rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::StaleElementReferenceError
-          # Page may still be loading after payment processing or Chrome may be unstable; continue to success assertion
-        end
+        confirm_shipping_address_if_prompted
       end
 
       within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil?
@@ -194,6 +186,31 @@ module CheckoutHelpers
     end.to change { product.preorder_link.present? ? product.sales.preorder_authorization_successful.count : product.sales.successful.count }.by(error.blank? && logged_in_user&.id != product.user.id && (product.not_free_trial_enabled || gift.present?) ? cart_item_count : 0)
       .and change { product.preorder_link.present? ? product.sales.preorder_authorization_failed.count : product.sales.failed.count }.by(error.present? && error != true ? 1 : 0)
       .and change { product&.subscriptions&.count }.by(error.blank? && product.is_recurring_billing ? 1 : 0)
+  end
+
+  # Clicks through the shipping address confirmation dialog if one appears after submitting a
+  # form that verifies the address. Address verification fails open when EasyPost itself is
+  # unavailable (see ShipmentsController#verify_shipping_address), so a confirmation dialog may
+  # never appear and the flow proceeds straight to success. We wait once for whichever outcome
+  # shows up first instead of waiting out each dialog text in turn — otherwise we burn the full
+  # wait on absent dialogs and the transient success alert can auto-dismiss before the caller's
+  # own assertions run.
+  def confirm_shipping_address_if_prompted(success_text: "Your purchase was successful!", wait: 10)
+    page.has_text?(
+      Regexp.union(
+        "We are unable to verify your shipping address. Is your address correct?",
+        "You entered this address:",
+        success_text
+      ),
+      wait:
+    )
+    if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 0)
+      click_on "Yes, it is"
+    elsif page.has_text?("You entered this address:", wait: 0) && page.has_text?("We recommend using this format:", wait: 0)
+      click_on "No, continue"
+    end
+  rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::StaleElementReferenceError
+    # Page may still be loading after payment processing or Chrome may be unstable; continue to success assertion
   end
 end
 

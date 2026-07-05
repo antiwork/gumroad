@@ -422,7 +422,8 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
-      click_on "Yes, it is" # verify shipping address
+      # verify shipping address (skipped automatically if verification failed open)
+      confirm_shipping_address_if_prompted(success_text: "Your membership has been updated.")
       wait_for_ajax
 
       expect(page).to have_alert(text: "Your membership has been updated.")
