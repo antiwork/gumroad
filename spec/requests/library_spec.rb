@@ -492,7 +492,7 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to_not have_product_card(purchase.link)
   end
 
-  it "shows new results upon scrolling to the bottom of the page" do
+  it "paginates results and shows the next page when a page link is clicked" do
     products = []
     30.times do |n|
       product = create(:product, name: "Product #{n}", price_cents: 0)
@@ -510,10 +510,36 @@ describe("Library Scenario", type: :system, js: true) do
     15.times do |n|
       expect(page).to_not have_product_card(products[n], exact_text: true)
     end
-    scroll_to find(:section, "15", section_element: :article)
+
+    within find("[role='navigation'][aria-label='Pagination']") do
+      click_on "2"
+    end
+
+    expect(page).to have_text("Showing 16-30 of 30 products")
     15.times do |n|
       expect(page).to have_product_card(products[n], exact_text: true)
     end
+    15.times do |n|
+      expect(page).to_not have_product_card(products[29 - n], exact_text: true)
+    end
+
+    within find("[role='navigation'][aria-label='Pagination']") do
+      click_on "Previous"
+    end
+    expect(page).to have_text("Showing 1-15 of 30 products")
+    expect(page).to have_product_card(products[29], exact_text: true)
+  end
+
+  it "does not render pagination when all results fit on one page" do
+    10.times do |n|
+      create(:purchase, link: create(:product, name: "Product #{n}", price_cents: 0), purchaser: @user)
+    end
+
+    Link.import(refresh: true, force: true)
+    visit library_path
+
+    expect(page).to have_text("Showing 1-10 of 10 products")
+    expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
   end
 
   describe "bundle purchases" do

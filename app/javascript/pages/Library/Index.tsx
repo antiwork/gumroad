@@ -17,6 +17,7 @@ import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
+import { Pagination } from "$app/components/Pagination";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -303,8 +304,20 @@ export default function LibraryPage() {
       .sort((a, b) => b.count - a.count);
   }, [creators, state.results, state.search.showArchivedOnly]);
 
-  const [resultsLimit, setResultsLimit] = React.useState(15);
-  React.useEffect(() => setResultsLimit(15), [filteredResults]);
+  const RESULTS_PER_PAGE = 15;
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const pageCount = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_PAGE));
+  // Filters/search can shrink the result set below the current page; snap back
+  // into range (and to page 1 on any filter change, since the memo re-creates).
+  React.useEffect(() => setCurrentPage(1), [filteredResults]);
+  const pagedResults = React.useMemo(
+    () => filteredResults.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE),
+    [filteredResults, currentPage],
+  );
+  const handleChangePage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0 });
+  };
 
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
@@ -377,7 +390,6 @@ export default function LibraryPage() {
   return (
     <Layout
       selectedTab="purchases"
-      onScrollToBottom={() => setResultsLimit((prevNumberOfResults) => prevNumberOfResults + 15)}
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
@@ -433,7 +445,7 @@ export default function LibraryPage() {
                 <header>
                   <div className="grow">
                     {filteredResults.length
-                      ? `Showing 1-${Math.min(filteredResults.length, resultsLimit)} of ${filteredResults.length} products`
+                      ? `Showing ${(currentPage - 1) * RESULTS_PER_PAGE + 1}-${Math.min(filteredResults.length, currentPage * RESULTS_PER_PAGE)} of ${filteredResults.length} products`
                       : "No products found"}
                   </div>
                   {isDesktop ? null : (
@@ -577,7 +589,7 @@ export default function LibraryPage() {
             </UICard>
           ) : null}
           <ProductCardGrid>
-            {filteredResults.slice(0, resultsLimit).map((result) => (
+            {pagedResults.map((result) => (
               <Card
                 key={result.purchase.id}
                 result={result}
@@ -591,6 +603,11 @@ export default function LibraryPage() {
                 onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
               />
             ))}
+            {pageCount > 1 ? (
+              <div className="col-[1/-1]">
+                <Pagination pagination={{ pages: pageCount, page: currentPage }} onChangePage={handleChangePage} />
+              </div>
+            ) : null}
           </ProductCardGrid>
         </div>
         <DeleteProductModal
