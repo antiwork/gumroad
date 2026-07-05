@@ -146,10 +146,22 @@ module RendersCustomHtmlPages
               // A seller who set an explicit target (e.g. _blank) keeps it.
               var target = (anchor.getAttribute("target") || "").trim();
               if (target !== "" && target.toLowerCase() !== "_self") return;
+              var rawHref = (anchor.getAttribute("href") || "").trim();
+              // Hash-only and empty hrefs are same-document navigations (section
+              // jumps, "#"-placeholder buttons wired up by the seller's own JS).
+              // They resolve against the iframe's /landing/embed URL, so without
+              // this guard they would pass the host allowlist and top-navigate
+              // the visitor to the raw embed endpoint. Leave them to the browser
+              // / the seller's scripts.
+              if (rawHref === "" || rawHref.charAt(0) === "#") return;
               var url;
-              try { url = new URL(anchor.getAttribute("href"), window.location.href); } catch (_e) { return; }
+              try { url = new URL(rawHref, window.location.href); } catch (_e) { return; }
               if (url.protocol !== "https:" && url.protocol !== "http:") return;
               if (ALLOWED_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return;
+              // Same-document by resolution too (e.g. href="?x#y" or the page's
+              // own URL): anything that lands back on this embed document should
+              // stay in-frame, never become a top-level navigation.
+              if (url.pathname === window.location.pathname && url.hostname === window.location.hostname) return;
               e.preventDefault();
               parent.postMessage({ type: "gumroad:navigate", url: url.href }, "*");
             }, true);

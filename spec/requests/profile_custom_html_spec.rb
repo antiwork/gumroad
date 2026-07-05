@@ -67,6 +67,14 @@ describe "Profile custom HTML rendering", type: :request do
       expect(hosts).to include(seller.subdomain)
     end
 
+    it "leaves hash-only and empty hrefs to the browser instead of forwarding them" do
+      get "http://seller.example.com/landing/embed"
+
+      # Guard against the parent top-navigating to the raw /landing/embed URL
+      # when the seller's HTML uses `#section` links or `#` placeholder anchors.
+      expect(response.body).to include(%q(if (rawHref === "" || rawHref.charAt(0) === "#") return;))
+    end
+
     it "injects the validating listener into the wrapper with the same host allowlist" do
       get "http://seller.example.com/"
 
