@@ -66,7 +66,7 @@ class AccountingMailer < ApplicationMailer
 
     mail subject: @subject_and_title,
          to: PAYMENTS_EMAIL,
-         cc: %w[chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
+         cc: %w[steven.olson@gumroad.com chhabra.harbaksh@gmail.com gumclaw@gumroad.com]
   end
 
   def email_outstanding_balances_csv
