@@ -111,7 +111,7 @@ describe CreateGlobalSalesTaxSummaryReportJob do
 
         expect(ActionMailer::Base.deliveries.last.subject).to eq("Global Sales Tax Summary Report for 1/2024")
         expect(ActionMailer::Base.deliveries.last.to).to eq(["salestax@gumroad.com"])
-        expect(ActionMailer::Base.deliveries.last.cc).to eq(["steven.olson@gumroad.com"])
+        expect(ActionMailer::Base.deliveries.last.cc).to be_blank
       end
     end
 
