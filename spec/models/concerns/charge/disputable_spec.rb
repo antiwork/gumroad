@@ -355,6 +355,39 @@ describe Charge::Disputable, :vcr do
         Purchase.handle_charge_event(event)
       end
 
+      describe "buyer-presentment purchases" do
+        let(:event) do
+          event = build(:charge_event_dispute_formalized, charge_id: "ch_zitkxbhds3zqlt")
+          # Stripe pulls the disputed amount in the buyer's (charge) currency.
+          event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -135)
+          event
+        end
+
+        before do
+          create(:purchase_presentment, purchase:, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+          purchase.association(:purchase_presentment).reset
+        end
+
+        it "books the dispute balance debit in canonical USD, not the buyer currency" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(balance_transaction).to be_present
+          expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+          expect(balance_transaction.issued_amount_gross_cents).to eq(-purchase.gross_amount_refundable_cents)
+          expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+        end
+
+        it "snapshots the canonical gross the debit booked so the dispute-won re-credit can reuse it" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(purchase.presentment_dispute_debited_gross_cents).to eq(-balance_transaction.issued_amount_gross_cents)
+        end
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }
@@ -603,6 +636,101 @@ describe Charge::Disputable, :vcr do
         it "sets the chargeback reversed flag" do
           Purchase.handle_charge_event(@e)
           expect(@p.reload.chargeback_reversed).to be(true)
+        end
+
+        describe "buyer-presentment purchases" do
+          before do
+            create(:purchase_presentment, purchase: @p, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+            @p.association(:purchase_presentment).reset
+            # Stripe returns the disputed amount in the buyer's (charge) currency.
+            @e.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, 135)
+          end
+
+          it "books the dispute-won re-credit from the snapshotted debit gross in canonical USD, not the buyer currency" do
+            # The dispute debit snapshots the canonical gross right before it books.
+            @p.update!(presentment_dispute_debited_gross_cents: @p.gross_amount_refundable_cents)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(Credit.last.user).to eq @p.seller
+            expect(Credit.last.amount_cents).to eq @p.payment_cents
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
+          end
+
+          it "books the re-credit from the snapshotted debit gross when a refund lands after the debit" do
+            create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            # The debit snapshotted the gross it booked. A refund webhook arriving while
+            # the dispute is active then creates a refund row (no balance decrement) and
+            # shrinks gross_amount_refundable_cents — the re-credit must not follow it.
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+            expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
+          end
+
+          it "settles a mid-dispute refund by crediting the reduced seller net, not the full debited split" do
+            create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            # A briefly-shipped version of the dispute debit also snapshotted the
+            # seller/affiliate split into json_data so the win could reuse it. Seed those
+            # keys the way that code left them to pin that they are ignored: reusing the
+            # split would over-credit the seller (see below).
+            @p.json_data["presentment_dispute_debited_seller_cents"] = @p.payment_cents
+            @p.json_data["presentment_dispute_debited_affiliate_cents"] = 0
+            @p.save!
+            # A refund webhook arriving while the dispute is active creates the refund row
+            # but skips the seller balance debit (the dispute debit already took the full
+            # amount). The dispute-won credit settles that skipped debit by recomputing the
+            # seller net from the reduced refundable amount: crediting the full split the
+            # loss debited would leave the seller whole while the buyer also keeps the
+            # refund, over-crediting the seller by the refund's net share.
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(Credit.last.user).to eq @p.seller
+            # amount_refundable_cents (70) minus its proportional fee share, same as the
+            # non-presentment settlement above ("credits only remaining balance").
+            expect(Credit.last.amount_cents).to eq 5
+            expect(Credit.last.amount_cents).to be < @p.payment_cents
+            # The canonical gross still mirrors the debit's snapshot; only the net settles
+            # the skipped refund decrement.
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+          end
+
+          it "mirrors the processor flow of funds when the dispute predates the debit snapshot" do
+            # Disputes debited before the snapshot existed had their debit booked straight
+            # from the processor flow of funds, so the re-credit must mirror the same flow
+            # of funds — reconstructing a canonical amount could diverge from what was
+            # actually debited (e.g. when a refund landed after formalization but before
+            # the debit read the refundable gross).
+            dispute = create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+            expect(@p.presentment_dispute_debited_gross_cents).to be_nil
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(dispute.reload.state).to eq("won")
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::CAD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+          end
         end
 
         describe "purchase involves an affiliate" do

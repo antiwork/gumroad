@@ -109,6 +109,27 @@ class Purchase::PresentmentRefund
     end
   end
 
+  # Builds a snapshot for a standalone Gumroad-tax (VAT) refund: the refund consists
+  # entirely of the remaining presentment Gumroad-tax component, with no price, tip,
+  # seller-tax, or shipping share. Returns nil when no consistent tax-only amount
+  # remains, so callers fail closed.
+  def tax_only_result
+    return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
+
+    # Same reasoning as .from_presentment_amount: a prior refund without a presentment
+    # snapshot already consumed canonical tax cents but counts as zero presentment tax
+    # here, so the remaining buyer-currency tax is unknowable — fail closed rather than
+    # send Stripe more tax than the purchase has left.
+    return nil if purchase.refunds.any? { _1.presentment_amount_cents.to_i <= 0 }
+
+    remaining_tax_cents = purchase_presentment.presentment_gumroad_tax_cents.to_i -
+      refunded_presentment_cents_for(:presentment_gumroad_tax_cents)
+    return nil if remaining_tax_cents <= 0 || remaining_tax_cents > remaining_presentment_amount_cents
+
+    build_result(amount_cents: remaining_tax_cents,
+                 component_cents: [0, 0, 0, remaining_tax_cents, 0])
+  end
+
   private
     def purchase_presentment
       purchase.purchase_presentment

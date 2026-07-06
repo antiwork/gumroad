@@ -6,14 +6,18 @@ module Purchase::DisputeWinCredits
   def create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: 0)
     return if affiliate_credit_cents == 0 || amount_cents == 0
 
+    canonical_issued_amount = presentment_canonical_dispute_won_issued_amount
+
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
         flow_of_funds:,
-        issued_affiliate_cents: amount_cents
+        issued_affiliate_cents: amount_cents,
+        canonical_issued_amount:
     )
 
     affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
         flow_of_funds:,
-        issued_affiliate_cents: amount_cents
+        issued_affiliate_cents: amount_cents,
+        canonical_issued_amount:
     )
 
     Credit.create_for_dispute_won!(
@@ -29,14 +33,18 @@ module Purchase::DisputeWinCredits
   def create_credit_for_dispute_won_for_seller!(flow_of_funds, amount_cents:)
     return unless charged_using_gumroad_merchant_account?
 
+    canonical_issued_amount = presentment_canonical_dispute_won_issued_amount
+
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
         flow_of_funds:,
-        issued_net_cents: amount_cents
+        issued_net_cents: amount_cents,
+        canonical_issued_amount:
     )
 
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
         flow_of_funds:,
-        issued_net_cents: amount_cents
+        issued_net_cents: amount_cents,
+        canonical_issued_amount:
     )
 
     Credit.create_for_dispute_won!(

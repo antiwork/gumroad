@@ -70,6 +70,10 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :last_content_page_id
   attr_json_data_accessor :default_offer_code_id
+  # Buyer-presentment purchases only: the canonical USD gross the dispute-loss balance
+  # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
+  # exactly the same amount, even when refunds land between the debit and the win.
+  attr_json_data_accessor :presentment_dispute_debited_gross_cents
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -2058,7 +2062,7 @@ class Purchase < ApplicationRecord
   def process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
     return if affiliate_credit_cents == 0 || refund_cents == 0
 
-    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
 
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
       flow_of_funds:,
@@ -2110,7 +2114,7 @@ class Purchase < ApplicationRecord
     logger.info("process_refund_or_chargeback_for_purchase_balance::dispute::#{dispute.inspect}")
     return unless charged_using_gumroad_merchant_account?
 
-    canonical_issued_amount = presentment_canonical_refund_issued_amount(refund)
+    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
 
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,
@@ -2144,6 +2148,7 @@ class Purchase < ApplicationRecord
 
   def decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund: nil, dispute: nil)
     return unless seller_balance_update_eligible?
+    snapshot_presentment_dispute_debited_gross! if dispute.present?
     if (dispute && !stripe_partially_refunded) || [price_cents, total_transaction_cents].include?(refund&.amount_cents)
       # Short circuit for full refund, or dispute
       seller_refund_cents = payment_cents - affiliate_credit_cents
@@ -3215,6 +3220,53 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank? || refund.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * refund.total_transaction_cents)
+    end
+
+    # Dispute counterpart: the processor pulls the disputed amount in the buyer's
+    # currency, but the balance debit must be booked against the canonical gross that
+    # remains chargeable on this purchase (full canonical gross, or the unrefunded
+    # remainder when the purchase was partially refunded before the dispute). The gross
+    # is snapshotted right before the debit runs, so the debit and the eventual
+    # dispute-won re-credit always book the same number.
+    def presentment_canonical_dispute_issued_amount
+      return if purchase_presentment.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: -1 * (presentment_dispute_debited_gross_cents || gross_amount_refundable_cents))
+    end
+
+    # Dispute-won counterpart: the re-credit mirrors the dispute debit, so it books the
+    # same canonical gross back with a positive sign. It reads the gross that was
+    # snapshotted when the debit was booked, so refunds recorded between the debit and
+    # the win (webhook refunds create the row but skip the balance decrement while a
+    # dispute is active) cannot make the re-credit diverge from the debit.
+    #
+    # Disputes debited before the snapshot existed get no override: their debit was
+    # booked straight from the processor flow of funds (in the buyer's currency), so the
+    # re-credit mirrors the same flow of funds and returns exactly what was taken.
+    # Reconstructing a canonical amount here could only diverge from that debit.
+    def presentment_canonical_dispute_won_issued_amount
+      return if purchase_presentment.blank?
+      return if presentment_dispute_debited_gross_cents.blank?
+
+      FlowOfFunds::Amount.new(currency: Currency::USD, cents: presentment_dispute_debited_gross_cents)
+    end
+
+    # Records, at dispute-debit time, the canonical gross the debit is about to book.
+    # Idempotent: a webhook re-fire keeps the first snapshot.
+    def snapshot_presentment_dispute_debited_gross!
+      return if purchase_presentment.blank?
+      return if presentment_dispute_debited_gross_cents.present?
+
+      self.presentment_dispute_debited_gross_cents = gross_amount_refundable_cents
+      save!
+    end
+
+    # Selects the canonical override for a refund-or-chargeback balance debit. Returns
+    # nil for non-presentment purchases so the processor flow of funds is used as-is.
+    def presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
+      return if purchase_presentment.blank?
+
+      dispute.present? ? presentment_canonical_dispute_issued_amount : presentment_canonical_refund_issued_amount(refund)
     end
 
     def web_csv_parity_fields
