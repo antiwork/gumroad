@@ -111,7 +111,7 @@ const membershipRequest = (item: Product, managementURL: string): ApplePayRecurr
     ...(item.hasFreeTrial ? { trialBilling: { label: "Free trial", amount: 0 } } : {}),
     billingAgreement:
       totalBillingCycles != null
-        ? `${formattedRenewal} for ${totalBillingCycles} payments. Manage anytime from your Gumroad library.`
+        ? `${formattedRenewal} for ${totalBillingCycles} ${totalBillingCycles === 1 ? "payment" : "payments"}. Manage anytime from your Gumroad library.`
         : `${formattedRenewal} until you cancel. Manage or cancel anytime from your Gumroad library.`,
   };
 };

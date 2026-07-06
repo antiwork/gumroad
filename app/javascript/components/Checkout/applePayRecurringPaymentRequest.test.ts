@@ -98,6 +98,16 @@ describe("getApplePayRecurringPaymentRequest", () => {
     expect(request?.billingAgreement).toContain("for 4 payments");
   });
 
+  it("uses the singular 'payment' when the fixed duration fits in a single billing cycle", () => {
+    // A 12-month membership billed yearly makes exactly one payment (charged today), so the
+    // agreement text must not read "1 payments".
+    const request = getApplePayRecurringPaymentRequest(
+      [membership({ recurrence: "yearly", durationInMonths: 12 })],
+      MANAGEMENT_URL,
+    );
+    expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
+  });
+
   it("leaves open-ended memberships without an end date", () => {
     const request = getApplePayRecurringPaymentRequest([membership({ durationInMonths: null })], MANAGEMENT_URL);
     expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
