@@ -7,6 +7,11 @@ class HandleHelperEventWorker
 
   RECENT_PURCHASE_PERIOD = 1.year
   HELPER_EVENTS = %w[conversation.created]
+  # Automated Stripe notification emails (e.g. Radar "suspected fraudulent payment"
+  # alerts) are not from a customer, so the buyer-unblock flow below has nothing to
+  # do for them. Radar fraud signals are handled by the Stripe webhook processor
+  # (StripeChargeRadarProcessor); the conversation itself is left for support triage.
+  STRIPE_NOTIFICATION_SENDER = "notifications@stripe.com"
 
   def perform(event, payload)
     return unless event.in?(HELPER_EVENTS)
@@ -20,6 +25,8 @@ class HandleHelperEventWorker
       Rails.logger.warn("Empty email in conversation #{conversation_id}")
       return
     end
+
+    return if email == STRIPE_NOTIFICATION_SENDER
 
     purchase = HelperUserInfoService.new(email:, recent_purchase_period: RECENT_PURCHASE_PERIOD).recent_purchase
 

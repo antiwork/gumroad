@@ -46,5 +46,14 @@ describe HandleHelperEventWorker do
         described_class.new.perform(@event, @payload)
       end
     end
+
+    context "when the email is an automated Stripe notification" do
+      it "does not trigger UnblockEmailService" do
+        expect_any_instance_of(HelperUserInfoService).not_to receive(:recent_purchase)
+        expect_any_instance_of(Helper::UnblockEmailService).not_to receive(:process)
+        @payload["email_from"] = described_class::STRIPE_NOTIFICATION_SENDER
+        described_class.new.perform(@event, @payload)
+      end
+    end
   end
 end
