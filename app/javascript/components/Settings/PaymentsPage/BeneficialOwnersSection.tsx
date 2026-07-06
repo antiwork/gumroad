@@ -503,6 +503,12 @@ const BeneficialOwnersSection = ({
       if (!HAS_KATAKANA.test(formState.address_street_address_kana)) {
         return "Town/Cho-me (Kana) must include katakana characters.";
       }
+      if (!KANA_ADDRESS_REGEX.test(formState.address_city_kana)) {
+        return "City/Ward (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+      }
+      if (!HAS_KATAKANA.test(formState.address_city_kana)) {
+        return "City/Ward (Kana) must include katakana characters.";
+      }
     }
     return null;
   };
