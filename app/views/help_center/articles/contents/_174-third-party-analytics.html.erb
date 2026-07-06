@@ -58,6 +58,9 @@
     <li>Go to the <a href="https://gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics tab</a></li>
     <li>Paste the Pixel ID in the Facebook Pixel field </li>
   </ul>
+  <div class="callout-yellow">
+    <p><b>Important:</b> if your pixel uses <a href="https://www.facebook.com/business/help/572690630080597" target="_blank">traffic permissions</a> (an allowed-domain list in Meta Events Manager under Settings), it must allow <b>both</b> your Gumroad subdomain (for example, yourusername.gumroad.com) <b>and</b> gumroad.com. Your product pages live on your subdomain, but the receipt page shown after a purchase is served from gumroad.com, and that is where the Purchase event fires. If gumroad.com is missing from the list, Meta silently drops every Purchase event even though your setup is otherwise correct.</p>
+  </div>
   <p><b>Step 3: Go back to Meta Events Manager</b></p>
   <p>The <a href="https://www.facebook.com/business/help/898185560232180" target="_blank">Meta Events Manager</a> provides valuable information such as who's viewing your products, who are initiating a checkout, and who's making purchases. </p>
   <p>The most important value is the Purchase event. With this event, you can create a <a href="https://www.facebook.com/business/help/365463786964246" target="_blank">Lookalike Audience</a>. Lookalike audiences simulate people closest to those who have already purchased the product. </p>
@@ -89,6 +92,7 @@
   <p>The status of your Conversion ID will remain Unverified until someone clicks your product link on Facebook and buys your product. If you run a <a href="62-testing-a-purchase" target="_blank">test purchase</a> of the product through Facebook, this will verify and activate the pixel.</p>
   <p><b>Troubleshoot</b></p>
   <p>If you don't see events going through, try turning off your browser extensions or ad-blockers as they can often block Pixel requests too. You should also test your Pixel setup with the <a href="https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener noreferrer">Meta Pixel Helper Chrome extension</a>.</p>
+  <p>If ViewContent and InitiateCheckout work but Purchase never appears (and the Pixel Helper shows no pixel at all on the receipt page), check your pixel's <a href="https://www.facebook.com/business/help/572690630080597" target="_blank">traffic permissions</a> in Meta Events Manager. The allowed-domain list must include gumroad.com in addition to your subdomain, because the Purchase event fires from the gumroad.com receipt page. See the note under Step 2 above.</p>
   <p>Learn more about the Meta Pixel <a href="https://www.facebook.com/help/435189689870514/" target="_blank">here</a>.</p>
   <h3 id="TikTok-Pixel-zK9mP">TikTok Pixel</h3>
   <p>A TikTok pixel lets you track visitors and conversions from your TikTok ads.</p>
