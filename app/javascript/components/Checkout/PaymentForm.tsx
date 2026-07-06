@@ -1170,11 +1170,21 @@ const useStripePaymentRequest = (disabled: boolean) => {
           // code without the province — since every Canadian postal code's first letter maps to
           // exactly one province or territory, we derive the province from the postal code so
           // Canadian tax can still be calculated (the wallet flow has no province field the
-          // buyer could fill in manually).
+          // buyer could fill in manually). If the wallet gives neither a state nor a usable
+          // Canadian postal code, we still must not submit a blank province: Canadian tax is only
+          // calculated when a province is present, so "CA" with an empty province would silently
+          // collect no tax, and the wallet flow gives the buyer no province field to correct it.
+          // In that case we keep the existing checkout state when the wallet's billing country
+          // matches the country checkout already had (it came from the buyer's saved address or
+          // geo-detection for that same country, so it isn't stale), and as a last resort for
+          // Canada we fall back to the first province in the list — the same default the manual
+          // country dropdown applies when a buyer switches it to Canada.
           const billingAddress = e.paymentMethod.billing_details.address;
           const billingState =
             billingAddress.state ||
-            (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null);
+            (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
+            (billingAddress.country === state.country ? state.state : null) ||
+            (billingAddress.country === "CA" ? state.caProvinces[0] : null);
           dispatch({ type: "set-value", country: billingAddress.country });
           dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
           dispatch({ type: "set-value", state: billingState ?? "" });
