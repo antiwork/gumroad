@@ -124,15 +124,54 @@ class PaypalChargeProcessor
     usd_amount_cents = get_usd_cents(refund_currency.downcase, (refunded_amount.to_f * unit_scaling_factor(refund_currency)).to_i)
 
     refund_purchase(capture_id:, usd_amount_cents:,
-                    processor_refund: OpenStruct.new({ id: refund_id, status: event_info["resource"]["status"] }))
+                    processor_refund: OpenStruct.new({ id: refund_id, status: event_info["resource"]["status"] }),
+                    skip_if_capture_shared: true)
   end
   private_class_method :handle_payment_capture_refunded_event
 
-  def self.refund_purchase(capture_id:, usd_amount_cents: nil, processor_refund: nil)
+  def self.refund_purchase(capture_id:, usd_amount_cents: nil, processor_refund: nil, skip_if_capture_shared: false)
     raise ArgumentError, "No paypal transaction id found in refund webhook" if capture_id.blank?
 
     purchase = Purchase.find_by(stripe_transaction_id: capture_id)
     return unless purchase&.successful?
+
+    # A single PayPal capture can back multiple Purchase rows (a multi-item cart from one seller
+    # is charged as one capture). Looking a purchase up by the capture id alone finds only ONE of
+    # those rows, so blindly recording the capture's refund against it can mark the wrong item
+    # refunded. Real incident: a partial refund issued for two FAILED (undelivered, never-credited)
+    # items in a 3-item cart was recorded against the cart's one successful purchase, flipped it to
+    # fully refunded, and revoked the buyer's Library access to the item they paid for and kept.
+    # When sibling purchases share this capture (same capture id, or same PayPal order with no
+    # capture of their own — e.g. failed rows), we can't tell which item the refund belongs to,
+    # so skip the automatic refund and alert a human to attribute it manually instead. Siblings
+    # from the same PayPal order that carry a DIFFERENT capture id (multi-seller carts get one
+    # capture per seller) are unambiguous and do not block the refund, and neither do free
+    # ($0) siblings since a refund can never belong to them.
+    # This ambiguity only exists for item-level refund webhooks (PAYMENT.CAPTURE.REFUNDED), so
+    # callers opt in via skip_if_capture_shared. Whole-capture events like
+    # PAYMENT.CAPTURE.DENIED mean the entire capture failed and must keep unwinding.
+    if skip_if_capture_shared
+      sibling_scope = Purchase.where.not(id: purchase.id).where(stripe_transaction_id: capture_id)
+      if purchase.paypal_order_id.present?
+        sibling_scope = sibling_scope.or(
+          Purchase.where.not(id: purchase.id)
+                  .where(paypal_order_id: purchase.paypal_order_id)
+                  .where(stripe_transaction_id: [nil, "", capture_id])
+        )
+      end
+      sibling_scope = sibling_scope.where("price_cents > 0")
+      if sibling_scope.exists?
+        ErrorNotifier.notify(
+          "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+          capture_id:,
+          resolved_purchase_id: purchase.id,
+          sibling_purchase_ids: sibling_scope.pluck(:id),
+          usd_amount_cents:,
+          processor_refund_id: processor_refund&.id
+        )
+        return
+      end
+    end
 
     usd_cents_to_refund = usd_amount_cents.present? ?
                             [usd_amount_cents, purchase.gross_amount_refundable_cents].min :
