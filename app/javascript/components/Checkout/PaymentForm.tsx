@@ -1155,9 +1155,18 @@ const useStripePaymentRequest = (disabled: boolean) => {
       (async () => {
         const state = stateRef.current;
         if (hasShipping(state) && e.shippingAddress) dispatch({ type: "set-value", ...getAddress(e.shippingAddress) });
-        if (!hasShipping(state) && e.paymentMethod.billing_details.address?.country === "US") {
-          dispatch({ type: "set-value", country: "US" });
+        if (!hasShipping(state) && e.paymentMethod.billing_details.address?.country) {
+          // Honor the wallet's billing country for ALL countries, not just US. Checkout state
+          // defaults `country` to "US" when the account has no country and geo-detection fails,
+          // so without this a non-US Apple Pay / Google Pay buyer submits taxCountryElection "US"
+          // with an empty ZIP and the server's US-only ZIP validation rejects the purchase with
+          // "You entered a ZIP Code that doesn't exist within your country" — an error the buyer
+          // can't fix because the wallet flow never shows a ZIP field. The billing state/province
+          // is copied too because Canadian tax lookup requires it alongside the country.
+          dispatch({ type: "set-value", country: e.paymentMethod.billing_details.address.country });
           dispatch({ type: "set-value", zipCode: e.paymentMethod.billing_details.address.postal_code || undefined });
+          if (e.paymentMethod.billing_details.address.state)
+            dispatch({ type: "set-value", state: e.paymentMethod.billing_details.address.state });
         }
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
