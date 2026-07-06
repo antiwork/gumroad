@@ -60,10 +60,12 @@ class PurchasePaymentFlow < ApplicationRecord
   # it), so its presence is a reliable lane signal.
   def self.payment_details_transport_for(source, params)
     return if NON_STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
+    # A saved card sends no new payment details, so any submitted new-payment param (a PaymentMethod
+    # id or a ConfirmationToken) contradicts the claimed source and nothing is recorded. This guard
+    # must run before the confirmation_token branch below, or a saved-card request carrying a token
+    # would be misclassified as a client-confirm purchase.
+    return params[:stripe_payment_method_id].blank? && params[:confirmation_token].blank? ? PAYMENT_METHOD : nil if source == SAVED_PAYMENT_METHOD
     return CONFIRMATION_TOKEN if params[:confirmation_token].present?
-    # A saved card sends no new payment details, so a submitted PaymentMethod id contradicts the
-    # claimed source and nothing is recorded.
-    return params[:stripe_payment_method_id].blank? ? PAYMENT_METHOD : nil if source == SAVED_PAYMENT_METHOD
 
     PAYMENT_METHOD if STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
   end

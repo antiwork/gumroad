@@ -91,6 +91,10 @@ describe PurchasePaymentFlow do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method", stripe_payment_method_id: "pm_123")).to be_nil
     end
 
+    it "does not record a saved-card flow when a confirmation_token is also submitted, rather than misclassifying it as client-confirm" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method", confirmation_token: "ctoken_123")).to be_nil
+    end
+
     it "records the confirmation_token transport for a client-confirm submission" do
       attributes = described_class.attributes_for_checkout_params(payment_details_source: "payment_element", confirmation_token: "ctoken_123")
 
