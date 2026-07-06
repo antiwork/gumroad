@@ -21,11 +21,6 @@ class HandleHelperEventWorker
       return
     end
 
-    if email == BlockStripeSuspectedFraudulentPaymentsWorker::STRIPE_EMAIL_SENDER && BlockStripeSuspectedFraudulentPaymentsWorker::POSSIBLE_CONVERSATION_SUBJECTS.include?(payload["subject"])
-      BlockStripeSuspectedFraudulentPaymentsWorker.new.perform(conversation_id, email, payload["body"])
-      return
-    end
-
     user_info = HelperUserInfoService.new(email:, recent_purchase_period: RECENT_PURCHASE_PERIOD).user_info
     purchase = user_info[:recent_purchase]
 

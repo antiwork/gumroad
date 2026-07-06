@@ -51,21 +51,5 @@ describe HandleHelperEventWorker do
         described_class.new.perform(@event, @payload)
       end
     end
-
-    context "when the event is for a new Stripe fraud email" do
-      it "triggers BlockStripeSuspectedFraudulentPaymentsWorker and skips UnblockEmailService" do
-        @payload["email_from"] = BlockStripeSuspectedFraudulentPaymentsWorker::STRIPE_EMAIL_SENDER
-        @payload["subject"] = BlockStripeSuspectedFraudulentPaymentsWorker::POSSIBLE_CONVERSATION_SUBJECTS.sample
-
-        expect_any_instance_of(BlockStripeSuspectedFraudulentPaymentsWorker).to receive(:perform).with(
-          @payload["conversation_id"],
-          @payload["email_from"],
-          @payload["body"]
-        )
-        expect_any_instance_of(Helper::UnblockEmailService).not_to receive(:process)
-
-        described_class.new.perform(@event, @payload)
-      end
-    end
   end
 end
