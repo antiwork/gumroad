@@ -34,6 +34,24 @@ export type ApplePayRecurringPaymentRequest = NonNullable<
 // on the sheet, so they keep today's one-time request (and a device token) rather than
 // misdescribing the purchase.
 
+// Adds calendar months to a date without JavaScript's month-boundary overflow. A plain
+// `setMonth()` call rolls over when the target month is shorter than the starting day — e.g.
+// January 31 + 1 month lands on March 3 instead of a day in February. Billing anniversaries clamp
+// to the last day of shorter months, so the end date shown on the sheet should too. The date here
+// is display-only (it bounds the agreement Apple prints); actual charge scheduling happens
+// server-side and is unaffected.
+const addMonthsClamped = (date: Date, months: number): Date => {
+  const result = new Date(date);
+  const dayOfMonth = result.getDate();
+  // Move to the 1st first so changing the month can never overflow, then restore the day capped
+  // at the target month's length.
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(dayOfMonth, lastDayOfTargetMonth));
+  return result;
+};
+
 export const getApplePayRecurringPaymentRequest = (
   products: Product[],
   managementURL: string,
@@ -70,8 +88,7 @@ const membershipRequest = (item: Product, managementURL: string): ApplePayRecurr
   if (totalBillingCycles != null) {
     // The last charge happens one interval before the total duration elapses (the first charge is
     // today), so the agreement ends after (cycles - 1) further intervals.
-    recurringPaymentEndDate = new Date();
-    recurringPaymentEndDate.setMonth(recurringPaymentEndDate.getMonth() + (totalBillingCycles - 1) * months);
+    recurringPaymentEndDate = addMonthsClamped(new Date(), (totalBillingCycles - 1) * months);
   }
 
   const formattedRenewal = `${formatPriceCentsWithCurrencySymbol("usd", renewalAmount, { symbolFormat: "short" })} ${
@@ -107,8 +124,7 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
   // even base amount (the first installment absorbs the rounding remainder and has already been
   // paid by the time any recurring charge happens), and the end date bounds the agreement.
   const baseInstallmentAmount = Math.floor(item.price / numberOfInstallments);
-  const endDate = new Date();
-  endDate.setMonth(endDate.getMonth() + numberOfInstallments - 1);
+  const endDate = addMonthsClamped(new Date(), numberOfInstallments - 1);
 
   return {
     paymentDescription: `${item.name} (${numberOfInstallments} monthly installments)`,

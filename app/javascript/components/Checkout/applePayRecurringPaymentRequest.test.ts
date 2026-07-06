@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { Product } from "$app/components/Checkout/payment";
@@ -153,5 +153,41 @@ describe("getApplePayRecurringPaymentRequest", () => {
     expect(
       getApplePayRecurringPaymentRequest([product({ payInInstallments: true, installmentPlan: null })], MANAGEMENT_URL),
     ).toBeNull();
+  });
+
+  describe("month-boundary end dates", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("clamps a fixed-duration membership end date to the last day of a shorter month", () => {
+      // Buying on January 31 with a 2-month monthly membership: the agreement ends one month out.
+      // Plain setMonth() would overflow January 31 + 1 month into March 3; the sheet should show
+      // the last day of February instead, matching how billing anniversaries clamp.
+      vi.setSystemTime(new Date(2026, 0, 31)); // January 31, 2026
+      const request = getApplePayRecurringPaymentRequest([membership({ durationInMonths: 2 })], MANAGEMENT_URL);
+      const endDate = request?.regularBilling.recurringPaymentEndDate;
+      expect(endDate?.getFullYear()).toBe(2026);
+      expect(endDate?.getMonth()).toBe(1); // February
+      expect(endDate?.getDate()).toBe(28);
+    });
+
+    it("clamps an installment plan end date to the last day of a shorter month", () => {
+      // 2 installments bought on October 31: the second (last) installment lands one month out,
+      // which should clamp to November 30 rather than overflowing into December 1.
+      vi.setSystemTime(new Date(2026, 9, 31)); // October 31, 2026
+      const request = getApplePayRecurringPaymentRequest(
+        [product({ price: 10_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+        MANAGEMENT_URL,
+      );
+      const endDate = request?.regularBilling.recurringPaymentEndDate;
+      expect(endDate?.getFullYear()).toBe(2026);
+      expect(endDate?.getMonth()).toBe(10); // November
+      expect(endDate?.getDate()).toBe(30);
+    });
   });
 });
