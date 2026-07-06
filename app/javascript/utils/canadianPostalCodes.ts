@@ -29,6 +29,16 @@ const FSA_FIRST_LETTER_TO_PROVINCE: Record<string, string> = {
 // "X" postal code belongs to the Northwest Territories.
 const NUNAVUT_FSAS = new Set(["X0A", "X0B", "X0C"]);
 
+// Province to elect when a Canadian buyer's real province cannot be determined
+// at all (the wallet shared neither a state nor a usable postal code, and
+// checkout has no prior Canadian province). Alberta charges only the 5%
+// federal GST — the one component of Canadian sales tax every buyer owes no
+// matter which province or territory they live in. Electing it means an
+// unknown-province purchase still collects the federal portion, without
+// charging the buyer another province's higher HST/PST or attributing
+// provincial tax to a jurisdiction they may not be in.
+export const GST_ONLY_FALLBACK_PROVINCE = "AB";
+
 // Returns the two-letter Canadian province/territory code for a postal code,
 // or null when the postal code doesn't look Canadian. Accepts the common
 // formats buyers and wallets produce: "K1A 0B1", "k1a0b1", "K1A".

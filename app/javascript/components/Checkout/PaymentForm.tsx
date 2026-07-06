@@ -30,7 +30,7 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
-import { provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
+import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { classNames } from "$app/utils/classNames";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
@@ -1176,15 +1176,20 @@ const useStripePaymentRequest = (disabled: boolean) => {
           // collect no tax, and the wallet flow gives the buyer no province field to correct it.
           // In that case we keep the existing checkout state when the wallet's billing country
           // matches the country checkout already had (it came from the buyer's saved address or
-          // geo-detection for that same country, so it isn't stale), and as a last resort for
-          // Canada we fall back to the first province in the list — the same default the manual
-          // country dropdown applies when a buyer switches it to Canada.
+          // geo-detection for that same country, so it isn't stale). As a true last resort for
+          // Canada — the wallet gave no province, no usable postal code, and checkout had no
+          // prior Canadian province — we elect Alberta. That choice is deliberate, not an
+          // arbitrary list default: Alberta charges only the 5% federal GST, which applies to
+          // buyers in every province and territory. Electing it when the real province is
+          // unknowable means we always collect the federal portion the buyer owes regardless of
+          // where they live, and we never charge them another province's higher HST/PST or remit
+          // provincial tax to a jurisdiction they may not be in.
           const billingAddress = e.paymentMethod.billing_details.address;
           const billingState =
             billingAddress.state ||
             (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
             (billingAddress.country === state.country ? state.state : null) ||
-            (billingAddress.country === "CA" ? state.caProvinces[0] : null);
+            (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
           dispatch({ type: "set-value", country: billingAddress.country });
           dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
           dispatch({ type: "set-value", state: billingState ?? "" });
