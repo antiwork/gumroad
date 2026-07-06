@@ -322,6 +322,27 @@ describe StripeBeneficialOwnersManager do
         .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\)/)
     end
 
+    it "still validates kana fields when the address country is blank and falls back to the JP seller country" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      # The required-fields check normally rejects a blank country before the kana validator
+      # runs, so this exercises the validator directly to prove it uses the same country
+      # fallback as the payload builder: blank submitted country + JP seller = JP kana rules.
+      jp_params = {
+        first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+        address: {
+          country: "", state: "東京都", postal_code: "100-0001",
+          building_number: "1-1", building_number_kana: "1-1",
+          street_address_kanji: "千代田", street_address_kana: "チヨダ",
+          city: "千代田区", city_kana: "Chiyoda",
+        },
+      }
+      expect { described_class.send(:validate_jp_kana_address_format!, jp_params, user) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\) must include katakana/)
+    end
+
     it "sends kanji/kana names with a Latin address when a JP seller adds a non-JP-resident BO" do
       user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info, user: user, country: "Japan", is_business: true,

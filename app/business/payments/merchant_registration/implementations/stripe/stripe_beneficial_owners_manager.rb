@@ -65,7 +65,7 @@ module StripeBeneficialOwnersManager
   def self.create(user, params)
     stripe_account = ensure_eligible!(user)
     validate_required_fields!(params, action: :create, user: user)
-    validate_jp_kana_address_format!(params)
+    validate_jp_kana_address_format!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -79,7 +79,7 @@ module StripeBeneficialOwnersManager
       person_params = build_representative_update_params(params)
     else
       validate_required_fields!(params, action: :update, user: user)
-      validate_jp_kana_address_format!(params)
+      validate_jp_kana_address_format!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -171,13 +171,18 @@ module StripeBeneficialOwnersManager
   # and we would forward it to Stripe as address_kana/first_name_kana, which Stripe rejects
   # for Japanese accounts. Reuses the same regexes UserComplianceInfo applies to the
   # seller's own kana fields.
-  def self.validate_jp_kana_address_format!(params)
+  def self.validate_jp_kana_address_format!(params, user)
     validate_kana_param!(params[:first_name_kana], "First name (Kana)", UserComplianceInfo::KANA_NAME_REGEX, "katakana characters, spaces, dashes, and dots")
     validate_kana_param!(params[:last_name_kana], "Last name (Kana)", UserComplianceInfo::KANA_NAME_REGEX, "katakana characters, spaces, dashes, and dots")
 
     address = params[:address]
     return unless address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
-    return unless address[:country].to_s.strip == Compliance::Countries::JPN.alpha2
+    # build_person_params falls back to the seller's own country when the submitted address
+    # leaves country blank, so the validator must use that same effective country. Otherwise a
+    # request with a blank country would skip these checks and still be sent to Stripe as a
+    # Japanese kana address.
+    address_country = address[:country].to_s.strip.presence || user.alive_user_compliance_info&.legal_entity_country_code
+    return unless address_country == Compliance::Countries::JPN.alpha2
 
     { building_number_kana: "Block / Building number (Kana)",
       street_address_kana: "Town/Cho-me (Kana)",

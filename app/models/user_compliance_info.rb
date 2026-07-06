@@ -33,7 +33,7 @@ class UserComplianceInfo < ApplicationRecord
 
   validate :birthday_is_over_minimum_age
   validate :kana_fields_format
-  validate :street_address_kana_must_contain_katakana
+  validate :kana_address_fields_must_contain_katakana
   validate :business_name_romaji_format
 
   after_create_commit :handle_stripe_compliance_info
@@ -223,11 +223,16 @@ class UserComplianceInfo < ApplicationRecord
       end
     end
 
-    def street_address_kana_must_contain_katakana
+    # Building numbers are often just digits and dashes (e.g. "1-1"), so only the town/street
+    # and city kana fields must actually contain katakana — matching the browser-side rules
+    # and the beneficial-owner server-side check.
+    def kana_address_fields_must_contain_katakana
       return if country_code != Compliance::Countries::JPN.alpha2
 
       { street_address_kana: "Street address (Kana)",
-        business_street_address_kana: "Business street address (Kana)" }.each do |field, label|
+        city_kana: "City (Kana)",
+        business_street_address_kana: "Business street address (Kana)",
+        business_city_kana: "Business city (Kana)" }.each do |field, label|
         value = send(field)
         next if value.blank?
         next if value.match?(HAS_KATAKANA)
