@@ -21,8 +21,7 @@ class HandleHelperEventWorker
       return
     end
 
-    user_info = HelperUserInfoService.new(email:, recent_purchase_period: RECENT_PURCHASE_PERIOD).user_info
-    purchase = user_info[:recent_purchase]
+    purchase = HelperUserInfoService.new(email:, recent_purchase_period: RECENT_PURCHASE_PERIOD).recent_purchase
 
     unblock_email_service = Helper::UnblockEmailService.new(conversation_id:, email_id:, email:)
     unblock_email_service.recent_blocked_purchase = purchase if purchase.try(:buyer_blocked?) && (purchase.stripe_error_code || purchase.error_code).in?(PurchaseErrorCode::UNBLOCK_BUYER_ERROR_CODES)

@@ -25,12 +25,7 @@ describe HandleHelperEventWorker do
 
   describe "#perform" do
     it "triggers UnblockEmailService" do
-      allow_any_instance_of(HelperUserInfoService).to receive(:user_info).and_return({
-                                                                                       user: nil,
-                                                                                       account_infos: [],
-                                                                                       purchase_infos: [],
-                                                                                       recent_purchase: nil,
-                                                                                     })
+      allow_any_instance_of(HelperUserInfoService).to receive(:recent_purchase).and_return(nil)
       expect_any_instance_of(Helper::UnblockEmailService).to receive(:process)
       expect_any_instance_of(Helper::UnblockEmailService).to receive(:replied?)
       described_class.new.perform(@event, @payload)

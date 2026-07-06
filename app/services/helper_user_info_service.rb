@@ -21,6 +21,15 @@ class HelperUserInfoService
     }
   end
 
+  # The user's most recent purchase (successful or failed) within the
+  # configured lookback window. Exposed publicly because
+  # HandleHelperEventWorker uses it to decide whether a blocked buyer's
+  # email should go through the unblock flow.
+  def recent_purchase
+    return @_recent_purchase if defined?(@_recent_purchase)
+    @_recent_purchase = find_recent_purchase
+  end
+
   def customer_info
     {
       **user_details,
@@ -105,7 +114,6 @@ class HelperUserInfoService
     end
 
     def recent_purchase_info
-      recent_purchase = find_recent_purchase
       return unless recent_purchase
 
       product = recent_purchase.link
