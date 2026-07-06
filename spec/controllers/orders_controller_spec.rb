@@ -1088,7 +1088,7 @@ describe OrdersController, :vcr do
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to eq false
-        expect(response.parsed_body["error_message"]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
+        expect(response.parsed_body["error_message"]).to eq ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
         expect(response.parsed_body["can_buyer_sign_up"]).to be_nil
       end
 
@@ -2481,6 +2481,17 @@ describe OrdersController, :vcr do
       expect(Charge.last.stripe_payment_intent_id).to be_present
 
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
+    end
+
+    it "records the client-confirm lane in the purchase's payment-flow analytics row" do
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_details_source: "payment_element" }.merge(common_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+      flow = Purchase.last.purchase_payment_flow
+      expect(flow).to be_present
+      expect(flow.payment_details_source).to eq("payment_element")
+      expect(flow.payment_details_transport).to eq("confirmation_token")
+      expect(flow.stripe_payment_method_type).to eq("card")
     end
 
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do

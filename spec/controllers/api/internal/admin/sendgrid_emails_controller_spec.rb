@@ -1,27 +1,27 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "shared_examples/authorized_helper_api_method"
+require "shared_examples/authorized_admin_api_method"
 
-describe Api::Internal::Helper::SendgridEmailsController do
+describe Api::Internal::Admin::SendgridEmailsController do
+  let(:admin_user) { create(:admin_user) }
   let(:email) { "buyer@example.com" }
   let(:suppression_manager) { instance_double(EmailSuppressionManager) }
 
   before do
-    request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
     allow(EmailSuppressionManager).to receive(:new).with(email).and_return(suppression_manager)
   end
 
-  it "inherits from Api::Internal::Helper::BaseController" do
-    expect(described_class.superclass).to eq(Api::Internal::Helper::BaseController)
+  it "inherits from Api::Internal::Admin::BaseController" do
+    expect(described_class.superclass).to eq(Api::Internal::Admin::BaseController)
   end
 
-  describe "POST check_status" do
-    include_examples "helper api authorization required", :post, :check_status
+  describe "GET check_status" do
+    include_examples "admin api authorization required", :get, :check_status
 
     context "when email parameter is missing" do
       it "returns 400" do
-        post :check_status
+        get :check_status
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body).to eq("success" => false, "message" => "'email' parameter is required")
       end
@@ -35,7 +35,7 @@ describe Api::Internal::Helper::SendgridEmailsController do
       end
 
       it "returns suppressed: false with empty SendGrid buckets" do
-        post :check_status, params: { email: }
+        get :check_status, params: { email: }
 
         expect(response).to be_successful
         body = response.parsed_body
@@ -62,7 +62,7 @@ describe Api::Internal::Helper::SendgridEmailsController do
       end
 
       it "returns suppressed: true with details" do
-        post :check_status, params: { email: }
+        get :check_status, params: { email: }
 
         expect(response).to be_successful
         body = response.parsed_body
@@ -75,7 +75,7 @@ describe Api::Internal::Helper::SendgridEmailsController do
   end
 
   describe "POST remove_suppression" do
-    include_examples "helper api authorization required", :post, :remove_suppression
+    include_examples "admin api authorization required", :post, :remove_suppression
 
     context "when email parameter is missing" do
       it "returns 400" do
@@ -136,6 +136,22 @@ describe Api::Internal::Helper::SendgridEmailsController do
 
         expect(response).to be_successful
       end
+    end
+
+    it "records an admin audit log" do
+      allow(suppression_manager).to receive(:remove_from_lists).and_return(bounces: [])
+
+      expect do
+        post :remove_suppression, params: { email:, list: "bounces" }
+      end.to change(AdminApiAuditLog, :count).by(1)
+
+      audit_log = AdminApiAuditLog.last
+      expect(audit_log.action).to eq("sendgrid_emails.remove_suppression")
+      expect(audit_log.http_method).to eq("POST")
+      # The email is the subject of this write, so it must survive redaction —
+      # otherwise the audit row can't say which address was unsuppressed.
+      expect(audit_log.params_snapshot["email"]).to eq(email)
+      expect(audit_log.params_snapshot["list"]).to eq("bounces")
     end
   end
 end

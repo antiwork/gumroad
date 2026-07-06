@@ -9,6 +9,7 @@ class PurchasePaymentFlow < ApplicationRecord
   SAVED_PAYMENT_METHOD = "saved_payment_method"
 
   PAYMENT_METHOD = "payment_method"
+  CONFIRMATION_TOKEN = "confirmation_token"
 
   CARD = "card"
 
@@ -22,18 +23,25 @@ class PurchasePaymentFlow < ApplicationRecord
     saved_payment_method: SAVED_PAYMENT_METHOD,
   }, prefix: true, validate: true
 
-  enum :payment_details_transport, { payment_method: PAYMENT_METHOD }, prefix: true, validate: true
+  # The transport distinguishes the two checkout lanes, which is what rollout monitoring compares:
+  # the existing server-confirmed lane submits a PaymentMethod id (`payment_method`), while the
+  # client-confirmed Intent lane submits a ConfirmationToken (`confirmation_token`). The source
+  # alone cannot tell them apart — both lanes report `payment_element` when the buyer uses the
+  # Payment Element.
+  enum :payment_details_transport, { payment_method: PAYMENT_METHOD, confirmation_token: CONFIRMATION_TOKEN }, prefix: true, validate: true
 
   validates :stripe_payment_method_type, presence: true
 
   def self.attributes_for_checkout_params(params)
     source = payment_details_source_for(params)
     return if source.nil?
-    return unless stripe_payment_submission?(source, params)
+
+    transport = payment_details_transport_for(source, params)
+    return if transport.nil?
 
     {
       payment_details_source: source,
-      payment_details_transport: PAYMENT_METHOD,
+      payment_details_transport: transport,
       stripe_payment_method_type: CARD,
     }
   end
@@ -46,11 +54,20 @@ class PurchasePaymentFlow < ApplicationRecord
   end
   private_class_method :payment_details_source_for
 
-  def self.stripe_payment_submission?(source, params)
-    return false if NON_STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
-    return params[:stripe_payment_method_id].blank? if source == SAVED_PAYMENT_METHOD
+  # Derived from which payment params the server actually received, never from a client-supplied
+  # label. The `confirmation_token` param only exists on the client-confirm prepare endpoint
+  # (OrdersController#prepare threads it through; the server-confirm create endpoint never permits
+  # it), so its presence is a reliable lane signal.
+  def self.payment_details_transport_for(source, params)
+    return if NON_STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
+    # A saved card sends no new payment details, so any submitted new-payment param (a PaymentMethod
+    # id or a ConfirmationToken) contradicts the claimed source and nothing is recorded. This guard
+    # must run before the confirmation_token branch below, or a saved-card request carrying a token
+    # would be misclassified as a client-confirm purchase.
+    return params[:stripe_payment_method_id].blank? && params[:confirmation_token].blank? ? PAYMENT_METHOD : nil if source == SAVED_PAYMENT_METHOD
+    return CONFIRMATION_TOKEN if params[:confirmation_token].present?
 
-    STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
+    PAYMENT_METHOD if STRIPE_PAYMENT_PARAM_KEYS.any? { params[_1].present? }
   end
-  private_class_method :stripe_payment_submission?
+  private_class_method :payment_details_transport_for
 end

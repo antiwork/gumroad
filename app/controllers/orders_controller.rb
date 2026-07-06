@@ -48,7 +48,10 @@ class OrdersController < ApplicationController
 
   # Starts client-confirm Payment Element checkout by returning an unconfirmed PaymentIntent.
   def prepare
-    order_params = build_order_params
+    # The ConfirmationToken is deliberately absent from permitted_order_params: only this endpoint
+    # accepts it, so #create requests can never carry one. It is merged here so purchase creation
+    # can record the client-confirm lane in the purchase's payment-flow analytics row.
+    order_params = build_order_params.merge(confirmation_token: params[:confirmation_token].presence)
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
@@ -111,7 +114,7 @@ class OrdersController < ApplicationController
 
       # Verify reCAPTCHA response
       if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
-        render_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+        render_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
       end
     end
 

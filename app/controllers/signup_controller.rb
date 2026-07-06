@@ -132,8 +132,8 @@ class SignupController < Devise::RegistrationsController
         site_key = GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY")
         if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :signup)
           respond_to do |format|
-            format.html { redirect_with_signup_error("Sorry, we could not verify the CAPTCHA. Please try again.") }
-            format.json { render json: { success: false, error_message: "Sorry, we could not verify the CAPTCHA. Please try again." } }
+            format.html { redirect_with_signup_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE) }
+            format.json { render json: { success: false, error_message: ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE } }
           end
           return
         end

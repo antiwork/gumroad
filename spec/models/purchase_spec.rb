@@ -6002,6 +6002,84 @@ describe Purchase, :vcr do
       expect(mandate_options).to be_present
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
     end
+
+    it "caps the mandate at the undiscounted total when a limited-duration discount code was applied" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      subscription = create(:subscription, link: product)
+      offer_code = create(:offer_code, products: [product], amount_percentage: 10, duration_in_billing_cycles: 1)
+      purchase = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "in_progress",
+                                   card_country: "IN", subscription:, is_original_subscription_purchase: true,
+                                   offer_code:, price_cents: 100, total_transaction_cents: 105, displayed_price_cents: 100)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 80, offer_code_is_percent: true,
+                                                    pre_discount_minimum_price_cents: 500, duration_in_billing_cycles: 1)
+      allow(purchase).to receive(:chargeable).and_return(instance_double(StripeChargeablePaymentMethod, requires_mandate?: true))
+
+      mandate_options = purchase.mandate_options_for_stripe
+
+      # Once the single discounted cycle is over, renewals charge the full 500¢ price, so the
+      # cap must cover the undiscounted total (105 * 500 / 100 = 525), not the first charge.
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(525)
+    end
+
+    it "caps the mandate at the charged total when the discount applies to all billing cycles" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      subscription = create(:subscription, link: product)
+      offer_code = create(:offer_code, products: [product], amount_percentage: 10)
+      purchase = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "in_progress",
+                                   card_country: "IN", subscription:, is_original_subscription_purchase: true,
+                                   offer_code:, price_cents: 100, total_transaction_cents: 105, displayed_price_cents: 100)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 80, offer_code_is_percent: true,
+                                                    pre_discount_minimum_price_cents: 500)
+      allow(purchase).to receive(:chargeable).and_return(instance_double(StripeChargeablePaymentMethod, requires_mandate?: true))
+
+      mandate_options = purchase.mandate_options_for_stripe
+
+      # A discount without a billing-cycle limit applies to every renewal, so the first
+      # charge's total is the correct maximum — no headroom needed.
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(105)
+    end
+
+    it "sizes the mandate from the subscription's original purchase (not the prorated charge) for upgrade purchases" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      subscription = create(:subscription, link: product)
+      offer_code = create(:offer_code, products: [product], amount_percentage: 10, duration_in_billing_cycles: 1)
+      original_purchase = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "successful",
+                                            card_country: "IN", subscription:, is_original_subscription_purchase: true,
+                                            offer_code:, price_cents: 100, total_transaction_cents: 105, displayed_price_cents: 100)
+      original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 80, offer_code_is_percent: true,
+                                                             pre_discount_minimum_price_cents: 500, duration_in_billing_cycles: 1)
+      # The upgrade purchase itself only charges a small prorated amount and carries no
+      # discount record — none of its numbers should influence the mandate cap.
+      upgrade_purchase = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "in_progress",
+                                           card_country: "IN", subscription:, is_upgrade_purchase: true,
+                                           price_cents: 37, total_transaction_cents: 37, displayed_price_cents: 37)
+      allow(upgrade_purchase).to receive(:chargeable).and_return(instance_double(StripeChargeablePaymentMethod, requires_mandate?: true))
+
+      mandate_options = upgrade_purchase.mandate_options_for_stripe
+
+      # Renewals bill the original purchase, whose limited-duration discount expires after
+      # one cycle — so the cap scales the original total to its undiscounted equivalent
+      # (105 * 500 / 100 = 525), ignoring the 37¢ prorated upgrade charge entirely.
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(525)
+    end
+
+    it "caps an upgrade purchase's mandate at the original purchase total when there is no limited-duration discount" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      subscription = create(:subscription, link: product)
+      create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "successful",
+                        card_country: "IN", subscription:, is_original_subscription_purchase: true,
+                        price_cents: 500, total_transaction_cents: 525, displayed_price_cents: 500)
+      upgrade_purchase = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "in_progress",
+                                           card_country: "IN", subscription:, is_upgrade_purchase: true,
+                                           price_cents: 37, total_transaction_cents: 37, displayed_price_cents: 37)
+      allow(upgrade_purchase).to receive(:chargeable).and_return(instance_double(StripeChargeablePaymentMethod, requires_mandate?: true))
+
+      mandate_options = upgrade_purchase.mandate_options_for_stripe
+
+      # No discount on the original purchase means renewals charge its full total, which is
+      # the correct cap — unchanged from the pre-existing upgrade behavior.
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(525)
+    end
   end
 
   describe "#is_an_off_session_charge_on_indian_card?" do

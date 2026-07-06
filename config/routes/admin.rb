@@ -9,8 +9,6 @@ namespace :admin do
   get :impersonate, to: "base#impersonate"
   delete :unimpersonate, to: "base#unimpersonate"
   get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard", as: :redirect_to_stripe_dashboard
-  get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
-  get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
   resources :api_tokens, only: :index, param: :external_id do
     member do

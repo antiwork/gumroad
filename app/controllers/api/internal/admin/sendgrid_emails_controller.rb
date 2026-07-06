@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Api::Internal::Helper::SendgridEmailsController < Api::Internal::Helper::BaseController
+class Api::Internal::Admin::SendgridEmailsController < Api::Internal::Admin::BaseController
   SUPPORTED_LISTS = %w[bounces blocks spam_reports invalid_emails].freeze
 
   def check_status
@@ -25,12 +25,14 @@ class Api::Internal::Helper::SendgridEmailsController < Api::Internal::Helper::B
       return render json: { success: false, message: "Unsupported list(s): #{invalid.join(", ")}" }, status: :bad_request
     end
 
-    removed_from = EmailSuppressionManager.new(params[:email]).remove_from_lists(requested.map(&:to_sym))
+    record_admin_write(action: "sendgrid_emails.remove_suppression") do
+      removed_from = EmailSuppressionManager.new(params[:email]).remove_from_lists(requested.map(&:to_sym))
 
-    render json: {
-      success: true,
-      email: params[:email],
-      removed_from:,
-    }
+      render json: {
+        success: true,
+        email: params[:email],
+        removed_from:,
+      }
+    end
   end
 end

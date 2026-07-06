@@ -275,7 +275,7 @@ describe LoginsController, type: :controller, inertia: true do
       post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
+      expect(flash[:warning]).to eq ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
       expect(controller.user_signed_in?).to be(false)
     end
 

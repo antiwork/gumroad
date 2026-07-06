@@ -90,5 +90,44 @@ describe PurchasePaymentFlow do
     it "does not record a saved-card flow when a new Stripe PaymentMethod is also submitted" do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method", stripe_payment_method_id: "pm_123")).to be_nil
     end
+
+    it "does not record a saved-card flow when a confirmation_token is also submitted, rather than misclassifying it as client-confirm" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "saved_payment_method", confirmation_token: "ctoken_123")).to be_nil
+    end
+
+    it "records the confirmation_token transport for a client-confirm submission" do
+      attributes = described_class.attributes_for_checkout_params(payment_details_source: "payment_element", confirmation_token: "ctoken_123")
+
+      expect(attributes).to eq(
+        payment_details_source: "payment_element",
+        payment_details_transport: "confirmation_token",
+        stripe_payment_method_type: "card"
+      )
+    end
+
+    it "records a client-confirm wallet payment as a payment request over the confirmation_token transport" do
+      attributes = described_class.attributes_for_checkout_params(
+        wallet_type: "apple_pay",
+        payment_details_source: "payment_element",
+        confirmation_token: "ctoken_123"
+      )
+
+      expect(attributes[:payment_details_source]).to eq("payment_request")
+      expect(attributes[:payment_details_transport]).to eq("confirmation_token")
+    end
+
+    it "prefers the confirmation_token transport when a PaymentMethod id is also present" do
+      attributes = described_class.attributes_for_checkout_params(
+        payment_details_source: "payment_element",
+        confirmation_token: "ctoken_123",
+        stripe_payment_method_id: "pm_123"
+      )
+
+      expect(attributes[:payment_details_transport]).to eq("confirmation_token")
+    end
+
+    it "does not record a Stripe flow for a PayPal submission carrying a forged confirmation_token" do
+      expect(described_class.attributes_for_checkout_params(payment_details_source: "payment_element", confirmation_token: "ctoken_123", paypal_order_id: "PAY-123")).to be_nil
+    end
   end
 end

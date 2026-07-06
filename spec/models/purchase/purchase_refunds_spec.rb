@@ -743,8 +743,43 @@ describe "PurchaseRefunds", :vcr do
         describe "buyer-presentment purchases" do
           let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-          it "blocks processor tax refunds until presentment tax refunds are supported" do
-            create(:purchase_presentment, purchase: @purchase)
+          def build_presentment_charge_refund(presentment_cents:, currency: Currency::CAD)
+            stripe_refund = double("stripe_refund", status: "succeeded", id: "re_presentment_tax_#{SecureRandom.hex(6)}")
+            charge_refund = ChargeRefund.new
+            charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+            charge_refund.id = stripe_refund.id
+            charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(currency, -presentment_cents)
+            charge_refund.instance_variable_set(:@refund, stripe_refund)
+            charge_refund
+          end
+
+          it "sends the remaining presentment tax amount to the processor and stores the snapshot" do
+            create(:purchase_presentment, purchase: @purchase, presentment_gumroad_tax_cents: 1_50)
+            @purchase.association(:purchase_presentment).reset
+
+            expect(ChargeProcessor).to receive(:refund!)
+              .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                    hash_including(amount_cents: 1_50, reverse_transfer: false))
+              .and_return(build_presentment_charge_refund(presentment_cents: 1_50))
+
+            expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(true)
+
+            refund = @purchase.refunds.last
+            expect(refund.gumroad_tax_cents).to eq 20
+            expect(refund.presentment_currency).to eq(Currency::CAD)
+            expect(refund.presentment_amount_cents).to eq(1_50)
+            expect(refund.presentment_gumroad_tax_cents).to eq(1_50)
+            expect(refund.presentment_price_cents).to eq(0)
+            expect(refund.presentment_settled_currency).to eq(Currency::CAD)
+            expect(refund.presentment_settled_amount_cents).to eq(-1_50)
+          end
+
+          it "fails closed when no presentment tax amount remains" do
+            create(:purchase_presentment, purchase: @purchase,
+                                          presentment_gumroad_tax_cents: 0,
+                                          presentment_price_cents: 13_50,
+                                          presentment_total_cents: 13_50)
+            @purchase.association(:purchase_presentment).reset
             allow(ErrorNotifier).to receive(:notify)
 
             expect(ChargeProcessor).not_to receive(:refund!)

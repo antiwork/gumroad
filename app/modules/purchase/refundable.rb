@@ -246,6 +246,14 @@ class Purchase
       end
       if presentment_refund
         presentment_refund.json_data.each { |key, value| refund.public_send("#{key}=", value) }
+        # Stripe settles refunds at the live rate, not the locked quote rate; keep the
+        # settled facts on the refund so treasury can reconcile the per-refund FX delta
+        # against the canonical balance debit.
+        settled_amount = flow_of_funds&.settled_amount
+        if settled_amount.present?
+          refund.presentment_settled_currency = settled_amount.currency
+          refund.presentment_settled_amount_cents = settled_amount.cents
+        end
       end
       refund.is_for_fraud = is_for_fraud
       refunds << refund
@@ -322,13 +330,22 @@ class Purchase
       errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
       return false
     end
-    # TODO(#5419): Remove this hard stop once buyer-presentment tax refunds are supported.
-    return false if buyer_presentment_refund_blocked?
+
+    # Buyer-presentment purchases were charged in the buyer's currency, and Stripe
+    # denominates refunds in the original charge currency, so a standalone VAT refund
+    # must send the remaining presentment Gumroad-tax amount, never canonical USD cents.
+    # Fail closed when no consistent tax-only presentment amount can be computed.
+    presentment_refund = nil
+    if buyer_presentment?
+      presentment_refund = Purchase::PresentmentRefund.new(purchase: self, canonical_gross_refund_cents: gumroad_tax_refundable_cents).tax_only_result if stripe_charge_processor?
+      return false if presentment_refund.blank? && buyer_presentment_refund_blocked?
+    end
+    processor_refund_amount_cents = presentment_refund ? presentment_refund.presentment_amount_cents : gumroad_tax_refundable_cents
 
     begin
       logger.info("Refunding purchase: #{id} gumroad taxes: #{self.gumroad_tax_refundable_cents}")
       charge_refund = ChargeProcessor.refund!(charge_processor_id, stripe_transaction_id,
-                                              amount_cents: gumroad_tax_refundable_cents,
+                                              amount_cents: processor_refund_amount_cents,
                                               reverse_transfer: false,
                                               merchant_account:,
                                               paypal_order_purchase_unit_refund: paypal_order_id.present?,
@@ -345,6 +362,14 @@ class Purchase
         refund.note = note
         refund.business_vat_id = business_vat_id
         refund.processor_refund_id = charge_refund.id
+        if presentment_refund
+          presentment_refund.json_data.each { |key, value| refund.public_send("#{key}=", value) }
+          settled_amount = charge_refund.flow_of_funds&.settled_amount
+          if settled_amount.present?
+            refund.presentment_settled_currency = settled_amount.currency
+            refund.presentment_settled_amount_cents = settled_amount.cents
+          end
+        end
         refunds << refund
         save!
         Credit.create_for_vat_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
