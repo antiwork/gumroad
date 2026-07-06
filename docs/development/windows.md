@@ -227,9 +227,3 @@ git config --local core.hooksPath .githooks
 sudo lsof -i :8080
 kill -9 <PID>
 ```
-
-- Ensure the following environment variable is set (for Helper API authentication):
-
-```
-HELPER_WIDGET_SECRET=<any random string>
-```

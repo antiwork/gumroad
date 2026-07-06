@@ -336,45 +336,6 @@ Rails.application.routes.draw do
       namespace :internal do
         resource :mobile_minimum_version, only: :show
         resources :home_page_numbers, only: :index
-        namespace :helper do
-          post :webhook, to: "webhook#handle"
-
-          resources :users, only: [] do
-            collection do
-              get :user_info
-              post :create_appeal
-              post :create_comment
-              post :user_suspension_info
-              post :send_reset_password_instructions
-              post :update_email
-              post :update_two_factor_authentication_enabled
-            end
-          end
-
-          resources :purchases, only: [] do
-            collection do
-              post :refund_last_purchase
-              post :resend_last_receipt
-              post :resend_all_receipts
-              post :resend_receipt_by_number
-              post :search
-              post :reassign_purchases
-              post :auto_refund_purchase
-              post :refund_taxes_only
-            end
-          end
-
-          resources :payouts, only: [:index, :create]
-          resources :instant_payouts, only: [:index, :create]
-
-          resources :sendgrid_emails, only: [] do
-            collection do
-              post :check_status
-              post :remove_suppression
-            end
-          end
-        end
-
         namespace :admin do
           namespace :auth do
             post :exchange
@@ -403,6 +364,13 @@ Rails.application.routes.draw do
           resources :licenses, only: [] do
             collection do
               get :lookup
+            end
+          end
+
+          resources :sendgrid_emails, only: [] do
+            collection do
+              get :check_status
+              post :remove_suppression
             end
           end
 
