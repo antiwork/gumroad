@@ -43,12 +43,26 @@ class HealthcheckController < ApplicationController
     return render plain: "Apple Pay domain: no CUSTOM_DOMAIN set", status: :service_unavailable if domain.blank?
 
     existing = Stripe::ApplePayDomain.list(domain_name: domain, limit: 1).data.first
-    if existing
-      render plain: "Apple Pay domain: registered (#{domain}, #{existing.id}, livemode=#{existing.livemode})"
-    else
+    if existing.nil?
       created = Stripe::ApplePayDomain.create(domain_name: domain)
-      render plain: "Apple Pay domain: registered just now (#{domain}, #{created.id}, livemode=#{created.livemode})"
     end
+
+    # PaymentMethodDomain reports the Stripe↔Apple activation handshake per wallet, which the
+    # legacy ApplePayDomain endpoint can't: a domain can be "registered" with Stripe while Apple
+    # Pay is still inactive on it. Creating is idempotent (returns the existing record), and
+    # validate re-runs the domain verification on demand.
+    pm_domain = Stripe::PaymentMethodDomain.create(domain_name: domain)
+    pm_domain = Stripe::PaymentMethodDomain.validate(pm_domain.id)
+    apple_pay = pm_domain.apple_pay
+    lines = [
+      "Apple Pay domain: #{existing ? "registered" : "registered just now"} (#{domain}, #{(existing || created).id}, livemode=#{(existing || created).livemode})",
+      "Payment method domain: #{pm_domain.id} enabled=#{pm_domain.enabled}",
+      "apple_pay status: #{apple_pay.status}",
+    ]
+    if apple_pay.status != "active" && apple_pay.respond_to?(:status_details) && apple_pay.status_details.respond_to?(:error_message)
+      lines << "apple_pay error: #{apple_pay.status_details.error_message}"
+    end
+    render plain: lines.join("\n")
   rescue Stripe::StripeError => e
     render plain: "Apple Pay domain: registration failed (#{domain}): #{e.message}", status: :service_unavailable
   end
