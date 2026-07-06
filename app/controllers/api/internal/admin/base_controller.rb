@@ -8,6 +8,13 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS = {
     "purchases.reassign" => %w[from to]
   }.freeze
+  # Some params match the redaction pattern above but are the very thing the
+  # audit row exists to record. For SendGrid suppression removal the email
+  # address is the subject of the write — redacting it would leave an audit row
+  # that says a suppression was removed without saying for whom.
+  ADMIN_AUDIT_ACTION_UNREDACTED_PARAM_KEYS = {
+    "sendgrid_emails.remove_suppression" => %w[email]
+  }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
     purchases.reassign
     purchases.resend_all_receipts
@@ -196,6 +203,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     end
 
     def admin_audit_redacted_param_key?(key, action:)
+      return false if ADMIN_AUDIT_ACTION_UNREDACTED_PARAM_KEYS.fetch(action, []).include?(key.to_s)
+
       key.to_s.match?(ADMIN_AUDIT_REDACTED_PARAM_PATTERN) ||
         ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS.fetch(action, []).include?(key.to_s)
     end

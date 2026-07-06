@@ -148,6 +148,10 @@ describe Api::Internal::Admin::SendgridEmailsController do
       audit_log = AdminApiAuditLog.last
       expect(audit_log.action).to eq("sendgrid_emails.remove_suppression")
       expect(audit_log.http_method).to eq("POST")
+      # The email is the subject of this write, so it must survive redaction —
+      # otherwise the audit row can't say which address was unsuppressed.
+      expect(audit_log.params_snapshot["email"]).to eq(email)
+      expect(audit_log.params_snapshot["list"]).to eq("bounces")
     end
   end
 end
