@@ -30,6 +30,7 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
+import { provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { classNames } from "$app/utils/classNames";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
@@ -1165,10 +1166,18 @@ const useStripePaymentRequest = (disabled: boolean) => {
           // is copied too because Canadian tax lookup requires it alongside the country. When the
           // wallet omits a state we clear the field rather than keep the old value, so a stale
           // province from a previous selection can't pair with the new country and produce a
-          // wrong tax calculation.
-          dispatch({ type: "set-value", country: e.paymentMethod.billing_details.address.country });
-          dispatch({ type: "set-value", zipCode: e.paymentMethod.billing_details.address.postal_code || undefined });
-          dispatch({ type: "set-value", state: e.paymentMethod.billing_details.address.state ?? "" });
+          // wrong tax calculation. For Canada specifically, some wallets share only the postal
+          // code without the province — since every Canadian postal code's first letter maps to
+          // exactly one province or territory, we derive the province from the postal code so
+          // Canadian tax can still be calculated (the wallet flow has no province field the
+          // buyer could fill in manually).
+          const billingAddress = e.paymentMethod.billing_details.address;
+          const billingState =
+            billingAddress.state ||
+            (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null);
+          dispatch({ type: "set-value", country: billingAddress.country });
+          dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
+          dispatch({ type: "set-value", state: billingState ?? "" });
         }
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
