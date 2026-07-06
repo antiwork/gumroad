@@ -295,7 +295,14 @@ const CheckoutIndexPage = () => {
 
   function getProducts(state: CartState): Product[] {
     return state.items.map((item) => {
-      const { price } = getDiscountedPrice(state, item);
+      const { price, discount } = getDiscountedPrice(state, item);
+      // What one renewal will charge, for describing the recurring agreement on the Apple Pay
+      // sheet. A discount limited to the first billing cycle doesn't apply to renewals, so
+      // renewals bill the undiscounted price; any other discount carries over.
+      const discountLimitedToFirstCycle =
+        (discount?.type === "code" || discount?.type === "cross-sell") &&
+        discount.value.duration_in_billing_cycles === 1;
+      const renewalPrice = discountLimitedToFirstCycle ? item.price * item.quantity : price;
       return {
         permalink: item.product.permalink,
         name: item.product.name,
@@ -314,7 +321,12 @@ const CheckoutIndexPage = () => {
         hasTippingEnabled: item.product.has_tipping_enabled,
         isPreorder: item.product.is_preorder,
         price: convertToUSD(item, price),
+        renewalPriceCents: item.recurrence ? Math.round(convertToUSD(item, renewalPrice)) : null,
         payInInstallments: item.pay_in_installments,
+        installmentPlan: item.product.installment_plan
+          ? { numberOfInstallments: item.product.installment_plan.number_of_installments }
+          : null,
+        durationInMonths: item.product.duration_in_months,
         recurrence: item.recurrence,
         recommended_by: item.recommended_by,
         shippableCountryCodes: item.product.shippable_country_codes,

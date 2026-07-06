@@ -34,18 +34,19 @@ describe Checkout::StripePaymentPresenter do
     checkout_product_for(product, **overrides)
   end
 
-  def card_element_fallback(reason)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, elements_options: nil }
+  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, request_apple_pay_merchant_tokens: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       disable_wallets: false,
+      request_apple_pay_merchant_tokens:,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: "usd",
@@ -56,11 +57,12 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       disable_wallets: false,
+      request_apple_pay_merchant_tokens:,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
@@ -133,6 +135,7 @@ describe Checkout::StripePaymentPresenter do
       integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
       elements_options: nil,
     )
   ensure
@@ -504,6 +507,64 @@ describe Checkout::StripePaymentPresenter do
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))
+    end
+  end
+
+  describe "Apple Pay merchant token flag" do
+    it "requests merchant tokens on the Payment Element integration when the seller is flagged" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_props(request_apple_pay_merchant_tokens: true))
+    end
+
+    it "requests merchant tokens on the CardElement fallback when the seller is flagged" do
+      # The wallet button renders on CardElement checkouts too (installment plans and other
+      # Payment Element fallbacks), so the flag must reach the frontend on every integration.
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
+        .to eq(card_element_fallback("setup_or_installment_flow", request_apple_pay_merchant_tokens: true))
+    end
+
+    it "requests merchant tokens on the client-confirm integration when the seller is flagged" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props(request_apple_pay_merchant_tokens: true))
+    end
+
+    it "does not request merchant tokens when the seller is not flagged" do
+      expect(stripe_payment_props(add_products: [flagged_seller_product]))
+        .to eq(payment_element_props(request_apple_pay_merchant_tokens: false))
+    end
+
+    it "does not request merchant tokens when any seller in the cart is not flagged" do
+      flagged_seller = create(:user)
+      flagged = create(:product, user: flagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, flagged_seller)
+      Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, flagged_seller)
+      unflagged_seller = create(:user)
+      unflagged = create(:product, user: unflagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
+        .to eq(payment_element_props(request_apple_pay_merchant_tokens: false))
+    end
+
+    it "does not request merchant tokens for an empty cart" do
+      expect(stripe_payment_props)
+        .to eq(card_element_fallback("empty_cart", request_apple_pay_merchant_tokens: false))
     end
   end
 end

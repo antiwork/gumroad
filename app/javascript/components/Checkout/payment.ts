@@ -54,23 +54,30 @@ export type PaymentElementClientConfirmConfig = {
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };
+// Every integration variant also carries `request_apple_pay_merchant_tokens` — a per-seller
+// rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
+// Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
+// to the wallet button regardless of which card integration is active.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: null;
     }
   | {
       integration: "payment_element";
       fallback_reason: null;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -80,7 +87,18 @@ export type Product = {
   creator: Creator;
   quantity: number;
   price: number;
+  // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
+  // limited to the first billing cycle). Used to describe the recurring agreement on the Apple
+  // Pay sheet; null/absent means renewals charge the same as today.
+  renewalPriceCents?: number | null;
   payInInstallments: boolean;
+  // Present when the buyer chose to pay in installments; describes the fixed monthly schedule so
+  // the Apple Pay sheet can state it.
+  installmentPlan?: { numberOfInstallments: number } | null;
+  // For memberships that automatically end after a fixed period (product duration_in_months):
+  // bounds the recurring agreement shown on the Apple Pay sheet instead of describing it as
+  // billing until cancellation.
+  durationInMonths?: number | null;
   requireShipping: boolean;
   customFields: CustomFieldDescriptor[];
   bundleProductCustomFields: { product: { id: string; name: string }; customFields: CustomFieldDescriptor[] }[];
@@ -571,6 +589,7 @@ export function createReducer(initial: {
         integration: "card_element",
         fallback_reason: "not_checkout",
         disable_wallets: false,
+        request_apple_pay_merchant_tokens: false,
         elements_options: null,
       },
       paymentMethod: "card",
