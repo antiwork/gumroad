@@ -123,6 +123,15 @@ describe Purchase::PresentmentRefund do
 
       expect(described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result).to be_nil
     end
+
+    it "fails closed when a prior refund lacks a presentment snapshot" do
+      # A snapshotless refund reduced the canonical tax refundable amount but counts as
+      # zero presentment cents, so the remaining buyer-currency tax cannot be computed.
+      refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+      purchase.refunds << refund
+
+      expect(described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result).to be_nil
+    end
   end
 
   describe ".from_presentment_amount" do
