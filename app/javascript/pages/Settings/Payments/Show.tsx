@@ -567,6 +567,12 @@ export default function PaymentsPage() {
       if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
+      if (!form.data.user.city) {
+        markFieldInvalid("city");
+      }
+      if (!form.data.user.city_kana) {
+        markFieldInvalid("city_kana");
+      }
       validateKanaField(
         "first_name_kana",
         form.data.user.first_name_kana,
@@ -690,6 +696,12 @@ export default function PaymentsPage() {
         }
         if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
+        }
+        if (!form.data.user.business_city) {
+          markFieldInvalid("business_city");
+        }
+        if (!form.data.user.business_city_kana) {
+          markFieldInvalid("business_city_kana");
         }
         validateKanaField(
           "business_name_kana",

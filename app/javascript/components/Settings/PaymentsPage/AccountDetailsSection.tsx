@@ -637,6 +637,38 @@ const AccountDetailsSection = ({
                   />
                 </Fieldset>
               </div>
+              <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
+                <Fieldset state={errorFieldNames.has("business_city") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-city-kanji`}>Business city/Ward (Kanji)</Label>
+                  </FieldsetTitle>
+                  <Input
+                    id={`${uid}-business-city-kanji`}
+                    type="text"
+                    placeholder="千代田区"
+                    value={complianceInfo.business_city || ""}
+                    disabled={isFormDisabled}
+                    aria-invalid={errorFieldNames.has("business_city")}
+                    required
+                    onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
+                  />
+                </Fieldset>
+                <Fieldset state={errorFieldNames.has("business_city_kana") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-city-kana`}>Business city/Ward (Kana)</Label>
+                  </FieldsetTitle>
+                  <Input
+                    id={`${uid}-business-city-kana`}
+                    type="text"
+                    placeholder="チヨダク"
+                    value={complianceInfo.business_city_kana || ""}
+                    disabled={isFormDisabled}
+                    aria-invalid={errorFieldNames.has("business_city_kana")}
+                    required
+                    onChange={(evt) => updateComplianceInfo({ business_city_kana: evt.target.value })}
+                  />
+                </Fieldset>
+              </div>
             </>
           ) : (
             <Fieldset state={errorFieldNames.has("business_street_address") ? "danger" : undefined}>
@@ -660,19 +692,21 @@ const AccountDetailsSection = ({
               gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
             }}
           >
-            <Fieldset state={errorFieldNames.has("business_city") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-business-city`}>City</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-business-city`}
-                placeholder="Springfield"
-                value={complianceInfo.business_city || ""}
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("business_city")}
-                onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
-              />
-            </Fieldset>
+            {complianceInfo.business_country === "JP" ? null : (
+              <Fieldset state={errorFieldNames.has("business_city") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-city`}>City</Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-business-city`}
+                  placeholder="Springfield"
+                  value={complianceInfo.business_city || ""}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("business_city")}
+                  onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
+                />
+              </Fieldset>
+            )}
             {businessStateConfig
               ? renderStateSelect(
                   businessStateConfig,
@@ -979,6 +1013,38 @@ const AccountDetailsSection = ({
                   aria-invalid={errorFieldNames.has("street_address_kana")}
                   required
                   onChange={(evt) => updateComplianceInfo({ street_address_kana: evt.target.value })}
+                />
+              </Fieldset>
+            </div>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
+              <Fieldset state={errorFieldNames.has("city") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-city-kanji`}>City/Ward (Kanji)</Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-creator-city-kanji`}
+                  type="text"
+                  placeholder="千代田区"
+                  value={complianceInfo.city || ""}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("city")}
+                  required
+                  onChange={(evt) => updateComplianceInfo({ city: evt.target.value })}
+                />
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("city_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-city-kana`}>City/Ward (Kana)</Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-creator-city-kana`}
+                  type="text"
+                  placeholder="チヨダク"
+                  value={complianceInfo.city_kana || ""}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("city_kana")}
+                  required
+                  onChange={(evt) => updateComplianceInfo({ city_kana: evt.target.value })}
                 />
               </Fieldset>
             </div>

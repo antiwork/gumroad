@@ -38,6 +38,7 @@ class UpdateUserComplianceInfo
     street_address_kanji
     street_address_kana
     city
+    city_kana
     state
     zip_code
     business_name
@@ -49,6 +50,7 @@ class UpdateUserComplianceInfo
     business_street_address_kanji
     business_street_address_kana
     business_city
+    business_city_kana
     business_state
     business_zip_code
     business_type
@@ -128,6 +130,7 @@ class UpdateUserComplianceInfo
       new_compliance_info.street_address_kanji =    compliance_params[:street_address_kanji]    if compliance_params[:street_address_kanji].present?
       new_compliance_info.street_address_kana =     compliance_params[:street_address_kana]     if compliance_params[:street_address_kana].present?
       new_compliance_info.city =                    compliance_params[:city]                    if compliance_params[:city].present?
+      new_compliance_info.city_kana =               compliance_params[:city_kana]               if compliance_params[:city_kana].present?
       new_compliance_info.state =                   compliance_params[:state]                   if compliance_params[:state].present?
       new_compliance_info.country =                 Compliance::Countries.mapping[compliance_params[:country]] if compliance_params[:country].present? && compliance_params[:is_business]
       new_compliance_info.zip_code =                compliance_params[:zip_code]                if compliance_params[:zip_code].present?
@@ -140,6 +143,7 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_street_address_kanji = compliance_params[:business_street_address_kanji] if compliance_params[:business_street_address_kanji].present?
       new_compliance_info.business_street_address_kana =  compliance_params[:business_street_address_kana]  if compliance_params[:business_street_address_kana].present?
       new_compliance_info.business_city =           compliance_params[:business_city]           if compliance_params[:business_city].present?
+      new_compliance_info.business_city_kana =      compliance_params[:business_city_kana]      if compliance_params[:business_city_kana].present?
       new_compliance_info.business_state =          compliance_params[:business_state]          if compliance_params[:business_state].present?
       new_compliance_info.business_country =        Compliance::Countries.mapping[compliance_params[:business_country]] if compliance_params[:business_country].present? && compliance_params[:is_business]
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?

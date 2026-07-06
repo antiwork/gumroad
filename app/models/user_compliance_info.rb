@@ -57,12 +57,14 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :building_number_kana
   attr_json_data_accessor :street_address_kanji
   attr_json_data_accessor :street_address_kana
+  attr_json_data_accessor :city_kana
   attr_json_data_accessor :business_name_kanji
   attr_json_data_accessor :business_name_kana
   attr_json_data_accessor :business_building_number
   attr_json_data_accessor :business_building_number_kana
   attr_json_data_accessor :business_street_address_kanji
   attr_json_data_accessor :business_street_address_kana
+  attr_json_data_accessor :business_city_kana
   def is_individual?
     !is_business?
   end
@@ -203,8 +205,10 @@ class UserComplianceInfo < ApplicationRecord
       validate_kana_fields(
         { building_number_kana: "Building number (Kana)",
           street_address_kana: "Street address (Kana)",
+          city_kana: "City (Kana)",
           business_building_number_kana: "Business building number (Kana)",
-          business_street_address_kana: "Business street address (Kana)" },
+          business_street_address_kana: "Business street address (Kana)",
+          business_city_kana: "Business city (Kana)" },
         KANA_ADDRESS_REGEX,
         "katakana, latin characters, digits, spaces, dashes, and dots"
       )

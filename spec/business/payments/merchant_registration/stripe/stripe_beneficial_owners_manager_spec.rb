@@ -242,14 +242,15 @@ describe StripeBeneficialOwnersManager do
         country: "JP", state: "東京都", postal_code: "100-0001",
         building_number: "1-1", building_number_kana: "1-1",
         street_address_kanji: "千代田", street_address_kana: "チヨダ",
+        city: "千代田区", city_kana: "チヨダク",
       }
       expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
         expect(attrs[:first_name_kanji]).to eq("太郎")
         expect(attrs[:last_name_kanji]).to eq("山田")
         expect(attrs[:first_name_kana]).to eq("タロウ")
         expect(attrs[:last_name_kana]).to eq("ヤマダ")
-        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", state: "東京都", country: "JP", postal_code: "100-0001")
-        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", state: "トウキョウト", country: "JP")
+        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", city: "千代田区", state: "東京都", country: "JP", postal_code: "100-0001")
+        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", city: "チヨダク", state: "トウキョウト", country: "JP")
         expect(attrs).not_to have_key(:address)
         other_owner_person
       end

@@ -1447,7 +1447,7 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     describe "all info provided of a Japanese individual" do
-      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", phone: "+81987654321",
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", city_kana: "シブヤク", phone: "+81987654321",
                                                                   first_name_kanji: "日本語", last_name_kanji: "創造者",
                                                                   first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
                                                                   building_number: "1-1", building_number_kana: "1-1",
@@ -1487,6 +1487,7 @@ describe StripeMerchantAccountManager, :vcr do
             address_kanji: {
               line1: "1-1",
               town: "神宮前",
+              city: "渋谷区",
               state: "東京都",
               country: "JP",
               postal_code: "100-0000",
@@ -1494,6 +1495,7 @@ describe StripeMerchantAccountManager, :vcr do
             address_kana: {
               line1: "1-1",
               town: "ジングウマエ",
+              city: "シブヤク",
               state: "トウキョウト",
               country: "JP",
               postal_code: "100-0000",

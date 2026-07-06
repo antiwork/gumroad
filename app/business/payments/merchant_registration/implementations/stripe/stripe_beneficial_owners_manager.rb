@@ -271,6 +271,7 @@ module StripeBeneficialOwnersManager
         address_kanji = {
           line1: params[:address][:building_number].presence,
           town: params[:address][:street_address_kanji].presence,
+          city: params[:address][:city].presence,
           state: params[:address][:state].presence,
           country: "JP",
           postal_code: params[:address][:postal_code].presence,
@@ -281,6 +282,7 @@ module StripeBeneficialOwnersManager
         address_kana = {
           line1: params[:address][:building_number_kana].presence,
           town: params[:address][:street_address_kana].presence,
+          city: params[:address][:city_kana].presence,
           state: kana_state,
           country: "JP",
           postal_code: params[:address][:postal_code].presence,
