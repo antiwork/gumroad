@@ -149,6 +149,20 @@ describe Order::CreateService, :vcr do
         expect(order.reload.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["card_element"])
       end
 
+      it "records the confirmation_token transport for a client-confirm submission" do
+        params[:payment_details_source] = "payment_element"
+        params[:confirmation_token] = "ctoken_123"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        flows = order.reload.purchases.map(&:purchase_payment_flow)
+        expect(flows.size).to eq(5)
+        expect(flows).to all(be_present)
+        expect(flows.map(&:payment_details_source).uniq).to eq(["payment_element"])
+        expect(flows.map(&:payment_details_transport).uniq).to eq(["confirmation_token"])
+        expect(flows.map(&:stripe_payment_method_type).uniq).to eq(["card"])
+      end
+
       it "records a wallet payment as a payment request" do
         params[:wallet_type] = "apple_pay"
         params[:payment_details_source] = "payment_element"

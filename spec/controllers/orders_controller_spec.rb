@@ -2483,6 +2483,17 @@ describe OrdersController, :vcr do
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
+    it "records the client-confirm lane in the purchase's payment-flow analytics row" do
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_details_source: "payment_element" }.merge(common_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+      flow = Purchase.last.purchase_payment_flow
+      expect(flow).to be_present
+      expect(flow.payment_details_source).to eq("payment_element")
+      expect(flow.payment_details_transport).to eq("confirmation_token")
+      expect(flow.stripe_payment_method_type).to eq("card")
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)

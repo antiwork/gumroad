@@ -48,7 +48,10 @@ class OrdersController < ApplicationController
 
   # Starts client-confirm Payment Element checkout by returning an unconfirmed PaymentIntent.
   def prepare
-    order_params = build_order_params
+    # The ConfirmationToken is deliberately absent from permitted_order_params: only this endpoint
+    # accepts it, so #create requests can never carry one. It is merged here so purchase creation
+    # can record the client-confirm lane in the purchase's payment-flow analytics row.
+    order_params = build_order_params.merge(confirmation_token: params[:confirmation_token].presence)
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
