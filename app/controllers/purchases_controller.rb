@@ -32,7 +32,7 @@ class PurchasesController < ApplicationController
     update resend_receipt change_can_contact cancel_preorder_by_seller receipt
     revoke_access undo_revoke_access confirm_receipt_email
   ]
-  before_action :verify_current_seller_is_seller_for_purchase, only: %i[update change_can_contact cancel_preorder_by_seller]
+  before_action :verify_current_seller_is_seller_for_purchase, only: %i[update change_can_contact cancel_preorder_by_seller revoke_access undo_revoke_access]
   before_action :hide_layouts, only: %i[subscribe unsubscribe receipt confirm_receipt_email]
   before_action :set_noindex_header, only: [:receipt, :confirm_receipt_email]
 
