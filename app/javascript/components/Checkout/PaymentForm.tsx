@@ -1145,12 +1145,18 @@ const useStripePaymentRequest = (disabled: boolean) => {
   };
 
   // Stripe's PaymentRequest#update can change an existing recurring declaration but not remove
-  // one, so when cart edits flip the cart between recurring-eligible and not (e.g. the membership
-  // is removed, or a second one is added), rebuild the PaymentRequest from scratch instead of
-  // letting a stale recurring agreement linger on the Apple Pay sheet.
-  const hasApplePayRecurringDeclaration =
-    state.checkoutPayment.request_apple_pay_merchant_tokens &&
-    getApplePayRecurringPaymentRequest(state.products, Routes.library_url()) !== null;
+  // one, so whenever cart edits change what the recurring agreement should say — the cart flips
+  // between recurring-eligible and not, one membership is swapped for another, or the renewal
+  // price changes — rebuild the PaymentRequest from scratch instead of letting a stale recurring
+  // agreement linger on the Apple Pay sheet. The key serializes the declaration's content so any
+  // change to it triggers a rebuild; the end date is excluded because it's computed from "now"
+  // (so it would differ on every call) and every change that moves it also changes another field
+  // in the declaration (the billing agreement text spells out the number of payments).
+  const applePayRecurringDeclarationKey = state.checkoutPayment.request_apple_pay_merchant_tokens
+    ? JSON.stringify(getApplePayRecurringPaymentRequest(state.products, Routes.library_url()), (key, value: unknown) =>
+        key === "recurringPaymentEndDate" ? undefined : value,
+      )
+    : "null";
 
   const paymentRequest = React.useMemo(() => {
     if (!stripe || disabled) return null;
@@ -1200,7 +1206,7 @@ const useStripePaymentRequest = (disabled: boolean) => {
       })().catch(fail),
     );
     return paymentRequest;
-  }, [stripe, disabled, hasApplePayRecurringDeclaration]);
+  }, [stripe, disabled, applePayRecurringDeclarationKey]);
 
   // Use a layout effect because `paymentRequest.show` needs to be called synchronously
   useOnChangeSync(() => {
