@@ -380,14 +380,6 @@ describe Charge::Disputable, :vcr do
           balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
           expect(purchase.presentment_dispute_debited_gross_cents).to eq(-balance_transaction.issued_amount_gross_cents)
         end
-
-        it "snapshots the seller and affiliate portions the debit booked so the dispute-won re-credit can reuse the split" do
-          Purchase.handle_charge_event(event)
-          purchase.reload
-
-          expect(purchase.presentment_dispute_debited_seller_cents).to eq(purchase.payment_cents - purchase.affiliate_credit_cents)
-          expect(purchase.presentment_dispute_debited_affiliate_cents).to eq(purchase.affiliate_credit_cents)
-        end
       end
 
       describe "purchase involves an affiliate" do
@@ -676,17 +668,22 @@ describe Charge::Disputable, :vcr do
             expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
           end
 
-          it "credits the seller portion the debit actually booked when a refund lands after the debit" do
+          it "settles a mid-dispute refund by crediting the reduced seller net, not the full debited split" do
             create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
-            # The debit snapshotted the split it booked. A refund webhook arriving while
-            # the dispute is active then creates a refund row (no balance decrement) and
-            # shrinks amount_refundable_cents — recomputing the split at win time would
-            # credit a smaller seller amount than the loss debited.
-            @p.update!(
-              presentment_dispute_debited_gross_cents: @p.gross_amount_refundable_cents,
-              presentment_dispute_debited_seller_cents: @p.payment_cents,
-              presentment_dispute_debited_affiliate_cents: 0
-            )
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            # A briefly-shipped version of the dispute debit also snapshotted the
+            # seller/affiliate split into json_data so the win could reuse it. Seed those
+            # keys the way that code left them to pin that they are ignored: reusing the
+            # split would over-credit the seller (see below).
+            @p.json_data["presentment_dispute_debited_seller_cents"] = @p.payment_cents
+            @p.json_data["presentment_dispute_debited_affiliate_cents"] = 0
+            @p.save!
+            # A refund webhook arriving while the dispute is active creates the refund row
+            # but skips the seller balance debit (the dispute debit already took the full
+            # amount). The dispute-won credit settles that skipped debit by recomputing the
+            # seller net from the reduced refundable amount: crediting the full split the
+            # loss debited would leave the seller whole while the buyer also keeps the
+            # refund, over-crediting the seller by the refund's net share.
             create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
             @p.update!(stripe_partially_refunded: true)
 
@@ -694,7 +691,15 @@ describe Charge::Disputable, :vcr do
             @p.reload
 
             expect(Credit.last.user).to eq @p.seller
-            expect(Credit.last.amount_cents).to eq @p.payment_cents
+            # amount_refundable_cents (70) minus its proportional fee share, same as the
+            # non-presentment settlement above ("credits only remaining balance").
+            expect(Credit.last.amount_cents).to eq 5
+            expect(Credit.last.amount_cents).to be < @p.payment_cents
+            # The canonical gross still mirrors the debit's snapshot; only the net settles
+            # the skipped refund decrement.
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
           end
 
           it "mirrors the processor flow of funds when the dispute predates the debit snapshot" do
