@@ -33,6 +33,26 @@ class HealthcheckController < ApplicationController
     render plain: "Stripe balance: #{message}", status:
   end
 
+  # Staging preview apps only: reports (and retries) Stripe Apple Pay domain registration for the
+  # app's own hostname, since preview app boot logs are not readily accessible. See
+  # config/initializers/stripe_apple_pay_preview_domain.rb for why registration is needed.
+  def apple_pay_domain
+    return e404 unless Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
+
+    domain = ENV["CUSTOM_DOMAIN"]
+    return render plain: "Apple Pay domain: no CUSTOM_DOMAIN set", status: :service_unavailable if domain.blank?
+
+    existing = Stripe::ApplePayDomain.list(domain_name: domain, limit: 1).data.first
+    if existing
+      render plain: "Apple Pay domain: registered (#{domain}, #{existing.id}, livemode=#{existing.livemode})"
+    else
+      created = Stripe::ApplePayDomain.create(domain_name: domain)
+      render plain: "Apple Pay domain: registered just now (#{domain}, #{created.id}, livemode=#{created.livemode})"
+    end
+  rescue Stripe::StripeError => e
+    render plain: "Apple Pay domain: registration failed (#{domain}): #{e.message}", status: :service_unavailable
+  end
+
   def purchases
     threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
     count = Rails.cache.fetch("healthcheck:purchases:successful_last_10_minutes", expires_in: 30.seconds) do

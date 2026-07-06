@@ -21,6 +21,7 @@ Rails.application.routes.draw do
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
   get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"
+  get "/healthcheck/apple_pay_domain" => "healthcheck#apple_pay_domain"
 
   use_doorkeeper do
     controllers applications: "oauth/applications"
