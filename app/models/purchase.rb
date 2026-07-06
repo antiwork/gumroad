@@ -3055,7 +3055,7 @@ class Purchase < ApplicationRecord
           mandate_options: {
             reference: StripeChargeProcessor::MANDATE_PREFIX + (Rails.env.production? ? external_id : SecureRandom.hex),
             amount_type: "maximum",
-            amount: is_upgrade_purchase? ? subscription.original_purchase.total_transaction_cents : total_transaction_cents,
+            amount: mandate_maximum_amount_cents,
             start_date: Time.current.to_i,
             interval:,
             interval_count:,
@@ -3066,6 +3066,38 @@ class Purchase < ApplicationRecord
     }
     mandate_options[:payment_method_options][:card][:mandate_options][:currency] = "usd" if with_currency
     mandate_options
+  end
+
+  # The e-mandate registered with the first charge caps every future off-session charge on
+  # this card (RBI rules for Indian cards; see mandate_options_for_stripe). Sizing that cap
+  # to the first charge's total breaks subscriptions bought with a limited-duration discount
+  # code: once the discount's billing cycles run out, the renewal charges the full
+  # undiscounted price, which is guaranteed to exceed a cap sized to the discounted first
+  # charge — the renewal then fails at the card network and the buyer has to come back and
+  # re-authenticate manually. Size the cap to the largest charge this subscription can
+  # legitimately make: the undiscounted equivalent of today's total when the discount is
+  # temporary, today's total otherwise.
+  def mandate_maximum_amount_cents
+    # An upgrade purchase only charges the prorated difference today, and any active
+    # discount record lives on the subscription's original purchase rather than on the
+    # upgrade purchase itself. Future renewals bill that original purchase (which
+    # `Subscription#update_current_plan!` rebuilds to reflect the new plan), so for
+    # upgrades derive every input below — charged total, discount record, discounted
+    # price, quantity — from the original purchase. Mixing sources would pair the
+    # original purchase's total with the upgrade's small prorated price (wildly
+    # inflating the cap) or miss a temporary discount that only exists on the original
+    # purchase (undersizing the cap so renewals fail).
+    reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
+    base_cents = reference_purchase.total_transaction_cents
+    discount = reference_purchase.purchase_offer_code_discount
+    return base_cents if discount.blank? || discount.duration_in_billing_cycles.blank?
+    return base_cents unless reference_purchase.displayed_price_cents.to_i.positive?
+
+    # Scale the charged total (which already includes tax) by the pre-discount/discounted
+    # price ratio instead of re-deriving price + tax + FX from scratch — the mandate is an
+    # upper bound, so a proportional estimate is sufficient and much simpler.
+    pre_discount_cents = discount.pre_discount_minimum_price_cents * reference_purchase.quantity
+    [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
   end
 
   def name_or_email

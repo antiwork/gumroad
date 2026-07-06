@@ -949,6 +949,16 @@ describe PurchasesController, :vcr do
         expect(purchase.reload.is_access_revoked).to eq(true)
         expect(response).to be_successful
       end
+
+      it "does not revoke access for another seller's purchase" do
+        other_seller = create(:user)
+        other_purchase = create(:purchase, link: create(:product, user: other_seller), seller: other_seller)
+
+        put :revoke_access, params: { id: other_purchase.external_id }, as: :json
+
+        expect(other_purchase.reload.is_access_revoked).to eq(false)
+        expect(response).to have_http_status(:not_found)
+      end
     end
 
     describe "PUT undo_revoke_access" do
@@ -966,6 +976,16 @@ describe PurchasesController, :vcr do
         put :undo_revoke_access, params: { id: purchase.external_id }, as: :json
         expect(purchase.reload.is_access_revoked).to eq(false)
         expect(response).to be_successful
+      end
+
+      it "does not restore access for another seller's purchase" do
+        other_seller = create(:user)
+        other_purchase = create(:purchase, link: create(:product, user: other_seller), seller: other_seller, is_access_revoked: true)
+
+        put :undo_revoke_access, params: { id: other_purchase.external_id }, as: :json
+
+        expect(other_purchase.reload.is_access_revoked).to eq(true)
+        expect(response).to have_http_status(:not_found)
       end
     end
   end
