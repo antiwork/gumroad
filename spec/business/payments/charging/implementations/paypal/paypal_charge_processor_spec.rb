@@ -554,6 +554,26 @@ describe PaypalChargeProcessor, :vcr do
           expect(@purchase.reload.refunds.count).to eq(0)
         end
 
+        it "does not refund and notifies when a same-order sibling has a NULL price" do
+          # price_cents is a nullable column. A NULL price tells us nothing about whether
+          # money moved for that sibling, so the guard must treat the capture as ambiguous
+          # and fail toward manual review instead of auto-applying the refund.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          sibling = create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                             stripe_transaction_id: nil,
+                                             charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+          sibling.update_column(:price_cents, nil)
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+            hash_including(capture_id: "0JF852973C016714D", resolved_purchase_id: @purchase.id)
+          )
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+        end
+
         it "still refunds when same-order siblings carry their own different capture ids (multi-seller cart)" do
           @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
           create(:purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",

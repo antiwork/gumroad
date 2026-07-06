@@ -159,7 +159,13 @@ class PaypalChargeProcessor
                   .where(stripe_transaction_id: [nil, "", capture_id])
         )
       end
-      sibling_scope = sibling_scope.where("price_cents > 0")
+      # Free ($0) siblings can never be what the refund belongs to, so they don't make the
+      # capture ambiguous. Keep siblings whose price is NULL, though: price_cents is a
+      # nullable column, and an unknown price tells us nothing about whether money moved
+      # for that row — excluding NULLs (a bare price_cents > 0) would let the refund
+      # auto-apply in exactly the rows we can't attribute. Unknown price stays ambiguous
+      # and fails toward manual review.
+      sibling_scope = sibling_scope.where("price_cents IS NULL OR price_cents > 0")
       if sibling_scope.exists?
         ErrorNotifier.notify(
           "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
