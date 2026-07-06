@@ -3078,16 +3078,26 @@ class Purchase < ApplicationRecord
   # legitimately make: the undiscounted equivalent of today's total when the discount is
   # temporary, today's total otherwise.
   def mandate_maximum_amount_cents
-    base_cents = is_upgrade_purchase? ? subscription.original_purchase.total_transaction_cents : total_transaction_cents
-    discount = purchase_offer_code_discount
+    # An upgrade purchase only charges the prorated difference today, and any active
+    # discount record lives on the subscription's original purchase rather than on the
+    # upgrade purchase itself. Future renewals bill that original purchase (which
+    # `Subscription#update_current_plan!` rebuilds to reflect the new plan), so for
+    # upgrades derive every input below — charged total, discount record, discounted
+    # price, quantity — from the original purchase. Mixing sources would pair the
+    # original purchase's total with the upgrade's small prorated price (wildly
+    # inflating the cap) or miss a temporary discount that only exists on the original
+    # purchase (undersizing the cap so renewals fail).
+    reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
+    base_cents = reference_purchase.total_transaction_cents
+    discount = reference_purchase.purchase_offer_code_discount
     return base_cents if discount.blank? || discount.duration_in_billing_cycles.blank?
-    return base_cents unless displayed_price_cents.to_i.positive?
+    return base_cents unless reference_purchase.displayed_price_cents.to_i.positive?
 
     # Scale the charged total (which already includes tax) by the pre-discount/discounted
     # price ratio instead of re-deriving price + tax + FX from scratch — the mandate is an
     # upper bound, so a proportional estimate is sufficient and much simpler.
-    pre_discount_cents = discount.pre_discount_minimum_price_cents * quantity
-    [(Rational(base_cents * pre_discount_cents, displayed_price_cents)).ceil, base_cents].max
+    pre_discount_cents = discount.pre_discount_minimum_price_cents * reference_purchase.quantity
+    [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
   end
 
   def name_or_email
