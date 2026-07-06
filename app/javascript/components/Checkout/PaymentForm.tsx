@@ -1162,11 +1162,13 @@ const useStripePaymentRequest = (disabled: boolean) => {
           // with an empty ZIP and the server's US-only ZIP validation rejects the purchase with
           // "You entered a ZIP Code that doesn't exist within your country" — an error the buyer
           // can't fix because the wallet flow never shows a ZIP field. The billing state/province
-          // is copied too because Canadian tax lookup requires it alongside the country.
+          // is copied too because Canadian tax lookup requires it alongside the country. When the
+          // wallet omits a state we clear the field rather than keep the old value, so a stale
+          // province from a previous selection can't pair with the new country and produce a
+          // wrong tax calculation.
           dispatch({ type: "set-value", country: e.paymentMethod.billing_details.address.country });
           dispatch({ type: "set-value", zipCode: e.paymentMethod.billing_details.address.postal_code || undefined });
-          if (e.paymentMethod.billing_details.address.state)
-            dispatch({ type: "set-value", state: e.paymentMethod.billing_details.address.state });
+          dispatch({ type: "set-value", state: e.paymentMethod.billing_details.address.state ?? "" });
         }
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
