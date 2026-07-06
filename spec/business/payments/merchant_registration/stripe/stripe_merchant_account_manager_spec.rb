@@ -1545,6 +1545,51 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "a Japanese individual without the city fields (compliance info saved before the city inputs existed)" do
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: nil, phone: "+81987654321",
+                                                                  first_name_kanji: "日本語", last_name_kanji: "創造者",
+                                                                  first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
+                                                                  building_number: "1-1", building_number_kana: "1-1",
+                                                                  street_address_kanji: "神宮前", street_address_kana: "ジングウマエ",
+                                                                  street_address: "address_full_match", state: "東京都", zip_code: "100-0000",
+                                                                  country: "Japan") end
+      let(:bank_account) { create(:japan_bank_account, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        bank_account
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+      end
+
+      it "omits the city keys from the kanji and kana address hashes instead of sending explicit nils" do
+        expect(Stripe::Account).to receive(:create).with(
+          hash_including(
+            individual: hash_including(
+              address_kanji: {
+                line1: "1-1",
+                town: "神宮前",
+                state: "東京都",
+                country: "JP",
+                postal_code: "100-0000",
+              },
+              address_kana: {
+                line1: "1-1",
+                town: "ジングウマエ",
+                state: "トウキョウト",
+                country: "JP",
+                postal_code: "100-0000",
+              }
+            )
+          )
+        ).and_call_original
+
+        subject.create_account(user, passphrase: "1234")
+      end
+    end
+
     describe "all info provided of an NZ individual" do
       let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Wellington",
                                                                   street_address: "address_full_match", state: nil, zip_code: "6012",
