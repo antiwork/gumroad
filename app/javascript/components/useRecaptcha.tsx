@@ -2,6 +2,20 @@ import * as React from "react";
 
 export class RecaptchaCancelledError extends Error {}
 
+// Thrown when reCAPTCHA itself never produced a token for a reason that was NOT the user
+// dismissing a challenge — most commonly the Google script being blocked by an ad blocker /
+// privacy extension, or failing to load on a restricted network. Callers should surface
+// actionable guidance for this case instead of failing silently: the buyer can fix it
+// themselves (disable the extension for this page, use a private window, or switch networks),
+// but only if we tell them.
+export class RecaptchaUnavailableError extends Error {}
+
+// The buyer-facing guidance for RecaptchaUnavailableError. Shared so every checkout surface
+// shows the same message. Kept in sync with the server-side CAPTCHA failure message in
+// OrdersController / PurchasesController.
+export const RECAPTCHA_UNAVAILABLE_MESSAGE =
+  "We couldn't load the security check. This is often caused by an ad blocker or privacy extension — try disabling it for this page, using a private/incognito window, or switching networks, then try again.";
+
 const SCRIPT_BASE_URL = "https://www.google.com/recaptcha/enterprise.js";
 const CHALLENGE_SCRIPT_URL = `${SCRIPT_BASE_URL}?render=explicit`;
 const scoreScriptUrl = (siteKey: string) => `${SCRIPT_BASE_URL}?render=${encodeURIComponent(siteKey)}`;
@@ -113,27 +127,31 @@ export function useRecaptcha({
     if (!siteKey) return Promise.reject(new RecaptchaCancelledError());
 
     if (scoreBased) {
-      return (
-        loadRecaptchaScript(scoreScriptUrl(siteKey))
-          .then(
-            () =>
-              new Promise<string>((resolve, reject) => {
-                grecaptcha.enterprise.ready(() => {
-                  grecaptcha.enterprise.execute(siteKey, { action }).then(resolve, () => {
-                    reject(new RecaptchaCancelledError());
-                  });
+      return loadRecaptchaScript(scoreScriptUrl(siteKey))
+        .catch(() => {
+          // The script failing to load is environmental (blocked by an extension or the
+          // network), not a user dismissal — surface it as such so the UI can show guidance.
+          throw new RecaptchaUnavailableError();
+        })
+        .then(
+          () =>
+            new Promise<string>((resolve, reject) => {
+              grecaptcha.enterprise.ready(() => {
+                grecaptcha.enterprise.execute(siteKey, { action }).then(resolve, () => {
+                  // Score keys never show a challenge, so there is nothing for the user to
+                  // dismiss — a token failure here is also environmental.
+                  reject(new RecaptchaUnavailableError());
                 });
-              }),
-          )
-          // Normalize any pre-token failure (e.g. the script being blocked or
-          // failing to load) to RecaptchaCancelledError so callers can treat it
-          // like a dismissed challenge and reset, rather than hanging.
-          .catch(() => Promise.reject(new RecaptchaCancelledError()))
-      );
+              });
+            }),
+        );
     }
 
     const widgetId = recaptchaId.current;
-    if (widgetId === null) return Promise.reject(new RecaptchaCancelledError());
+    // A null widget means the reCAPTCHA script never loaded (typically blocked by an ad
+    // blocker / privacy extension), so the challenge can never run — distinct from the user
+    // dismissing a rendered challenge.
+    if (widgetId === null) return Promise.reject(new RecaptchaUnavailableError());
     grecaptcha.enterprise.reset(widgetId);
     void grecaptcha.enterprise.execute(widgetId);
     // This promise should always complete if recaptcha works correctly, but it's not guaranteed to (e.g.

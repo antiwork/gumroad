@@ -17,12 +17,18 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
+import {
+  RECAPTCHA_UNAVAILABLE_MESSAGE,
+  RecaptchaCancelledError,
+  RecaptchaUnavailableError,
+  useRecaptcha,
+} from "$app/components/useRecaptcha";
 
 const PASSKEY_ERROR = "We couldn't sign you in with that passkey. Please try again or use your password.";
 
@@ -90,6 +96,12 @@ function LoginPage() {
       form.post(Routes.login_path());
     } catch (e) {
       if (e instanceof RecaptchaCancelledError) return;
+      // The reCAPTCHA script being blocked (ad blocker / privacy extension) is fixable by the
+      // user — tell them how instead of failing silently (see gumroad-private#927).
+      if (e instanceof RecaptchaUnavailableError) {
+        showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
+        return;
+      }
       throw e;
     }
   };

@@ -1088,7 +1088,7 @@ describe OrdersController, :vcr do
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to eq false
-        expect(response.parsed_body["error_message"]).to eq "Sorry, we could not verify the CAPTCHA. Please try again."
+        expect(response.parsed_body["error_message"]).to eq ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
         expect(response.parsed_body["can_buyer_sign_up"]).to be_nil
       end
 
