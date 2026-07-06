@@ -92,6 +92,10 @@ export function useRecaptcha({
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const recaptchaId = React.useRef<number | null>(null);
   const resolveRef = React.useRef<((response: string) => void) | null>(null);
+  // Tracks the script-load + widget-render sequence so execute() can wait for it. Without
+  // this, a submit that happens before initialization finishes would see a missing widget
+  // and wrongly report the CAPTCHA as unavailable (blocked), when it was simply still loading.
+  const initPromiseRef = React.useRef<Promise<void> | null>(null);
 
   React.useEffect(() => {
     if (!siteKey) return;
@@ -104,23 +108,28 @@ export function useRecaptcha({
       return;
     }
 
-    const initRecaptcha = () => {
-      grecaptcha.enterprise.ready(() => {
-        if (!containerRef.current || containerRef.current.childElementCount) return;
-        recaptchaId.current = grecaptcha.enterprise.render(containerRef.current, {
-          sitekey: siteKey,
-          callback: (response) => {
-            resolveRef.current?.(response);
-            resolveRef.current = null;
-          },
-          size: "invisible",
+    const initRecaptcha = () =>
+      new Promise<void>((resolve) => {
+        grecaptcha.enterprise.ready(() => {
+          if (containerRef.current && !containerRef.current.childElementCount) {
+            recaptchaId.current = grecaptcha.enterprise.render(containerRef.current, {
+              sitekey: siteKey,
+              callback: (response) => {
+                resolveRef.current?.(response);
+                resolveRef.current = null;
+              },
+              size: "invisible",
+            });
+          }
+          resolve();
         });
       });
-    };
 
-    loadRecaptchaScript(CHALLENGE_SCRIPT_URL)
-      .then(initRecaptcha)
-      .catch(() => {});
+    const initPromise = loadRecaptchaScript(CHALLENGE_SCRIPT_URL).then(initRecaptcha);
+    initPromiseRef.current = initPromise;
+    // Swallow the rejection here so a blocked script doesn't surface as an unhandled promise
+    // rejection — execute() re-checks the stored promise and reports the failure to the user.
+    initPromise.catch(() => {});
   }, [siteKey, scoreBased]);
 
   const execute = () => {
@@ -147,22 +156,34 @@ export function useRecaptcha({
         );
     }
 
-    const widgetId = recaptchaId.current;
-    // A null widget means the reCAPTCHA script never loaded (typically blocked by an ad
-    // blocker / privacy extension), so the challenge can never run — distinct from the user
-    // dismissing a rendered challenge.
-    if (widgetId === null) return Promise.reject(new RecaptchaUnavailableError());
-    grecaptcha.enterprise.reset(widgetId);
-    void grecaptcha.enterprise.execute(widgetId);
-    // This promise should always complete if recaptcha works correctly, but it's not guaranteed to (e.g.
-    // if recaptcha's DOM structure ever changes, or if there's an error during their processing).
-    return new Promise<string>((resolve, reject) => {
-      listenForRecaptchaCancel(widgetId, () => {
-        reject(new RecaptchaCancelledError());
-        resolveRef.current = null;
+    // Wait for initialization to finish before checking the widget: a submit that lands
+    // before the script has loaded and rendered the widget is a normal timing race, not a
+    // blocked CAPTCHA, so we must not report it as unavailable prematurely.
+    const initPromise = initPromiseRef.current ?? Promise.reject(new Error("reCAPTCHA was never initialized"));
+    return initPromise
+      .catch(() => {
+        // The script failing to load is environmental (blocked by an extension or the
+        // network), not a user dismissal — surface it as such so the UI can show guidance.
+        throw new RecaptchaUnavailableError();
+      })
+      .then(() => {
+        const widgetId = recaptchaId.current;
+        // Initialization finished but no widget exists — the reCAPTCHA script loaded without
+        // producing a usable challenge (or its container never mounted), so the challenge can
+        // never run. Distinct from the user dismissing a rendered challenge.
+        if (widgetId === null) throw new RecaptchaUnavailableError();
+        grecaptcha.enterprise.reset(widgetId);
+        void grecaptcha.enterprise.execute(widgetId);
+        // This promise should always complete if recaptcha works correctly, but it's not guaranteed to (e.g.
+        // if recaptcha's DOM structure ever changes, or if there's an error during their processing).
+        return new Promise<string>((resolve, reject) => {
+          listenForRecaptchaCancel(widgetId, () => {
+            reject(new RecaptchaCancelledError());
+            resolveRef.current = null;
+          });
+          resolveRef.current = resolve;
+        });
       });
-      resolveRef.current = resolve;
-    });
   };
 
   return {
