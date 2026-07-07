@@ -6,7 +6,6 @@ class TwoFactorAuthenticationMailer < ApplicationMailer
 
   layout "layouts/email"
 
-  # TODO(ershad): Remove this once the issue with Resend is resolved
   default delivery_method_options: -> { MailerInfo.default_delivery_method_options(domain: :gumroad) }
 
   def authentication_token(user_id, email_provider: nil)
