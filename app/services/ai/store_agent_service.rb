@@ -27,8 +27,19 @@ class Ai::StoreAgentService
   REQUEST_TIMEOUT_IN_SECONDS = 60
   MAX_TOOL_ITERATIONS = 5
   MAX_MESSAGE_LENGTH = 2_000
-  # Anthropic requires max_tokens; size it for a brief chat reply plus a tool call's JSON args.
-  MAX_REPLY_TOKENS = 1_500
+  # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
+  # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
+  # long description's full HTML) inside the tool call's JSON arguments. A cap sized only for text
+  # replies (this was previously 1,500) cut those tool calls off mid-JSON, which surfaced to the
+  # seller as a generic "Something went wrong" error. 8,192 comfortably fits real product
+  # descriptions while still bounding the cost of a runaway turn.
+  MAX_REPLY_TOKENS = 8_192
+  # What the seller sees when a model turn still hits MAX_REPLY_TOKENS (stop_reason "max_tokens").
+  # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
+  # text reply would silently present half an answer as if it were complete — so we replace it
+  # with an honest ask to scope the request down instead of streaming garbage or raising.
+  TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
+                    "summarize a smaller section, and I'll take it from there."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
@@ -129,6 +140,13 @@ class Ai::StoreAgentService
         max_tokens: MAX_REPLY_TOKENS,
       )
 
+      # The model hit MAX_REPLY_TOKENS mid-turn. Whatever came back is incomplete — a cut-off tool
+      # call has unusable arguments, and a cut-off text answer would read as a complete reply when
+      # it isn't — so stop here with an honest message instead of acting on a truncated turn.
+      if result.stop_reason == "max_tokens"
+        return { reply: TRUNCATED_REPLY, proposed_action: proposed_action&.as_json, objects: deduped_objects }
+      end
+
       if result.tool_uses.blank?
         return { reply: result.text.to_s.strip, proposed_action: proposed_action&.as_json, objects: deduped_objects }
       end
@@ -168,6 +186,15 @@ class Ai::StoreAgentService
       ) do |text|
         streamed_any = true
         emit.call(:token, { text: })
+      end
+
+      # Same truncation handling as #respond. Anything this turn streamed is incomplete, so tell
+      # the UI to discard it and stream the honest fallback instead of leaving half an answer (or
+      # half a tool call's preamble) on screen as if it were the finished reply.
+      if result.stop_reason == "max_tokens"
+        emit.call(:reset, {}) if streamed_any
+        emit.call(:token, { text: TRUNCATED_REPLY })
+        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:)
       end
 
       if result.tool_uses.blank?
