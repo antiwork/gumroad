@@ -408,7 +408,11 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                     <ProposedActionCard
                       action={message.proposedAction}
                       status={message.actionStatus}
-                      isPending={pendingActionIndex !== null}
+                      // Also treat an in-flight turn as pending: while streaming, the proposal card
+                      // can render before the terminal `done` event persists the turn server-side.
+                      // Confirming in that window would apply the change before the stored proposal
+                      // exists, so it could never be marked applied in the saved history.
+                      isPending={pendingActionIndex !== null || isSending}
                       isApplying={pendingActionIndex === index}
                       onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
                       onDismiss={() => dismissAction(index)}
