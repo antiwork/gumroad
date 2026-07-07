@@ -889,7 +889,11 @@ class StripeChargeProcessor
       # failure monitoring and support tooling even though the money flow is correct.
       last_payment_error = stripe_event["data"]["object"]["last_payment_error"]
       if last_payment_error.present?
-        event.extras = { "stripe_error_code" => error_code_from_last_payment_error(last_payment_error) }
+        error_code = error_code_from_last_payment_error(last_payment_error)
+        # Merge rather than assign so any extras set earlier for this event (none today, but
+        # handle_event_informational! reads other keys like fee_cents) are never silently dropped,
+        # and skip entirely when Stripe sent an error object with no usable code.
+        event.extras = (event.extras || {}).merge("stripe_error_code" => error_code) if error_code.present?
       end
     elsif PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
       raise "Stripe Event #{stripe_event['id']} does not contain a 'payment_intent' object." if stripe_event["data"]["object"]["object"] != "payment_intent"

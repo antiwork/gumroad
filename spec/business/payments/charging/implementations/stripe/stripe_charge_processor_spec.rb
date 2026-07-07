@@ -2299,6 +2299,17 @@ describe StripeChargeProcessor, :vcr do
 
           StripeChargeProcessor.handle_stripe_event(stripe_event)
         end
+
+        it "leaves extras unset when last_payment_error carries neither a code nor a type" do
+          stripe_event["data"]["object"]["last_payment_error"] = { "message" => "Something went wrong." }
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.type).to eq(ChargeEvent::TYPE_PAYMENT_INTENT_FAILED)
+            expect(event.extras).to be_nil
+          end
+
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
       end
     end
 
