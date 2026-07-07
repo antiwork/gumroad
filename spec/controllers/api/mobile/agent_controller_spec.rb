@@ -309,6 +309,17 @@ describe Api::Mobile::AgentController do
           post :create, params: valid_params
         end.to not_change { @seller.ai_conversations.count }.and not_change { AiMessage.count }
       end
+
+      it "rolls back the whole turn when the assistant write fails, leaving no stray user message" do
+        stub_agent_service
+        allow(controller).to receive(:record_agent_assistant_message!).and_raise(ActiveRecord::RecordInvalid)
+
+        expect do
+          post :create, params: valid_params
+        end.to not_change { @seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        expect(response).to have_http_status(:internal_server_error)
+      end
     end
 
     describe "POST execute" do

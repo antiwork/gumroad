@@ -86,9 +86,15 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
 
       result = ::Ai::StoreAgentService.new(seller:, pundit_user:).respond(messages: history)
 
-      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-      record_agent_assistant_message!(conversation, result)
+      # Store the whole turn atomically: without the transaction, a failure writing the assistant
+      # reply would leave a stray user message that gets silently replayed to the model on the
+      # next turn or after a resume (the same partial-history problem the pre-service guard above
+      # protects against).
+      ActiveRecord::Base.transaction do
+        conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+        record_agent_assistant_message!(conversation, result)
+      end
       render json: {
         success: true,
         reply: result[:reply],
