@@ -434,6 +434,169 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # Method-forced local payment methods (iDEAL/Bancontact) can only charge in one currency, so
+    # when the buyer confirms with one, the deferred intent must be created in that currency with
+    # the presentment snapshot persisted at prepare time (Local-Methods Join, issue #5419).
+    context "with a method-forced local payment method (iDEAL)" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def perform_with_ideal_preview(order, params, confirmation_token: "ctoken_ideal")
+        preview = Stripe::StripeObject.construct_from(type: "ideal", ideal: {}, card: nil)
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_ideal", client_secret: "pi_ideal_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token:).perform
+        [create_args, responses]
+      end
+
+      context "with a USD-priced product (FX quote case)" do
+        let(:quote) do
+          StripeFxQuote::Quote.new(id: "fxq_prepare", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25"))
+        end
+
+        before { allow(StripeFxQuote).to receive(:create).and_return(quote) }
+
+        it "prepares the intent in EUR for the quote-converted amount with quote-backed presentment rows" do
+          order, params = build_order
+          create_args, responses = perform_with_ideal_preview(order, params)
+
+          purchase = order.purchases.first.reload
+          expected_total = ((BigDecimal(purchase.total_transaction_cents.to_s) / BigDecimal("1.25"))).round
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(expected_total)
+          expect(create_args[:payment_method_types]).to include("ideal")
+          expect(responses["unique-id-0"][:success]).to eq(true)
+
+          charge = order.charges.last
+          expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                               presentment_total_cents: expected_total,
+                                                               stripe_fx_quote_id: "fxq_prepare",
+                                                               fx_rate: BigDecimal("1.25"))
+          expect(purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                                   presentment_total_cents: expected_total)
+        end
+
+        it "keys the intent on the FX quote id scoped to the confirmation token" do
+          order, params = build_order
+          create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_quoted")
+
+          charge = order.charges.last
+          expect(create_args[:idempotency_key]).to eq("buyer-currency-intent-#{charge.external_id}-fxq_prepare_ctoken_quoted")
+        end
+      end
+
+      context "with a product priced in the forced currency (direct listed-amount case)" do
+        let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 15_00) }
+        let(:line_item) { { uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 } }
+
+        it "prepares the intent for the listed EUR amount with no FX quote and null quote columns" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order
+          create_args, responses = perform_with_ideal_preview(order, params)
+
+          purchase = order.purchases.first.reload
+          expect(purchase.displayed_price_cents).to eq(15_00)
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(create_args[:payment_method_types]).to include("ideal")
+          expect(responses["unique-id-0"][:success]).to eq(true)
+
+          charge = order.charges.last
+          expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                               presentment_total_cents: 15_00,
+                                                               stripe_fx_quote_id: nil,
+                                                               stripe_fx_quote_expires_at: nil,
+                                                               fx_rate: nil)
+          expect(purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                                   presentment_price_cents: 15_00,
+                                                                   presentment_total_cents: 15_00)
+        end
+
+        it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
+          order, params = build_order
+          create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")
+
+          charge = order.charges.last
+          expect(create_args[:idempotency_key]).to eq("buyer-currency-intent-#{charge.external_id}-#{Currency::EUR}_ctoken_direct")
+        end
+      end
+
+      it "keeps today's canonical USD behavior byte-for-byte when the flag is off" do
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        order, params = build_order
+        create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_flag_off")
+
+        charge = order.charges.last
+        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+        expect(create_args[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
+        expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_flag_off")
+        expect(create_args[:payment_method_types]).not_to include("ideal")
+        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(charge.charge_presentment).to be_nil
+        expect(order.purchases.first.reload.purchase_presentment).to be_nil
+      end
+
+      it "keeps today's canonical USD behavior for a non-method-forced payment method even with the flag on" do
+        order, params = build_order
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card", client_secret: "pi_card_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+        expect(StripeFxQuote).not_to receive(:create)
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_card").perform
+
+        charge = order.charges.last
+        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+        expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_card")
+        expect(charge.charge_presentment).to be_nil
+      end
+
+      # The presentment build swallows its own failures into a nil result, so a broken FX quote
+      # fetch degrades to today's canonical USD intent instead of failing the checkout.
+      it "falls back to the canonical USD intent when the presentment build fails" do
+        allow(ErrorNotifier).to receive(:notify)
+        allow(StripeFxQuote).to receive(:create).and_raise("fx quote unavailable")
+
+        order, params = build_order
+        create_args, responses = perform_with_ideal_preview(order, params)
+
+        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(order.charges.last.charge_presentment).to be_nil
+      end
+    end
+
     context "when a purchase matches no line item in params" do
       # A bundle child (or any purchase whose permalink/variant is absent from params) must not be
       # keyed under nil, which silently drops its response and collides across purchases.
