@@ -7,6 +7,7 @@ class Payouts
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
+  HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -93,7 +94,7 @@ class Payouts
     # cap at the scheduled slot and aborting entire payout batches. Splitting the
     # query leaves no join for the optimizer to get wrong, and each piece stays far
     # under the statement cap.
-    holding_balance_user_ids = User.holding_balance.ids
+    holding_balance_user_ids = self.holding_balance_user_ids
 
     bank_account_types.each do |bank_account_type|
       user_ids = holding_balance_user_ids.each_slice(BANK_ACCOUNT_LOOKUP_BATCH_SIZE).flat_map do |user_ids_batch|
@@ -102,6 +103,62 @@ class Payouts
       users = User.where(id: user_ids)
       self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
     end
+  end
+
+  # Returns the ids of every user holding a positive unpaid balance — the same set
+  # as User.holding_balance — but computed in bounded batches so that no single SQL
+  # statement has to aggregate the entire balances table in one go.
+  #
+  # The single-statement version (users JOIN balances GROUP BY user, or even
+  # User.holding_balance.ids on its own) aggregates every unpaid balance row on the
+  # platform in one query. That query's runtime grows with the size of the platform,
+  # and during the contended 10:00 UTC scheduled-jobs window it has repeatedly
+  # exceeded MySQL's 5-minute statement cap, killing whole payout batches
+  # (StatementTimeout incidents on 2026-05-26, 07-02, and 07-07). Retries don't help
+  # because they land in the same contention window.
+  #
+  # Instead we walk balances.user_id in ascending order with a keyset cursor
+  # (`user_id > last seen id`), aggregating at most HOLDING_BALANCE_ID_BATCH_SIZE
+  # users' balances per statement and applying the "sum is positive" filter in Ruby.
+  # The positivity check deliberately lives here and not in a SQL HAVING clause:
+  # HAVING filters groups after aggregation but before LIMIT, so a long run of
+  # users with zero or negative net balances would force one statement to keep
+  # aggregating until it found enough positive ones — reintroducing unbounded work.
+  # Grouping without HAVING lets MySQL stream exactly LIMIT groups off the
+  # `(state, user_id, amount_cents)` covering index and stop, so each statement's
+  # work is bounded by the batch size — not by how many sellers Gumroad has. A
+  # user's balance rows all share one user_id, so partitioning by user_id ranges
+  # never splits a user's SUM across batches, and the union of batches is exactly
+  # the users with SUM > 0.
+  #
+  # One deliberate difference from the JOIN version: this reads only the balances
+  # table, so a balance row pointing at a deleted/nonexistent user id would be
+  # included here where the JOIN would have dropped it. That cannot change who gets
+  # paid — every caller resolves these ids through `User.where(id: ...)`, which
+  # drops ids without a users row.
+  #
+  # Balances don't move out of the `unpaid` state while this worker is only reading,
+  # so re-running after a partial failure re-selects the same users; actual payout
+  # creation stays idempotent downstream (per-user jobs are deduplicated and
+  # Payouts.create_payment no-ops once a user's balances leave `unpaid`).
+  def self.holding_balance_user_ids
+    user_ids = []
+    last_user_id = 0
+
+    loop do
+      batch = Balance.unpaid
+                     .where("user_id > ?", last_user_id)
+                     .group(:user_id)
+                     .order(:user_id)
+                     .limit(HOLDING_BALANCE_ID_BATCH_SIZE)
+                     .pluck(:user_id, Arel.sql("SUM(amount_cents)"))
+      break if batch.empty?
+
+      user_ids.concat(batch.filter_map { |user_id, amount_cents| user_id if amount_cents > 0 })
+      last_user_id = batch.last.first
+    end
+
+    user_ids
   end
 
   def self.create_instant_payouts_for_balances_up_to_date(date)
