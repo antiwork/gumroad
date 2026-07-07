@@ -166,6 +166,11 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // state updates) always read the current id without re-creating handlers.
   const conversationIdRef = React.useRef<string | null>(null);
   conversationIdRef.current = conversationId;
+  // Flips true the moment the seller sends their first message. Guards the mount-time hydration
+  // below: once a turn is in flight (which may create a brand-new stored conversation), a late
+  // "latest conversation" response must not overwrite the chat or its conversation id — otherwise
+  // subsequent turns would be appended to the wrong stored conversation.
+  const hasSentMessageRef = React.useRef(false);
   // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
   // which we show only until the first token lands, then let the streaming text take over.
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -205,31 +210,26 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     let cancelled = false;
     void fetchLatestAgentConversation()
       .then((conversation) => {
-        if (cancelled || !conversation || conversation.messages.length === 0) return;
-        setMessages((prev) => {
-          // Anything beyond the initial greeting means the seller already started typing/chatting;
-          // leave their in-progress conversation alone.
-          if (prev.length > 1) return prev;
-          return [
-            { role: "assistant", content: greeting },
-            ...conversation.messages.map(
-              (message: ConversationMessage): DisplayMessage => ({
-                role: message.role,
-                content: message.content,
-                ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
-                ...(message.objects?.length ? { objects: message.objects } : {}),
-                ...(message.action_status
-                  ? { actionStatus: message.action_status }
-                  : // A proposal persisted without a status was never confirmed in the session it was
-                    // made. Its context (and the throttle window) is gone, so render it as dismissed
-                    // rather than offering a stale, re-confirmable change after reload.
-                    message.proposed_action
-                    ? { actionStatus: "dismissed" as const }
-                    : {}),
-              }),
-            ),
-          ];
-        });
+        if (cancelled || !conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
+        setMessages([
+          { role: "assistant", content: greeting },
+          ...conversation.messages.map(
+            (message: ConversationMessage): DisplayMessage => ({
+              role: message.role,
+              content: message.content,
+              ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
+              ...(message.objects?.length ? { objects: message.objects } : {}),
+              ...(message.action_status
+                ? { actionStatus: message.action_status }
+                : // A proposal persisted without a status was never confirmed in the session it was
+                  // made. Its context (and the throttle window) is gone, so render it as dismissed
+                  // rather than offering a stale, re-confirmable change after reload.
+                  message.proposed_action
+                  ? { actionStatus: "dismissed" as const }
+                  : {}),
+            }),
+          ),
+        ]);
         setConversationId(conversation.id);
       })
       .catch(() => {
@@ -253,6 +253,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending) return;
+
+    // From here on the seller owns the chat: block the mount-time hydration from replacing it.
+    hasSentMessageRef.current = true;
 
     // Sending re-engages auto-scroll so the seller's own message and the reply come into view.
     stickToBottom.current = true;
