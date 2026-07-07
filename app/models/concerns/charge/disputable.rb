@@ -328,7 +328,7 @@ module Charge::Disputable
         PostToPingEndpointsWorker.perform_in(5.seconds, purchase.id, purchase.url_parameters, ResourceSubscription::DISPUTE_RESOURCE_NAME)
       end
 
-      FightDisputeJob.perform_async(dispute_evidence.dispute.id) if dispute_evidence.present?
+      FightDisputeJob.perform_async(dispute.id) if dispute_evidence.present?
 
       # Completion marker: a replayed webhook only re-runs these side effects while this is nil.
       dispute.update!(formalized_side_effects_finished_at: Time.current)

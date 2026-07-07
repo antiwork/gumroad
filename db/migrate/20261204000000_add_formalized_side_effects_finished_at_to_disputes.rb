@@ -10,7 +10,11 @@ class AddFormalizedSideEffectsFinishedAtToDisputes < ActiveRecord::Migration[7.1
     # re-enqueues the refund-policy enforcement job. The new resume-on-replay path
     # (Charge::Disputable#handle_event_dispute_formalized!) should only ever fire for
     # disputes formalized after this deploy whose side effects genuinely crashed partway.
-    Dispute.where.not(formalized_at: nil).update_all("formalized_side_effects_finished_at = formalized_at")
+    # Batched so the backfill never holds row locks on the whole table at once: a single
+    # unbounded UPDATE could block live dispute webhook processing for its full duration.
+    Dispute.where.not(formalized_at: nil).in_batches do |batch|
+      batch.update_all("formalized_side_effects_finished_at = formalized_at")
+    end
   end
 
   def down
