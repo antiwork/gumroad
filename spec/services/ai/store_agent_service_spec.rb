@@ -543,6 +543,11 @@ describe Ai::StoreAgentService do
 
       event_names = events.map(&:first)
       expect(event_names).to include(:reset)
+      # The reset must come BEFORE the fallback token. If the order were flipped, the UI would
+      # render the fallback and then immediately wipe it, leaving the seller with nothing.
+      fallback_index = events.index { |event, payload| event == :token && payload[:text] == described_class::TRUNCATED_REPLY }
+      expect(fallback_index).not_to be_nil
+      expect(event_names.index(:reset)).to be < fallback_index
       final_tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(final_tokens.last).to eq(described_class::TRUNCATED_REPLY)
       expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
