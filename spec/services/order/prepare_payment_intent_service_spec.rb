@@ -595,6 +595,32 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true)
         expect(order.charges.last.charge_presentment).to be_nil
       end
+
+      # The presentment rows are persisted before the PaymentIntent is created. If that create
+      # then fails, the purchases are failed immediately — so the payment_failed webhook and the
+      # abandonment worker never run for this charge, and prepare itself must clean up the rows
+      # it just persisted or they'd be orphaned.
+      it "destroys the persisted presentment rows when the intent create fails after the presentment succeeded" do
+        allow(StripeFxQuote).to receive(:create)
+          .and_return(StripeFxQuote::Quote.new(id: "fxq_orphan", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25")))
+
+        preview = Stripe::StripeObject.construct_from(type: "ideal", ideal: {}, card: nil)
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(ChargeProcessorUnavailableError.new("stripe down"))
+
+        order, params = build_order
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_orphan").perform
+
+        purchase = order.purchases.first.reload
+        expect(purchase.failed?).to eq(true)
+        expect(responses["unique-id-0"][:success]).to eq(false)
+
+        charge = order.charges.last
+        expect(charge.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+      end
     end
 
     context "when a purchase matches no line item in params" do

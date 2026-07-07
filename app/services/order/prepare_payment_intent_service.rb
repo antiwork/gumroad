@@ -172,7 +172,14 @@ class Order::PreparePaymentIntentService
       charge = build_charge
       presentment = method_forced_presentment_for(charge)
       charge_intent = create_unconfirmed_intent(charge, presentment)
-      return fail_purchases_with(GENERIC_CHARGE_ERROR) if charge_intent.nil?
+      if charge_intent.nil?
+        # The presentment rows were persisted before the intent create failed, and the
+        # purchases are failed right here — so neither the payment_failed webhook nor the
+        # abandonment worker will ever run for this charge. Without this cleanup those
+        # rows would be orphaned snapshots pointing at a charge that never got an intent.
+        charge.destroy_presentment_records! if presentment.present?
+        return fail_purchases_with(GENERIC_CHARGE_ERROR)
+      end
 
       persist_intent_mapping(charge, charge_intent)
       schedule_abandonment_checks
