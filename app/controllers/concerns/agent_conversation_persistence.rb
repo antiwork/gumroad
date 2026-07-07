@@ -29,6 +29,20 @@ module AgentConversationPersistence
       current_seller.ai_conversations.create!(title: AiConversation.title_from(first_user_message))
     end
 
+    # Persists one full turn (creating the conversation when needed) atomically. Without the
+    # transaction, a failure between the user-message insert and the assistant-message insert would
+    # strand a half-written turn: `latest` would hydrate a user message with no reply, and a resumed
+    # turn would silently replay that stray message to the model. Returns the conversation so
+    # callers can hand its external id back to the client.
+    def persist_agent_turn!(conversation, new_user_message, result, fallback_first_message:)
+      AiConversation.transaction do
+        conversation ||= create_agent_conversation!(new_user_message || fallback_first_message)
+        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+        record_agent_assistant_message!(conversation, result)
+        conversation
+      end
+    end
+
     # The plain role/content transcript to send to the model — rebuilt from the stored rows so a
     # tampered or stale client-side history can't rewrite what the agent believes was said.
     def agent_conversation_history(conversation)
@@ -72,7 +86,13 @@ module AgentConversationPersistence
       # Mirror the live UI: once applied, the created/edited object replaces the turn's lookup
       # objects as the thing worth showing.
       metadata["objects"] = [result[:object]] if result[:object].present?
-      message.update_column(:metadata, metadata)
+      # The candidates above were loaded with a narrow `select` (no MEDIUMTEXT content), and saving
+      # a partially-loaded record raises MissingAttributeError — so re-fetch the full row before
+      # saving. Use `update!` (not `update_column`) so the `belongs_to :ai_conversation, touch: true`
+      # callback bumps the conversation's `updated_at`; without that, confirming a proposal wouldn't
+      # count as activity and `GET /internal/agent/conversations/latest` could resume a different,
+      # more recently active conversation after the seller refreshes.
+      conversation.ai_messages.find(message.id).update!(metadata:)
     end
 
     # The shape the chat clients (AgentChat.tsx on web, the Agent tab on mobile) hydrate a resumed

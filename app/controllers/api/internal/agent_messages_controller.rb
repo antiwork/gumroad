@@ -52,9 +52,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond(messages: history)
 
-      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-      record_agent_assistant_message!(conversation, result)
+      conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
       render json: {
         success: true,
         reply: result[:reply],

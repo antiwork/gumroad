@@ -227,6 +227,36 @@ describe Api::Internal::AgentMessagesController do
         expect(other_proposal.reload.metadata["action_status"]).to be_nil
       end
 
+      it "bumps the conversation's updated_at when a proposal is marked applied" do
+        # Confirming an action counts as conversation activity: the resume-latest endpoint orders
+        # by updated_at, so a stale timestamp here would make a refresh resume a DIFFERENT, more
+        # recently active conversation than the one the seller just acted in.
+        conversation = create(:ai_conversation, seller:)
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "I can create that discount.",
+          metadata: {
+            "proposed_action" => {
+              "type" => "api_write",
+              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+            },
+          },
+        )
+        stale_time = 1.hour.ago
+        conversation.update_column(:updated_at, stale_time)
+
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount code LAUNCH.")
+
+        post :execute, params: valid_params.merge(conversation_id: conversation.external_id), format: :json
+
+        expect(response).to be_successful
+        expect(conversation.reload.updated_at).to be > stale_time
+      end
+
       it "does not touch stored history when the executor fails" do
         conversation = create(:ai_conversation, seller:)
         proposal_message = create(
