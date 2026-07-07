@@ -634,6 +634,28 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(charge.charge_presentment).to be_nil
         expect(purchase.purchase_presentment).to be_nil
       end
+
+      it "destroys the persisted presentment rows when an unexpected error escapes after the presentment succeeded" do
+        allow(StripeFxQuote).to receive(:create)
+          .and_return(StripeFxQuote::Quote.new(id: "fxq_unexpected", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25")))
+
+        preview = Stripe::StripeObject.construct_from(type: "ideal", ideal: {}, card: nil)
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(RuntimeError, "merchant account missing id")
+
+        order, params = build_order
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_unexpected").perform
+
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(responses["unique-id-0"][:success]).to eq(false)
+
+        charge = order.charges.last
+        expect(charge.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+      end
     end
 
     context "when a purchase matches no line item in params" do

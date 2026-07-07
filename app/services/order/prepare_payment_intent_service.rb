@@ -36,6 +36,9 @@ class Order::PreparePaymentIntentService
     # leave every purchase in a terminal state with a buyer-facing error, not stuck in_progress.
     Rails.logger.error("Error preparing client-confirm charge for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
     fail_purchases_with(GENERIC_CHARGE_ERROR)
+    # Best-effort and last: the cleanup writes to the database, so if the original error was
+    # database trouble it can raise too — that must not skip failing the purchases above.
+    cleanup_prepare_time_presentment_records
     responses
   end
 
@@ -173,19 +176,28 @@ class Order::PreparePaymentIntentService
       presentment = method_forced_presentment_for(charge)
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
 
+      @charge_with_prepare_time_presentment = charge if presentment.present?
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
         # The presentment rows were persisted before the intent create failed, and the
         # purchases are failed right here — so neither the payment_failed webhook nor the
         # abandonment worker will ever run for this charge. Without this cleanup those
         # rows would be orphaned snapshots pointing at a charge that never got an intent.
-        charge.destroy_presentment_records! if presentment.present?
+        cleanup_prepare_time_presentment_records
         return fail_purchases_with(GENERIC_CHARGE_ERROR)
       end
 
       persist_intent_mapping(charge, charge_intent)
       schedule_abandonment_checks
       build_confirmation_responses(charge_intent)
+      # The snapshot now belongs to the live intent the buyer is about to confirm — a failure
+      # later in perform must not destroy it, so stop tracking it for cleanup.
+      @charge_with_prepare_time_presentment = nil
+    end
+
+    def cleanup_prepare_time_presentment_records
+      @charge_with_prepare_time_presentment&.destroy_presentment_records!
+      @charge_with_prepare_time_presentment = nil
     end
 
     # Must run before amount_cents/gumroad_amount_cents are summed: it resolves the seller's merchant
