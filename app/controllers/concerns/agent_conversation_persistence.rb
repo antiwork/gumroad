@@ -29,6 +29,20 @@ module AgentConversationPersistence
       current_seller.ai_conversations.create!(title: AiConversation.title_from(first_user_message))
     end
 
+    # Persists one full turn (creating the conversation when needed) atomically. Without the
+    # transaction, a failure between the user-message insert and the assistant-message insert would
+    # strand a half-written turn: `latest` would hydrate a user message with no reply, and a resumed
+    # turn would silently replay that stray message to the model. Returns the conversation so
+    # callers can hand its external id back to the client.
+    def persist_agent_turn!(conversation, new_user_message, result, fallback_first_message:)
+      AiConversation.transaction do
+        conversation ||= create_agent_conversation!(new_user_message || fallback_first_message)
+        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+        record_agent_assistant_message!(conversation, result)
+        conversation
+      end
+    end
+
     # The plain role/content transcript to send to the model — rebuilt from the stored rows so a
     # tampered or stale client-side history can't rewrite what the agent believes was said.
     def agent_conversation_history(conversation)

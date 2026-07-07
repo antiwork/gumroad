@@ -79,9 +79,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # so the next turn would silently start a brand-new conversation. The only cost of a
       # persistence failure is that this turn isn't stored.
       begin
-        conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-        record_agent_assistant_message!(conversation, result)
+        conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
       rescue => e
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
