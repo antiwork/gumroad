@@ -178,7 +178,22 @@ describe Api::Internal::AgentMessagesController do
           ai_conversation: conversation,
           role: "assistant",
           content: "I can create that discount.",
-          metadata: { "proposed_action" => { "type" => "api_write", "summary" => "Create discount LAUNCH" } },
+          metadata: {
+            "proposed_action" => {
+              "type" => "api_write",
+              "summary" => "Create discount LAUNCH",
+              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+            },
+          },
+        )
+        # A different, newer pending proposal in the same chat must NOT be the one marked applied —
+        # the executed payload identifies which proposal was confirmed.
+        other_proposal = create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "I can also refund that sale.",
+          metadata: { "proposed_action" => { "type" => "api_write", "params" => { "endpoint" => "refund_sale" } } },
         )
 
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
@@ -196,6 +211,8 @@ describe Api::Internal::AgentMessagesController do
         expect(metadata["action_status"]).to eq("applied")
         # The created object replaces the turn's lookup objects, matching what the live UI shows.
         expect(metadata["objects"]).to eq([{ "type" => "discount", "title" => "LAUNCH", "fields" => [] }])
+        # The unrelated pending proposal is untouched.
+        expect(other_proposal.reload.metadata["action_status"]).to be_nil
       end
 
       it "does not touch stored history when the executor fails" do
@@ -204,7 +221,12 @@ describe Api::Internal::AgentMessagesController do
           :ai_message,
           ai_conversation: conversation,
           role: "assistant",
-          metadata: { "proposed_action" => { "type" => "api_write" } },
+          metadata: {
+            "proposed_action" => {
+              "type" => "api_write",
+              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+            },
+          },
         )
 
         executor_double = instance_double(Ai::StoreAgentActionExecutor)

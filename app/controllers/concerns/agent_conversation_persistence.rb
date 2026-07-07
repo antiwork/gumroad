@@ -51,11 +51,16 @@ module AgentConversationPersistence
 
     # After a seller confirms a proposed change, mark the proposing assistant message as applied
     # (and attach the resulting object) so history shows the collapsed "Applied" card instead of a
-    # still-confirmable one. The newest unresolved proposal is the one the seller just confirmed —
-    # the UI only ever exposes one pending confirmation at a time.
-    def record_agent_action_applied!(conversation, result)
+    # still-confirmable one. Multiple proposals can be pending in one chat (the seller can scroll
+    # back and confirm an earlier one), so identify the confirmed proposal by matching the executed
+    # payload (type + params) against the stored one — never by assuming it's the newest.
+    def record_agent_action_applied!(conversation, result, type:, action_params:)
+      executed = normalize_action_payload("type" => type, "params" => action_params)
       message = conversation.ai_messages.role_assistant.order(created_at: :desc, id: :desc).detect do |candidate|
-        candidate.metadata&.dig("proposed_action").present? && candidate.metadata["action_status"].blank?
+        proposal = candidate.metadata&.dig("proposed_action")
+        next false if proposal.blank? || candidate.metadata["action_status"].present?
+
+        normalize_action_payload("type" => proposal["type"], "params" => proposal["params"]) == executed
       end
       return if message.nil?
 
@@ -64,5 +69,21 @@ module AgentConversationPersistence
       # objects as the thing worth showing.
       metadata["objects"] = [result[:object]] if result[:object].present?
       message.update!(metadata:)
+    end
+
+    # Recursively string-keys hashes and stringifies scalar leaves so the executed request params
+    # (which arrive with string values under form encoding, or native types under JSON) compare
+    # equal to the stored proposal payload regardless of transport/serialization differences.
+    def normalize_action_payload(value)
+      case value
+      when Hash
+        value.each_with_object({}) { |(k, v), out| out[k.to_s] = normalize_action_payload(v) }
+      when Array
+        value.map { |v| normalize_action_payload(v) }
+      when nil
+        nil
+      else
+        value.to_s
+      end
     end
 end

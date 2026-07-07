@@ -82,7 +82,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     result = ::Ai::StoreAgentActionExecutor.new(seller: current_seller, pundit_user:)
       .execute(type:, params: action_params)
 
-    record_agent_action_applied!(conversation, result) if conversation && result[:success]
+    record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
 
     render json: result, status: result[:success] ? :ok : :unprocessable_entity
   rescue ActiveRecord::RecordNotFound
