@@ -20,8 +20,15 @@ class Checkout::Upsells::ProductsController < ApplicationController
     return render json: [] unless seller
 
     products = WithMaxExecutionTime.timeout_queries(seconds: 10) do
-      seller.products
-        .eligible_for_content_upsells
+      # The picker UI only ever shows MAX_PRODUCTS results at a time, so sellers
+      # with more products than that rely on the `query` param to search the rest
+      # of their catalog server-side. Without it, older products could never be
+      # selected as upsells.
+      scope = seller.products.eligible_for_content_upsells
+      if params[:query].present?
+        scope = scope.where("name LIKE ?", "%#{Link.sanitize_sql_like(params[:query])}%")
+      end
+      scope
         .includes(*PRODUCT_INCLUDES)
         .order(created_at: :desc, id: :desc)
         .limit(MAX_PRODUCTS)
