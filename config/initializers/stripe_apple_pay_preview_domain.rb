@@ -20,4 +20,12 @@ Rails.application.config.after_initialize do
   rescue StandardError => e
     Rails.logger.error("Apple Pay domain registration failed: #{e.message}")
   end
+
+  # Preview app databases were seeded when they were first created, so seed files added since
+  # never ran on them. Load the seeds this branch's testing depends on; each is idempotent.
+  Thread.new do
+    load Rails.root.join("db", "seeds", "020_development_staging", "03_membership_product.rb")
+  rescue StandardError => e
+    Rails.logger.error("Membership product seed failed: #{e.message}")
+  end
 end
