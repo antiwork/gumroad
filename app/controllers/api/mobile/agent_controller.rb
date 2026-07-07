@@ -123,34 +123,37 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
       return
     end
 
-    # Look up before executing so a bad conversation id 404s without mutating the store.
+    # Look up before executing so a bad conversation id 404s without mutating the store. The lookup
+    # sits outside the begin block below so its RecordNotFound reaches the controller-level
+    # rescue_from (JSON 404), while a RecordNotFound raised inside the executor — say an internal
+    # v2 API dispatch calling find! on a product that no longer exists — is an unexpected failure
+    # that the generic rescue below must log + report, not a missing conversation.
     conversation = find_agent_conversation!
 
-    result = ::Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type:, params: action_params)
-
-    # Recording the applied status must not mask a store change that already committed: if the
-    # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
-    # to retry the confirmation — running the action a second time (a duplicate discount, refund,
-    # etc.). Log + report the failure and return the successful result; the only cost is that
-    # resumed history shows a still-confirmable card instead of the collapsed "Applied" one.
     begin
-      record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
-    rescue => e
-      Rails.logger.error("Mobile store agent action persistence failed: #{e.full_message}")
-      ErrorNotifier.notify(e)
-    end
+      result = ::Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type:, params: action_params)
 
-    render json: result, status: result[:success] ? :ok : :unprocessable_entity
-  rescue ActiveRecord::RecordNotFound
-    # Re-raise so the controller-level rescue_from renders the JSON 404 — without this the generic
-    # rescue below would report an unknown conversation id as a 500.
-    raise
-  rescue => e
-    # The executor only rescues expected validation failures; log + report anything unexpected from a
-    # real store mutation (e.g. ActiveRecord::StatementInvalid) instead of leaking a 500 with no trail.
-    Rails.logger.error("Mobile store agent action failed: #{e.full_message}")
-    ErrorNotifier.notify(e)
-    render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
+      # Recording the applied status must not mask a store change that already committed: if the
+      # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
+      # to retry the confirmation — running the action a second time (a duplicate discount, refund,
+      # etc.). Log + report the failure and return the successful result; the only cost is that
+      # resumed history shows a still-confirmable card instead of the collapsed "Applied" one.
+      begin
+        record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
+      rescue => e
+        Rails.logger.error("Mobile store agent action persistence failed: #{e.full_message}")
+        ErrorNotifier.notify(e)
+      end
+
+      render json: result, status: result[:success] ? :ok : :unprocessable_entity
+    rescue => e
+      # The executor only rescues expected validation failures; log + report anything unexpected from
+      # a real store mutation (e.g. ActiveRecord::StatementInvalid, or a RecordNotFound raised inside
+      # the executor) instead of leaking a 500 with no trail.
+      Rails.logger.error("Mobile store agent action failed: #{e.full_message}")
+      ErrorNotifier.notify(e)
+      render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
+    end
   end
 
   private

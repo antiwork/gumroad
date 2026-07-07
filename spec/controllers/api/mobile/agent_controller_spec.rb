@@ -384,6 +384,22 @@ describe Api::Mobile::AgentController do
 
         expect(response).to have_http_status(:not_found)
       end
+
+      it "reports a RecordNotFound raised inside the executor as a 500, not a missing conversation" do
+        # A RecordNotFound from the executor (e.g. an internal dispatch calling find! on a product
+        # that no longer exists) is an unexpected failure — it must be logged + notified and return
+        # a 500, not reuse the "conversation could not be found" 404 meant for a bad conversation_id.
+        conversation = create(:ai_conversation, seller: @seller)
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_raise(ActiveRecord::RecordNotFound)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordNotFound))
+
+        post :execute, params: valid_params.merge(conversation_id: conversation.external_id)
+
+        expect(response).to have_http_status(:internal_server_error)
+        expect(response.parsed_body["message"]).to eq("Something went wrong. Please try again.")
+      end
     end
   end
 end
