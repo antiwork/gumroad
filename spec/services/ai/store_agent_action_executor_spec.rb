@@ -133,7 +133,7 @@ describe Ai::StoreAgentActionExecutor do
 
           expect(result[:success]).to be(false)
           expect(result[:message]).to include("price_cents")
-          expect(result[:message]).to include("name, price, url, description, custom_permalink, price_currency_type")
+          expect(result[:message]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
         end.not_to change { seller.links.count }
       end
     end

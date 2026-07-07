@@ -51,11 +51,8 @@ class Ai::StoreAgentActionExecutor
     # and fail downstream with a confusing internal error. The propose path (StoreAgentService)
     # already rejects these, so a well-formed proposal never hits this.
     body = normalize_body(params[:params])
-    unknown_keys = endpoint.unknown_param_keys(body)
-    if unknown_keys.any?
-      accepted = endpoint.params.any? ? "this endpoint accepts: #{endpoint.params.join(', ')}" : "this endpoint accepts no params"
-      return failure("Unknown param #{unknown_keys.join(', ')} for #{endpoint.id}; #{accepted}.")
-    end
+    unknown_keys_error = endpoint.unknown_param_keys_error(body)
+    return failure(unknown_keys_error) if unknown_keys_error
 
     response = api_client.write(endpoint.method, path, body)
 
@@ -89,7 +86,7 @@ class Ai::StoreAgentActionExecutor
     # The proposed params arrive with string keys (they round-tripped through JSON in the proposal).
     # Hand the body to the client as a plain hash; the API normalizes types itself.
     def normalize_body(raw)
-      return {} unless raw.respond_to?(:to_h)
+      return {} unless raw.is_a?(Hash) || raw.is_a?(ActionController::Parameters)
       raw.to_h
     end
 

@@ -577,14 +577,10 @@ class Ai::StoreAgentService
     end
 
     # A corrective message when the proposed body carries keys the endpoint doesn't declare, or nil
-    # when the body is fine. The message names both the bad and the accepted keys so the model can
-    # immediately retry with the right ones (a bare "invalid params" would leave it guessing).
+    # when the body is fine. Delegates to the catalog Endpoint so this propose-path message and the
+    # executor's confirm-path message can't drift apart.
     def unknown_body_keys_error(endpoint, body)
-      unknown = endpoint.unknown_param_keys(body)
-      return nil if unknown.empty?
-
-      accepted = endpoint.params.any? ? "this endpoint accepts: #{endpoint.params.join(', ')}" : "this endpoint accepts no params"
-      "Unknown param #{unknown.join(', ')} for #{endpoint.id}; #{accepted}."
+      endpoint.unknown_param_keys_error(body)
     end
 
     def api_client

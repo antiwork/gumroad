@@ -361,7 +361,7 @@ describe Ai::StoreAgentService do
 
         expect(result[:proposed_action]).to be_nil
         expect(captured["error"]).to include("price_cents")
-        expect(captured["error"]).to include("name, price, url, description, custom_permalink, price_currency_type")
+        expect(captured["error"]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
       end
     end
 
