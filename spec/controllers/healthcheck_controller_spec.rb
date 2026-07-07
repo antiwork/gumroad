@@ -218,63 +218,36 @@ describe HealthcheckController do
 
     context "when running as a staging branch deployment" do
       before do
-        allow(Rails.env).to receive(:staging?).and_return(true)
-        stub_const("ENV", ENV.to_h.merge("BRANCH_DEPLOYMENT" => "true", "CUSTOM_DOMAIN" => "my-branch.apps.staging.gumroad.org"))
-        allow(Stripe::PaymentMethodDomain).to receive(:create).with(domain_name: "my-branch.apps.staging.gumroad.org").and_return(double(id: "pmd_123"))
-        allow(Stripe::PaymentMethodDomain).to receive(:validate).with("pmd_123").and_return(pm_domain)
+        allow(StagingApplePayDomainRegistration).to receive(:applicable?).and_return(true)
       end
 
-      let(:pm_domain) { double(id: "pmd_123", enabled: true, apple_pay: double(status: "active")) }
-
-      it "reports an already-registered domain with its Apple Pay activation status" do
-        domain_object = double(id: "apwc_123", livemode: false)
-        allow(Stripe::ApplePayDomain).to receive(:list).with(domain_name: "my-branch.apps.staging.gumroad.org", limit: 1).and_return(double(data: [domain_object]))
+      it "reports an active registration" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!)
+          .and_return(StagingApplePayDomainRegistration::Result.new(active: true, message: "Apple Pay on my-branch.apps.staging.gumroad.org: active"))
 
         get :apple_pay_domain
 
         expect(response.status).to eq(200)
-        expect(response.body).to eq(<<~RESPONSE.strip)
-          Apple Pay domain: registered (my-branch.apps.staging.gumroad.org, apwc_123, livemode=false)
-          Payment method domain: pmd_123 enabled=true
-          apple_pay status: active
-        RESPONSE
+        expect(response.body).to eq("Apple Pay on my-branch.apps.staging.gumroad.org: active")
       end
 
-      it "registers the domain when it is missing" do
-        allow(Stripe::ApplePayDomain).to receive(:list).and_return(double(data: []))
-        expect(Stripe::ApplePayDomain).to receive(:create).with(domain_name: "my-branch.apps.staging.gumroad.org").and_return(double(id: "apwc_456", livemode: false))
-
-        get :apple_pay_domain
-
-        expect(response.status).to eq(200)
-        expect(response.body).to start_with("Apple Pay domain: registered just now (my-branch.apps.staging.gumroad.org, apwc_456, livemode=false)")
-      end
-
-      it "reports the Apple Pay activation error when the wallet is not active on the domain" do
-        domain_object = double(id: "apwc_123", livemode: false)
-        allow(Stripe::ApplePayDomain).to receive(:list).and_return(double(data: [domain_object]))
-        allow(Stripe::PaymentMethodDomain).to receive(:validate).with("pmd_123").and_return(
-          double(
-            id: "pmd_123",
-            enabled: true,
-            apple_pay: double(status: "inactive", status_details: double(error_message: "Domain verification failed")),
-          ),
-        )
-
-        get :apple_pay_domain
-
-        expect(response.status).to eq(200)
-        expect(response.body).to include("apple_pay status: inactive")
-        expect(response.body).to include("apple_pay error: Domain verification failed")
-      end
-
-      it "reports Stripe errors as service_unavailable" do
-        allow(Stripe::ApplePayDomain).to receive(:list).and_raise(Stripe::InvalidRequestError.new("verification failed", nil))
+      it "reports an inactive registration as service_unavailable" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!)
+          .and_return(StagingApplePayDomainRegistration::Result.new(active: false, message: "Apple Pay on my-branch.apps.staging.gumroad.org: inactive — Domain verification failed"))
 
         get :apple_pay_domain
 
         expect(response.status).to eq(503)
-        expect(response.body).to eq("Apple Pay domain: registration failed (my-branch.apps.staging.gumroad.org): verification failed")
+        expect(response.body).to eq("Apple Pay on my-branch.apps.staging.gumroad.org: inactive — Domain verification failed")
+      end
+
+      it "reports Stripe errors as service_unavailable" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!).and_raise(Stripe::InvalidRequestError.new("verification failed", nil))
+
+        get :apple_pay_domain
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Apple Pay domain registration failed: verification failed")
       end
     end
   end

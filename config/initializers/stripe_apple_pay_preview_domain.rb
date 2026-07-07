@@ -1,23 +1,23 @@
 # frozen_string_literal: true
 
-# Preview apps get a unique hostname (<branch>.apps.staging.gumroad.org), and Stripe only renders
-# Apple Pay on domains registered with it — registration has no wildcard support, so each preview
-# app must register its own hostname. The domain association file is served from
-# public/.well-known/, so verification succeeds without any per-app setup.
+# Preview apps must register their unique hostname with Stripe for the Apple Pay button to
+# render; see StagingApplePayDomainRegistration.
 #
-# Staging branch deployments only: production and plain staging hostnames are registered
-# out-of-band, and seller subdomains are handled by CreateStripeApplePayDomainWorker.
-if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true" && ENV["CUSTOM_DOMAIN"].present?
-  Rails.application.config.after_initialize do
-    Thread.new do
-      domain = ENV["CUSTOM_DOMAIN"]
-      if Stripe::ApplePayDomain.list(domain_name: domain, limit: 1).data.empty?
-        Stripe::ApplePayDomain.create(domain_name: domain)
-        Rails.logger.info("Registered Apple Pay domain for preview app: #{domain}")
-      end
-    rescue StandardError => e
-      # Best-effort: a failure here should never take the preview app down.
-      Rails.logger.error("Failed to register Apple Pay domain #{domain}: #{e.message}")
-    end
+# The registration runs in a thread rather than a Sidekiq job on purpose: preview apps run no
+# Sidekiq process of their own (docker/web/server.sh starts only the Rails server) but share
+# staging's Redis, so an enqueued job would be picked up by staging's main workers — which run
+# main-branch code (where a branch's classes may not exist) and don't have the preview app's
+# CUSTOM_DOMAIN env. Best-effort: a failure here should never take the preview app down, and
+# /healthcheck/apple_pay_domain re-runs the registration on demand.
+#
+# The service is referenced only inside after_initialize because autoloadable constants can't be
+# loaded while initializers run.
+Rails.application.config.after_initialize do
+  next unless StagingApplePayDomainRegistration.applicable?
+
+  Thread.new do
+    Rails.logger.info(StagingApplePayDomainRegistration.register!.message)
+  rescue StandardError => e
+    Rails.logger.error("Apple Pay domain registration failed: #{e.message}")
   end
 end

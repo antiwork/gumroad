@@ -33,38 +33,16 @@ class HealthcheckController < ApplicationController
     render plain: "Stripe balance: #{message}", status:
   end
 
-  # Staging preview apps only: reports (and retries) Stripe Apple Pay domain registration for the
-  # app's own hostname, since preview app boot logs are not readily accessible. See
-  # config/initializers/stripe_apple_pay_preview_domain.rb for why registration is needed.
+  # Staging preview apps only: reports whether Apple Pay is active on the app's own hostname and
+  # re-runs the Stripe domain registration on demand, since preview app boot logs (where the
+  # boot-time registration logs) are not readily accessible. See StagingApplePayDomainRegistration.
   def apple_pay_domain
-    return e404 unless Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
+    return e404 unless StagingApplePayDomainRegistration.applicable?
 
-    domain = ENV["CUSTOM_DOMAIN"]
-    return render plain: "Apple Pay domain: no CUSTOM_DOMAIN set", status: :service_unavailable if domain.blank?
-
-    existing = Stripe::ApplePayDomain.list(domain_name: domain, limit: 1).data.first
-    if existing.nil?
-      created = Stripe::ApplePayDomain.create(domain_name: domain)
-    end
-
-    # PaymentMethodDomain reports the Stripe↔Apple activation handshake per wallet, which the
-    # legacy ApplePayDomain endpoint can't: a domain can be "registered" with Stripe while Apple
-    # Pay is still inactive on it. Creating is idempotent (returns the existing record), and
-    # validate re-runs the domain verification on demand.
-    pm_domain = Stripe::PaymentMethodDomain.create(domain_name: domain)
-    pm_domain = Stripe::PaymentMethodDomain.validate(pm_domain.id)
-    apple_pay = pm_domain.apple_pay
-    lines = [
-      "Apple Pay domain: #{existing ? "registered" : "registered just now"} (#{domain}, #{(existing || created).id}, livemode=#{(existing || created).livemode})",
-      "Payment method domain: #{pm_domain.id} enabled=#{pm_domain.enabled}",
-      "apple_pay status: #{apple_pay.status}",
-    ]
-    if apple_pay.status != "active" && apple_pay.respond_to?(:status_details) && apple_pay.status_details.respond_to?(:error_message)
-      lines << "apple_pay error: #{apple_pay.status_details.error_message}"
-    end
-    render plain: lines.join("\n")
+    result = StagingApplePayDomainRegistration.register!
+    render plain: result.message, status: result.active? ? :ok : :service_unavailable
   rescue Stripe::StripeError => e
-    render plain: "Apple Pay domain: registration failed (#{domain}): #{e.message}", status: :service_unavailable
+    render plain: "Apple Pay domain registration failed: #{e.message}", status: :service_unavailable
   end
 
   def purchases
