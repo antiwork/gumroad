@@ -56,16 +56,25 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         return
       end
 
-      # The last user entry in the posted history is this turn's new message; earlier entries are
-      # replaced by the stored transcript when resuming, so a stale client can't rewrite history.
+      # The last user entry in the posted history is this turn's new message; when resuming, the
+      # earlier entries are replaced by the stored transcript so a stale client can't rewrite
+      # history. Nothing is persisted until the service succeeds — a failed turn (the seller sees
+      # an error and will retry) must not leave a stray user message that gets silently replayed
+      # to the model on the next turn or after a refresh.
       new_user_message = messages.reverse.find { |message| message[:role] == "user" }&.dig(:content)
-      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-      history = agent_conversation_history(conversation).presence || messages
+      history =
+        if conversation
+          agent_conversation_history(conversation) + (new_user_message ? [{ role: "user", content: new_user_message }] : [])
+        else
+          messages
+        end
 
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond_streaming(messages: history) do |event, payload|
         sse.write(payload, event:)
       end
+
+      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
       record_agent_assistant_message!(conversation, result)
       sse.write(
         {

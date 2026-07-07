@@ -125,6 +125,18 @@ describe Api::Internal::AgentMessagesController do
         expect(response).to have_http_status(:not_found)
       end
 
+      it "persists nothing when the service raises, so a failed turn is not replayed later" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond).and_raise(Ai::StoreAgentService::Error, "Too long.")
+
+        expect do
+          post :create, params: valid_params, format: :json
+        end.to not_change { seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
       it "rejects an empty message list" do
         post :create, params: { messages: [] }, format: :json
 
