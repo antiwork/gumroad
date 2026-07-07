@@ -161,7 +161,10 @@ export const UpsellSelectModal = ({
               selectProductOption(null);
               // Clearing the selection also resets the option list to the full
               // (unfiltered) catalog — otherwise the dropdown would keep showing
-              // only the results of the last search.
+              // only the results of the last search. Cancel any search that is
+              // still waiting on the debounce timer first, so it can't fire
+              // after this reset and put the stale filtered results back.
+              debouncedFetchProducts.cancel();
               void fetchProducts("");
             }
           }}
