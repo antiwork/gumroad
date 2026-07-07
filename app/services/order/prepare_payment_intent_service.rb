@@ -283,7 +283,14 @@ class Order::PreparePaymentIntentService
     def intent_payment_method_types(presentment)
       return resolved_payment_method_types if presentment.nil?
 
-      (resolved_payment_method_types + [@previewed_payment_method_type]).uniq
+      method_types = resolved_payment_method_types
+      # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
+      # intent in any other currency that lists them. Dropping them here is about currency
+      # compatibility, not the buyer's location — a US-GeoIP buyer keeps them on USD intents.
+      # The remaining launched methods (card, Link) support every currency we can force today.
+      method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES if presentment.presentment_currency != Currency::USD
+
+      (method_types + [@previewed_payment_method_type]).uniq
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied

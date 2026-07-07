@@ -504,6 +504,16 @@ describe Order::PreparePaymentIntentService, :vcr do
           charge = order.charges.last
           expect(create_args[:idempotency_key]).to eq("buyer-currency-intent-#{charge.external_id}-fxq_prepare_ctoken_quoted")
         end
+
+        it "drops USD-only methods from the EUR intent for US buyers" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, = perform_with_ideal_preview(order, params)
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:payment_method_types]).to eq(%w[card link ideal])
+        end
       end
 
       context "with a product priced in the forced currency (direct listed-amount case)" do
