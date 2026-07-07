@@ -43,7 +43,7 @@ export const GST_ONLY_FALLBACK_PROVINCE = "AB";
 // or null when the postal code doesn't look Canadian. Accepts the common
 // formats buyers and wallets produce: "K1A 0B1", "k1a0b1", "K1A".
 export const provinceForCanadianPostalCode = (postalCode: string | null | undefined): string | null => {
-  const normalized = (postalCode ?? "").replace(/\s/g, "").toUpperCase();
+  const normalized = (postalCode ?? "").replace(/\s/gu, "").toUpperCase();
   if (!/^[A-Z]\d[A-Z]/u.test(normalized)) return null;
   const firstLetter = normalized[0] ?? "";
   if (firstLetter === "X") return NUNAVUT_FSAS.has(normalized.slice(0, 3)) ? "NU" : "NT";
