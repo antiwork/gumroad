@@ -594,17 +594,18 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(charge.charge_presentment).to be_nil
       end
 
-      # The presentment build swallows its own failures into a nil result, so a broken FX quote
-      # fetch degrades to today's canonical USD intent instead of failing the checkout.
-      it "falls back to the canonical USD intent when the presentment build fails" do
+      # Once the buyer selected a forced-currency method, a missing presentment is not equivalent to
+      # today's card-path USD fallback: Stripe cannot confirm iDEAL/Bancontact against a USD intent.
+      it "fails closed without creating a USD intent when the presentment build fails" do
         allow(ErrorNotifier).to receive(:notify)
         allow(StripeFxQuote).to receive(:create).and_raise("fx quote unavailable")
 
         order, params = build_order
         create_args, responses = perform_with_ideal_preview(order, params)
 
-        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
-        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
         expect(order.charges.last.charge_presentment).to be_nil
       end
 

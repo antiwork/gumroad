@@ -171,6 +171,8 @@ class Order::PreparePaymentIntentService
 
       charge = build_charge
       presentment = method_forced_presentment_for(charge)
+      return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
+
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
         # The presentment rows were persisted before the intent create failed, and the
@@ -237,6 +239,19 @@ class Order::PreparePaymentIntentService
         payment_method_type: method_type,
         params:
       ).perform
+    end
+
+    # Once the buyer confirmed with a forced-currency method (iDEAL/Bancontact), the canonical
+    # USD intent is never a usable fallback: Stripe rejects confirming such a ConfirmationToken
+    # against a USD intent, synchronously and without a payment_failed webhook, so the purchase
+    # would sit in_progress until the abandonment worker instead of failing cleanly here. Gated
+    # on the seller flags so the dark feature preserves today's USD behavior byte-for-byte —
+    # with the flags off, a crafted iDEAL token gets exactly the same (dead) response as before.
+    def method_forced_presentment_required?
+      return false if @previewed_payment_method_type.blank?
+      return false if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).blank?
+
+      Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
     end
 
     def create_unconfirmed_intent(charge, presentment = nil)
