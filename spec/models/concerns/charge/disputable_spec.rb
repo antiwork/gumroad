@@ -578,6 +578,165 @@ describe Charge::Disputable, :vcr do
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.reload.payment_cents
         end
       end
+
+      describe "webhook replay safety" do
+        let!(:purchase_event) { create(:event, event_name: "purchase", purchase_id: purchase.id, link_id: product.id) }
+
+        context "when the first delivery crashes partway through the side effects" do
+          before do
+            # Simulate a crash on a late step: the creator notification raises on the first
+            # delivery only, leaving the dispute formalized with unfinished side effects.
+            call_count = 0
+            allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_wrap_original do |original, *args|
+              call_count += 1
+              raise "simulated crash" if call_count == 1
+              original.call(*args)
+            end
+          end
+
+          it "resumes and completes the side effects on replay without applying them twice" do
+            expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+            dispute = purchase.reload.dispute
+            expect(dispute.state).to eq("formalized")
+            expect(dispute.formalized_side_effects_finished_at).to be_nil
+            seller_contacted_at_after_crash = dispute.dispute_evidence.seller_contacted_at
+            expect(seller_contacted_at_after_crash).to be_present
+
+            expect { Purchase.handle_charge_event(event) }.not_to raise_error
+
+            dispute.reload
+            purchase.reload
+            seller.reload
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+            # Balance decremented exactly once across both deliveries.
+            expect(seller.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+            expect(purchase.purchase_chargeback_balance).to be_present
+            expect(Event.where(purchase_id: purchase.id, event_name: "chargeback").count).to eq(1)
+            # The replay must not move the evidence-submission window.
+            expect(dispute.dispute_evidence.reload.seller_contacted_at).to eq(seller_contacted_at_after_crash)
+            expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+          end
+
+          context "when the product is a subscription" do
+            let(:product) { create(:subscription_product, user: seller) }
+            let!(:purchase) do
+              subscription = create(:subscription, link: product, cancelled_at: nil)
+              purchase = create(:purchase, link: product, is_original_subscription_purchase: true, subscription:, stripe_transaction_id: "ch_zitkxbhds3zqlt")
+              purchase.update(is_original_subscription_purchase: true, subscription:)
+              purchase
+            end
+
+            it "does not cancel the already-deactivated subscription again on replay" do
+              expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+              subscription = purchase.reload.subscription
+              deactivated_at_after_crash = subscription.deactivated_at
+              expect(deactivated_at_after_crash).to be_present
+
+              expect_any_instance_of(Subscription).not_to receive(:cancel_effective_immediately!)
+              expect { Purchase.handle_charge_event(event) }.not_to raise_error
+
+              expect(subscription.reload.deactivated_at).to eq(deactivated_at_after_crash)
+              expect(purchase.reload.dispute.formalized_side_effects_finished_at).to be_present
+            end
+          end
+        end
+
+        context "when the first delivery fully succeeded" do
+          before do
+            Purchase.handle_charge_event(event)
+          end
+
+          it "does not re-run the side effects but still enqueues the enforcement job" do
+            purchase.reload
+            seller.reload
+            dispute = purchase.dispute
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+            balance_after_first_delivery = seller.unpaid_balance_cents
+            seller_contacted_at_after_first_delivery = dispute.dispute_evidence.seller_contacted_at
+            marker_after_first_delivery = dispute.formalized_side_effects_finished_at
+
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+            expect(AdminMailer).not_to receive(:chargeback_notify)
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            Purchase.handle_charge_event(event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq(balance_after_first_delivery)
+            expect(Event.where(purchase_id: purchase.id, event_name: "chargeback").count).to eq(1)
+            dispute.reload
+            expect(dispute.dispute_evidence.seller_contacted_at).to eq(seller_contacted_at_after_first_delivery)
+            expect(dispute.formalized_side_effects_finished_at).to eq(marker_after_first_delivery)
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)
+          end
+
+          it "keeps the enqueue-only replay behavior once the dispute has been won" do
+            purchase.reload.dispute.update!(state: "won")
+
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            Purchase.handle_charge_event(event)
+
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)
+          end
+        end
+
+        context "for a charge" do
+          let(:transaction_id) { "ch_charge_884" }
+          let!(:charge_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: transaction_id, price_cents: 100,
+                              total_transaction_cents: 100, fee_cents: 30)
+          end
+          let!(:charge) { create(:charge, seller:, processor_transaction_id: transaction_id, amount_cents: 100, purchases: [charge_purchase]) }
+          let!(:charge_purchase_event) { create(:event, event_name: "purchase", purchase_id: charge_purchase.id, link_id: product.id) }
+          let(:charge_event) { build(:charge_event_dispute_formalized, charge_id: transaction_id) }
+
+          before do
+            sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+            allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+          end
+
+          it "resumes unfinished side effects on replay without double-applying them" do
+            call_count = 0
+            allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_wrap_original do |original, *args|
+              call_count += 1
+              raise "simulated crash" if call_count == 1
+              original.call(*args)
+            end
+
+            expect { charge.handle_event(charge_event) }.to raise_error("simulated crash")
+
+            dispute = charge.reload.dispute
+            expect(dispute.state).to eq("formalized")
+            expect(dispute.formalized_side_effects_finished_at).to be_nil
+
+            expect { charge.handle_event(charge_event) }.not_to raise_error
+
+            expect(dispute.reload.formalized_side_effects_finished_at).to be_present
+            expect(charge_purchase.reload.purchase_chargeback_balance).to be_present
+            expect(seller.reload.unpaid_balance_cents).to eq initial_balance - charge_purchase.payment_cents
+            expect(Event.where(purchase_id: charge_purchase.id, event_name: "chargeback").count).to eq(1)
+          end
+
+          it "does not re-run the side effects when replayed after a fully successful delivery" do
+            charge.handle_event(charge_event)
+            balance_after_first_delivery = seller.reload.unpaid_balance_cents
+            expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_present
+
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            charge.handle_event(charge_event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq(balance_after_first_delivery)
+            expect(Event.where(purchase_id: charge_purchase.id, event_name: "chargeback").count).to eq(1)
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(charge_purchase.id)
+          end
+        end
+      end
     end
 
     describe "dispute closed" do
