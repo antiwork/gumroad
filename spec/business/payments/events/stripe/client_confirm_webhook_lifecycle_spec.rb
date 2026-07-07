@@ -55,7 +55,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     [order, charge]
   end
 
-  def payment_intent_event(type, charge, event_id:, account: nil)
+  def payment_intent_event(type, charge, event_id:, account: nil, object_attrs: {})
     {
       "id" => event_id,
       "object" => "event",
@@ -68,7 +68,7 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
           "id" => charge.stripe_payment_intent_id,
           "transfer_group" => charge.id_with_prefix,
           "metadata" => { "purchase" => charge.reference_id_for_charge_processors }
-        }
+        }.merge(object_attrs)
       }
     }.compact
   end
@@ -190,6 +190,42 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       # Not recorded (see above) — a re-delivery is safe because the in_progress? guard skips
       # terminal purchases, not because the event is deduplicated.
       expect(ProcessedStripeEvent.processed?("evt_pf_terminal")).to be(false)
+    end
+
+    it "persists the decline reason from last_payment_error onto the failed purchase" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_async_decline")
+      purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+
+      # A Cash App Pay decline never raises Stripe::CardError at confirm time — the reason only
+      # arrives via this webhook's last_payment_error.
+      deliver_webhook(payment_intent_event(
+                        "payment_intent.payment_failed", charge, event_id: "evt_async_decline",
+                                                                 object_attrs: {
+                                                                   "last_payment_error" => {
+                                                                     "code" => "payment_method_provider_decline",
+                                                                     "decline_code" => "insufficient_funds",
+                                                                     "message" => "Cash App Pay has declined the payment.",
+                                                                     "type" => "card_error"
+                                                                   }
+                                                                 }
+                      ))
+
+      expect(purchase.reload).to be_failed
+      expect(purchase.stripe_error_code).to eq("payment_method_provider_decline_insufficient_funds")
+    end
+
+    it "still fails the purchase when the webhook carries no last_payment_error" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_no_lpe")
+      purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+
+      deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_no_lpe"))
+
+      expect(purchase.reload).to be_failed
+      expect(purchase.stripe_error_code).to be_nil
     end
   end
 

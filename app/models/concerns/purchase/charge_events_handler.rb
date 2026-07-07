@@ -129,7 +129,16 @@ module Purchase::ChargeEventsHandler
     # mark_failed! only defines the in_progress -> failed transition, so calling it on an
     # already-terminal purchase would raise AASM::InvalidTransition.
     if client_confirmed_charge?
-      charged_purchases.each { |purchase| purchase.mark_failed! if purchase.in_progress? }
+      # Async payment methods (Cash App Pay, Link, ACH) fail via this webhook instead of raising
+      # a Stripe::CardError at confirm time, so this is the only chance to record why the payment
+      # failed. Persist the decline reason the processor extracted from the intent's
+      # last_payment_error, matching what the synchronous confirm path stores.
+      stripe_error_code = event.extras.try(:[], "stripe_error_code")
+      charged_purchases.each do |purchase|
+        next unless purchase.in_progress?
+        purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
+        purchase.mark_failed!
+      end
       return
     end
 
