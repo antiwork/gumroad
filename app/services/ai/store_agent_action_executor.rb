@@ -44,7 +44,20 @@ class Ai::StoreAgentActionExecutor
     end
 
     path = endpoint.expand_path(params[:path_params])
-    response = api_client.write(endpoint.method, path, normalize_body(params[:params]))
+
+    # Defense in depth against a stale or tampered proposal: refuse a body carrying keys the
+    # endpoint doesn't declare BEFORE dispatching. The v2 API silently ignores unknown body keys,
+    # so such a call would drop the value the seller confirmed (e.g. a price sent as "price_cents")
+    # and fail downstream with a confusing internal error. The propose path (StoreAgentService)
+    # already rejects these, so a well-formed proposal never hits this.
+    body = normalize_body(params[:params])
+    unknown_keys = endpoint.unknown_param_keys(body)
+    if unknown_keys.any?
+      accepted = endpoint.params.any? ? "this endpoint accepts: #{endpoint.params.join(', ')}" : "this endpoint accepts no params"
+      return failure("Unknown param #{unknown_keys.join(', ')} for #{endpoint.id}; #{accepted}.")
+    end
+
+    response = api_client.write(endpoint.method, path, body)
 
     interpret(endpoint, response)
   rescue ArgumentError => e

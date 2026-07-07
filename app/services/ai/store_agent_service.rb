@@ -390,6 +390,16 @@ class Ai::StoreAgentService
         return [{ error: e.message }, nil]
       end
 
+      # Refuse to stage a body carrying keys the endpoint doesn't declare. The v2 API silently
+      # ignores unknown body keys, so without this check a write like create_product with
+      # "price_cents" (instead of the declared "price") sails through to the API missing its real
+      # payload, fails there with a confusing internal error, and the model retries the same wrong
+      # key forever. Naming the unknown and allowed keys here lets the model correct itself within
+      # the same turn instead of doom-looping.
+      if (error = unknown_body_keys_error(endpoint, body))
+        return [{ error: }, nil]
+      end
+
       summary = write_summary(endpoint, path_params, body)
       action = ProposedAction.new(
         type: "api_write",
@@ -537,6 +547,17 @@ class Ai::StoreAgentService
     def sanitize_param_hash(raw)
       return {} unless raw.is_a?(Hash)
       raw.transform_keys(&:to_s)
+    end
+
+    # A corrective message when the proposed body carries keys the endpoint doesn't declare, or nil
+    # when the body is fine. The message names both the bad and the accepted keys so the model can
+    # immediately retry with the right ones (a bare "invalid params" would leave it guessing).
+    def unknown_body_keys_error(endpoint, body)
+      unknown = endpoint.unknown_param_keys(body)
+      return nil if unknown.empty?
+
+      accepted = endpoint.params.any? ? "this endpoint accepts: #{endpoint.params.join(', ')}" : "this endpoint accepts no params"
+      "Unknown param #{unknown.join(', ')} for #{endpoint.id}; #{accepted}."
     end
 
     def api_client

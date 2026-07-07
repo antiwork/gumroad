@@ -50,6 +50,15 @@ module Ai::StoreAgentApiCatalog
         value
       end
     end
+
+    # The proposal body keys that this endpoint does not declare in `params`. The v2 API ignores
+    # body keys it doesn't read, so an undeclared key (e.g. `price_cents` instead of the declared
+    # `price` on create_product) would silently drop the value the model meant to send — the call
+    # then fails downstream with a confusing validation error. Both the propose path (service) and
+    # the confirm path (executor) refuse such bodies up front using this list.
+    def unknown_param_keys(body)
+      (body || {}).keys.map(&:to_s) - params
+    end
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).
