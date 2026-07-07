@@ -72,7 +72,13 @@ module AgentConversationPersistence
       # Mirror the live UI: once applied, the created/edited object replaces the turn's lookup
       # objects as the thing worth showing.
       metadata["objects"] = [result[:object]] if result[:object].present?
-      message.update_column(:metadata, metadata)
+      # The candidates above were loaded with a narrow `select` (no MEDIUMTEXT content), and saving
+      # a partially-loaded record raises MissingAttributeError — so re-fetch the full row before
+      # saving. Use `update!` (not `update_column`) so the `belongs_to :ai_conversation, touch: true`
+      # callback bumps the conversation's `updated_at`; without that, confirming a proposal wouldn't
+      # count as activity and `GET /internal/agent/conversations/latest` could resume a different,
+      # more recently active conversation after the seller refreshes.
+      conversation.ai_messages.find(message.id).update!(metadata:)
     end
 
     # Recursively string-keys hashes and stringifies scalar leaves so the executed request params
