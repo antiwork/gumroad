@@ -28,12 +28,15 @@ class Api::Internal::AgentConversationsController < Api::Internal::BaseControlle
 
     # The shape AgentChat.tsx hydrates from: the plain transcript plus each turn's persisted
     # extras (proposed-action card, object cards, applied/dismissed status) so history re-renders
-    # exactly as it did live.
+    # exactly as it did live. Hydration is capped at the same window the model replays
+    # (AgentConversationPersistence::HISTORY_MAX_MESSAGES) so a very long conversation doesn't
+    # produce a multi-megabyte resume payload — and so what the seller sees matches what the
+    # model will be shown on the next turn.
     def conversation_props(conversation)
       {
         id: conversation.external_id,
         title: conversation.title,
-        messages: conversation.ai_messages.map do |message|
+        messages: conversation.ai_messages.last(AgentConversationPersistence::HISTORY_MAX_MESSAGES).map do |message|
           metadata = message.metadata || {}
           {
             role: message.role,

@@ -12,6 +12,13 @@
 module AgentConversationPersistence
   extend ActiveSupport::Concern
 
+  # Conversations grow one turn at a time forever (there's no "end" to a chat), so both the
+  # transcript replayed to the model and the hydration payload need a ceiling. 100 messages
+  # (~50 turns) comfortably covers a long working session while capping the per-turn token cost
+  # and keeping the resume response a bounded size; older messages are still stored, just no
+  # longer replayed or hydrated.
+  HISTORY_MAX_MESSAGES = 100
+
   private
     # Returns the seller's conversation for params[:conversation_id], or nil when the param is
     # absent. A present-but-unknown id (including another seller's conversation) raises
@@ -44,9 +51,12 @@ module AgentConversationPersistence
     end
 
     # The plain role/content transcript to send to the model — rebuilt from the stored rows so a
-    # tampered or stale client-side history can't rewrite what the agent believes was said.
+    # tampered or stale client-side history can't rewrite what the agent believes was said. Only
+    # the most recent HISTORY_MAX_MESSAGES are replayed: without a cap, every turn of a long-lived
+    # conversation would resend the entire transcript to the LLM (O(n²) token cost over the
+    # conversation's life) — `last` keeps the newest rows while preserving chronological order.
     def agent_conversation_history(conversation)
-      conversation.ai_messages.map { |message| { role: message.role, content: message.content } }
+      conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map { |message| { role: message.role, content: message.content } }
     end
 
     def record_agent_user_message!(conversation, content)

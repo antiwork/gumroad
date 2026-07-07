@@ -72,6 +72,17 @@ describe Api::Internal::AgentConversationsController do
         )
       end
 
+      it "caps hydration at the most recent HISTORY_MAX_MESSAGES messages" do
+        stub_const("AgentConversationPersistence::HISTORY_MAX_MESSAGES", 3)
+        conversation = create(:ai_conversation, seller:)
+        5.times { |i| create(:ai_message, ai_conversation: conversation, content: "Message #{i + 1}") }
+
+        get :latest, format: :json
+
+        messages = response.parsed_body["conversation"]["messages"]
+        expect(messages.map { |m| m["content"] }).to eq(["Message 3", "Message 4", "Message 5"])
+      end
+
       it "skips soft-deleted conversations" do
         conversation = create(:ai_conversation, seller:)
         conversation.mark_deleted!

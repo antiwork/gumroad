@@ -106,6 +106,33 @@ describe Api::Internal::AgentMessagesController do
         expect(conversation.ai_messages.reload.count).to eq(4)
       end
 
+      it "replays only the most recent HISTORY_MAX_MESSAGES stored messages to the service" do
+        stub_const("AgentConversationPersistence::HISTORY_MAX_MESSAGES", 2)
+        conversation = create(:ai_conversation, seller:)
+        create(:ai_message, ai_conversation: conversation, content: "Dropped question")
+        create(:ai_message, ai_conversation: conversation, role: "assistant", content: "Dropped answer")
+        create(:ai_message, ai_conversation: conversation, content: "Kept question")
+        create(:ai_message, ai_conversation: conversation, role: "assistant", content: "Kept answer")
+
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        # Only the newest window of the stored transcript (plus the new turn) reaches the model —
+        # replaying the full history would make each turn's token cost grow without bound.
+        expect(service_double).to receive(:respond).with(
+          messages: [
+            { role: "user", content: "Kept question" },
+            { role: "assistant", content: "Kept answer" },
+            { role: "user", content: "And this month?" },
+          ]
+        ).and_return(reply: "Capped.", proposed_action: nil)
+
+        post :create,
+             params: { messages: [{ role: "user", content: "And this month?" }], conversation_id: conversation.external_id },
+             format: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+
       it "404s when the conversation belongs to another seller" do
         other_conversation = create(:ai_conversation)
 
