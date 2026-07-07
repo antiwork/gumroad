@@ -137,6 +137,25 @@ describe Api::Internal::AgentMessagesController do
         expect(response).to have_http_status(:unprocessable_entity)
       end
 
+      it "still returns the reply when persistence fails after a successful service call" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond).and_return(reply: "Sales are up.", proposed_action: nil)
+
+        # A DB failure while recording the turn must not turn an already-earned reply into a 500 —
+        # the seller would retry and burn another quota slot. The reply comes back without a
+        # conversation id (the turn simply isn't stored), and the failure is reported.
+        allow(controller).to receive(:persist_agent_turn!).and_raise(ActiveRecord::StatementInvalid)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+        post :create, params: valid_params, format: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["reply"]).to eq("Sales are up.")
+        expect(response.parsed_body["conversation_id"]).to be_nil
+      end
+
       it "rejects an empty message list" do
         post :create, params: { messages: [] }, format: :json
 

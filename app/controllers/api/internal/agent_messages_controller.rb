@@ -52,13 +52,24 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond(messages: history)
 
-      conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
+      # Persistence must not mask a reply the model already produced. If recording the turn fails
+      # (e.g. a DB hiccup after a long LLM call), log + report it but still return the reply —
+      # otherwise the seller would see an error, retry, and burn another quota slot for an answer
+      # that already succeeded. The only cost of a persistence failure is that this turn isn't
+      # stored; `conversation_id` comes back nil when creating the conversation itself failed, so
+      # the client's next turn starts fresh. This mirrors the streaming path's handling.
+      begin
+        conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
+      rescue => e
+        Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
+        ErrorNotifier.notify(e)
+      end
       render json: {
         success: true,
         reply: result[:reply],
         proposed_action: result[:proposed_action],
         objects: result[:objects] || [],
-        conversation_id: conversation.external_id,
+        conversation_id: conversation&.external_id,
       }
     rescue ::Ai::StoreAgentService::Error => e
       render json: { success: false, error: e.message }, status: :unprocessable_entity
