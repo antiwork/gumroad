@@ -83,18 +83,26 @@ describe "Custom HTML landing page analytics", type: :request do
   context "when the seller disabled third-party analytics" do
     before { seller.update!(disable_third_party_analytics: true) }
 
-    it "still loads the entry point with third-party tracking disabled" do
+    it "still loads the entry point with third-party tracking disabled and no pixel ids in the source" do
       get_wrapper
 
       expect(response.body).to include("gr:custom-html-analytics")
       expect(response.body).to include('src="/custom_html_analytics.js"')
       expect(response.body).not_to include("gr:google_analytics:enabled")
+      # The seller has a configured Google Analytics id, but with tracking
+      # disabled it must not be visible anywhere in the page source.
+      expect(response.body).not_to include("G-ABC123")
 
       props = analytics_props(response.body)
       expect(props).to include(
         "tracking_enabled" => false,
         "has_product_third_party_analytics" => false,
         "permalink" => product.unique_permalink,
+      )
+      expect(props["analytics"]).to include(
+        "google_analytics_id" => nil,
+        "facebook_pixel_id" => nil,
+        "tiktok_pixel_id" => nil,
       )
     end
   end
