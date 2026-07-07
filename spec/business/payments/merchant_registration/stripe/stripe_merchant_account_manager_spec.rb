@@ -1447,7 +1447,7 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     describe "all info provided of a Japanese individual" do
-      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", phone: "+81987654321",
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", city_kana: "シブヤク", phone: "+81987654321",
                                                                   first_name_kanji: "日本語", last_name_kanji: "創造者",
                                                                   first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
                                                                   building_number: "1-1", building_number_kana: "1-1",
@@ -1487,6 +1487,7 @@ describe StripeMerchantAccountManager, :vcr do
             address_kanji: {
               line1: "1-1",
               town: "神宮前",
+              city: "渋谷区",
               state: "東京都",
               country: "JP",
               postal_code: "100-0000",
@@ -1494,6 +1495,7 @@ describe StripeMerchantAccountManager, :vcr do
             address_kana: {
               line1: "1-1",
               town: "ジングウマエ",
+              city: "シブヤク",
               state: "トウキョウト",
               country: "JP",
               postal_code: "100-0000",
@@ -1540,6 +1542,35 @@ describe StripeMerchantAccountManager, :vcr do
         expect(bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
         expect(bank_account.reload.stripe_bank_account_id).to match(/ba_[a-zA-Z0-9]+/)
         expect(bank_account.reload.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
+      end
+    end
+
+    describe "a Japanese individual without the city fields (compliance info saved before the city inputs existed)" do
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: nil, phone: "+81987654321",
+                                                                  first_name_kanji: "日本語", last_name_kanji: "創造者",
+                                                                  first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
+                                                                  building_number: "1-1", building_number_kana: "1-1",
+                                                                  street_address_kanji: "神宮前", street_address_kana: "ジングウマエ",
+                                                                  street_address: "address_full_match", state: "東京都", zip_code: "100-0000",
+                                                                  country: "Japan") end
+
+      it "omits the city keys from the kanji and kana address hashes instead of sending explicit nils" do
+        person = described_class.send(:person_hash, user_compliance_info, "1234")
+
+        expect(person[:address_kanji]).to eq(
+          line1: "1-1",
+          town: "神宮前",
+          state: "東京都",
+          country: "JP",
+          postal_code: "100-0000"
+        )
+        expect(person[:address_kana]).to eq(
+          line1: "1-1",
+          town: "ジングウマエ",
+          state: "トウキョウト",
+          country: "JP",
+          postal_code: "100-0000"
+        )
       end
     end
 

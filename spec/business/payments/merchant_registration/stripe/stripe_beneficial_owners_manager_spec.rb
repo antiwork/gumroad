@@ -242,18 +242,105 @@ describe StripeBeneficialOwnersManager do
         country: "JP", state: "東京都", postal_code: "100-0001",
         building_number: "1-1", building_number_kana: "1-1",
         street_address_kanji: "千代田", street_address_kana: "チヨダ",
+        city: "千代田区", city_kana: "チヨダク",
       }
       expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
         expect(attrs[:first_name_kanji]).to eq("太郎")
         expect(attrs[:last_name_kanji]).to eq("山田")
         expect(attrs[:first_name_kana]).to eq("タロウ")
         expect(attrs[:last_name_kana]).to eq("ヤマダ")
-        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", state: "東京都", country: "JP", postal_code: "100-0001")
-        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", state: "トウキョウト", country: "JP")
+        expect(attrs[:address_kanji]).to include(line1: "1-1", town: "千代田", city: "千代田区", state: "東京都", country: "JP", postal_code: "100-0001")
+        expect(attrs[:address_kana]).to include(line1: "1-1", town: "チヨダ", city: "チヨダク", state: "トウキョウト", country: "JP")
         expect(attrs).not_to have_key(:address)
         other_owner_person
       end
       described_class.create(user, jp_params)
+    end
+
+    it "rejects non-kana text in the JP kana address fields even though the browser also validates them" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      jp_params = params.deep_dup
+      jp_params[:first_name_kanji] = "太郎"
+      jp_params[:last_name_kanji] = "山田"
+      jp_params[:first_name_kana] = "タロウ"
+      jp_params[:last_name_kana] = "ヤマダ"
+      jp_params[:address] = {
+        country: "JP", state: "東京都", postal_code: "100-0001",
+        building_number: "1-1", building_number_kana: "1-1",
+        street_address_kanji: "千代田", street_address_kana: "チヨダ",
+        city: "千代田区", city_kana: "チヨダク",
+      }
+      expect(Stripe::Account).not_to receive(:create_person)
+
+      # Hiragana instead of katakana — allowed characters check fails.
+      hiragana_city = jp_params.deep_dup
+      hiragana_city[:address][:city_kana] = "ちよだく"
+      expect { described_class.create(user, hiragana_city) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\) may only contain/)
+
+      # Latin-only text passes the character allowlist but has no katakana at all.
+      latin_only_city = jp_params.deep_dup
+      latin_only_city[:address][:city_kana] = "Chiyoda"
+      expect { described_class.create(user, latin_only_city) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\) must include katakana/)
+
+      # The same server-side check covers the other kana address fields.
+      kanji_town = jp_params.deep_dup
+      kanji_town[:address][:street_address_kana] = "千代田"
+      expect { described_class.create(user, kanji_town) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /Town\/Cho-me \(Kana\) may only contain/)
+
+      # And the kana name fields.
+      kanji_name = jp_params.deep_dup
+      kanji_name[:first_name_kana] = "太郎"
+      expect { described_class.create(user, kanji_name) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /First name \(Kana\) may only contain/)
+    end
+
+    it "rejects non-kana city_kana on update for a non-representative owner" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      allow(Stripe::Account).to receive(:retrieve_person).and_return(other_owner_person)
+      expect(Stripe::Account).not_to receive(:update_person)
+      jp_params = params.deep_dup
+      jp_params[:first_name_kanji] = "太郎"
+      jp_params[:last_name_kanji] = "山田"
+      jp_params[:first_name_kana] = "タロウ"
+      jp_params[:last_name_kana] = "ヤマダ"
+      jp_params[:address] = {
+        country: "JP", state: "東京都", postal_code: "100-0001",
+        building_number: "1-1", building_number_kana: "1-1",
+        street_address_kanji: "千代田", street_address_kana: "チヨダ",
+        city: "千代田区", city_kana: "not kana at all 千代田",
+      }
+      expect { described_class.update(user, "person_123", jp_params) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\)/)
+    end
+
+    it "still validates kana fields when the address country is blank and falls back to the JP seller country" do
+      user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: user, country: "Japan", is_business: true,
+                                    first_name_kanji: "太郎", last_name_kanji: "山田",
+                                    first_name_kana: "タロウ", last_name_kana: "ヤマダ")
+      # The required-fields check normally rejects a blank country before the kana validator
+      # runs, so this exercises the validator directly to prove it uses the same country
+      # fallback as the payload builder: blank submitted country + JP seller = JP kana rules.
+      jp_params = {
+        first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+        address: {
+          country: "", state: "東京都", postal_code: "100-0001",
+          building_number: "1-1", building_number_kana: "1-1",
+          street_address_kanji: "千代田", street_address_kana: "チヨダ",
+          city: "千代田区", city_kana: "Chiyoda",
+        },
+      }
+      expect { described_class.send(:validate_jp_kana_address_format!, jp_params, user) }
+        .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /City\/Ward \(Kana\) must include katakana/)
     end
 
     it "sends kanji/kana names with a Latin address when a JP seller adds a non-JP-resident BO" do
