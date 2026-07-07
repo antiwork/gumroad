@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
+  getChargeTodayPrice,
+  getEstimatedTaxRate,
   getStripePaymentElementAmount,
   isCardReadyToPay,
   reduceCheckoutState,
@@ -648,5 +650,86 @@ describe("reduceCheckoutState", () => {
     const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
 
     expect(next.surcharges).toEqual({ type: "pending" });
+  });
+});
+
+const loadedSurcharges = (
+  overrides: Partial<{ subtotal: number; tax_cents: number; shipping_rate_cents: number }> = {},
+) =>
+  ({
+    type: "loaded",
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      buyer_currency_quote: null,
+      ...overrides,
+    },
+  }) as const;
+
+describe("getChargeTodayPrice", () => {
+  it("returns null until surcharges load", () => {
+    expect(getChargeTodayPrice(state({ surcharges: { type: "pending" } }))).toBeNull();
+  });
+
+  it("matches the full total for carts without installments", () => {
+    expect(
+      getChargeTodayPrice(state({ surcharges: loadedSurcharges({ tax_cents: 100, shipping_rate_cents: 50 }) })),
+    ).toBe(1_150);
+  });
+
+  it("charges only the first installment (plus its tax share) for an installment cart", () => {
+    // $10 in 2 installments at 20% tax: today charges $5 + $1 tax = $6, not the $12 full value.
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }),
+        }),
+      ),
+    ).toBe(600);
+  });
+
+  it("gives the first installment the rounding remainder", () => {
+    // $100.01 in 4 installments: today charges $25.01 (three future installments of $25.00).
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 10_001, payInInstallments: true, installmentPlan: { numberOfInstallments: 4 } })],
+          surcharges: loadedSurcharges({ subtotal: 10_001 }),
+        }),
+      ),
+    ).toBe(2_501);
+  });
+
+  it("only splits the installment item in a mixed cart", () => {
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [
+            product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } }),
+            product({ permalink: "b", price: 500 }),
+          ],
+          surcharges: loadedSurcharges({ subtotal: 1_500 }),
+        }),
+      ),
+    ).toBe(1_000);
+  });
+});
+
+describe("getEstimatedTaxRate", () => {
+  it("returns zero until surcharges load", () => {
+    expect(getEstimatedTaxRate(state({ surcharges: { type: "pending" } }))).toBe(0);
+  });
+
+  it("returns the quote's effective tax rate", () => {
+    expect(getEstimatedTaxRate(state({ surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }) }))).toBe(0.2);
+  });
+
+  it("returns zero for a zero subtotal", () => {
+    expect(getEstimatedTaxRate(state({ surcharges: loadedSurcharges({ subtotal: 0, tax_cents: 0 }) }))).toBe(0);
   });
 });

@@ -44,7 +44,8 @@ import {
   canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
-  getTotalPrice,
+  getChargeTodayPrice,
+  getEstimatedTaxRate,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -1130,7 +1131,10 @@ const useStripePaymentRequest = (disabled: boolean) => {
   const [paymentMethodEvent, setPaymentMethodEvent] = React.useState<PaymentRequestPaymentMethodEvent | null>(null);
   const [paymentMethods, setPaymentMethods] = React.useState<CanMakePaymentResult | null>(null);
 
-  const getTotalItem = () => ({ amount: getTotalPrice(state) ?? 0, label: "Gumroad" });
+  // Wallet sheets authorize their displayed total as today's charge, so the total must be what
+  // the server will actually charge now — the first installment for pay-in-installments carts,
+  // not the full cart value.
+  const getTotalItem = () => ({ amount: getChargeTodayPrice(state) ?? 0, label: "Gumroad" });
   const stateRef = useRefToLatest(state);
 
   // When the cart contains a subscription, describe the recurring agreement on the Apple Pay
@@ -1139,9 +1143,15 @@ const useStripePaymentRequest = (disabled: boolean) => {
   // or replaces their phone. Behind a per-seller flag while we verify token issuance in
   // production; without the flag the sheet stays a plain one-time request and Apple issues a
   // device token, exactly as before.
+  //
+  // Reads `state` directly (NOT stateRef): this is called during render from the useMemo below,
+  // and stateRef only catches up in an effect AFTER render — inside the memo it still holds the
+  // previous products, which would rebuild the PaymentRequest from exactly the stale declaration
+  // the rebuild was meant to discard (e.g. switching an item from installments to pay-in-full
+  // kept declaring the installment plan).
   const getApplePayOption = () => {
-    if (!stateRef.current.checkoutPayment.request_apple_pay_merchant_tokens) return null;
-    return getApplePayRecurringPaymentRequest(stateRef.current.products, Routes.library_url());
+    if (!state.checkoutPayment.request_apple_pay_merchant_tokens) return null;
+    return getApplePayRecurringPaymentRequest(state.products, Routes.library_url(), getEstimatedTaxRate(state));
   };
 
   // Stripe's PaymentRequest#update can change an existing recurring declaration but not remove
@@ -1152,11 +1162,9 @@ const useStripePaymentRequest = (disabled: boolean) => {
   // change to it triggers a rebuild; the end date is excluded because it's computed from "now"
   // (so it would differ on every call) and every change that moves it also changes another field
   // in the declaration (the billing agreement text spells out the number of payments).
-  const applePayRecurringDeclarationKey = state.checkoutPayment.request_apple_pay_merchant_tokens
-    ? JSON.stringify(getApplePayRecurringPaymentRequest(state.products, Routes.library_url()), (key, value: unknown) =>
-        key === "recurringPaymentEndDate" ? undefined : value,
-      )
-    : "null";
+  const applePayRecurringDeclarationKey = JSON.stringify(getApplePayOption(), (key, value: unknown) =>
+    key === "recurringPaymentEndDate" ? undefined : value,
+  );
 
   const paymentRequest = React.useMemo(() => {
     if (!stripe || disabled) return null;

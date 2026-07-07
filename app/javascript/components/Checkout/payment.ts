@@ -8,6 +8,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
+import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -393,6 +394,46 @@ export function getTotalPrice(state: State) {
   return state.surcharges.type === "loaded"
     ? state.surcharges.result.subtotal + state.surcharges.result.tax_cents + state.surcharges.result.shipping_rate_cents
     : null;
+}
+
+// What the buyer's card is charged TODAY, as opposed to the cart's full value (getTotalPrice).
+// The two differ when an item is paid in installments: the server charges only the first
+// installment now (Purchase#calculate_installment_payment_price_cents) and the rest monthly.
+// Wallet payment sheets (Apple Pay / Google Pay) authorize their displayed total as the charge,
+// so they must show today's charge, not the full cart value.
+//
+// The surcharges quote only returns cart-level totals, so today's item shares are recomputed
+// client-side by mirroring what loadSurcharges sent, and the quote's tax is scaled down
+// proportionally — tax is charged per payment on each payment's share.
+export function getChargeTodayPrice(state: State) {
+  if (state.surcharges.type !== "loaded") return null;
+  if (!state.products.some((item) => item.payInInstallments && item.installmentPlan != null))
+    return getTotalPrice(state);
+
+  const { subtotal, tax_cents, shipping_rate_cents } = state.surcharges.result;
+  const isGift = state.gift !== null;
+  const chargedToday = state.products.reduce((sum, item) => {
+    if (item.hasFreeTrial && !isGift) return sum;
+    // Tips are charged in full with the first payment (see Checkout/Show.tsx lineItems).
+    const tip = computeTipForPrice(state, item.price, item.permalink) ?? 0;
+    const itemPriceToday =
+      item.payInInstallments && item.installmentPlan != null
+        ? calculateFirstInstallmentPaymentPriceCents(item.price, item.installmentPlan.numberOfInstallments)
+        : item.price;
+    return sum + Math.round(itemPriceToday + tip);
+  }, 0);
+  const taxToday = subtotal > 0 ? Math.round(tax_cents * (chargedToday / subtotal)) : 0;
+  return chargedToday + taxToday + shipping_rate_cents;
+}
+
+// The effective tax rate of the loaded surcharges quote, for stating tax-inclusive amounts for
+// future payments (installments, membership renewals) that each charge tax on their own share.
+// Zero for tax-inclusive prices (quote reports those under tax_included_cents, already part of
+// the subtotal) and while surcharges are still loading — callers refresh once loaded.
+export function getEstimatedTaxRate(state: State) {
+  if (state.surcharges.type !== "loaded") return 0;
+  const { subtotal, tax_cents } = state.surcharges.result;
+  return subtotal > 0 ? tax_cents / subtotal : 0;
 }
 
 export function getCustomFieldKey(
