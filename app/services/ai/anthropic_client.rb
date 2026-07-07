@@ -91,7 +91,7 @@ class Ai::AnthropicClient
       end
     end
 
-    Result.new(text:, tool_uses: assemble_tool_uses(blocks), stop_reason:)
+    Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
   rescue HTTP::Error => e
     raise Error, "Anthropic network error: #{e.message}"
   end
@@ -165,13 +165,24 @@ class Ai::AnthropicClient
 
     # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A
     # tool_use block with no input fragments is a no-arg call; malformed non-empty input must fail the
-    # turn instead of dispatching a lossy {} tool call.
-    def assemble_tool_uses(blocks)
+    # turn instead of dispatching a lossy {} tool call — EXCEPT when the model was cut off by
+    # max_tokens. A turn truncated mid-tool-call always ends with half-written (unparseable) JSON;
+    # that isn't the model misbehaving, it's the token cap. Dropping the cut-off block and letting
+    # the caller see stop_reason == "max_tokens" lets it respond honestly instead of erroring out.
+    def assemble_tool_uses(blocks, stop_reason: nil)
+      truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
         block = blocks[index]
         next unless block[:type] == "tool_use"
 
-        { id: block[:id], name: block[:name], input: parse_tool_use_input(block) }
+        input = begin
+          parse_tool_use_input(block)
+        rescue Error
+          # Only swallow the parse failure for a truncated turn; otherwise it is a real error.
+          raise unless truncated
+          next
+        end
+        { id: block[:id], name: block[:name], input: }
       end
     end
 

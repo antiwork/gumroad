@@ -148,6 +148,24 @@ describe Ai::AnthropicClient do
         .to raise_error(described_class::Error, /unreadable tool call/i)
     end
 
+    it "drops a tool call whose JSON was cut off by max_tokens instead of raising" do
+      # When the stream stops with stop_reason "max_tokens", a half-written tool call's JSON is
+      # expected (the token cap cut it off mid-arguments), not a model bug. Returning a Result with
+      # the broken block dropped and stop_reason intact lets the caller handle the truncation
+      # honestly instead of blowing up with "unreadable tool call".
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"description":"<p>very long' } }],
+        ["message_delta", { delta: { stop_reason: "max_tokens" } }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "update my description" }])
+
+      expect(result.tool_uses).to eq([])
+      expect(result.stop_reason).to eq("max_tokens")
+    end
+
     it "raises Error on a stream-level error event" do
       stream = sse(["error", { error: { message: "overloaded" } }])
       stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })

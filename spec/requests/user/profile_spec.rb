@@ -166,7 +166,20 @@ describe "User profile page", type: :system, js: true do
         end
       end
 
-      it "shows the subscribe block when there are no sections" do
+      it "shows a default products section when there are no sections but there are products" do
+        # The server renders the section's initial results from Elasticsearch, so make sure the
+        # products created above are searchable before the page loads.
+        Link.import(force: true, refresh: true)
+        visit seller.subdomain_with_protocol
+        expect(page).to_not have_selector "main > header"
+        # No saved sections + published products = the virtual default products section, so
+        # visitors see the catalog instead of only an email signup box.
+        expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
+        expect_product_cards_in_order([@product4, @product3, @product2, @product1])
+      end
+
+      it "shows the subscribe block when there are no sections and no products" do
+        seller.links.each { _1.update!(deleted_at: Time.current) }
         visit seller.subdomain_with_protocol
         expect(page).to_not have_selector "main > header"
         expect(page).to have_text "Subscribe to receive email updates from #{seller.name}"
