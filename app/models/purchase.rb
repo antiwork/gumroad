@@ -1991,6 +1991,14 @@ class Purchase < ApplicationRecord
   def cancel_charge_intent!
     ChargeProcessor.cancel_payment_intent!(merchant_account, processor_payment_intent_id)
     Purchase::MarkFailedService.new(self).perform
+    # A client-confirm checkout that prepared a method-forced (iDEAL/Bancontact)
+    # PaymentIntent persisted buyer-currency presentment rows at prepare time. The
+    # intent is now canceled — Stripe emits payment_intent.canceled, which we don't
+    # consume, so this is the only place an abandoned checkout's snapshot gets cleaned
+    # up. There is no separate intent-expiry path either: stale client-confirm intents
+    # are always canceled here by FailAbandonedPurchaseWorker. A fresh checkout builds
+    # a new charge and re-persists its own snapshot, so at most one live set remains.
+    charge.destroy_presentment_records! if charge&.client_confirmed?
   end
 
   # Attempts to cancel setup intent, assuming it hasn't succeeded or failed yet.

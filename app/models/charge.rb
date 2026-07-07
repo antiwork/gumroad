@@ -32,6 +32,26 @@ class Charge < ApplicationRecord
     seller.name_or_username
   end
 
+  # Removes the buyer-currency presentment snapshot (charge_presentments +
+  # purchase_presentments) prepared for this charge's PaymentIntent.
+  #
+  # Called when the intent can no longer settle — the payment_intent.payment_failed
+  # webhook and the stale-checkout abandonment worker. We delete the rows outright
+  # rather than marking them voided: neither table has a state column, and adding one
+  # would require a migration for data nobody reads — receipts, refunds, and accounting
+  # only consult presentment rows on charges that actually settled, and a retried
+  # checkout builds a brand-new charge whose intent-prepare step persists a fresh
+  # snapshot. Deleting therefore also guarantees at most one live presentment set per
+  # checkout attempt. Idempotent: re-delivered webhooks find nothing left to delete.
+  def destroy_presentment_records!
+    transaction do
+      # charge_presentment cascades to its purchase_presentments; the per-purchase pass
+      # additionally catches any row that lost (or never had) its charge link.
+      purchases.each { _1.purchase_presentment&.destroy! }
+      charge_presentment&.destroy!
+    end
+  end
+
   def reference_id_for_charge_processors
     COMBINED_CHARGE_PREFIX + external_id
   end
