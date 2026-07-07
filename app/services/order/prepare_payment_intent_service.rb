@@ -37,8 +37,14 @@ class Order::PreparePaymentIntentService
     Rails.logger.error("Error preparing client-confirm charge for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
     fail_purchases_with(GENERIC_CHARGE_ERROR)
     # Best-effort and last: the cleanup writes to the database, so if the original error was
-    # database trouble it can raise too — that must not skip failing the purchases above.
-    cleanup_prepare_time_presentment_records
+    # database trouble it can raise too. Swallow any cleanup failure so the caller still gets
+    # the buyer-facing error responses built above instead of an unhandled exception — leftover
+    # presentment rows are harmless because nothing reads them for a charge that never settled.
+    begin
+      cleanup_prepare_time_presentment_records
+    rescue => cleanup_error
+      ErrorNotifier.notify(cleanup_error, order_id: order.id)
+    end
     responses
   end
 

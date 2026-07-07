@@ -656,6 +656,33 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(charge.charge_presentment).to be_nil
         expect(purchase.purchase_presentment).to be_nil
       end
+
+      # The rescue-path cleanup is best-effort: if the original error was database trouble, the
+      # cleanup's own DB delete can raise too. That must not turn the buyer-facing error responses
+      # into an unhandled exception (a 500) — the purchases are already failed at that point.
+      it "still returns the error responses when the rescue-path cleanup itself raises" do
+        allow(StripeFxQuote).to receive(:create)
+          .and_return(StripeFxQuote::Quote.new(id: "fxq_cleanup_boom", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25")))
+
+        preview = Stripe::StripeObject.construct_from(type: "ideal", ideal: {}, card: nil)
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(RuntimeError, "merchant account missing id")
+        allow_any_instance_of(Charge).to receive(:destroy_presentment_records!)
+          .and_raise(ActiveRecord::StatementInvalid, "database went away")
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid), order_id: anything)
+
+        order, params = build_order
+        responses = nil
+        expect do
+          responses = described_class.new(order:, params:, confirmation_token: "ctoken_cleanup_boom").perform
+        end.not_to raise_error
+
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(responses["unique-id-0"][:success]).to eq(false)
+      end
     end
 
     context "when a purchase matches no line item in params" do
