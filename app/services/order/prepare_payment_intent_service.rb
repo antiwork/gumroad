@@ -261,7 +261,8 @@ class Order::PreparePaymentIntentService
         # so the key also changes whenever the presentment context does.
         idempotency_key: "#{presentment&.idempotency_key || "deferred_intent_#{charge.external_id}"}_#{confirmation_token}",
         payment_method_types: intent_payment_method_types(presentment),
-        currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+        currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY,
+        stripe_fx_quote_id: presentment&.stripe_fx_quote_id
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")

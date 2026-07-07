@@ -484,6 +484,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
           expect(create_args[:currency]).to eq(Currency::EUR)
           expect(create_args[:amount_cents]).to eq(expected_total)
+          expect(create_args[:stripe_fx_quote_id]).to eq("fxq_prepare")
           expect(create_args[:payment_method_types]).to include("ideal")
           expect(responses["unique-id-0"][:success]).to eq(true)
 
@@ -520,6 +521,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
           expect(create_args[:currency]).to eq(Currency::EUR)
           expect(create_args[:amount_cents]).to eq(15_00)
+          expect(create_args[:stripe_fx_quote_id]).to be_nil
           expect(create_args[:payment_method_types]).to include("ideal")
           expect(responses["unique-id-0"][:success]).to eq(true)
 
