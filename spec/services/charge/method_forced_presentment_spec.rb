@@ -149,6 +149,28 @@ describe Charge::MethodForcedPresentment do
                                                                       presentment_total_cents: 19_40)
     end
 
+    it "adds excluded seller tax to the forced-currency total" do
+      purchase.update!(tax_cents: 1_00,
+                       was_tax_excluded_from_price: true,
+                       total_transaction_cents: 19_75)
+
+      expect(result.presentment_total_cents).to eq(15_00 + 80)
+      expect(purchase.reload.purchase_presentment).to have_attributes(presentment_seller_tax_cents: 80,
+                                                                      presentment_price_cents: 15_00,
+                                                                      presentment_total_cents: 15_80)
+    end
+
+    it "keeps included seller tax inside the forced-currency total and splits it out from price" do
+      purchase.update!(tax_cents: 1_00,
+                       was_tax_excluded_from_price: false,
+                       total_transaction_cents: 18_75)
+
+      expect(result.presentment_total_cents).to eq(15_00)
+      expect(purchase.reload.purchase_presentment).to have_attributes(presentment_seller_tax_cents: 80,
+                                                                      presentment_price_cents: 14_20,
+                                                                      presentment_total_cents: 15_00)
+    end
+
     it "returns a stable idempotency key derived from the charge and currency, without any quote" do
       expect(result.idempotency_key).to eq("buyer-currency-intent-#{charge.external_id}-#{Currency::EUR}")
     end
