@@ -200,6 +200,28 @@ describe("getApplePayRecurringPaymentRequest", () => {
     });
   });
 
+  it("declares only the installment item in a mixed cart, without tips", () => {
+    // $10 one-time + $200 in 2 installments at 10% tax: the agreement describes only the
+    // installment item's future payments ($100 + tax). The one-time item and any tip are part of
+    // the sheet's one-time total (getChargeTodayPrice), never of the recurring declaration —
+    // tips are charged once with the first payment and never re-charged on future installments.
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        product({ permalink: "one-time", price: 1_000 }),
+        product({
+          permalink: "installments",
+          price: 20_000,
+          payInInstallments: true,
+          installmentPlan: { numberOfInstallments: 2 },
+        }),
+      ],
+      MANAGEMENT_URL,
+      0.1,
+    );
+    expect(request?.regularBilling.amount).toBe(11_000);
+    expect(request?.billingAgreement).toContain("2 monthly installments of $110");
+  });
+
   describe("month-boundary end dates", () => {
     beforeEach(() => {
       vi.useFakeTimers();

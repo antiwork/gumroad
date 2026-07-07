@@ -718,6 +718,32 @@ describe("getChargeTodayPrice", () => {
       ),
     ).toBe(1_000);
   });
+
+  it("handles a mixed cart with tips and taxes: full tip and pay-in-full item today, first installment only", () => {
+    // $10 one-time + $200 in 2 installments, $21 fixed tip, 10% tax.
+    // The tip distributes across items proportionally to price ($1 + $20) and is charged in full
+    // today. Today: ($10 + $1) + ($100 first installment + $20) = $131, plus proportional tax
+    // 2310 * (13100/23100) = 1310 -> $144.10 total. Future installments ($100 + tax) are declared
+    // separately by getApplePayRecurringPaymentRequest and are NOT part of today's total.
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [
+            product({ permalink: "one-time", price: 1_000, hasTippingEnabled: true }),
+            product({
+              permalink: "installments",
+              price: 20_000,
+              hasTippingEnabled: true,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 2 },
+            }),
+          ],
+          tip: { type: "fixed", amount: 2_100 },
+          surcharges: loadedSurcharges({ subtotal: 23_100, tax_cents: 2_310 }),
+        }),
+      ),
+    ).toBe(14_410);
+  });
 });
 
 describe("getEstimatedTaxRate", () => {
