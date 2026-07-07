@@ -240,16 +240,6 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
   }, []);
 
-  // Start over with an empty chat; the next message will create a fresh stored conversation.
-  const startNewChat = () => {
-    if (isSending) return;
-    setMessages([{ role: "assistant", content: greeting }]);
-    setConversationId(null);
-    setFollowUps([]);
-    setPendingActionIndex(null);
-    inputRef.current?.focus({ preventScroll: true });
-  };
-
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending) return;
@@ -389,15 +379,6 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         {/* Content starts at the top and grows downward; the effect below keeps the newest line in
             view as the conversation gets long enough to scroll. */}
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 md:p-8">
-          {/* Offer a way out of a resumed/long conversation. Only shown once there's history to
-              leave behind; a brand-new chat has nothing to reset. */}
-          {messages.length > 1 ? (
-            <div className="flex justify-end">
-              <Button size="sm" onClick={startNewChat} disabled={isSending}>
-                New chat
-              </Button>
-            </div>
-          ) : null}
           {messages.map((message, index) => {
             const isUser = message.role === "user";
             // A pending proposed change reads as the confirmation card alone — suppress the objects the
