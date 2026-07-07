@@ -69,6 +69,32 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#daily_finance_ledger_report" do
+    it "sends the report to finance with the machine-readable JSON ledger attached" do
+      travel_to(Time.utc(2026, 7, 8, 12)) do
+        create(:merchant_account, user: nil) if MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).nil?
+        purchase = create(:purchase, created_at: Time.utc(2026, 7, 7, 10), succeeded_at: Time.utc(2026, 7, 7, 10))
+
+        email = AccountingMailer.daily_finance_ledger_report(Date.new(2026, 7, 7))
+
+        expect(email.subject).to include("Daily Finance Ledger Report – 2026-07-07")
+        expect(email.to).to eq([ApplicationMailer::FINANCE_EMAIL])
+        expect(email.cc).to eq(["gumclaw@gumroad.com"])
+        expect(email.attachments.map(&:filename)).to eq(["daily-finance-ledger-report-2026-07-07.json"])
+
+        report = JSON.parse(email.attachments.first.body.raw_source)
+        expect(report["report_version"]).to eq(FinanceEventLedgerReports::REPORT_VERSION)
+        expect(report["date"]).to eq("2026-07-07")
+        funds_received = report["processors"].find { |entry| entry["processor"] == "Stripe" }["funds_received"]
+        expect(funds_received["count"]).to eq(1)
+        expect(funds_received["total_transaction_cents"]).to eq(purchase.total_transaction_cents)
+
+        html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body
+        expect(html_body).to include("Daily Finance Ledger Report")
+      end
+    end
+  end
+
   describe "#stripe_currency_balances_report" do
     it "sends an email with balances report attached as csv" do
       last_month = Time.current.last_month
