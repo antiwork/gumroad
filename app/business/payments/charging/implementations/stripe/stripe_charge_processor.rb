@@ -881,6 +881,20 @@ class StripeChargeProcessor
       event.created_at = DateTime.strptime(stripe_event["created"].to_s, "%s")
       event.comment = stripe_event["type"]
       event.type = ChargeEvent::TYPE_PAYMENT_INTENT_FAILED
+      # Payment methods that fail asynchronously (Cash App Pay, Link, ACH Direct Debit) never raise
+      # a Stripe::CardError at confirm time — the only place their decline reason exists is this
+      # webhook's last_payment_error. Carry it on the event so the purchase-failure transition can
+      # persist it to purchases.stripe_error_code the same way the synchronous confirm path does.
+      # Without this, failed async purchases have no error code in the database, which blinds
+      # failure monitoring and support tooling even though the money flow is correct.
+      last_payment_error = stripe_event["data"]["object"]["last_payment_error"]
+      if last_payment_error.present?
+        error_code = error_code_from_last_payment_error(last_payment_error)
+        # Merge rather than assign so any extras set earlier for this event (none today, but
+        # handle_event_informational! reads other keys like fee_cents) are never silently dropped,
+        # and skip entirely when Stripe sent an error object with no usable code.
+        event.extras = (event.extras || {}).merge("stripe_error_code" => error_code) if error_code.present?
+      end
     elsif PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
       raise "Stripe Event #{stripe_event['id']} does not contain a 'payment_intent' object." if stripe_event["data"]["object"]["object"] != "payment_intent"
 
@@ -903,6 +917,25 @@ class StripeChargeProcessor
     ChargeProcessor.handle_event(event) unless event.nil?
 
     ProcessedStripeEvent.record!(stripe_event["id"], event_type: stripe_event["type"]) if event && PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
+  end
+
+  # Builds a Gumroad error code from a failed PaymentIntent's `last_payment_error`, mirroring the
+  # shape the synchronous confirm path produces (see StripeErrorHandler#get_card_error_details):
+  # Stripe's error `code`, with the more specific `decline_code` appended when one is present.
+  # Examples:
+  # | Stripe's error code             | Stripe's decline code | Gumroad's error code                              |
+  # | :------------------------------ | :-------------------- | :------------------------------------------------ |
+  # | card_declined                   | generic_decline       | card_declined_generic_decline                      |
+  # | payment_method_provider_decline | insufficient_funds    | payment_method_provider_decline_insufficient_funds |
+  # | incorrect_cvc                   |                       | incorrect_cvc                                      |
+  # Falls back to the error `type` (e.g. "card_error") when Stripe sends no code at all.
+  def self.error_code_from_last_payment_error(last_payment_error)
+    error_code = last_payment_error["code"].presence || last_payment_error["type"]
+    return if error_code.blank?
+
+    decline_code = last_payment_error["decline_code"]
+    error_code += "_#{decline_code}" if decline_code.present? && decline_code != error_code
+    error_code
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_widthdrawn(stripe_dispute, stripe_charge, event)
