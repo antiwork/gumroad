@@ -114,6 +114,14 @@ describe Checkout::Upsells::ProductsController do
         expect(response.parsed_body.map { |product| product["id"] }).to eq([old_product.external_id])
       end
 
+      it "matches variant names, since the picker lists variants as options" do
+        sign_in seller
+        get :index, params: { query: "Untitled 1" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.map { |product| product["name"] }).to eq(["Versioned Product"])
+      end
+
       it "treats SQL LIKE wildcards in the query as literal characters" do
         sign_in seller
         get :index, params: { query: "%" }
