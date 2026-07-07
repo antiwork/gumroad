@@ -12,6 +12,7 @@
 class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseController
   include Throttling
   include ActionController::Live
+  include AgentConversationPersistence
 
   before_action :authenticate_user!
   before_action :authorize_store_agent
@@ -23,10 +24,15 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
   private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # POST /internal/agent/messages/stream
-  # params: { messages: [{ role:, content: }, ...] }
+  # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id> }
   # Each event is `event: <name>` + `data: <json>` + a blank line. Event names: `token` (a chunk of
   # reply text), `objects`, `proposed_action`, `suggestions`, `done` (terminal, carrying the final
   # assembled payload), and `error` (a friendly message; the stream still closes cleanly).
+  #
+  # Turns are persisted the same way as the buffered endpoint (see AgentConversationPersistence):
+  # with a conversation_id the turn appends to that stored conversation and the model replays the
+  # server-held transcript; without one a new conversation is created. The `done` event carries the
+  # conversation's external id so the client can send it on subsequent turns.
   def create
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
@@ -41,15 +47,33 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         return
       end
 
-      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond_streaming(messages:) do |event, payload|
+      # An unknown/foreign conversation id is surfaced as a stream error (the response status is
+      # already committed once we start streaming, so a 404 render isn't possible here).
+      begin
+        conversation = find_agent_conversation!
+      rescue ActiveRecord::RecordNotFound
+        sse.write({ message: "That conversation could not be found." }, event: "error")
+        return
+      end
+
+      # The last user entry in the posted history is this turn's new message; earlier entries are
+      # replaced by the stored transcript when resuming, so a stale client can't rewrite history.
+      new_user_message = messages.reverse.find { |message| message[:role] == "user" }&.dig(:content)
+      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+      history = agent_conversation_history(conversation).presence || messages
+
+      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond_streaming(messages: history) do |event, payload|
         sse.write(payload, event:)
       end
+      record_agent_assistant_message!(conversation, result)
       sse.write(
         {
           reply: result[:reply],
           proposed_action: result[:proposed_action],
           objects: result[:objects] || [],
           suggestions: result[:suggestions] || [],
+          conversation_id: conversation.external_id,
         },
         event: "done",
       )
