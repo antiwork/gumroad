@@ -202,14 +202,14 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       # arrives via this webhook's last_payment_error.
       deliver_webhook(payment_intent_event(
                         "payment_intent.payment_failed", charge, event_id: "evt_async_decline",
-                        object_attrs: {
-                          "last_payment_error" => {
-                            "code" => "payment_method_provider_decline",
-                            "decline_code" => "insufficient_funds",
-                            "message" => "Cash App Pay has declined the payment.",
-                            "type" => "card_error"
-                          }
-                        }
+                                                                 object_attrs: {
+                                                                   "last_payment_error" => {
+                                                                     "code" => "payment_method_provider_decline",
+                                                                     "decline_code" => "insufficient_funds",
+                                                                     "message" => "Cash App Pay has declined the payment.",
+                                                                     "type" => "card_error"
+                                                                   }
+                                                                 }
                       ))
 
       expect(purchase.reload).to be_failed
