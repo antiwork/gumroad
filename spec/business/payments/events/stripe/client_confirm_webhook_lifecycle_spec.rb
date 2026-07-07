@@ -157,6 +157,42 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
     end
   end
 
+  context "payment_intent.processing then payment_intent.succeeded for a charge with method-forced presentment rows" do
+    it "keeps the prepare-time presentment snapshot intact across the processing state and finalizes with receipts reading it" do
+      order, charge = build_client_confirmed_order
+      purchase = order.purchases.first
+      # A method-forced (iDEAL/Bancontact) checkout persists its buyer-currency snapshot at
+      # intent-prepare time; the direct-listed-amount shape carries no FX quote by design.
+      charge_presentment = create(:charge_presentment, charge:, presentment_currency: Currency::EUR,
+                                                       presentment_total_cents: 10_00, presentment_gumroad_amount_cents: 1_00,
+                                                       stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+      create(:purchase_presentment, purchase:, charge_presentment:, presentment_currency: Currency::EUR,
+                                    presentment_price_cents: 10_00, presentment_gumroad_tax_cents: 0,
+                                    presentment_total_cents: 10_00, presentment_gumroad_amount_cents: 1_00)
+
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+
+      # The buyer has redirected away; the intent sits in processing. The snapshot must survive.
+      deliver_webhook(payment_intent_event("payment_intent.processing", charge, event_id: "evt_present_processing"))
+      expect(purchase.reload).to be_in_progress
+      expect(charge.reload.charge_presentment).to eq(charge_presentment)
+      expect(purchase.purchase_presentment).to be_present
+
+      expect do
+        deliver_webhook(payment_intent_event("payment_intent.succeeded", charge, event_id: "evt_present_succeeded"))
+      end.to change { SendChargeReceiptJob.jobs.size }.by(1)
+
+      # Success must NOT remove the rows: the receipt renders the buyer-currency amounts from them.
+      purchase.reload
+      expect(purchase).to be_successful
+      expect(charge.reload.charge_presentment).to eq(charge_presentment)
+      expect(purchase.buyer_presentment?).to be(true)
+      expect(purchase.buyer_presentment_currency).to eq(Currency::EUR)
+      expect(purchase.buyer_presentment_total_cents).to eq(10_00)
+      expect(purchase.formatted_buyer_presentment_total).to be_present
+    end
+  end
+
   context "payment_intent.processing then payment_intent.payment_failed for a client-confirmed charge" do
     it "keeps the purchase in progress while processing, then fails it to a resubmittable state on payment_failed" do
       seller = create(:user)
@@ -176,6 +212,53 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
       # PAYMENT_INTENT_LIFECYCLE_EVENTS (processing/succeeded), where it gates exactly-once
       # fulfillment. The failed path's idempotency is the in_progress? guard in the handler.
       expect(ProcessedStripeEvent.processed?("evt_pf_failed")).to be(false)
+    end
+
+    context "when the charge carries method-forced presentment rows (prepared at intent time)" do
+      let(:seller) { create(:user) }
+      let(:charge) { create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_presentment_fail") }
+      let(:purchase) { create(:purchase_in_progress, link: create(:product, user: seller), seller:) }
+
+      before do
+        charge.purchases << purchase
+        charge_presentment = create(:charge_presentment, charge:, presentment_currency: Currency::EUR,
+                                                         stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+        create(:purchase_presentment, purchase:, charge_presentment:, presentment_currency: Currency::EUR)
+      end
+
+      it "fails the purchase and removes the presentment snapshot so the retry starts clean" do
+        deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed"))
+
+        expect(purchase.reload).to be_failed
+        # The prepare-time snapshot describes a payment that will never settle; a retried
+        # checkout re-runs prepare and persists a fresh set for its new intent.
+        expect(charge.reload.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      end
+
+      it "handles a re-delivered payment_failed after cleanup as a no-op" do
+        deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed_1"))
+        expect do
+          deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed_2"))
+        end.not_to raise_error
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
+
+    it "is a no-op on presentment cleanup when no rows exist (buyer-local-currency flag off)" do
+      seller = create(:user)
+      charge = create(:charge, seller:, client_confirmed: true, stripe_payment_intent_id: "pi_no_presentment")
+      purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
+      charge.purchases << purchase
+
+      expect do
+        deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_no_presentment"))
+      end.not_to raise_error
+
+      expect(purchase.reload).to be_failed
+      expect(ChargePresentment.count).to eq(0)
     end
 
     it "is a no-op when the purchase already reached a terminal state (re-delivered payment_failed)" do
