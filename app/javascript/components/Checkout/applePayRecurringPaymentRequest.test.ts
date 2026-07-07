@@ -106,6 +106,13 @@ describe("getApplePayRecurringPaymentRequest", () => {
       MANAGEMENT_URL,
     );
     expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
+    // The end date marks the final charge, and with one billing cycle the only charge is today's,
+    // so the agreement ends the same day it starts. This is display-only on the payment sheet.
+    const today = new Date();
+    const endDate = request?.regularBilling.recurringPaymentEndDate;
+    expect(endDate?.getFullYear()).toBe(today.getFullYear());
+    expect(endDate?.getMonth()).toBe(today.getMonth());
+    expect(endDate?.getDate()).toBe(today.getDate());
   });
 
   it("leaves open-ended memberships without an end date", () => {
