@@ -50,7 +50,6 @@ class ProfileSectionsPresenter
   end
 
   def cached_sections
-    products_cache_key = seller.products.cache_key_with_version
     sections_cache_key = query.cache_key_with_version
     cache_key = "#{CACHE_KEY_PREFIX}_#{REVISION}-#{products_cache_key}-#{sections_cache_key}"
     Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
@@ -87,6 +86,13 @@ class ProfileSectionsPresenter
   private
     attr_reader :seller, :query
 
+    # Computing this cache key runs a SQL query (count + max updated_at over the seller's
+    # products), and both `cached_sections` and `cached_default_products_section` need it on the
+    # same request - memoize so we only hit the database once per presenter instance.
+    def products_cache_key
+      @products_cache_key ||= seller.products.cache_key_with_version
+    end
+
     # Builds the cacheable data for the virtual default products section (see
     # DEFAULT_PRODUCTS_SECTION_ID above). Returns nil when the creator has no products that
     # could appear on their profile, so the caller can keep the existing email-signup fallback.
@@ -97,7 +103,6 @@ class ProfileSectionsPresenter
       # uses, so this guard agrees with what the search below would actually return.
       return nil unless seller.products.alive.not_archived.exists?
 
-      products_cache_key = seller.products.cache_key_with_version
       cache_key = "#{CACHE_KEY_PREFIX}_default_#{REVISION}-#{products_cache_key}"
       Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
         {
