@@ -147,9 +147,11 @@ class PaypalChargeProcessor
     # from the same PayPal order that carry a DIFFERENT capture id (multi-seller carts get one
     # capture per seller) are unambiguous and do not block the refund, and neither do free
     # ($0) siblings since a refund can never belong to them.
-    # This ambiguity only exists for item-level refund webhooks (PAYMENT.CAPTURE.REFUNDED), so
-    # callers opt in via skip_if_capture_shared. Whole-capture events like
-    # PAYMENT.CAPTURE.DENIED mean the entire capture failed and must keep unwinding.
+    # This ambiguity only exists for item-level money-back webhooks — PAYMENT.CAPTURE.REFUNDED
+    # and PAYMENT.CAPTURE.REVERSED both route here and both opt in via skip_if_capture_shared
+    # (a reversal on a shared capture is just as ambiguous as a refund, so it also deserves
+    # human review). Whole-capture events like PAYMENT.CAPTURE.DENIED mean the entire capture
+    # failed and must keep unwinding unconditionally.
     if skip_if_capture_shared
       sibling_scope = Purchase.where.not(id: purchase.id).where(stripe_transaction_id: capture_id)
       if purchase.paypal_order_id.present?
@@ -166,12 +168,15 @@ class PaypalChargeProcessor
       # auto-apply in exactly the rows we can't attribute. Unknown price stays ambiguous
       # and fails toward manual review.
       sibling_scope = sibling_scope.where("price_cents IS NULL OR price_cents > 0")
-      if sibling_scope.exists?
+      # A single pluck drives both the "any siblings?" check and the notification payload, so
+      # the ids a human needs to attribute the refund always match the rows that blocked it.
+      sibling_purchase_ids = sibling_scope.pluck(:id)
+      if sibling_purchase_ids.any?
         ErrorNotifier.notify(
           "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
           capture_id:,
           resolved_purchase_id: purchase.id,
-          sibling_purchase_ids: sibling_scope.pluck(:id),
+          sibling_purchase_ids:,
           usd_amount_cents:,
           processor_refund_id: processor_refund&.id
         )

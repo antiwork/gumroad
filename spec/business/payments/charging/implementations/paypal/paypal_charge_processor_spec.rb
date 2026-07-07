@@ -599,6 +599,27 @@ describe PaypalChargeProcessor, :vcr do
           expect(@purchase.reload.refunds.count).to eq(1)
         end
 
+        it "also blocks PAYMENT.CAPTURE.REVERSED and notifies when the capture is shared" do
+          # Reversals (chargebacks) route through the same handler as refunds, so a reversal
+          # on a shared capture is just as ambiguous and must also defer to human review.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                   stripe_transaction_id: nil,
+                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+
+          reversed_event_info = refund_event_info.merge("event_type" => "PAYMENT.CAPTURE.REVERSED")
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+            hash_including(capture_id: "0JF852973C016714D", resolved_purchase_id: @purchase.id)
+          )
+
+          described_class.handle_order_events(reversed_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+          expect(@purchase.stripe_refunded?).to be(false)
+        end
+
         it "still unwinds PAYMENT.CAPTURE.DENIED even when the capture is shared" do
           # A denied capture means the WHOLE capture failed, so the shared-capture ambiguity
           # guard must not block it — only item-level refund webhooks opt into the skip.
