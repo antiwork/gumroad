@@ -16,8 +16,13 @@
 #     could do.
 #
 # Path templates use :name placeholders filled from the tool call's `path_params`. `params` lists the
-# query (reads) or body (writes) keys the endpoint accepts, purely to teach the model; the API still
-# validates the real payload.
+# query (reads) or body (writes) keys the endpoint accepts. For writes this list is load-bearing: a
+# proposed body carrying a key not listed here is refused (see StoreAgentService and
+# StoreAgentActionExecutor), because the v2 API silently ignores unknown body keys — a misnamed key
+# (e.g. `price_cents` instead of `price`) would otherwise drop the value the model meant to send and
+# fail downstream with a confusing error. The list is a deliberately curated subset of what each
+# endpoint can accept: it is exactly what the system-prompt manifest teaches the model, so the agent
+# only drives the surface it was told about.
 module Ai::StoreAgentApiCatalog
   Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, keyword_init: true) do
     def read? = read == true
@@ -104,9 +109,9 @@ module Ai::StoreAgentApiCatalog
     ep("list_offer_codes", :get, "/products/:link_id/offer_codes", "List a product's discount codes.", read: true, scope: "view_sales", path_params: %w[link_id]),
     ep("get_offer_code", :get, "/products/:link_id/offer_codes/:id", "Get one discount code.", read: true, scope: "view_sales", path_params: %w[link_id id]),
     ep("create_offer_code", :post, "/products/:link_id/offer_codes", "Create a discount code on a product.", scope: "edit_products",
-                                                                                                             path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count]),
+                                                                                                             path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count universal amount_cents minimum_amount_cents]),
     ep("update_offer_code", :put, "/products/:link_id/offer_codes/:id", "Update a discount code (max purchase count).", scope: "edit_products",
-                                                                                                                        path_params: %w[link_id id], params: %w[max_purchase_count]),
+                                                                                                                        path_params: %w[link_id id], params: %w[max_purchase_count minimum_amount_cents]),
     ep("delete_offer_code", :delete, "/products/:link_id/offer_codes/:id", "Delete a discount code.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Variant categories & variants (per product) ----
