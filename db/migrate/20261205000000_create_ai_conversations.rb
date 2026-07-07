@@ -15,6 +15,8 @@ class CreateAiConversations < ActiveRecord::Migration[7.1]
       t.timestamps
     end
 
+    add_index :ai_conversations, [:seller_id, :deleted_at, :updated_at, :id], name: "index_ai_conversations_latest_per_seller"
+
     create_table :ai_messages do |t|
       t.references :ai_conversation, null: false
       t.string :role, null: false

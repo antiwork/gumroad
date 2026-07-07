@@ -190,6 +190,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_05_000000) do
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["seller_id", "deleted_at", "updated_at", "id"], name: "index_ai_conversations_latest_per_seller"
     t.index ["seller_id"], name: "index_ai_conversations_on_seller_id"
   end
 

@@ -91,7 +91,17 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     result = ::Ai::StoreAgentActionExecutor.new(seller: current_seller, pundit_user:)
       .execute(type:, params: action_params)
 
-    record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
+    # Recording the applied status must not mask a store change that already committed: if the
+    # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
+    # to retry the confirmation — running the action a second time (a duplicate discount, refund,
+    # etc.). Log + report the failure and return the successful result; the only cost is that
+    # reloaded history shows a still-confirmable card instead of the collapsed "Applied" one.
+    begin
+      record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
+    rescue => e
+      Rails.logger.error("Store agent action persistence failed: #{e.full_message}")
+      ErrorNotifier.notify(e)
+    end
 
     render json: result, status: result[:success] ? :ok : :unprocessable_entity
   rescue ActiveRecord::RecordNotFound

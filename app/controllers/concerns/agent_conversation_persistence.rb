@@ -56,12 +56,16 @@ module AgentConversationPersistence
     # payload (type + params) against the stored one — never by assuming it's the newest.
     def record_agent_action_applied!(conversation, result, type:, action_params:)
       executed = normalize_action_payload("type" => type, "params" => action_params)
-      message = conversation.ai_messages.role_assistant.order(created_at: :desc, id: :desc).detect do |candidate|
-        proposal = candidate.metadata&.dig("proposed_action")
-        next false if proposal.blank? || candidate.metadata["action_status"].present?
+      message = conversation.ai_messages
+        .role_assistant
+        .select(:id, :metadata, :created_at)
+        .reorder(created_at: :desc, id: :desc)
+        .detect do |candidate|
+          proposal = candidate.metadata&.dig("proposed_action")
+          next false if proposal.blank? || candidate.metadata["action_status"].present?
 
-        normalize_action_payload("type" => proposal["type"], "params" => proposal["params"]) == executed
-      end
+          normalize_action_payload("type" => proposal["type"], "params" => proposal["params"]) == executed
+        end
       return if message.nil?
 
       metadata = message.metadata.merge("action_status" => "applied")

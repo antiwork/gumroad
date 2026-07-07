@@ -73,16 +73,27 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         sse.write(payload, event:)
       end
 
-      conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-      record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-      record_agent_assistant_message!(conversation, result)
+      # Persistence must not mask a reply the seller has already watched stream in. If recording
+      # the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but still send the
+      # terminal `done` event — dropping `done` would leave the client without a conversation id,
+      # so the next turn would silently start a brand-new conversation. The only cost of a
+      # persistence failure is that this turn isn't stored.
+      begin
+        conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+        record_agent_assistant_message!(conversation, result)
+      rescue => e
+        Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
+        ErrorNotifier.notify(e)
+      end
       sse.write(
         {
           reply: result[:reply],
           proposed_action: result[:proposed_action],
           objects: result[:objects] || [],
           suggestions: result[:suggestions] || [],
-          conversation_id: conversation.external_id,
+          # Omitted (nil) when creating the conversation itself failed above.
+          conversation_id: conversation&.external_id,
         },
         event: "done",
       )

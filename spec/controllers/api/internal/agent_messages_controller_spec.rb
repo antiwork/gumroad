@@ -251,6 +251,24 @@ describe Api::Internal::AgentMessagesController do
         expect(proposal_message.reload.metadata["action_status"]).to be_nil
       end
 
+      it "still reports success when recording the applied status fails after the action committed" do
+        # The store change has already committed by the time the bookkeeping write runs. Returning
+        # an error here would prompt the seller to retry the confirmation and run the action twice
+        # (a duplicate discount, refund, etc.), so persistence failures must not mask the success.
+        conversation = create(:ai_conversation, seller:)
+
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount code LAUNCH.")
+        allow(controller).to receive(:record_agent_action_applied!).and_raise(ActiveRecord::StatementInvalid)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+        post :execute, params: valid_params.merge(conversation_id: conversation.external_id), format: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true, "message" => "Created discount code LAUNCH.")
+      end
+
       it "404s without executing when the conversation belongs to another seller" do
         other_conversation = create(:ai_conversation)
 
