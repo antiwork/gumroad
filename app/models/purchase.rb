@@ -1880,6 +1880,9 @@ class Purchase < ApplicationRecord
   def mark_giftee_purchase_as_chargeback
     giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
     return if giftee_purchase.nil?
+    # Already marked (e.g. a replayed dispute webhook re-running its side effects) —
+    # rewriting the date would move the recorded chargeback time for no reason.
+    return if giftee_purchase.chargeback_date.present?
 
     giftee_purchase.chargeback_date = DateTime.current
     giftee_purchase.save!
@@ -1896,6 +1899,10 @@ class Purchase < ApplicationRecord
   def mark_product_purchases_as_chargedback!
     return unless is_bundle_purchase?
     product_purchases.each do |product_purchase|
+      # Skip children that are already charged back (e.g. a replayed dispute webhook
+      # re-running its side effects) so their original chargeback timestamp is preserved.
+      next if product_purchase.chargeback_date.present?
+
       product_purchase.update!(chargeback_date: DateTime.current)
     end
   end
