@@ -513,6 +513,11 @@ class LinksController < ApplicationController
       return render json: { success: false, error_message: "There was a temporary issue processing your product images. Please try again." }
     rescue => e
       ErrorNotifier.notify(e)
+      # TEMP (revert before merge): preview apps have no accessible error tracker or logs, so
+      # surface the real exception instead of the generic message while debugging on the branch.
+      if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
+        return render json: { success: false, error_message: "#{e.class}: #{e.message}" }
+      end
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end
 
