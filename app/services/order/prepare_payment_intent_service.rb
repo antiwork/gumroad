@@ -105,6 +105,10 @@ class Order::PreparePaymentIntentService
     end
 
     def apply_previewed_card_country(preview)
+      # Remember which payment method the buyer actually picked in the Payment Element:
+      # a method-forced local method (iDEAL/Bancontact) changes the currency the deferred
+      # intent must be created in (see method_forced_presentment_for).
+      @previewed_payment_method_type = preview[:type]
       country = previewed_country(preview)
       purchases_to_charge.each do |purchase|
         purchase.card_country = country
@@ -166,7 +170,8 @@ class Order::PreparePaymentIntentService
       return if fail_all_purchases_when_any_errored
 
       charge = build_charge
-      charge_intent = create_unconfirmed_intent(charge)
+      presentment = method_forced_presentment_for(charge)
+      charge_intent = create_unconfirmed_intent(charge, presentment)
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if charge_intent.nil?
 
       persist_intent_mapping(charge, charge_intent)
@@ -201,11 +206,41 @@ class Order::PreparePaymentIntentService
       charge
     end
 
-    def create_unconfirmed_intent(charge)
+    # When the buyer picked a method-forced local payment method (iDEAL/Bancontact —
+    # methods that can only charge in one currency), the deferred intent must be created
+    # in that currency, so the presentment snapshot is built here at prepare time rather
+    # than at charge time as on the card path. Returns nil (canonical USD intent, no
+    # presentment rows — byte-for-byte today's behavior) for every other method, for
+    # ineligible checkouts, and when the feature flags are off: the eligibility service
+    # inside Charge::MethodForcedPresentment enforces all of that, and the service also
+    # swallows its own failures into a nil fallback.
+    def method_forced_presentment_for(charge)
+      method_type = @previewed_payment_method_type
+      return nil if method_type.blank?
+      return nil if Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).blank?
+
+      Charge::MethodForcedPresentment.new(
+        charge:,
+        order:,
+        seller:,
+        merchant_account:,
+        purchases: purchases_to_charge,
+        amount_cents:,
+        gumroad_amount_cents:,
+        payment_method_type: method_type,
+        params:
+      ).perform
+    end
+
+    def create_unconfirmed_intent(charge, presentment = nil)
       StripeDeferredPaymentIntent.create(
         merchant_account:,
-        amount_cents:,
-        amount_for_gumroad_cents: gumroad_amount_cents,
+        # A method-forced presentment intent is created directly in the presentment
+        # currency for the presentment amounts (amount_for_gumroad_cents feeds Stripe's
+        # application-fee routing, so it must be in the intent's currency too);
+        # otherwise this is today's canonical USD intent.
+        amount_cents: presentment&.presentment_total_cents || amount_cents,
+        amount_for_gumroad_cents: presentment&.presentment_gumroad_amount_cents || gumroad_amount_cents,
         reference: "#{Charge::COMBINED_CHARGE_PREFIX}#{charge.external_id}",
         description: "Gumroad Charge #{charge.external_id}",
         statement_description: seller.name_or_username,
@@ -214,9 +249,12 @@ class Order::PreparePaymentIntentService
         # reuses, so retrying this exact create stays idempotent. A key built only from
         # charge.external_id (derived from a database id) collides in Stripe test mode, where
         # idempotency keys persist for 24h across CI runs that reset the database and reuse those ids.
-        idempotency_key: "deferred_intent_#{charge.external_id}_#{confirmation_token}",
-        payment_method_types: resolved_payment_method_types,
-        currency: Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+        # On the method-forced path the base key comes from the presentment (FX-quote id when a
+        # quote exists, charge external id + currency when the listed amount is charged directly)
+        # so the key also changes whenever the presentment context does.
+        idempotency_key: "#{presentment&.idempotency_key || "deferred_intent_#{charge.external_id}"}_#{confirmation_token}",
+        payment_method_types: intent_payment_method_types(presentment),
+        currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
@@ -227,6 +265,17 @@ class Order::PreparePaymentIntentService
     # payment_method_types must equal the Payment Element's or Stripe rejects the ConfirmationToken.
     def resolved_payment_method_types
       payment_method_resolution.payment_method_types
+    end
+
+    # The buyer confirmed with a method-forced local method, so the intent must list that
+    # method or Stripe rejects the (payment_method_types-scoped) ConfirmationToken. The
+    # resolver's launched set does not include iDEAL/Bancontact yet — a checkout only
+    # reaches this branch behind the eligibility service's test-mode flags — so append
+    # the confirmed method to the resolved set here rather than widening the resolver.
+    def intent_payment_method_types(presentment)
+      return resolved_payment_method_types if presentment.nil?
+
+      (resolved_payment_method_types + [@previewed_payment_method_type]).uniq
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied

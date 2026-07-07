@@ -30,6 +30,48 @@ class Charge::PresentmentOrchestrator
     @locked_quote = locked_quote
   end
 
+  # Shared presentment persistence, also used by the method-forced intent-prepare path
+  # (Charge::MethodForcedPresentment). Takes precomputed per-purchase allocations so
+  # callers control the component split: the card path splits proportionally via
+  # Charge::PresentmentAllocator, while the method-forced direct-listed-amount path
+  # supplies exact components (the tip the buyer picked in the product's own currency
+  # must not be re-derived by proportional rounding). Quote fields are nullable because
+  # a direct-listed-amount presentment has no FX quote by design.
+  def self.persist!(charge:, presentment_currency:, presentment_total_cents:, presentment_gumroad_amount_cents:,
+                    allocations:, stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+    ActiveRecord::Base.transaction do
+      allocations.each { _1.purchase.purchase_presentment&.destroy! }
+      charge.charge_presentment&.destroy!
+
+      charge_presentment = charge.create_charge_presentment!(
+        processor: StripeChargeProcessor.charge_processor_id,
+        presentment_currency:,
+        presentment_total_cents:,
+        presentment_gumroad_amount_cents:,
+        stripe_fx_quote_id:,
+        stripe_fx_quote_expires_at:,
+        fx_rate:
+      )
+
+      allocations.each do |allocation|
+        allocation.purchase.create_purchase_presentment!(
+          charge_presentment:,
+          processor: StripeChargeProcessor.charge_processor_id,
+          presentment_currency:,
+          presentment_price_cents: allocation.presentment_price_cents,
+          presentment_tip_cents: allocation.presentment_tip_cents,
+          presentment_seller_tax_cents: allocation.presentment_seller_tax_cents,
+          presentment_gumroad_tax_cents: allocation.presentment_gumroad_tax_cents,
+          presentment_shipping_cents: allocation.presentment_shipping_cents,
+          presentment_total_cents: allocation.presentment_total_cents,
+          presentment_gumroad_amount_cents: allocation.presentment_gumroad_amount_cents
+        )
+      end
+
+      charge_presentment
+    end
+  end
+
   def perform
     return unless eligibility_decision.eligible?
 
@@ -38,7 +80,17 @@ class Charge::PresentmentOrchestrator
     presentment_total_cents = locked_quote.presentment_total_cents
     presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate)
 
-    persist_presentment!(quote: locked_quote, presentment_total_cents:, presentment_gumroad_amount_cents:)
+    allocations = Charge::PresentmentAllocator.new(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:).allocations
+    self.class.persist!(
+      charge:,
+      presentment_currency: eligibility_decision.currency,
+      presentment_total_cents:,
+      presentment_gumroad_amount_cents:,
+      allocations:,
+      stripe_fx_quote_id: locked_quote.id,
+      stripe_fx_quote_expires_at: locked_quote.expires_at,
+      fx_rate: locked_quote.fx_rate
+    )
 
     Result.new(
       processor_amount_cents: presentment_total_cents,
@@ -58,39 +110,6 @@ class Charge::PresentmentOrchestrator
   end
 
   private
-    def persist_presentment!(quote:, presentment_total_cents:, presentment_gumroad_amount_cents:)
-      ActiveRecord::Base.transaction do
-        purchases.each { _1.purchase_presentment&.destroy! }
-        charge.charge_presentment&.destroy!
-
-        charge_presentment = charge.create_charge_presentment!(
-          processor: StripeChargeProcessor.charge_processor_id,
-          presentment_currency: eligibility_decision.currency,
-          presentment_total_cents:,
-          presentment_gumroad_amount_cents:,
-          stripe_fx_quote_id: quote.id,
-          stripe_fx_quote_expires_at: quote.expires_at,
-          fx_rate: quote.fx_rate
-        )
-
-        allocator = Charge::PresentmentAllocator.new(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:)
-        allocator.allocations.each do |allocation|
-          allocation.purchase.create_purchase_presentment!(
-            charge_presentment:,
-            processor: StripeChargeProcessor.charge_processor_id,
-            presentment_currency: eligibility_decision.currency,
-            presentment_price_cents: allocation.presentment_price_cents,
-            presentment_tip_cents: allocation.presentment_tip_cents,
-            presentment_seller_tax_cents: allocation.presentment_seller_tax_cents,
-            presentment_gumroad_tax_cents: allocation.presentment_gumroad_tax_cents,
-            presentment_shipping_cents: allocation.presentment_shipping_cents,
-            presentment_total_cents: allocation.presentment_total_cents,
-            presentment_gumroad_amount_cents: allocation.presentment_gumroad_amount_cents
-          )
-        end
-      end
-    end
-
     def presentment_cents_for(canonical_usd_cents, fx_rate)
       raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
 
