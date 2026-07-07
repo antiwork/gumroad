@@ -172,46 +172,19 @@ describe("getApplePayRecurringPaymentRequest", () => {
     ).toBeNull();
   });
 
-  describe("tax-inclusive amounts", () => {
-    // Each future payment charges tax on its own share, and Apple renders the declared amounts
-    // as what the buyer will pay, so the declaration must include the estimated tax.
-    it("applies the tax rate to membership renewal amounts", () => {
-      const request = getApplePayRecurringPaymentRequest([membership({ price: 1_000 })], MANAGEMENT_URL, 0.2);
-      expect(request?.regularBilling.amount).toBe(1_200);
-      expect(request?.billingAgreement).toContain("$12 a month");
-    });
-
-    it("applies the tax rate to installment amounts", () => {
-      // $10 over 2 installments at 20% tax: each future installment charges $5 + $1 tax = $6.
-      const request = getApplePayRecurringPaymentRequest(
-        [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
-        MANAGEMENT_URL,
-        0.2,
-      );
-      expect(request?.regularBilling.amount).toBe(600);
-      expect(request?.billingAgreement).toContain("2 monthly installments of $6");
-    });
-
-    it("applies the tax rate to the declared renewal price when one is set", () => {
-      const request = getApplePayRecurringPaymentRequest(
-        [membership({ price: 500, renewalPriceCents: 1_000 })],
-        MANAGEMENT_URL,
-        0.1,
-      );
-      expect(request?.regularBilling.amount).toBe(1_100);
-    });
-
-    it("leaves amounts unchanged without a tax rate", () => {
-      const request = getApplePayRecurringPaymentRequest([membership({ price: 1_000 })], MANAGEMENT_URL);
-      expect(request?.regularBilling.amount).toBe(1_000);
-    });
+  // Declared amounts are pre-tax, matching how the checkout table presents future installments
+  // and renewal prices; the server computes each future payment's tax when it is charged.
+  it("declares the pre-tax renewal amount", () => {
+    const request = getApplePayRecurringPaymentRequest([membership({ price: 1_000 })], MANAGEMENT_URL);
+    expect(request?.regularBilling.amount).toBe(1_000);
+    expect(request?.billingAgreement).toContain("$10 a month");
   });
 
   it("declares only the installment item in a mixed cart, without tips", () => {
-    // $10 one-time + $200 in 2 installments at 10% tax: the agreement describes only the
-    // installment item's future payments ($100 + tax). The one-time item and any tip are part of
-    // the sheet's one-time total (getChargeTodayPrice), never of the recurring declaration —
-    // tips are charged once with the first payment and never re-charged on future installments.
+    // $10 one-time + $200 in 2 installments: the agreement describes only the installment item's
+    // future payments ($100, pre-tax). The one-time item and any tip are part of the sheet's
+    // one-time total (getChargeTodayPrice), never of the recurring declaration — tips are charged
+    // once with the first payment and never re-charged on future installments.
     const request = getApplePayRecurringPaymentRequest(
       [
         product({ permalink: "one-time", price: 1_000 }),
@@ -223,10 +196,9 @@ describe("getApplePayRecurringPaymentRequest", () => {
         }),
       ],
       MANAGEMENT_URL,
-      0.1,
     );
-    expect(request?.regularBilling.amount).toBe(11_000);
-    expect(request?.billingAgreement).toContain("2 monthly installments of $110");
+    expect(request?.regularBilling.amount).toBe(10_000);
+    expect(request?.billingAgreement).toContain("2 monthly installments of $100");
   });
 
   describe("month-boundary end dates", () => {

@@ -4,7 +4,7 @@ import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   getChargeTodayPrice,
-  getEstimatedTaxRate,
+  getFutureInstallmentsTotal,
   getStripePaymentElementAmount,
   isCardReadyToPay,
   reduceCheckoutState,
@@ -681,8 +681,9 @@ describe("getChargeTodayPrice", () => {
     ).toBe(1_150);
   });
 
-  it("charges only the first installment (plus its tax share) for an installment cart", () => {
-    // $10 in 2 installments at 20% tax: today charges $5 + $1 tax = $6, not the $12 full value.
+  it("matches the checkout table's Payment today row for an installment cart", () => {
+    // $10 in 2 installments at 20% tax: the table presents the full tax with "Payment today"
+    // ($5 first installment + $2 tax = $7) and "Future installments" pre-tax ($5).
     expect(
       getChargeTodayPrice(
         state({
@@ -690,7 +691,7 @@ describe("getChargeTodayPrice", () => {
           surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }),
         }),
       ),
-    ).toBe(600);
+    ).toBe(700);
   });
 
   it("gives the first installment the rounding remainder", () => {
@@ -719,12 +720,11 @@ describe("getChargeTodayPrice", () => {
     ).toBe(1_000);
   });
 
-  it("handles a mixed cart with tips and taxes: full tip and pay-in-full item today, first installment only", () => {
-    // $10 one-time + $200 in 2 installments, $21 fixed tip, 10% tax.
-    // The tip distributes across items proportionally to price ($1 + $20) and is charged in full
-    // today. Today: ($10 + $1) + ($100 first installment + $20) = $131, plus proportional tax
-    // 2310 * (13100/23100) = 1310 -> $144.10 total. Future installments ($100 + tax) are declared
-    // separately by getApplePayRecurringPaymentRequest and are NOT part of today's total.
+  it("handles a mixed cart with tips and taxes like the checkout table does", () => {
+    // $10 one-time + $200 in 2 installments, $21 fixed tip, 10% tax. The surcharges quote's
+    // subtotal already includes the tip (loadSurcharges sends tipped prices). Today =
+    // total ($23,100 + $2,310 tax) minus the pre-tax future installment ($10,000): $154.10.
+    // Tips and taxes are entirely part of today's number, mirroring the table.
     expect(
       getChargeTodayPrice(
         state({
@@ -742,20 +742,41 @@ describe("getChargeTodayPrice", () => {
           surcharges: loadedSurcharges({ subtotal: 23_100, tax_cents: 2_310 }),
         }),
       ),
-    ).toBe(14_410);
+    ).toBe(15_410);
   });
 });
 
-describe("getEstimatedTaxRate", () => {
-  it("returns zero until surcharges load", () => {
-    expect(getEstimatedTaxRate(state({ surcharges: { type: "pending" } }))).toBe(0);
+describe("getFutureInstallmentsTotal", () => {
+  it("is zero for carts without installment items", () => {
+    expect(getFutureInstallmentsTotal(state({ products: [product({ price: 1_000 })] }))).toBe(0);
   });
 
-  it("returns the quote's effective tax rate", () => {
-    expect(getEstimatedTaxRate(state({ surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }) }))).toBe(0.2);
+  it("sums the pre-tax future payments of installment items", () => {
+    // $10 in 2 installments + $200 in 2 installments: $5 + $100 remain after today.
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [
+            product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } }),
+            product({
+              permalink: "b",
+              price: 20_000,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 2 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(10_500);
   });
 
-  it("returns zero for a zero subtotal", () => {
-    expect(getEstimatedTaxRate(state({ surcharges: loadedSurcharges({ subtotal: 0, tax_cents: 0 }) }))).toBe(0);
+  it("ignores items not paying in installments even when the product offers a plan", () => {
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [product({ price: 1_000, payInInstallments: false, installmentPlan: { numberOfInstallments: 2 } })],
+        }),
+      ),
+    ).toBe(0);
   });
 });

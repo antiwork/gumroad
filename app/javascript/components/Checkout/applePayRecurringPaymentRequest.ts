@@ -55,12 +55,6 @@ const addMonthsClamped = (date: Date, months: number): Date => {
 export const getApplePayRecurringPaymentRequest = (
   products: Product[],
   managementURL: string,
-  // The effective tax rate of the current checkout (e.g. from the loaded surcharges quote).
-  // Future payments each charge tax on their own share, and Apple renders the declared amounts
-  // as what the buyer will actually pay, so the declaration must state tax-inclusive amounts.
-  // The rate is an estimate locked to the buyer's current address; the server remains the
-  // source of truth for what each payment actually charges.
-  taxRate = 0,
 ): ApplePayRecurringPaymentRequest | null => {
   const recurringItems = products.filter(
     (item) => item.recurrence !== null || (item.payInInstallments && item.installmentPlan != null),
@@ -69,24 +63,19 @@ export const getApplePayRecurringPaymentRequest = (
   const item = recurringItems[0];
   if (!item) return null;
 
-  const withTax = (amount: number) => Math.round(amount * (1 + taxRate));
-
-  if (item.payInInstallments && item.installmentPlan != null)
-    return installmentPlanRequest(item, managementURL, withTax);
-  return membershipRequest(item, managementURL, withTax);
+  if (item.payInInstallments && item.installmentPlan != null) return installmentPlanRequest(item, managementURL);
+  return membershipRequest(item, managementURL);
 };
 
-const membershipRequest = (
-  item: Product,
-  managementURL: string,
-  withTax: (amount: number) => number,
-): ApplePayRecurringPaymentRequest | null => {
+const membershipRequest = (item: Product, managementURL: string): ApplePayRecurringPaymentRequest | null => {
   if (item.recurrence === null) return null;
 
   // The renewal amount can differ from today's charge (e.g. a discount limited to the first
   // billing cycle), so the caller computes it where discount details are available. Falling back
   // to the current price keeps the declaration usable when no separate renewal price is known.
-  const renewalAmount = withTax(item.renewalPriceCents ?? item.price);
+  // Amounts are pre-tax, matching how prices are presented everywhere else at checkout; each
+  // renewal's tax is computed by the server when it is charged.
+  const renewalAmount = item.renewalPriceCents ?? item.price;
   const months = numberOfMonthsInRecurrence(item.recurrence);
   const interval =
     months % 12 === 0
@@ -129,18 +118,15 @@ const membershipRequest = (
   };
 };
 
-const installmentPlanRequest = (
-  item: Product,
-  managementURL: string,
-  withTax: (amount: number) => number,
-): ApplePayRecurringPaymentRequest | null => {
+const installmentPlanRequest = (item: Product, managementURL: string): ApplePayRecurringPaymentRequest | null => {
   const numberOfInstallments = item.installmentPlan?.numberOfInstallments;
   if (numberOfInstallments == null || numberOfInstallments < 2) return null;
 
   // Installments charge monthly until the fixed count is reached. Later installments charge the
   // even base amount (the first installment absorbs the rounding remainder and has already been
   // paid by the time any recurring charge happens), and the end date bounds the agreement.
-  const baseInstallmentAmount = withTax(Math.floor(item.price / numberOfInstallments));
+  // Amounts are pre-tax, matching the checkout table's "Future installments" row.
+  const baseInstallmentAmount = Math.floor(item.price / numberOfInstallments);
   const endDate = addMonthsClamped(new Date(), numberOfInstallments - 1);
 
   return {

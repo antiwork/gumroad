@@ -396,44 +396,28 @@ export function getTotalPrice(state: State) {
     : null;
 }
 
-// What the buyer's card is charged TODAY, as opposed to the cart's full value (getTotalPrice).
-// The two differ when an item is paid in installments: the server charges only the first
-// installment now (Purchase#calculate_installment_payment_price_cents) and the rest monthly.
-// Wallet payment sheets (Apple Pay / Google Pay) authorize their displayed total as the charge,
-// so they must show today's charge, not the full cart value.
-//
-// The surcharges quote only returns cart-level totals, so today's item shares are recomputed
-// client-side by mirroring what loadSurcharges sent, and the quote's tax is scaled down
-// proportionally — tax is charged per payment on each payment's share.
-export function getChargeTodayPrice(state: State) {
-  if (state.surcharges.type !== "loaded") return null;
-  if (!state.products.some((item) => item.payInInstallments && item.installmentPlan != null))
-    return getTotalPrice(state);
-
-  const { subtotal, tax_cents, shipping_rate_cents } = state.surcharges.result;
-  const isGift = state.gift !== null;
-  const chargedToday = state.products.reduce((sum, item) => {
-    if (item.hasFreeTrial && !isGift) return sum;
-    // Tips are charged in full with the first payment (see Checkout/Show.tsx lineItems).
-    const tip = computeTipForPrice(state, item.price, item.permalink) ?? 0;
-    const itemPriceToday =
-      item.payInInstallments && item.installmentPlan != null
-        ? calculateFirstInstallmentPaymentPriceCents(item.price, item.installmentPlan.numberOfInstallments)
-        : item.price;
-    return sum + Math.round(itemPriceToday + tip);
+// The pre-tax sum of all future (not-charged-today) installment payments in the cart — the
+// checkout table's "Future installments" row. Tips are excluded because the full tip amount is
+// charged upfront with the first payment; taxes are excluded because the checkout table
+// presents the full tax amount as part of "Payment today".
+export function getFutureInstallmentsTotal(state: State) {
+  return state.products.reduce((sum, item) => {
+    if (!item.payInInstallments || item.installmentPlan == null) return sum;
+    return (
+      sum +
+      (item.price - calculateFirstInstallmentPaymentPriceCents(item.price, item.installmentPlan.numberOfInstallments))
+    );
   }, 0);
-  const taxToday = subtotal > 0 ? Math.round(tax_cents * (chargedToday / subtotal)) : 0;
-  return chargedToday + taxToday + shipping_rate_cents;
 }
 
-// The effective tax rate of the loaded surcharges quote, for stating tax-inclusive amounts for
-// future payments (installments, membership renewals) that each charge tax on their own share.
-// Zero for tax-inclusive prices (quote reports those under tax_included_cents, already part of
-// the subtotal) and while surcharges are still loading — callers refresh once loaded.
-export function getEstimatedTaxRate(state: State) {
-  if (state.surcharges.type !== "loaded") return 0;
-  const { subtotal, tax_cents } = state.surcharges.result;
-  return subtotal > 0 ? tax_cents / subtotal : 0;
+// What the buyer pays TODAY as the checkout table presents it ("Payment today"): the cart's full
+// value minus the future installment payments. Wallet payment sheets (Apple Pay / Google Pay)
+// display this as their total, so it must match the table the buyer just read — a single source
+// of numbers for both, derived from the same server surcharges quote the table renders.
+export function getChargeTodayPrice(state: State) {
+  const total = getTotalPrice(state);
+  if (total === null) return null;
+  return total - getFutureInstallmentsTotal(state);
 }
 
 export function getCustomFieldKey(

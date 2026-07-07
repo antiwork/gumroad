@@ -45,7 +45,6 @@ import {
   getErrors,
   getStripePaymentElementAmount,
   getChargeTodayPrice,
-  getEstimatedTaxRate,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -1131,9 +1130,9 @@ const useStripePaymentRequest = (disabled: boolean) => {
   const [paymentMethodEvent, setPaymentMethodEvent] = React.useState<PaymentRequestPaymentMethodEvent | null>(null);
   const [paymentMethods, setPaymentMethods] = React.useState<CanMakePaymentResult | null>(null);
 
-  // Wallet sheets authorize their displayed total as today's charge, so the total must be what
-  // the server will actually charge now — the first installment for pay-in-installments carts,
-  // not the full cart value.
+  // The wallet sheet's total mirrors the checkout table's "Payment today" row (the cart total
+  // minus future installment payments) so the sheet always shows the same number the buyer just
+  // read at checkout. The amount actually charged is decided server-side.
   const getTotalItem = () => ({ amount: getChargeTodayPrice(state) ?? 0, label: "Gumroad" });
   const stateRef = useRefToLatest(state);
 
@@ -1151,7 +1150,7 @@ const useStripePaymentRequest = (disabled: boolean) => {
   // kept declaring the installment plan).
   const getApplePayOption = () => {
     if (!state.checkoutPayment.request_apple_pay_merchant_tokens) return null;
-    return getApplePayRecurringPaymentRequest(state.products, Routes.library_url(), getEstimatedTaxRate(state));
+    return getApplePayRecurringPaymentRequest(state.products, Routes.library_url());
   };
 
   // Stripe's PaymentRequest#update can change an existing recurring declaration but not remove
