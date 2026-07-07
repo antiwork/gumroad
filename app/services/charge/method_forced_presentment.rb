@@ -115,11 +115,25 @@ class Charge::MethodForcedPresentment
       purchase = purchases.first
       currency = decision.currency
       rate = purchase.rate_converted_to_usd
+      # Without an explicit rate, usd_cents_to_currency silently falls back to the LIVE
+      # exchange rate, which would convert tax/shipping with a different rate than the
+      # one that produced those USD figures (the whole point of reusing the stored rate).
+      # Fail fast instead — the service-level rescue reports it and falls back to the
+      # canonical USD path.
+      raise "rate_converted_to_usd must be set for method-forced direct-listed-amount presentment (purchase #{purchase.id})" if rate.blank?
 
       tip_cents = purchase.tip&.value_cents.to_i
       seller_tax_cents = usd_cents_to_currency(currency, purchase.tax_cents.to_i, rate)
       gumroad_tax_cents = usd_cents_to_currency(currency, purchase.gumroad_tax_cents.to_i, rate)
       shipping_cents = usd_cents_to_currency(currency, purchase.shipping_cents.to_i, rate)
+
+      # displayed_price_cents already includes the tip (the buyer's chosen add-on is
+      # folded into the display total at purchase-creation time), which is why tip is
+      # subtracted below without ever having been added. If that invariant breaks (e.g.
+      # a future purchase type stores the tip separately), the subtraction would
+      # silently clamp price to 0 — raise early instead so the service-level rescue
+      # surfaces it and falls back to the canonical USD path.
+      raise "displayed_price_cents must include tip (purchase #{purchase.id}: tip #{tip_cents} > displayed #{purchase.displayed_price_cents})" if tip_cents > purchase.displayed_price_cents
 
       presentment_total_cents = purchase.displayed_price_cents +
                                 (purchase.was_tax_excluded_from_price ? seller_tax_cents : 0) +

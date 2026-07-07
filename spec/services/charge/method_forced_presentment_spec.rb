@@ -152,6 +152,26 @@ describe Charge::MethodForcedPresentment do
     it "returns a stable idempotency key derived from the charge and currency, without any quote" do
       expect(result.idempotency_key).to eq("buyer-currency-intent-#{charge.external_id}-#{Currency::EUR}")
     end
+
+    it "falls back to the canonical USD path when the purchase has no stored conversion rate" do
+      purchase.update!(rate_converted_to_usd: nil)
+
+      expect(ErrorNotifier).to receive(:notify)
+        .with(an_instance_of(RuntimeError).and(having_attributes(message: a_string_including("rate_converted_to_usd must be set"))),
+              context: hash_including(charge_id: charge.id))
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
+    end
+
+    it "falls back to the canonical USD path when the tip exceeds the displayed price (broken tip-inclusion invariant)" do
+      purchase.build_tip(value_cents: 20_00, value_usd_cents: 25_00).save!
+
+      expect(ErrorNotifier).to receive(:notify)
+        .with(an_instance_of(RuntimeError).and(having_attributes(message: a_string_including("displayed_price_cents must include tip"))),
+              context: hash_including(charge_id: charge.id))
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
+    end
   end
 
   describe ".idempotency_key_for" do
