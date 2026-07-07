@@ -72,7 +72,7 @@ module AgentConversationPersistence
       # Mirror the live UI: once applied, the created/edited object replaces the turn's lookup
       # objects as the thing worth showing.
       metadata["objects"] = [result[:object]] if result[:object].present?
-      message.update!(metadata:)
+      message.update_column(:metadata, metadata)
     end
 
     # Recursively string-keys hashes and stringifies scalar leaves so the executed request params
