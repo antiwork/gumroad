@@ -27,7 +27,11 @@ class ProfilePresenter
     # to /profile, so the public component no longer renders the owner/editing shape. The real viewer
     # is still passed through, so "you own this", "already following this wishlist", and currency
     # reflect them (including the seller viewing their own page).
-    shared_profile_props(seller_custom_domain_url:, request:, editing: false).merge(creator_profile:, seller_analytics:)
+    # include_default_products_section only applies to the public page: creators with products
+    # but no saved sections get a virtual products section instead of a bare email signup box.
+    # The profile editor (profile_settings_props below) never asks for it, so the editing
+    # experience is unchanged.
+    shared_profile_props(seller_custom_domain_url:, request:, editing: false, include_default_products_section: true).merge(creator_profile:, seller_analytics:)
   end
 
   def profile_settings_props(request:)
@@ -61,12 +65,22 @@ class ProfilePresenter
   end
 
   private
-    def shared_profile_props(seller_custom_domain_url:, request:, pundit_user: @pundit_user, editing: pundit_user.seller == seller)
+    def shared_profile_props(seller_custom_domain_url:, request:, pundit_user: @pundit_user, editing: pundit_user.seller == seller, include_default_products_section: false)
+      sections_props = profile_sections_presenter.props(request:, pundit_user:, seller_custom_domain_url:, editing:, include_default_products_section:)
+      tabs = (seller.seller_profile.json_data["tabs"] || [])
+               .map { |tab| { name: tab["name"], sections: tab["sections"].map { ObfuscateIds.encrypt(_1) } } }
+      # The frontend only renders sections that a tab points at, so when the presenter injected
+      # the virtual default products section (only possible when the creator has no saved
+      # sections), replace the tabs with a single tab that points at it. Any leftover saved tabs
+      # can't reference real sections here - there are none.
+      if include_default_products_section &&
+         sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+        tabs = [{ name: "Products", sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+      end
       {
-        **profile_sections_presenter.props(request:, pundit_user:, seller_custom_domain_url:, editing:),
+        **sections_props,
         bio: seller.bio,
-        tabs: (seller.seller_profile.json_data["tabs"] || [])
-                .map { |tab| { name: tab["name"], sections: tab["sections"].map { ObfuscateIds.encrypt(_1) } } },
+        tabs:,
       }
     end
 

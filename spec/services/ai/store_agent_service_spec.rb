@@ -387,6 +387,36 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "when a model turn is truncated by the max_tokens cap" do
+      # A truncated turn (stop_reason "max_tokens") is incomplete no matter what it contains: a
+      # cut-off text answer reads as a finished reply but isn't, and a cut-off tool call has
+      # unusable arguments. The service must return the honest fallback rather than the fragment.
+      def truncated_text_result(text)
+        Ai::AnthropicClient::Result.new(text:, tool_uses: [], stop_reason: "max_tokens")
+      end
+
+      it "does not return a truncated text turn as if it were a complete reply" do
+        allow(client).to receive(:messages).and_return(truncated_text_result("Sorry about that — let me"))
+
+        result = service.respond(messages: [{ role: "user", content: "rewrite my whole description" }])
+
+        expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+        expect(result[:reply]).not_to include("Sorry about that")
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "handles a truncated tool-call turn gracefully instead of raising" do
+        # The client drops a tool call whose JSON was cut off mid-stream, so the truncated turn
+        # arrives here with no usable tool_uses and stop_reason "max_tokens".
+        allow(client).to receive(:messages).and_return(truncated_text_result(""))
+
+        expect do
+          result = service.respond(messages: [{ role: "user", content: "update the description" }])
+          expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+        end.not_to raise_error
+      end
+    end
+
     context "when the model emits a non-hash tool input" do
       # Anthropic normally delivers tool input as a JSON object, but our client coerces a malformed
       # input to {}; the tool then falls through to its normal "endpoint is required" handling rather
@@ -499,6 +529,28 @@ describe Ai::StoreAgentService do
       expect(event_names).to include(:reset)
       expect(event_names.index(:reset)).to be < event_names.rindex(:token)
       expect(result[:reply]).to eq("You have 3 products.")
+    end
+
+    it "resets any streamed fragment and streams the honest fallback when a turn hits max_tokens" do
+      # The model streams part of a reply (or a tool call's preamble) and is then cut off by the
+      # token cap. What streamed is incomplete, so the UI must be told to discard it and the seller
+      # must get the honest fallback rather than half an answer presented as complete.
+      truncated = Ai::AnthropicClient::Result.new(text: "Here's the new descri", tool_uses: [], stop_reason: "max_tokens")
+      stub_stream_turns(stream: ["Here's the new descri"], result: truncated)
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "rewrite my whole description" }])
+
+      event_names = events.map(&:first)
+      expect(event_names).to include(:reset)
+      # The reset must come BEFORE the fallback token. If the order were flipped, the UI would
+      # render the fallback and then immediately wipe it, leaving the seller with nothing.
+      fallback_index = events.index { |event, payload| event == :token && payload[:text] == described_class::TRUNCATED_REPLY }
+      expect(fallback_index).not_to be_nil
+      expect(event_names.index(:reset)).to be < fallback_index
+      final_tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
+      expect(final_tokens.last).to eq(described_class::TRUNCATED_REPLY)
+      expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
     end
   end
 end
