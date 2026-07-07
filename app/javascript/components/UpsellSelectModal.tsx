@@ -159,6 +159,10 @@ export const UpsellSelectModal = ({
               selectProductOption(newValue);
             } else {
               selectProductOption(null);
+              // Clearing the selection also resets the option list to the full
+              // (unfiltered) catalog — otherwise the dropdown would keep showing
+              // only the results of the last search.
+              void fetchProducts("");
             }
           }}
           onInputChange={(inputValue, { action }) => {
