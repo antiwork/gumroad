@@ -33,7 +33,7 @@ class UserComplianceInfo < ApplicationRecord
 
   validate :birthday_is_over_minimum_age
   validate :kana_fields_format
-  validate :street_address_kana_must_contain_katakana
+  validate :kana_address_fields_must_contain_katakana
   validate :business_name_romaji_format
 
   after_create_commit :handle_stripe_compliance_info
@@ -57,12 +57,14 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :building_number_kana
   attr_json_data_accessor :street_address_kanji
   attr_json_data_accessor :street_address_kana
+  attr_json_data_accessor :city_kana
   attr_json_data_accessor :business_name_kanji
   attr_json_data_accessor :business_name_kana
   attr_json_data_accessor :business_building_number
   attr_json_data_accessor :business_building_number_kana
   attr_json_data_accessor :business_street_address_kanji
   attr_json_data_accessor :business_street_address_kana
+  attr_json_data_accessor :business_city_kana
   def is_individual?
     !is_business?
   end
@@ -203,8 +205,10 @@ class UserComplianceInfo < ApplicationRecord
       validate_kana_fields(
         { building_number_kana: "Building number (Kana)",
           street_address_kana: "Street address (Kana)",
+          city_kana: "City (Kana)",
           business_building_number_kana: "Business building number (Kana)",
-          business_street_address_kana: "Business street address (Kana)" },
+          business_street_address_kana: "Business street address (Kana)",
+          business_city_kana: "Business city (Kana)" },
         KANA_ADDRESS_REGEX,
         "katakana, latin characters, digits, spaces, dashes, and dots"
       )
@@ -219,11 +223,16 @@ class UserComplianceInfo < ApplicationRecord
       end
     end
 
-    def street_address_kana_must_contain_katakana
+    # Building numbers are often just digits and dashes (e.g. "1-1"), so only the town/street
+    # and city kana fields must actually contain katakana — matching the browser-side rules
+    # and the beneficial-owner server-side check.
+    def kana_address_fields_must_contain_katakana
       return if country_code != Compliance::Countries::JPN.alpha2
 
       { street_address_kana: "Street address (Kana)",
-        business_street_address_kana: "Business street address (Kana)" }.each do |field, label|
+        city_kana: "City (Kana)",
+        business_street_address_kana: "Business street address (Kana)",
+        business_city_kana: "Business city (Kana)" }.each do |field, label|
         value = send(field)
         next if value.blank?
         next if value.match?(HAS_KATAKANA)

@@ -359,7 +359,7 @@ describe UserComplianceInfo do
     end
   end
 
-  describe "street_address_kana_must_contain_katakana" do
+  describe "kana_address_fields_must_contain_katakana" do
     it "rejects Latin-only street_address_kana" do
       uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "Shibuya" })
       uci.valid?
@@ -398,6 +398,30 @@ describe UserComplianceInfo do
 
     it "accepts business_street_address_kana with mixed katakana and Latin" do
       uci = build(:user_compliance_info, country: "Japan", json_data: { business_street_address_kana: "チヨダ1-2" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "rejects Latin-only city_kana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { city_kana: "Chiyoda" })
+      uci.valid?
+      expect(uci.errors[:base]).to include("City (Kana) must include katakana characters")
+    end
+
+    it "accepts city_kana with katakana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { city_kana: "チヨダク" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "rejects Latin-only business_city_kana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { business_city_kana: "Shibuya" })
+      uci.valid?
+      expect(uci.errors[:base]).to include("Business city (Kana) must include katakana characters")
+    end
+
+    it "accepts business_city_kana with katakana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { business_city_kana: "シブヤク" })
       uci.valid?
       expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
     end

@@ -448,6 +448,85 @@ describe Payouts do
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
     end
+
+    it "selects the same users when the holding-balance ids are materialized in multiple batches" do
+      stub_const("Payouts::HOLDING_BALANCE_ID_BATCH_SIZE", 1)
+
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u1_2, u2_2], perform_async: true, bank_account_type: "AustralianBankAccount").and_call_original
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
+    end
+
+    it "loads the matched users in id-bounded batches so a large cohort cannot force a full-table scan" do
+      stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 1)
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+
+      loaded_batches = []
+      allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, users, **_options|
+        loaded_batches << users.to_a
+      end
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
+
+      # One batch per user at a batch size of 1: no single lookup ever exceeds the cap,
+      # and the union across batches is still the full Australian cohort.
+      expect(loaded_batches.size).to eq(2)
+      expect(loaded_batches.map(&:size)).to all(be <= 1)
+      expect(loaded_batches.flatten).to match_array([u1_2, u2_2])
+    end
+  end
+
+  describe ".holding_balance_user_ids" do
+    let!(:zero_balance_user) { create(:user, unpaid_balance_cents: 0) }
+    let!(:below_minimum_user) { create(:user, unpaid_balance_cents: 10_00) }
+    let!(:above_minimum_user) { create(:user, unpaid_balance_cents: 100_00) }
+    let!(:multiple_balances_user) do
+      user = create(:user)
+      create(:balance, user:, amount_cents: 60_00, date: Date.today - 3)
+      create(:balance, user:, amount_cents: -20_00, date: Date.today - 2)
+      user
+    end
+    let!(:negative_net_balance_user) do
+      user = create(:user)
+      create(:balance, user:, amount_cents: 10_00, date: Date.today - 3)
+      create(:balance, user:, amount_cents: -30_00, date: Date.today - 2)
+      user
+    end
+    let!(:paid_balance_user) do
+      user = create(:user)
+      create(:balance, user:, amount_cents: 500_00, date: Date.today - 3, state: "paid")
+      user
+    end
+    let!(:mixed_bank_type_user) do
+      user = create(:user, unpaid_balance_cents: 200_00)
+      create(:ach_account, user:)
+      create(:australian_bank_account, user:)
+      user
+    end
+
+    it "returns exactly the same user set as the single-statement User.holding_balance query" do
+      expect(described_class.holding_balance_user_ids.sort).to eq(User.holding_balance.ids.sort)
+      expect(described_class.holding_balance_user_ids).to match_array(
+        [below_minimum_user.id, above_minimum_user.id, multiple_balances_user.id, mixed_bank_type_user.id]
+      )
+    end
+
+    it "returns the same user set when materialized across multiple batches" do
+      stub_const("Payouts::HOLDING_BALANCE_ID_BATCH_SIZE", 1)
+
+      expect(described_class.holding_balance_user_ids.sort).to eq(User.holding_balance.ids.sort)
+    end
+
+    it "never splits a user's balance aggregation across batches" do
+      stub_const("Payouts::HOLDING_BALANCE_ID_BATCH_SIZE", 1)
+
+      # negative_net_balance_user has a positive row and a larger negative row; a
+      # per-row (rather than per-user) batching bug would surface them as holding
+      # a balance.
+      expect(described_class.holding_balance_user_ids).not_to include(negative_net_balance_user.id)
+      expect(described_class.holding_balance_user_ids).to include(multiple_balances_user.id)
+    end
   end
 
   describe "create_payments_for_balances_up_to_date_for_users" do

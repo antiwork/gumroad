@@ -3885,7 +3885,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Austria")
 
-      check_out(@product, country: "Mexico", zip_code: nil, credit_card: { number: "4000004840008001" })
+      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
+      # helper to complete it or the purchase never finishes.
+      check_out(@product, country: "Mexico", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Mexico")
@@ -3915,7 +3917,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       select("Mexico", from: "Country")
 
-      check_out(@product, zip_code: nil, credit_card: { number: "4000004840008001" })
+      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
+      # helper to complete it or the purchase never finishes.
+      check_out(@product, zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Mexico")
@@ -4051,7 +4055,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Mexico")
 
-      check_out(@product, country: "Austria", zip_code: nil, credit_card: { number: "4000004840008001" })
+      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
+      # helper to complete it or the purchase never finishes.
+      check_out(@product, country: "Austria", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Austria")

@@ -515,6 +515,128 @@ describe PaypalChargeProcessor, :vcr do
         expect(@purchase.refunds.count).to eq(1)
         expect(@purchase.refunds.last.amount_cents).to eq(253)
       end
+
+      context "when the capture is shared by multiple purchases (multi-item cart)" do
+        let(:refund_event_info) do
+          { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "0.99" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.02" }, "net_amount" => { "currency_code" => "USD", "value" => "0.97" }, "total_refunded_amount" => { "currency_code" => "USD", "value" => "10.00" } }, "amount" => { "currency_code" => "USD", "value" => "0.99" }, "update_time" => "2018-08-15T12:13:29-07:00", "create_time" => "2018-08-15T12:13:29-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" }, "links" => [], "event_version" => "1.0", "resource_version" => "2.0" }
+        end
+
+        it "does not refund and notifies when a failed sibling purchase shares the same PayPal order" do
+          # Regression test for a real incident: a partial refund issued for two failed
+          # (undelivered) items in a 3-item cart was recorded against the cart's one
+          # successful purchase, marking it fully refunded and revoking Library access.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                   stripe_transaction_id: nil,
+                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+            hash_including(capture_id: "0JF852973C016714D", resolved_purchase_id: @purchase.id)
+          )
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+          expect(@purchase.stripe_refunded?).to be(false)
+        end
+
+        it "does not refund and notifies when another purchase carries the same capture id" do
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
+          sibling = create(:purchase, link: @purchase.link,
+                                      charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+          sibling.update_column(:stripe_transaction_id, "0JF852973C016714D")
+
+          expect(ErrorNotifier).to receive(:notify)
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+        end
+
+        it "does not refund and notifies when a same-order sibling has a NULL price" do
+          # price_cents is a nullable column. A NULL price tells us nothing about whether
+          # money moved for that sibling, so the guard must treat the capture as ambiguous
+          # and fail toward manual review instead of auto-applying the refund.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          sibling = create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                             stripe_transaction_id: nil,
+                                             charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+          sibling.update_column(:price_cents, nil)
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+            hash_including(capture_id: "0JF852973C016714D", resolved_purchase_id: @purchase.id)
+          )
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+        end
+
+        it "still refunds when same-order siblings carry their own different capture ids (multi-seller cart)" do
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          create(:purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                            stripe_transaction_id: "9XA12345BB678901C",
+                            charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(1)
+        end
+
+        it "still refunds when the only same-order sibling is a free purchase" do
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          free_product = create(:product, price_cents: 0)
+          create(:free_purchase, link: free_product, paypal_order_id: "5O190127TN364715T")
+
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          described_class.handle_order_events(refund_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(1)
+        end
+
+        it "also blocks PAYMENT.CAPTURE.REVERSED and notifies when the capture is shared" do
+          # Reversals (chargebacks) route through the same handler as refunds, so a reversal
+          # on a shared capture is just as ambiguous and must also defer to human review.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                   stripe_transaction_id: nil,
+                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+
+          reversed_event_info = refund_event_info.merge("event_type" => "PAYMENT.CAPTURE.REVERSED")
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
+            hash_including(capture_id: "0JF852973C016714D", resolved_purchase_id: @purchase.id)
+          )
+
+          described_class.handle_order_events(reversed_event_info)
+
+          expect(@purchase.reload.refunds.count).to eq(0)
+          expect(@purchase.stripe_refunded?).to be(false)
+        end
+
+        it "still unwinds PAYMENT.CAPTURE.DENIED even when the capture is shared" do
+          # A denied capture means the WHOLE capture failed, so the shared-capture ambiguity
+          # guard must not block it — only item-level refund webhooks opt into the skip.
+          @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
+          create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
+                                   stripe_transaction_id: nil,
+                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+
+          denied_event_info = { "id" => "WH-4SW78779LY2325805-07E03580SX1414828", "create_time" => "2019-02-14T22:20:08.370Z", "resource_type" => "capture", "event_type" => "PAYMENT.CAPTURE.DENIED", "summary" => "A capture payment was denied", "resource" => { "amount" => { "currency_code" => "USD", "value" => "0.99" }, "final_capture" => true, "links" => [{ "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "self", "method" => "GET" }], "id" => "0JF852973C016714D", "status" => "DECLINED" }, "links" => [], "event_version" => "1.0", "resource_version" => "2.0" }
+
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          described_class.handle_order_events(denied_event_info)
+
+          verify_purchase_refunded
+        end
+      end
     end
   end
 

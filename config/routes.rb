@@ -324,6 +324,7 @@ Rails.application.routes.draw do
           end
         end
         get "/agent/meta", to: "agent#meta"
+        get "/agent/conversations/latest", to: "agent#latest_conversation"
         post "/agent/messages", to: "agent#create"
         post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
@@ -1132,6 +1133,7 @@ Rails.application.routes.draw do
         post "/agent/messages", to: "agent_messages#create", as: :agent_messages
         post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
+        get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
       end
     end
 

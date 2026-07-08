@@ -100,6 +100,7 @@ describe "Profile page analytics", type: :request do
         "seller_id" => seller.external_id,
         "username" => "analyticsseller",
         "third_party_analytics_domain" => THIRD_PARTY_ANALYTICS_DOMAIN,
+        "tracking_enabled" => true,
         "has_universal_third_party_analytics" => false,
       )
       expect(props["analytics"]).to include("google_analytics_id" => "G-ABC123")

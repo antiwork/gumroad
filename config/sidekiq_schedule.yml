@@ -353,6 +353,10 @@ deferred_refunds_report:
   cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
   class: SendDeferredRefundsReportWorker
   description: Email with defferred refunds numbers for the previous month
+daily_finance_ledger_report:
+  cron: "0 1 * * *" # UTC 01:00 daily — the reported (previous) UTC day is final at midnight
+  class: SendDailyFinanceLedgerReportJob
+  description: Daily event-ledger finance report (funds received, refunds, disputes) for the previous UTC day
 stripe_currency_balances_report:
   cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
   class: SendStripeCurrencyBalancesReportJob

@@ -272,7 +272,7 @@ module Product::Prices
 
       price_cents = read_attribute(:price_cents)
       if price_cents.blank?
-        errors.add(:base, "New products should be created with a price_cents")
+        errors.add(:base, "New products should be created with a price")
         raise Link::LinkInvalid
       end
 

@@ -4784,6 +4784,30 @@ describe LinksController, :vcr, inertia: true do
           expect(response.parsed_body).to eq({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] })
         end
 
+        it "returns all the creator's live profile products for the virtual default products section" do
+          @recommended_by = nil
+          @on_profile = true
+          # The default products section only exists for creators with no saved sections, so
+          # remove the one this describe block sets up.
+          @section.destroy!
+          another_product = create(:product, name: "Another product", user: @creator)
+          Link.import(force: true, refresh: true)
+
+          get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+          expect(response).to be_successful
+          expect(response.parsed_body["total"]).to eq(2)
+          expect(response.parsed_body["products"]).to match_array([product_json(@product, "profile"), product_json(another_product, "profile")])
+        end
+
+        it "returns an empty response for the default products section id when the creator has saved sections" do
+          # A creator with real sections controls exactly which products show on their profile;
+          # the virtual section id must not offer a way around that.
+          get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+          expect(response.parsed_body).to eq({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] })
+        end
+
 
         it "searches only for recommendable products" do
           bad_text = "Previously-owned weasel"

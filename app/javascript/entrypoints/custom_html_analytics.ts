@@ -1,6 +1,8 @@
 import typia from "typia";
 
+import { incrementProductViews } from "$app/data/view_event";
 import { AnalyticsData } from "$app/parsers/product";
+import { defaults as requestDefaults } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent, trackProfilePageView } from "$app/utils/user_analytics";
 
 import { addProfileThirdPartyAnalytics, addThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
@@ -8,6 +10,7 @@ import { addProfileThirdPartyAnalytics, addThirdPartyAnalytics } from "$app/comp
 type SharedProps = {
   seller_id: string;
   analytics: AnalyticsData;
+  tracking_enabled: boolean;
   third_party_analytics_domain: string;
 };
 
@@ -50,11 +53,19 @@ type ProfileProps = SharedProps & {
 const configElement = document.querySelector('meta[name="gr:custom-html-analytics"]');
 if (configElement) {
   const props = typia.assert<ProductProps | ProfileProps>(JSON.parse(configElement.getAttribute("content") ?? ""));
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");
+  if (csrfToken) requestDefaults.headers = { ...requestDefaults.headers, "X-CSRF-Token": csrfToken };
 
-  startTrackingForSeller(props.seller_id, props.analytics);
+  if (props.tracking_enabled) startTrackingForSeller(props.seller_id, props.analytics);
 
   if ("permalink" in props) {
-    trackProductEvent(props.seller_id, { permalink: props.permalink, action: "viewed", product_name: props.name });
+    void incrementProductViews({
+      permalink: props.permalink,
+      recommendedBy: new URLSearchParams(window.location.search).get("recommended_by"),
+    });
+
+    if (props.tracking_enabled)
+      trackProductEvent(props.seller_id, { permalink: props.permalink, action: "viewed", product_name: props.name });
     if (props.has_product_third_party_analytics)
       addThirdPartyAnalytics({
         domain: props.third_party_analytics_domain,
@@ -75,10 +86,11 @@ if (configElement) {
       const isCheckout =
         data === "gumroad:checkout" || (typia.is<{ type: string }>(data) && data.type === "gumroad:checkout");
       if (!isCheckout) return;
+      if (!props.tracking_enabled) return;
       trackProductEvent(props.seller_id, { permalink: props.permalink, action: "iwantthis", product_name: props.name });
     });
   } else {
-    trackProfilePageView(props.seller_id);
+    if (props.tracking_enabled) trackProfilePageView(props.seller_id);
     if (props.has_universal_third_party_analytics && props.username != null)
       addProfileThirdPartyAnalytics({ domain: props.third_party_analytics_domain, username: props.username });
   }

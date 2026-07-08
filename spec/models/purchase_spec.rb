@@ -3149,6 +3149,16 @@ describe Purchase, :vcr do
       expect(purchase.product_purchases.first.chargeback_date).to_not be_nil
       expect(purchase.product_purchases.second.chargeback_date).to_not be_nil
     end
+
+    it "keeps the original chargeback_date of an already-chargedback bundle purchase" do
+      original_chargeback_date = 3.days.ago
+      purchase.product_purchases.first.update!(chargeback_date: original_chargeback_date)
+
+      purchase.mark_product_purchases_as_chargedback!
+
+      expect(purchase.product_purchases.first.reload.chargeback_date).to be_within(1.second).of(original_chargeback_date)
+      expect(purchase.product_purchases.second.reload.chargeback_date).to_not be_nil
+    end
   end
 
   describe "#mark_product_purchases_as_chargeback_reversed!" do

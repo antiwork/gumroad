@@ -7,6 +7,10 @@ module StripeBeneficialOwnersManager
   class NotEligibleError < GumroadRuntimeError; end
   class RepresentativeNotEditableError < GumroadRuntimeError; end
   class MissingRequiredFieldError < GumroadRuntimeError; end
+  # Raised when a submitted field is present but malformed (e.g. non-katakana text in a kana
+  # field). Subclasses MissingRequiredFieldError so existing rescue blocks keep returning
+  # these as 422 validation errors without every caller needing a new rescue clause.
+  class InvalidFieldError < MissingRequiredFieldError; end
 
   REQUIRED_FIELDS_FOR_BENEFICIAL_OWNER = {
     first_name: "First name",
@@ -61,6 +65,7 @@ module StripeBeneficialOwnersManager
   def self.create(user, params)
     stripe_account = ensure_eligible!(user)
     validate_required_fields!(params, action: :create, user: user)
+    validate_jp_kana_address_format!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -74,6 +79,7 @@ module StripeBeneficialOwnersManager
       person_params = build_representative_update_params(params)
     else
       validate_required_fields!(params, action: :update, user: user)
+      validate_jp_kana_address_format!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -159,6 +165,50 @@ module StripeBeneficialOwnersManager
     fields
   end
   private_class_method :required_address_fields_for
+
+  # Server-side counterpart of the kana-format checks the beneficial-owner form runs in the
+  # browser. Without this, a direct API request could put non-katakana text in a kana field
+  # and we would forward it to Stripe as address_kana/first_name_kana, which Stripe rejects
+  # for Japanese accounts. Reuses the same regexes UserComplianceInfo applies to the
+  # seller's own kana fields.
+  def self.validate_jp_kana_address_format!(params, user)
+    validate_kana_param!(params[:first_name_kana], "First name (Kana)", UserComplianceInfo::KANA_NAME_REGEX, "katakana characters, spaces, dashes, and dots")
+    validate_kana_param!(params[:last_name_kana], "Last name (Kana)", UserComplianceInfo::KANA_NAME_REGEX, "katakana characters, spaces, dashes, and dots")
+
+    address = params[:address]
+    return unless address.is_a?(Hash) || address.is_a?(ActionController::Parameters)
+    # build_person_params falls back to the seller's own country when the submitted address
+    # leaves country blank, so the validator must use that same effective country. Otherwise a
+    # request with a blank country would skip these checks and still be sent to Stripe as a
+    # Japanese kana address.
+    address_country = address[:country].to_s.strip.presence || user.alive_user_compliance_info&.legal_entity_country_code
+    return unless address_country == Compliance::Countries::JPN.alpha2
+
+    { building_number_kana: "Block / Building number (Kana)",
+      street_address_kana: "Town/Cho-me (Kana)",
+      city_kana: "City/Ward (Kana)" }.each do |key, label|
+      validate_kana_param!(address[key], label, UserComplianceInfo::KANA_ADDRESS_REGEX, "katakana, latin characters, digits, spaces, dashes, and dots")
+    end
+
+    # The building number is often just digits and dashes (e.g. "1-1"), so only the town and
+    # city fields must actually contain katakana — matching the browser-side rules.
+    { street_address_kana: "Town/Cho-me (Kana)",
+      city_kana: "City/Ward (Kana)" }.each do |key, label|
+      value = address[key].to_s
+      next if value.blank?
+      next if value.match?(UserComplianceInfo::HAS_KATAKANA)
+      raise InvalidFieldError, "#{label} must include katakana characters."
+    end
+  end
+  private_class_method :validate_jp_kana_address_format!
+
+  def self.validate_kana_param!(value, label, regex, allowed_description)
+    value = value.to_s
+    return if value.blank?
+    return if value.match?(regex)
+    raise InvalidFieldError, "#{label} may only contain #{allowed_description}."
+  end
+  private_class_method :validate_kana_param!
 
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]
@@ -271,6 +321,7 @@ module StripeBeneficialOwnersManager
         address_kanji = {
           line1: params[:address][:building_number].presence,
           town: params[:address][:street_address_kanji].presence,
+          city: params[:address][:city].presence,
           state: params[:address][:state].presence,
           country: "JP",
           postal_code: params[:address][:postal_code].presence,
@@ -281,6 +332,7 @@ module StripeBeneficialOwnersManager
         address_kana = {
           line1: params[:address][:building_number_kana].presence,
           town: params[:address][:street_address_kana].presence,
+          city: params[:address][:city_kana].presence,
           state: kana_state,
           country: "JP",
           postal_code: params[:address][:postal_code].presence,

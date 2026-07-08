@@ -38,6 +38,7 @@ type BeneficialOwner = {
   address_kanji?: {
     line1?: string | null;
     town?: string | null;
+    city?: string | null;
     state?: string | null;
     postal_code?: string | null;
     country?: string | null;
@@ -45,6 +46,7 @@ type BeneficialOwner = {
   address_kana?: {
     line1?: string | null;
     town?: string | null;
+    city?: string | null;
     state?: string | null;
     postal_code?: string | null;
     country?: string | null;
@@ -91,6 +93,7 @@ type FormState = {
   address_building_number_kana: string;
   address_street_address_kanji: string;
   address_street_address_kana: string;
+  address_city_kana: string;
   id_number: string;
   nationality: string;
   title: string;
@@ -304,6 +307,7 @@ const blankFormState = (defaultCountry: string | null): FormState => ({
   address_building_number_kana: "",
   address_street_address_kanji: "",
   address_street_address_kana: "",
+  address_city_kana: "",
   id_number: "",
   nationality: "",
   title: DEFAULT_TITLE,
@@ -322,7 +326,7 @@ const ownerToFormState = (owner: BeneficialOwner, defaultCountry: string | null)
   dob_month: owner.dob?.month != null ? String(owner.dob.month) : "",
   dob_year: owner.dob?.year != null ? String(owner.dob.year) : "",
   address_line1: owner.address.line1 ?? "",
-  address_city: owner.address.city ?? "",
+  address_city: owner.address.city ?? owner.address_kanji?.city ?? "",
   address_state: owner.address.state ?? owner.address_kanji?.state ?? "",
   address_postal_code: owner.address.postal_code ?? owner.address_kanji?.postal_code ?? "",
   address_country: owner.address.country ?? owner.address_kanji?.country ?? defaultCountry ?? "",
@@ -334,6 +338,7 @@ const ownerToFormState = (owner: BeneficialOwner, defaultCountry: string | null)
   address_building_number_kana: owner.address_kana?.line1 ?? "",
   address_street_address_kanji: owner.address_kanji?.town ?? "",
   address_street_address_kana: owner.address_kana?.town ?? "",
+  address_city_kana: owner.address_kana?.city ?? "",
   id_number: "",
   nationality: owner.nationality ?? "",
   title: owner.relationship.title ?? DEFAULT_TITLE,
@@ -371,6 +376,7 @@ const formStatePayload = (state: FormState) => ({
       building_number_kana: state.address_building_number_kana,
       street_address_kanji: state.address_street_address_kanji,
       street_address_kana: state.address_street_address_kana,
+      city_kana: state.address_city_kana,
     },
   },
 });
@@ -496,6 +502,12 @@ const BeneficialOwnersSection = ({
       }
       if (!HAS_KATAKANA.test(formState.address_street_address_kana)) {
         return "Town/Cho-me (Kana) must include katakana characters.";
+      }
+      if (!KANA_ADDRESS_REGEX.test(formState.address_city_kana)) {
+        return "City/Ward (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+      }
+      if (!HAS_KATAKANA.test(formState.address_city_kana)) {
+        return "City/Ward (Kana) must include katakana characters.";
       }
     }
     return null;
@@ -911,6 +923,36 @@ const BeneficialOwnersSection = ({
                           disabled={isFormDisabled}
                           value={formState.address_street_address_kana}
                           onChange={(event) => updateForm({ address_street_address_kana: event.target.value })}
+                        />
+                      </Fieldset>
+                    </div>
+                    <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-address-city-kanji`}>City/Ward (Kanji)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-address-city-kanji`}
+                          type="text"
+                          required
+                          placeholder="千代田区"
+                          disabled={isFormDisabled}
+                          value={formState.address_city}
+                          onChange={(event) => updateForm({ address_city: event.target.value })}
+                        />
+                      </Fieldset>
+                      <Fieldset>
+                        <FieldsetTitle>
+                          <Label htmlFor={`${uid}-address-city-kana`}>City/Ward (Kana)</Label>
+                        </FieldsetTitle>
+                        <Input
+                          id={`${uid}-address-city-kana`}
+                          type="text"
+                          required
+                          placeholder="チヨダク"
+                          disabled={isFormDisabled}
+                          value={formState.address_city_kana}
+                          onChange={(event) => updateForm({ address_city_kana: event.target.value })}
                         />
                       </Fieldset>
                     </div>
