@@ -119,6 +119,23 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/missing path parameter/i)
       end
+
+      it "rejects a body key the endpoint does not declare before dispatching (no product is created)" do
+        # A stale/tampered proposal carrying `price_cents` (an internal column name) instead of the
+        # declared `price` must be refused up front: the v2 API would ignore the unknown key and
+        # create the product without its price. The error names the allowed keys so the mistake is
+        # correctable rather than a dead end.
+        expect do
+          result = executor.execute(
+            type: "api_write",
+            params: api_write(endpoint: "create_product", params: { "name" => "X", "price_cents" => 9900 }),
+          )
+
+          expect(result[:success]).to be(false)
+          expect(result[:message]).to include("price_cents")
+          expect(result[:message]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
+        end.not_to change { seller.links.count }
+      end
     end
 
     context "role-scoped access (acting user is a non-owner team member)" do

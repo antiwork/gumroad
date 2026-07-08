@@ -131,6 +131,8 @@ class User < ApplicationRecord
   has_one :totp_credential, dependent: :destroy
   has_many :webauthn_credentials, dependent: :destroy
   has_many :utm_links, dependent: :destroy, foreign_key: :seller_id
+  # Persisted store Agent chats (the conversational assistant on the Agent tab).
+  has_many :ai_conversations, dependent: :destroy, foreign_key: :seller_id
   has_many :seller_communities, class_name: "Community", foreign_key: :seller_id, dependent: :destroy
   has_many :community_chat_messages, dependent: :destroy
   has_many :last_read_community_chat_messages, dependent: :destroy

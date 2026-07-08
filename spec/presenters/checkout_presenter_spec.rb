@@ -23,6 +23,7 @@ describe CheckoutPresenter do
         integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
         fallback_reason: "empty_cart",
         disable_wallets: false,
+        request_apple_pay_merchant_tokens: false,
         elements_options: nil,
       }
     end
@@ -257,6 +258,7 @@ describe CheckoutPresenter do
           integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
           fallback_reason: "stripe_payment_element_flag_disabled",
           disable_wallets: false,
+          request_apple_pay_merchant_tokens: false,
           elements_options: nil,
         },
       )
@@ -778,6 +780,7 @@ describe CheckoutPresenter do
                                  },
                                  end_time_of_subscription: @subscription.end_time_of_subscription.iso8601,
                                  successful_purchases_count: 1,
+                                 remaining_charges_count: nil,
                                  is_in_free_trial: false,
                                  is_test: false,
                                  is_overdue_for_charge: false,
@@ -792,7 +795,27 @@ describe CheckoutPresenter do
                                used_card: { expiration_date: "12/24", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
                                recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
+                               request_apple_pay_merchant_tokens: false,
                              })
+      end
+
+      it "reports the charges still owed for a fixed-length subscription",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        @subscription.update!(charge_occurrence_count: 3)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        # One successful charge (the original purchase) out of three has been collected.
+        expect(result[:subscription][:remaining_charges_count]).to eq(2)
+      end
+
+      it "requests Apple Pay merchant tokens when the seller is in the rollout",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        Feature.activate_user(Checkout::StripePaymentPresenter::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, @subscription.seller)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        expect(result[:request_apple_pay_merchant_tokens]).to eq(true)
       end
 
       it "does not return a deleted original offer code discount",

@@ -220,6 +220,12 @@ class CheckoutPresenter
         country: Compliance::Countries.find_by_name(subscription.original_purchase.country || subscription.original_purchase.ip_country)&.alpha2 || "",
       },
       used_card: CheckoutPresenter.saved_card(subscription.credit_card_to_charge),
+      # When the seller is in the Apple Pay merchant-token rollout (antiwork/gumroad#5727), a
+      # payment-method update via Apple Pay declares the subscription's recurring agreement so
+      # Apple issues a durable merchant token. This page is where buyers land after a renewal
+      # decline — often caused by a device-bound token dying with the old device — so making the
+      # replacement token device-independent matters most here.
+      request_apple_pay_merchant_tokens: Feature.active?(Checkout::StripePaymentPresenter::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, subscription.seller),
       subscription: {
         id: subscription.external_id,
         option_id: (subscription.original_purchase.variant_attributes[0] || product.default_tier)&.external_id,
@@ -232,6 +238,12 @@ class CheckoutPresenter
         discount:,
         end_time_of_subscription: subscription.end_time_of_subscription.iso8601,
         successful_purchases_count: subscription.purchases.successful.count,
+        # Charges still owed for fixed-length subscriptions (installment plans, fixed-duration
+        # memberships); null when the subscription renews until cancelled. Bounds the recurring
+        # agreement declared on the Apple Pay sheet — and 0 (a fixed-length subscription with
+        # every charge already collected) tells the client to declare no agreement at all, which
+        # a bare count couldn't distinguish from "renews forever".
+        remaining_charges_count: subscription.has_fixed_length? ? subscription.remaining_charges_count : nil,
         is_in_free_trial: subscription.in_free_trial?,
         is_test: subscription.is_test_subscription,
         is_overdue_for_charge: subscription.overdue_for_charge?,

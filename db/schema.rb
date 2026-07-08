@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_04_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_05_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -184,6 +184,26 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_04_000000) do
     t.index ["link_id"], name: "index_affiliates_links_on_link_id"
   end
 
+  create_table "ai_conversations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.string "title"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["seller_id", "deleted_at", "updated_at", "id"], name: "index_ai_conversations_latest_per_seller"
+    t.index ["seller_id"], name: "index_ai_conversations_on_seller_id"
+  end
+
+  create_table "ai_messages", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "ai_conversation_id", null: false
+    t.string "role", null: false
+    t.text "content", size: :medium, null: false
+    t.json "metadata"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_conversation_id"], name: "index_ai_messages_on_ai_conversation_id"
+  end
+
   create_table "asset_previews", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "link_id"
     t.string "guid"
@@ -295,6 +315,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_04_000000) do
     t.string "holding_currency", default: "usd"
     t.integer "holding_amount_cents", default: 0
     t.index ["state", "merchant_account_id", "date", "user_id"], name: "index_balances_on_state_merchant_account_date_for_payouts"
+    t.index ["state", "user_id", "amount_cents"], name: "index_balances_on_state_user_id_amount_cents"
     t.index ["user_id", "merchant_account_id", "date"], name: "index_on_user_merchant_account_date"
   end
 
@@ -2057,6 +2078,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_04_000000) do
     t.integer "fee_cents"
     t.bigint "flags", default: 0, null: false
     t.bigint "seller_id"
+    t.index ["created_at"], name: "index_refunds_on_created_at"
     t.index ["link_id"], name: "index_refunds_on_link_id"
     t.index ["processor_refund_id"], name: "index_refunds_on_processor_refund_id"
     t.index ["purchase_id"], name: "index_refunds_on_purchase_id"

@@ -14,7 +14,7 @@ import {
   formatUSDCentsWithExpandedCurrencySymbol,
   getMinPriceCents,
 } from "$app/utils/currency";
-import { recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
+import { recurrenceLabels, numberOfMonthsInRecurrence, RecurrenceId } from "$app/utils/recurringPricing";
 
 import { Button } from "$app/components/Button";
 import { Creator } from "$app/components/Checkout/cartState";
@@ -72,6 +72,7 @@ type Props = {
     discount: Discount | null;
     end_time_of_subscription: string;
     successful_purchases_count: number;
+    remaining_charges_count: number | null;
     is_in_free_trial: boolean;
     is_test: boolean;
     is_overdue_for_charge: boolean;
@@ -93,6 +94,7 @@ type Props = {
   used_card: SavedCreditCard | null;
   recaptcha_key: string | null;
   paypal_client_id: string;
+  request_apple_pay_merchant_tokens: boolean;
 };
 
 export default function SubscriptionsManage() {
@@ -106,6 +108,7 @@ export default function SubscriptionsManage() {
     us_states,
     ca_provinces,
     used_card,
+    request_apple_pay_merchant_tokens,
   } = typia.assert<Props>(usePage().props);
 
   const url = new URL(useOriginalLocation());
@@ -191,13 +194,45 @@ export default function SubscriptionsManage() {
       ? 0
       : Math.max(price - subscription.prorated_discount_price_cents, 0);
   if (amountDueToday > 0) amountDueToday = Math.max(amountDueToday, getMinPriceCents(product.currency_code));
+  // Facts about the FUTURE payments of this subscription, declared as a recurring agreement on
+  // the Apple Pay sheet (when the seller is in the merchant-token rollout) so Apple issues a
+  // device-independent merchant token. `price` here is the currently selected plan's per-period
+  // price — for installment plans, the server already reports the next payment's amount — which
+  // is what future payments will charge, independent of amountDueToday (usually $0 for a plain
+  // payment-method update).
+  //
+  // Lapsed subscriptions are deliberately INCLUDED: the pay button there is "Restart", which
+  // resumes recurring billing — and a buyer restarting after renewal declines is the very case
+  // where the old device-bound token died and a durable replacement matters most.
+  //
+  // `remainingCharges` bounds the agreement for fixed-length subscriptions: an installment plan
+  // 1 payment into 3 has 2 payments left, and a fixed-duration membership similarly only bills
+  // its remaining cycles. null means the subscription renews until cancelled; 0 (a fixed-length
+  // subscription with every charge already collected) means nothing bills again, so no
+  // agreement is declared.
+  const remainingCharges = subscription.remaining_charges_count;
+  const declareRecurring = remainingCharges === null || remainingCharges > 0;
+  const renewalPriceCents = declareRecurring ? Math.round(price / product.exchange_rate) : null;
+  const recurrence = selection.recurrence ?? subscription.recurrence;
   const paymentProduct: PaymentProduct = {
     permalink: product.permalink,
     name: product.name,
     creator: product.creator,
     quantity: 1,
     price: Math.round(amountDueToday / product.exchange_rate),
+    renewalPriceCents,
     payInInstallments: subscription.is_installment_plan,
+    installmentPlan:
+      subscription.is_installment_plan && product.installment_plan && remainingCharges !== null && remainingCharges > 0
+        ? {
+            numberOfInstallments: product.installment_plan.number_of_installments,
+            remainingInstallments: remainingCharges,
+          }
+        : null,
+    durationInMonths:
+      !subscription.is_installment_plan && remainingCharges !== null && remainingCharges > 0
+        ? remainingCharges * numberOfMonthsInRecurrence(recurrence)
+        : null,
     requireShipping: product.require_shipping,
     customFields: [], // Custom fields were already collected during original purchase
     bundleProductCustomFields: [],
@@ -211,7 +246,7 @@ export default function SubscriptionsManage() {
     hasFreeTrial: false,
     isPreorder: false,
     nativeType: product.native_type,
-    recurrence: selection.recurrence,
+    recurrence: declareRecurring && !subscription.is_installment_plan ? recurrence : null,
     canGift: false,
   };
   const payLabel = restartable ? `Restart ${subscriptionEntity}` : `Update ${subscriptionEntity}`;
@@ -234,11 +269,23 @@ export default function SubscriptionsManage() {
     paypalClientId: paypal_client_id,
     gift: null,
     requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
+    // This page uses the CardElement integration (the createReducer default); only the Apple Pay
+    // merchant-token rollout flag is threaded through, so a payment-method update via Apple Pay
+    // declares the subscription's recurring agreement (see paymentProduct above).
+    checkoutPayment: {
+      integration: "card_element",
+      fallback_reason: "not_checkout",
+      disable_wallets: false,
+      request_apple_pay_merchant_tokens,
+      elements_options: null,
+    },
   });
   const [state, dispatchAction] = reducer;
   React.useEffect(
     () => dispatchAction({ type: "update-products", products: [paymentProduct] }),
-    [amountDueToday, requirePayment],
+    // renewalPriceCents and recurrence feed the Apple Pay recurring declaration and can change
+    // without changing amountDueToday (e.g. switching plans while today's charge stays $0).
+    [amountDueToday, requirePayment, renewalPriceCents, recurrence],
   );
   React.useEffect(() => dispatchAction({ type: "set-value", warning }), [warning]);
   React.useEffect(() => dispatchAction({ type: "set-value", payLabel }), [payLabel]);

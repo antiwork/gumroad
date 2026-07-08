@@ -99,6 +99,7 @@ type PaymentsPageProps = {
   payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  instant_payout_fee_percent: number;
   buyer_local_currency_enabled: boolean;
   disable_buyer_local_currency: boolean;
   can_manage_beneficial_owners: boolean;
@@ -1024,7 +1025,7 @@ export default function PaymentsPage() {
               <Alert variant="info" role="status">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
-                  <b>3% fee</b>.
+                  <b>{props.instant_payout_fee_percent}% fee</b> — the same fee as a one-off instant payout.
                 </div>
               </Alert>
             ) : null}

@@ -16,8 +16,13 @@
 #     could do.
 #
 # Path templates use :name placeholders filled from the tool call's `path_params`. `params` lists the
-# query (reads) or body (writes) keys the endpoint accepts, purely to teach the model; the API still
-# validates the real payload.
+# query (reads) or body (writes) keys the endpoint accepts. For writes this list is load-bearing: a
+# proposed body carrying a key not listed here is refused (see StoreAgentService and
+# StoreAgentActionExecutor), because the v2 API silently ignores unknown body keys — a misnamed key
+# (e.g. `price_cents` instead of `price`) would otherwise drop the value the model meant to send and
+# fail downstream with a confusing error. The list is a deliberately curated subset of what each
+# endpoint can accept: it is exactly what the system-prompt manifest teaches the model, so the agent
+# only drives the surface it was told about.
 module Ai::StoreAgentApiCatalog
   Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, keyword_init: true) do
     def read? = read == true
@@ -50,6 +55,27 @@ module Ai::StoreAgentApiCatalog
         value
       end
     end
+
+    # The proposal body keys that this endpoint does not declare in `params`. The v2 API ignores
+    # body keys it doesn't read, so an undeclared key (e.g. `price_cents` instead of the declared
+    # `price` on create_product) would silently drop the value the model meant to send — the call
+    # then fails downstream with a confusing validation error. Both the propose path (service) and
+    # the confirm path (executor) refuse such bodies up front using this list.
+    def unknown_param_keys(body)
+      (body || {}).keys.map(&:to_s) - params
+    end
+
+    # The corrective message for a body carrying undeclared keys, or nil when the body is fine.
+    # Names both the bad keys and the accepted keys so the model (propose path) can immediately
+    # retry with the right ones — a bare "invalid params" would leave it guessing. Lives here so
+    # the propose path (StoreAgentService) and confirm path (StoreAgentActionExecutor) can't drift.
+    def unknown_param_keys_error(body)
+      unknown = unknown_param_keys(body)
+      return nil if unknown.empty?
+
+      accepted = params.any? ? "this endpoint accepts: #{params.join(', ')}" : "this endpoint accepts no params"
+      "Unknown param#{"s" if unknown.size > 1} #{unknown.join(', ')} for #{id}; #{accepted}."
+    end
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).
@@ -60,8 +86,8 @@ module Ai::StoreAgentApiCatalog
   ENDPOINTS = [
     # ---- Account / profile ----
     ep("get_user", :get, "/user", "Get the creator's own account: name, email, currency, profile url, bio.", read: true, scope: "view_profile"),
-    ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio, twitter handle, etc.).", scope: "edit_profile",
-                                                                                                                 params: %w[name bio twitter_handle]),
+    ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
+                                                                                           params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
     ep("update_user_custom_html", :patch, "/user/custom_html", "Update the creator's profile custom HTML.", scope: "edit_profile", params: %w[custom_html]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
@@ -76,9 +102,9 @@ module Ai::StoreAgentApiCatalog
     ep("list_products", :get, "/products", "List the creator's products with price, status, and stats.", read: true, scope: "view_sales"),
     ep("get_product", :get, "/products/:id", "Get one product by its id.", read: true, scope: "view_sales", path_params: %w[id]),
     ep("create_product", :post, "/products", "Create a new product.", scope: "edit_products",
-                                                                      params: %w[name price url description custom_permalink price_currency_type]),
+                                                                      params: %w[name price description custom_permalink price_currency_type max_purchase_count]),
     ep("update_product", :put, "/products/:id", "Update a product's fields (name, price, description, etc.).", scope: "edit_products",
-                                                                                                               path_params: %w[id], params: %w[name price description custom_permalink max_purchase_count]),
+                                                                                                               path_params: %w[id], params: %w[name price description custom_permalink price_currency_type max_purchase_count]),
     ep("delete_product", :delete, "/products/:id", "Delete a product permanently.", scope: "edit_products", path_params: %w[id]),
     ep("enable_product", :put, "/products/:id/enable", "Publish a product so it is available for sale.", scope: "edit_products", path_params: %w[id]),
     ep("disable_product", :put, "/products/:id/disable", "Unpublish a product so it is no longer for sale.", scope: "edit_products", path_params: %w[id]),
@@ -88,16 +114,16 @@ module Ai::StoreAgentApiCatalog
     ep("create_custom_field", :post, "/products/:link_id/custom_fields", "Add a custom field to a product.", scope: "edit_products",
                                                                                                              path_params: %w[link_id], params: %w[name required type]),
     ep("update_custom_field", :put, "/products/:link_id/custom_fields/:id", "Update a product custom field.", scope: "edit_products",
-                                                                                                              path_params: %w[link_id id], params: %w[name required type]),
+                                                                                                              path_params: %w[link_id id], params: %w[required]),
     ep("delete_custom_field", :delete, "/products/:link_id/custom_fields/:id", "Delete a product custom field.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Offer codes / discounts (per product) ----
     ep("list_offer_codes", :get, "/products/:link_id/offer_codes", "List a product's discount codes.", read: true, scope: "view_sales", path_params: %w[link_id]),
     ep("get_offer_code", :get, "/products/:link_id/offer_codes/:id", "Get one discount code.", read: true, scope: "view_sales", path_params: %w[link_id id]),
     ep("create_offer_code", :post, "/products/:link_id/offer_codes", "Create a discount code on a product.", scope: "edit_products",
-                                                                                                             path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count]),
+                                                                                                             path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count universal amount_cents minimum_amount_cents]),
     ep("update_offer_code", :put, "/products/:link_id/offer_codes/:id", "Update a discount code (max purchase count).", scope: "edit_products",
-                                                                                                                        path_params: %w[link_id id], params: %w[max_purchase_count]),
+                                                                                                                        path_params: %w[link_id id], params: %w[max_purchase_count minimum_amount_cents]),
     ep("delete_offer_code", :delete, "/products/:link_id/offer_codes/:id", "Delete a discount code.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Variant categories & variants (per product) ----
@@ -117,9 +143,9 @@ module Ai::StoreAgentApiCatalog
 
     # ---- Bundle contents, thumbnail, covers ----
     ep("update_bundle_contents", :put, "/products/:link_id/bundle_contents", "Set the products contained in a bundle.", scope: "edit_products", path_params: %w[link_id], params: %w[products]),
-    ep("create_thumbnail", :post, "/products/:link_id/thumbnail", "Set a product's thumbnail image.", scope: "edit_products", path_params: %w[link_id], params: %w[url]),
+    ep("create_thumbnail", :post, "/products/:link_id/thumbnail", "Set a product's thumbnail image.", scope: "edit_products", path_params: %w[link_id], params: %w[url signed_blob_id]),
     ep("delete_thumbnail", :delete, "/products/:link_id/thumbnail", "Remove a product's thumbnail.", scope: "edit_products", path_params: %w[link_id]),
-    ep("create_cover", :post, "/products/:link_id/covers", "Add a cover image to a product.", scope: "edit_products", path_params: %w[link_id], params: %w[url]),
+    ep("create_cover", :post, "/products/:link_id/covers", "Add a cover image to a product.", scope: "edit_products", path_params: %w[link_id], params: %w[url signed_blob_id]),
     ep("delete_cover", :delete, "/products/:link_id/covers/:id", "Remove a product cover image.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Product subscribers ----
@@ -138,7 +164,7 @@ module Ai::StoreAgentApiCatalog
     # edit_emails too (not view_sales) to match the real contract.
     ep("list_emails", :get, "/emails", "List the creator's email posts.", read: true, scope: "edit_emails"),
     ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "edit_emails", path_params: %w[id]),
-    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish]),
+    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish draft]),
     ep("preview_email", :post, "/emails/:id/preview", "Send a preview of an email to the creator.", scope: "edit_emails", path_params: %w[id]),
     ep("send_email", :post, "/emails/:id/send", "Send an email post to its audience.", scope: "edit_emails", path_params: %w[id]),
     ep("delete_email", :delete, "/emails/:id", "Delete an email post.", scope: "edit_emails", path_params: %w[id]),
@@ -148,7 +174,7 @@ module Ai::StoreAgentApiCatalog
     ep("list_sales", :get, "/sales", "List the creator's sales, optionally filtered by date/product/email.", read: true, scope: "view_sales",
                                                                                                              params: %w[after before email order_id product_id page_key]),
     ep("get_sale", :get, "/sales/:id", "Get one sale by id.", read: true, scope: "view_sales", path_params: %w[id]),
-    ep("export_sales", :post, "/sales/exports", "Start a CSV export of sales.", scope: "view_sales", params: %w[after before]),
+    ep("export_sales", :post, "/sales/exports", "Start a CSV export of sales (dates as YYYY-MM-DD).", scope: "view_sales", params: %w[from to product_id]),
     ep("mark_sale_as_shipped", :put, "/sales/:id/mark_as_shipped", "Mark a sale as shipped (optionally with tracking).", scope: "mark_sales_as_shipped",
                                                                                                                          path_params: %w[id], params: %w[tracking_url]),
     ep("refund_sale", :put, "/sales/:id/refund", "Refund a sale, fully or partially.", scope: "refund_sales", path_params: %w[id], params: %w[amount_cents]),

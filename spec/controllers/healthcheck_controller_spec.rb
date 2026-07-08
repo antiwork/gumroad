@@ -208,4 +208,47 @@ describe HealthcheckController do
       end
     end
   end
+
+  describe "GET 'apple_pay_domain'" do
+    context "when not a staging branch deployment" do
+      it "returns 404" do
+        expect { get :apple_pay_domain }.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    context "when running as a staging branch deployment" do
+      before do
+        allow(StagingApplePayDomainRegistration).to receive(:applicable?).and_return(true)
+      end
+
+      it "reports an active registration" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!)
+          .and_return(StagingApplePayDomainRegistration::Result.new(active: true, message: "Apple Pay on my-branch.apps.staging.gumroad.org: active"))
+
+        get :apple_pay_domain
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Apple Pay on my-branch.apps.staging.gumroad.org: active")
+      end
+
+      it "reports an inactive registration as service_unavailable" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!)
+          .and_return(StagingApplePayDomainRegistration::Result.new(active: false, message: "Apple Pay on my-branch.apps.staging.gumroad.org: inactive — Domain verification failed"))
+
+        get :apple_pay_domain
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Apple Pay on my-branch.apps.staging.gumroad.org: inactive — Domain verification failed")
+      end
+
+      it "reports Stripe errors as service_unavailable" do
+        allow(StagingApplePayDomainRegistration).to receive(:register!).and_raise(Stripe::InvalidRequestError.new("verification failed", nil))
+
+        get :apple_pay_domain
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Apple Pay domain registration failed: verification failed")
+      end
+    end
+  end
 end

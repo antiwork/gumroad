@@ -36,6 +36,7 @@ import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
+import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import {
@@ -44,7 +45,7 @@ import {
   canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
-  getTotalPrice,
+  getChargeTodayPrice,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -1130,11 +1131,44 @@ const useStripePaymentRequest = (disabled: boolean) => {
   const [paymentMethodEvent, setPaymentMethodEvent] = React.useState<PaymentRequestPaymentMethodEvent | null>(null);
   const [paymentMethods, setPaymentMethods] = React.useState<CanMakePaymentResult | null>(null);
 
-  const getTotalItem = () => ({ amount: getTotalPrice(state) ?? 0, label: "Gumroad" });
+  // The wallet sheet's total mirrors the checkout table's "Payment today" row (the cart total
+  // minus future installment payments) so the sheet always shows the same number the buyer just
+  // read at checkout. The amount actually charged is decided server-side.
+  const getTotalItem = () => ({ amount: getChargeTodayPrice(state) ?? 0, label: "Gumroad" });
   const stateRef = useRefToLatest(state);
+
+  // When the cart contains a subscription, describe the recurring agreement on the Apple Pay
+  // sheet. This makes Apple issue a merchant token (MPAN) — a token tied to the buyer's card and
+  // Gumroad rather than to the physical device — so renewals keep working after the buyer wipes
+  // or replaces their phone. Behind a per-seller flag while we verify token issuance in
+  // production; without the flag the sheet stays a plain one-time request and Apple issues a
+  // device token, exactly as before.
+  //
+  // Reads `state` directly (NOT stateRef): this is called during render from the useMemo below,
+  // and stateRef only catches up in an effect AFTER render — inside the memo it still holds the
+  // previous products, which would rebuild the PaymentRequest from exactly the stale declaration
+  // the rebuild was meant to discard (e.g. switching an item from installments to pay-in-full
+  // kept declaring the installment plan).
+  const getApplePayOption = () => {
+    if (!state.checkoutPayment.request_apple_pay_merchant_tokens) return null;
+    return getApplePayRecurringPaymentRequest(state.products, Routes.library_url());
+  };
+
+  // Stripe's PaymentRequest#update can change an existing recurring declaration but not remove
+  // one, so whenever cart edits change what the recurring agreement should say — the cart flips
+  // between recurring-eligible and not, one membership is swapped for another, or the renewal
+  // price changes — rebuild the PaymentRequest from scratch instead of letting a stale recurring
+  // agreement linger on the Apple Pay sheet. The key serializes the declaration's content so any
+  // change to it triggers a rebuild; the end date is excluded because it's computed from "now"
+  // (so it would differ on every call) and every change that moves it also changes another field
+  // in the declaration (the billing agreement text spells out the number of payments).
+  const applePayRecurringDeclarationKey = JSON.stringify(getApplePayOption(), (key, value: unknown) =>
+    key === "recurringPaymentEndDate" ? undefined : value,
+  );
 
   const paymentRequest = React.useMemo(() => {
     if (!stripe || disabled) return null;
+    const applePayRecurringPaymentRequest = getApplePayOption();
     const paymentRequest = stripe.paymentRequest({
       country: "US",
       currency: "usd",
@@ -1142,6 +1176,9 @@ const useStripePaymentRequest = (disabled: boolean) => {
       requestPayerEmail: true,
       requestShipping: state.products.some((item) => item.requireShipping),
       requestPayerName: true,
+      ...(applePayRecurringPaymentRequest
+        ? { applePay: { recurringPaymentRequest: applePayRecurringPaymentRequest } }
+        : {}),
     });
     const getAddress = (address: PaymentRequestShippingAddress) => ({
       state: (address.region || address.city) ?? "",
@@ -1211,7 +1248,7 @@ const useStripePaymentRequest = (disabled: boolean) => {
       })().catch(fail),
     );
     return paymentRequest;
-  }, [stripe, disabled]);
+  }, [stripe, disabled, applePayRecurringDeclarationKey]);
 
   // Use a layout effect because `paymentRequest.show` needs to be called synchronously
   useOnChangeSync(() => {
@@ -1259,8 +1296,17 @@ const useStripePaymentRequest = (disabled: boolean) => {
       // to the Apple Pay billing ZIP code during payment.
       (state.status.type === "input" || state.status.type === "validating") &&
       state.surcharges.type === "loaded"
-    )
-      paymentRequest.update({ total: getTotalItem() });
+    ) {
+      const applePayRecurringPaymentRequest = getApplePayOption();
+      paymentRequest.update({
+        total: getTotalItem(),
+        // Keep the renewal amount on the Apple Pay sheet in sync when discounts, taxes, or cart
+        // edits change prices after the payment request was created.
+        ...(applePayRecurringPaymentRequest
+          ? { applePay: { recurringPaymentRequest: applePayRecurringPaymentRequest } }
+          : {}),
+      });
+    }
   }, [state.surcharges, shippingAddressChangeEvent]);
 
   const canPay = paymentMethods && (paymentMethods.googlePay || paymentMethods.applePay);

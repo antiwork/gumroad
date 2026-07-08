@@ -339,6 +339,30 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to be_nil
         expect(captured["error"]).to match(/missing path parameter/i)
       end
+
+      it "refuses to stage a body with a key the endpoint does not declare and names the accepted keys" do
+        # The doom-loop case from gumroad-private#953: the model sends `price_cents` (an internal
+        # column name) where create_product declares `price`. Staging it would create a priceless
+        # product that fails deep in the API; instead the tool_result must correct the model in the
+        # same turn by naming the unknown key and the keys the endpoint actually accepts.
+        captured = nil
+        first = true
+        allow(client).to receive(:messages) do |args|
+          captured = captured_tool_result(args)
+          if first
+            first = false
+            tool_result("api_write", { "endpoint" => "create_product", "params" => { "name" => "X", "price_cents" => 9900 } })
+          else
+            text_result("ok")
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "make a $99 product" }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(captured["error"]).to include("price_cents")
+        expect(captured["error"]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
+      end
     end
 
     context "when the model proposes more than one write in a single turn" do

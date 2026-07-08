@@ -33,6 +33,18 @@ class HealthcheckController < ApplicationController
     render plain: "Stripe balance: #{message}", status:
   end
 
+  # Staging preview apps only: reports whether Apple Pay is active on the app's own hostname and
+  # re-runs the Stripe domain registration on demand, since preview app boot logs (where the
+  # boot-time registration logs) are not readily accessible. See StagingApplePayDomainRegistration.
+  def apple_pay_domain
+    return e404 unless StagingApplePayDomainRegistration.applicable?
+
+    result = StagingApplePayDomainRegistration.register!
+    render plain: result.message, status: result.active? ? :ok : :service_unavailable
+  rescue Stripe::StripeError => e
+    render plain: "Apple Pay domain registration failed: #{e.message}", status: :service_unavailable
+  end
+
   def purchases
     threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
     count = Rails.cache.fetch("healthcheck:purchases:successful_last_10_minutes", expires_in: 30.seconds) do

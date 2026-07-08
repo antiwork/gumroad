@@ -1019,6 +1019,7 @@ class LinksController < ApplicationController
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
+            <meta name="csrf-token" content="#{ERB::Util.h(form_authenticity_token)}">
             #{custom_html_analytics_head(product)}
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
@@ -1078,32 +1079,46 @@ class LinksController < ApplicationController
     # the standard checkout and receipt pages the buy button navigates to, which
     # already fire them — firing them here too would double-count.
     def custom_html_analytics_head(product)
-      return "" unless analytics_enabled?(seller: product.user)
-
+      tracking_enabled = analytics_enabled?(seller: product.user)
       analytics = product.analytics_data
-      has_product_third_party_analytics = product.has_third_party_analytics?("product")
-      has_configured_pixel = analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
-      return "" unless has_configured_pixel || has_product_third_party_analytics
+      # When third-party tracking is off, blank the pixel ids before they reach
+      # the props JSON. The frontend never uses them in that case (every pixel
+      # call is gated on tracking_enabled), but without this a seller who
+      # disabled third-party analytics would still see their Google/Facebook/
+      # TikTok ids embedded in the page source for anyone to inspect.
+      analytics = analytics.merge(google_analytics_id: nil, facebook_pixel_id: nil, tiktok_pixel_id: nil) unless tracking_enabled
+      has_product_third_party_analytics = tracking_enabled && product.has_third_party_analytics?("product")
+      has_configured_pixel = tracking_enabled && analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
 
       props = {
         seller_id: product.user.external_id,
         analytics:,
+        tracking_enabled:,
         has_product_third_party_analytics:,
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
         permalink: product.unique_permalink,
         name: product.name,
       }
 
-      # All three enabled flags are "true" (not per-pixel): this block only renders
-      # when analytics_enabled?, and the frontend gates each pixel on its own
-      # configured id — mirroring PageMeta::Analytics#set_analytics_meta_tags, which
-      # the wrapper's layout-less document can't accumulate. The props JSON goes in a
+      # The pixel meta tags render only when tracking is enabled and the seller has
+      # at least one pixel id configured. All three enabled flags are "true" rather
+      # than per-pixel because the frontend gates each pixel on its own configured
+      # id — mirroring PageMeta::Analytics#set_analytics_meta_tags, which the
+      # wrapper's layout-less document can't accumulate. The props JSON goes in a
       # double-quoted attribute, so ERB::Util.h (which escapes ") is the right escape
       # here — json_escape would leave quotes intact and break out of the attribute.
+      pixel_meta_tags = if has_configured_pixel
+        <<~HTML
+          <meta property="gr:google_analytics:enabled" content="true">
+          <meta property="gr:fb_pixel:enabled" content="true">
+          <meta property="gr:tiktok_pixel:enabled" content="true">
+        HTML
+      else
+        ""
+      end
+
       <<~HTML.strip
-        <meta property="gr:google_analytics:enabled" content="true">
-        <meta property="gr:fb_pixel:enabled" content="true">
-        <meta property="gr:tiktok_pixel:enabled" content="true">
+        #{pixel_meta_tags}
         <meta name="gr:custom-html-analytics" content="#{ERB::Util.h(props.to_json)}">
         #{helpers.vite_typescript_tag("custom_html_analytics")}
       HTML

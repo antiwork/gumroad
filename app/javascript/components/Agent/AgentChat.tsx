@@ -4,9 +4,11 @@ import * as React from "react";
 import {
   type AgentStreamHandlers,
   type ChatMessage,
+  type ConversationMessage,
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
+  fetchLatestAgentConversation,
   streamAgentMessage,
 } from "$app/data/agent";
 import { classNames } from "$app/utils/classNames";
@@ -156,6 +158,19 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
   const [input, setInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
+  // The stored conversation this chat belongs to (server-side external id). Set when the latest
+  // conversation is resumed on mount or when the first turn's response creates one; sent with each
+  // turn so the server appends to the same conversation instead of starting a new one.
+  const [conversationId, setConversationId] = React.useState<string | null>(null);
+  // Ref mirror of conversationId so in-flight callbacks (the streaming turn resolves after several
+  // state updates) always read the current id without re-creating handlers.
+  const conversationIdRef = React.useRef<string | null>(null);
+  conversationIdRef.current = conversationId;
+  // Flips true the moment the seller sends their first message. Guards the mount-time hydration
+  // below: once a turn is in flight (which may create a brand-new stored conversation), a late
+  // "latest conversation" response must not overwrite the chat or its conversation id — otherwise
+  // subsequent turns would be appended to the wrong stored conversation.
+  const hasSentMessageRef = React.useRef(false);
   // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
   // which we show only until the first token lands, then let the streaming text take over.
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -188,9 +203,49 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     if (!isSending) inputRef.current?.focus({ preventScroll: true });
   }, [isSending]);
 
+  // On mount, resume the most recently active stored conversation (like OpenAI/Claude restore your
+  // last chat) so a page refresh doesn't lose the history. Any turn the seller sends before this
+  // resolves wins: it starts a fresh conversation, and we skip hydration rather than clobber it.
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchLatestAgentConversation()
+      .then((conversation) => {
+        if (cancelled || !conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
+        setMessages([
+          { role: "assistant", content: greeting },
+          ...conversation.messages.map(
+            (message: ConversationMessage): DisplayMessage => ({
+              role: message.role,
+              content: message.content,
+              ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
+              ...(message.objects?.length ? { objects: message.objects } : {}),
+              ...(message.action_status
+                ? { actionStatus: message.action_status }
+                : // A proposal persisted without a status was never confirmed in the session it was
+                  // made. Its context (and the throttle window) is gone, so render it as dismissed
+                  // rather than offering a stale, re-confirmable change after reload.
+                  message.proposed_action
+                  ? { actionStatus: "dismissed" as const }
+                  : {}),
+            }),
+          ),
+        ]);
+        setConversationId(conversation.id);
+      })
+      .catch(() => {
+        // Resuming is best-effort; a failed fetch just means starting a fresh chat.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending) return;
+
+    // From here on the seller owns the chat: block the mount-time hydration from replacing it.
+    hasSentMessageRef.current = true;
 
     // Sending re-engages auto-scroll so the seller's own message and the reply come into view.
     stickToBottom.current = true;
@@ -252,7 +307,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
 
     try {
-      const result = await streamAgentMessage(history, handlers);
+      const result = await streamAgentMessage(history, handlers, conversationIdRef.current);
+      if (result.conversationId) setConversationId(result.conversationId);
       // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
       // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
       setMessages((prev) => {
@@ -288,7 +344,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const confirmAction = async (index: number, action: ProposedAction) => {
     setPendingActionIndex(index);
     try {
-      const { message, object } = await executeAgentAction(action);
+      const { message, object } = await executeAgentAction(action, conversationIdRef.current);
       showAlert(message, "success");
       // Mark the proposal applied and attach the created/edited object so it renders as a card.
       setMessages((prev) =>
@@ -352,7 +408,11 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                     <ProposedActionCard
                       action={message.proposedAction}
                       status={message.actionStatus}
-                      isPending={pendingActionIndex !== null}
+                      // Also treat an in-flight turn as pending: while streaming, the proposal card
+                      // can render before the terminal `done` event persists the turn server-side.
+                      // Confirming in that window would apply the change before the stored proposal
+                      // exists, so it could never be marked applied in the saved history.
+                      isPending={pendingActionIndex !== null || isSending}
                       isApplying={pendingActionIndex === index}
                       onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
                       onDismiss={() => dismissAction(index)}

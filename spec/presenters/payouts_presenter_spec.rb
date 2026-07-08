@@ -87,6 +87,7 @@ describe PayoutsPresenter do
 
       expect(instance.instant_payout_data).to eq(
         {
+          instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
           payable_amount_cents: 1000,
           payable_balances: [],
           bank_account_type: "checking",
