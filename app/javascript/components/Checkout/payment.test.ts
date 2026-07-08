@@ -779,4 +779,23 @@ describe("getFutureInstallmentsTotal", () => {
       ),
     ).toBe(0);
   });
+
+  // On the subscription manage page `price` is today's charge alone — the future installments
+  // were never folded into it, so there is nothing to deduct from the wallet sheet's total.
+  it("skips items whose plan reports remaining installments (subscription manage page)", () => {
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [
+            product({
+              price: 0,
+              renewalPriceCents: 2_500,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 4, remainingInstallments: 2 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(0);
+  });
 });

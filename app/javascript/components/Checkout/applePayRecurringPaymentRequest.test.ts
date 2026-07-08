@@ -172,6 +172,42 @@ describe("getApplePayRecurringPaymentRequest", () => {
     ).toBeNull();
   });
 
+  // The subscription manage page mid-plan: some installments were already paid, `price` is
+  // today's charge ($0 for a plain payment-method update), and the per-installment amount comes
+  // from renewalPriceCents instead of being derived from `price`.
+  it("describes only the remaining installments with the renewal amount on the manage page", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        product({
+          price: 0,
+          renewalPriceCents: 2_500,
+          payInInstallments: true,
+          installmentPlan: { numberOfInstallments: 4, remainingInstallments: 2 },
+        }),
+      ],
+      MANAGEMENT_URL,
+    );
+    expect(request?.regularBilling.amount).toBe(2_500);
+    expect(request?.paymentDescription).toBe("Product A (2 monthly installments)");
+    expect(request?.billingAgreement).toBe("2 monthly installments of $25.");
+  });
+
+  it("returns null for an installment plan with no payments remaining", () => {
+    expect(
+      getApplePayRecurringPaymentRequest(
+        [
+          product({
+            price: 0,
+            renewalPriceCents: 2_500,
+            payInInstallments: true,
+            installmentPlan: { numberOfInstallments: 4, remainingInstallments: 0 },
+          }),
+        ],
+        MANAGEMENT_URL,
+      ),
+    ).toBeNull();
+  });
+
   // Declared amounts are pre-tax, matching how the checkout table presents future installments
   // and renewal prices; the server computes each future payment's tax when it is charged.
   it("declares the pre-tax renewal amount", () => {

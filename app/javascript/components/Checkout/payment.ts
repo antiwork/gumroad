@@ -89,13 +89,18 @@ export type Product = {
   quantity: number;
   price: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
-  // limited to the first billing cycle). Used to describe the recurring agreement on the Apple
-  // Pay sheet; null/absent means renewals charge the same as today.
+  // limited to the first billing cycle, or a payment-method update on the subscription manage
+  // page where `price` is today's charge — often zero — rather than the plan price). For
+  // installment plans it overrides the per-installment amount otherwise derived from `price`.
+  // Used to describe the recurring agreement on the Apple Pay sheet; null/absent means future
+  // payments charge the same as today.
   renewalPriceCents?: number | null;
   payInInstallments: boolean;
   // Present when the buyer chose to pay in installments; describes the fixed monthly schedule so
-  // the Apple Pay sheet can state it.
-  installmentPlan?: { numberOfInstallments: number } | null;
+  // the Apple Pay sheet can state it. `remainingInstallments` is set only on the subscription
+  // manage page, where some installments have already been paid and `price` is today's charge
+  // (not the plan total the future payments derive from at checkout).
+  installmentPlan?: { numberOfInstallments: number; remainingInstallments?: number } | null;
   // For memberships that automatically end after a fixed period (product duration_in_months):
   // bounds the recurring agreement shown on the Apple Pay sheet instead of describing it as
   // billing until cancellation.
@@ -400,9 +405,13 @@ export function getTotalPrice(state: State) {
 // checkout table's "Future installments" row. Tips are excluded because the full tip amount is
 // charged upfront with the first payment; taxes are excluded because the checkout table
 // presents the full tax amount as part of "Payment today".
+//
+// Items with remainingInstallments set (subscription manage page) are skipped: there `price` is
+// today's charge alone — future installments were never part of it, so nothing needs deducting.
 export function getFutureInstallmentsTotal(state: State) {
   return state.products.reduce((sum, item) => {
     if (!item.payInInstallments || item.installmentPlan == null) return sum;
+    if (item.installmentPlan.remainingInstallments != null) return sum;
     return (
       sum +
       (item.price - calculateFirstInstallmentPaymentPriceCents(item.price, item.installmentPlan.numberOfInstallments))

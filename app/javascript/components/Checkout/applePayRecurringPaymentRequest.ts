@@ -126,11 +126,18 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
   // even base amount (the first installment absorbs the rounding remainder and has already been
   // paid by the time any recurring charge happens), and the end date bounds the agreement.
   // Amounts are pre-tax, matching the checkout table's "Future installments" row.
-  const baseInstallmentAmount = Math.floor(item.price / numberOfInstallments);
-  const endDate = addMonthsClamped(new Date(), numberOfInstallments - 1);
+  //
+  // On the subscription manage page some installments have already been paid: the agreement
+  // describes only the payments still owed (remainingInstallments), and the per-installment
+  // amount comes from renewalPriceCents — item.price there is today's charge (usually zero for a
+  // payment-method update), not the plan total it derives from at checkout.
+  const remainingInstallments = item.installmentPlan?.remainingInstallments ?? numberOfInstallments;
+  if (remainingInstallments < 1) return null;
+  const baseInstallmentAmount = item.renewalPriceCents ?? Math.floor(item.price / numberOfInstallments);
+  const endDate = addMonthsClamped(new Date(), remainingInstallments - 1);
 
   return {
-    paymentDescription: `${item.name} (${numberOfInstallments} monthly installments)`,
+    paymentDescription: `${item.name} (${remainingInstallments} monthly installments)`,
     managementURL,
     regularBilling: {
       label: item.name,
@@ -139,7 +146,7 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
       recurringPaymentIntervalCount: 1,
       recurringPaymentEndDate: endDate,
     },
-    billingAgreement: `${numberOfInstallments} monthly installments of ${formatPriceCentsWithCurrencySymbol(
+    billingAgreement: `${remainingInstallments} monthly installments of ${formatPriceCentsWithCurrencySymbol(
       "usd",
       baseInstallmentAmount,
       { symbolFormat: "short" },
