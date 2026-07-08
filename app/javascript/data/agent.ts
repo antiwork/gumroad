@@ -26,7 +26,13 @@ export type ProposedAction = {
 };
 
 type SendMessageResponse =
-  | { success: true; reply: string; proposed_action: ProposedAction | null; objects?: DisplayObject[] }
+  | {
+      success: true;
+      reply: string;
+      proposed_action: ProposedAction | null;
+      objects?: DisplayObject[];
+      conversation_id?: string;
+    }
   | { success: false; error: string };
 
 type ExecuteActionResponse = { success: boolean; message: string; object?: DisplayObject | null };
@@ -45,30 +51,76 @@ export type DisplayObject = {
 
 export const sendAgentMessage = async (
   messages: ChatMessage[],
-): Promise<{ reply: string; proposedAction: ProposedAction | null; objects: DisplayObject[] }> => {
+  conversationId?: string | null,
+): Promise<{
+  reply: string;
+  proposedAction: ProposedAction | null;
+  objects: DisplayObject[];
+  conversationId: string | null;
+}> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_messages_path(),
-    data: { messages },
+    data: { messages, ...(conversationId ? { conversation_id: conversationId } : {}) },
   });
   const json = typia.assert<SendMessageResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
-  return { reply: json.reply, proposedAction: json.proposed_action, objects: json.objects ?? [] };
+  return {
+    reply: json.reply,
+    proposedAction: json.proposed_action,
+    objects: json.objects ?? [],
+    conversationId: json.conversation_id ?? null,
+  };
 };
 
 export const executeAgentAction = async (
   action: ProposedAction,
+  conversationId?: string | null,
 ): Promise<{ message: string; object: DisplayObject | null }> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_actions_path(),
-    data: { type: action.type, params: action.params },
+    // The conversation id lets the server mark the stored proposal as applied, so reloaded history
+    // shows the collapsed "Applied" card instead of a still-confirmable one.
+    data: { type: action.type, params: action.params, ...(conversationId ? { conversation_id: conversationId } : {}) },
   });
   const json = typia.assert<ExecuteActionResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.message);
   return { message: json.message, object: json.object ?? null };
+};
+
+// One persisted message of a stored conversation, as returned by the conversations endpoint. The
+// server keeps each turn's structured extras (proposed-action card, object cards, applied status)
+// so the chat re-renders history exactly as it looked live.
+export type ConversationMessage = {
+  role: ChatRole;
+  content: string;
+  proposed_action?: ProposedAction | null;
+  objects?: DisplayObject[] | null;
+  action_status?: "applied" | "dismissed" | null;
+};
+
+export type Conversation = {
+  id: string;
+  title: string | null;
+  messages: ConversationMessage[];
+};
+
+type LatestConversationResponse = { success: true; conversation: Conversation | null };
+
+// Fetch the seller's most recently active conversation so the Agent tab can resume it on mount —
+// the way hosted chat products restore your last chat. Resolves null when there's nothing to resume.
+export const fetchLatestAgentConversation = async (): Promise<Conversation | null> => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_agent_conversations_latest_path(),
+  });
+  if (!response.ok) throw new ResponseError();
+  const json = typia.assert<LatestConversationResponse>(await response.json());
+  return json.conversation;
 };
 
 // Events the streaming endpoint emits, surfaced to the caller as they arrive so the UI can render a
@@ -90,6 +142,9 @@ type StreamResult = {
   proposedAction: ProposedAction | null;
   objects: DisplayObject[];
   suggestions: string[];
+  // The id of the stored conversation this turn was persisted to; send it on the next turn (and on
+  // action confirmation) so the server appends instead of starting a new conversation.
+  conversationId: string | null;
 };
 
 // Server-Sent Event payloads, validated per-event with typia so a malformed frame can't slip
@@ -104,6 +159,7 @@ type DoneData = {
   proposed_action: ProposedAction | null;
   objects?: DisplayObject[];
   suggestions?: string[];
+  conversation_id?: string;
 };
 
 // Stream one conversation turn over Server-Sent Events. Calls the handlers as events arrive and
@@ -113,12 +169,13 @@ type DoneData = {
 export const streamAgentMessage = async (
   messages: ChatMessage[],
   handlers: AgentStreamHandlers = {},
+  conversationId?: string | null,
 ): Promise<StreamResult> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_messages_stream_path(),
-    data: { messages },
+    data: { messages, ...(conversationId ? { conversation_id: conversationId } : {}) },
   });
 
   // request() only rejects 5xx/429, so a 4xx or an HTML response from auth/CSRF/authorization
@@ -188,6 +245,7 @@ export const streamAgentMessage = async (
           proposedAction: data.proposed_action ?? proposedAction,
           objects: data.objects ?? objects,
           suggestions: data.suggestions ?? suggestions,
+          conversationId: data.conversation_id ?? conversationId ?? null,
         };
       }
       case "error": {

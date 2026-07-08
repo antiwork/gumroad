@@ -275,4 +275,83 @@ describe ProfileSectionsPresenter do
       subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
     end
   end
+
+  describe "default products section" do
+    let(:new_seller) { create(:user, name: "New Seller") }
+    let(:presenter) { described_class.new(seller: new_seller, query: new_seller.seller_profile_sections.on_profile) }
+    let(:visitor_pundit_user) { SellerContext.new(user: logged_in_user, seller: logged_in_user) }
+
+    context "when the seller has products but no profile sections" do
+      let!(:new_seller_products) { create_list(:product, 2, user: new_seller) }
+
+      before { Link.import(force: true, refresh: true) }
+
+      it "injects a virtual products section when asked to" do
+        props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)
+
+        expect(props[:sections].size).to eq(1)
+        expect(props[:sections].first).to match(
+          {
+            id: described_class::DEFAULT_PRODUCTS_SECTION_ID,
+            header: nil,
+            type: "SellerProfileProductsSection",
+            show_filters: false,
+            default_product_sort: ProductSortKey::PAGE_LAYOUT,
+            search_results: {
+              total: 2,
+              filetypes_data: [],
+              tags_data: [],
+              products: a_collection_containing_exactly(
+                *new_seller_products.map do |product|
+                  ProductPresenter.card_for_web(product:, request:, target: Product::Layout::PROFILE, show_seller: false, compute_description: false)
+                end
+              )
+            },
+          }
+        )
+      end
+
+      it "does not inject the virtual section by default" do
+        props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false)
+
+        expect(props[:sections]).to eq([])
+      end
+
+      it "does not inject the virtual section into the editing payload" do
+        props = presenter.props(request:, pundit_user: SellerContext.new(user: new_seller, seller: new_seller), seller_custom_domain_url: nil, include_default_products_section: true)
+
+        expect(props[:sections]).to eq([])
+        # The editing shape (with the section-builder helper lists) must be untouched.
+        expect(props).to have_key(:products)
+        expect(props).to have_key(:posts)
+        expect(props).to have_key(:wishlist_options)
+      end
+    end
+
+    context "when the seller has no products and no profile sections" do
+      it "returns no sections, preserving the email signup fallback" do
+        props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)
+
+        expect(props[:sections]).to eq([])
+      end
+
+      it "returns no sections when the seller's only products are archived or unpublished" do
+        create(:product, user: new_seller, archived: true)
+        create(:product, user: new_seller, purchase_disabled_at: Time.current)
+        Link.import(force: true, refresh: true)
+
+        props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)
+
+        expect(props[:sections]).to eq([])
+      end
+    end
+
+    context "when the seller has saved profile sections" do
+      it "renders only the saved sections, never the virtual one" do
+        props = subject.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)
+
+        expect(props[:sections].map { _1[:id] }).to match_array(sections.map(&:external_id))
+      end
+    end
+  end
 end

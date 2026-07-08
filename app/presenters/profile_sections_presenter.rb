@@ -5,6 +5,13 @@ class ProfileSectionsPresenter
 
   CACHE_KEY_PREFIX = "profile-sections"
 
+  # Identifier for the "default products section": a virtual (never saved to the database)
+  # products section that the public profile shows when a creator has published products but
+  # hasn't set up any profile sections yet. Without it, new creators' profiles showed only an
+  # email signup box even though they had products for sale. The frontend passes this id back
+  # as section_id when it fetches more results, so LinksController#search recognizes it too.
+  DEFAULT_PRODUCTS_SECTION_ID = "default-products"
+
   # seller is the owner of the section
   # pundit_user.seller is the selected seller for the logged-in user (pundit_user.user) - which may be different from seller
   def initialize(seller:, query:)
@@ -12,7 +19,7 @@ class ProfileSectionsPresenter
     @query = query
   end
 
-  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller)
+  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller, include_default_products_section: false)
     sections = query.to_a
 
     props = {
@@ -23,6 +30,17 @@ class ProfileSectionsPresenter
         section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:)
       end
     }
+    # New creators who haven't customized their profile yet get a virtual products section so
+    # visitors see what's for sale instead of just an email signup box. It only appears on the
+    # public page (never in the profile editor, so `editing` must be false), only when the
+    # creator has no saved sections, and only when they have products to show. The moment they
+    # save a real section in the editor, their own layout takes over.
+    if include_default_products_section && !editing && sections.empty?
+      default_section = cached_default_products_section
+      if default_section
+        props[:sections] = [section_props(nil, cached_props: default_section, request:, pundit_user:, seller_custom_domain_url:, editing: false)]
+      end
+    end
     if editing
       props[:products] = seller.products.alive.not_archived.select(:id, :name).map { { id: ObfuscateIds.encrypt(_1.id), name: _1.name } }
       props[:posts] = visible_posts
@@ -32,7 +50,6 @@ class ProfileSectionsPresenter
   end
 
   def cached_sections
-    products_cache_key = seller.products.cache_key_with_version
     sections_cache_key = query.cache_key_with_version
     cache_key = "#{CACHE_KEY_PREFIX}_#{REVISION}-#{products_cache_key}-#{sections_cache_key}"
     Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
@@ -68,6 +85,38 @@ class ProfileSectionsPresenter
 
   private
     attr_reader :seller, :query
+
+    # Computing this cache key runs a SQL query (count + max updated_at over the seller's
+    # products), and both `cached_sections` and `cached_default_products_section` need it on the
+    # same request - memoize so we only hit the database once per presenter instance.
+    def products_cache_key
+      @products_cache_key ||= seller.products.cache_key_with_version
+    end
+
+    # Builds the cacheable data for the virtual default products section (see
+    # DEFAULT_PRODUCTS_SECTION_ID above). Returns nil when the creator has no products that
+    # could appear on their profile, so the caller can keep the existing email-signup fallback.
+    # Cached with the same 10-minute window as saved sections; the cache key includes the
+    # products' cache version so publishing, archiving, or deleting a product refreshes it.
+    def cached_default_products_section
+      # `alive.not_archived` mirrors the `is_alive_on_profile` flag the product search index
+      # uses, so this guard agrees with what the search below would actually return.
+      return nil unless seller.products.alive.not_archived.exists?
+
+      cache_key = "#{CACHE_KEY_PREFIX}_default_#{REVISION}-#{products_cache_key}"
+      Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
+        {
+          id: DEFAULT_PRODUCTS_SECTION_ID,
+          header: nil,
+          type: "SellerProfileProductsSection",
+          # Match what a freshly added products section would use: no filter sidebar, and the
+          # page-layout sort (which, with no saved ordering, falls back to newest first).
+          show_filters: false,
+          default_product_sort: ProductSortKey::PAGE_LAYOUT,
+          search_results: section_search_results(nil),
+        }
+      end
+    end
 
     def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:)
       params = request.query_parameters
@@ -137,7 +186,9 @@ class ProfileSectionsPresenter
       search_results = search_products(
         params.merge(
           {
-            sort: params[:sort] || section.default_product_sort,
+            # `section` is nil for the virtual default products section, which has no saved
+            # sort preference - fall back to page-layout (effectively newest first).
+            sort: params[:sort] || section&.default_product_sort || ProductSortKey::PAGE_LAYOUT,
             section:,
             is_alive_on_profile: true,
             user_id: seller.id,

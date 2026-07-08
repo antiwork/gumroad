@@ -127,6 +127,44 @@ describe ProfilePresenter do
       expect(props).not_to have_key(:products)
       expect(props[:sections].first).not_to have_key(:shown_products)
     end
+
+    context "when the seller has products but no profile sections" do
+      let(:new_seller) { create(:user, name: "New Seller") }
+      let!(:new_seller_product) { create(:product, user: new_seller) }
+      let(:visitor_pundit_user) { SellerContext.new(user: logged_in_user, seller: logged_in_user) }
+
+      before { Link.import(force: true, refresh: true) }
+
+      it "serves the virtual default products section with a matching tab" do
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: new_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:sections].size).to eq(1)
+        expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+        expect(props[:sections].first[:type]).to eq("SellerProfileProductsSection")
+        # The frontend only renders sections referenced by a tab, so the virtual section needs
+        # one pointing at it.
+        expect(props[:tabs]).to eq([{ name: "Products", sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }])
+      end
+
+      it "does not serve the virtual section in the profile editor payload" do
+        pundit_user = SellerContext.new(user: new_seller, seller: new_seller)
+        props = described_class.new(pundit_user:, seller: new_seller).profile_settings_props(request:)
+
+        expect(props[:editable_profile][:sections]).to eq([])
+      end
+    end
+
+    context "when the seller has no products and no profile sections" do
+      it "keeps the empty-sections shape so the email signup fallback still renders" do
+        new_seller = create(:user, name: "New Seller")
+        visitor_pundit_user = SellerContext.new(user: logged_in_user, seller: logged_in_user)
+
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: new_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:sections]).to eq([])
+        expect(props[:tabs]).to eq([])
+      end
+    end
   end
 
   describe "#profile_settings_props" do
