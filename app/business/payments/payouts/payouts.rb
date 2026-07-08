@@ -8,9 +8,7 @@ class Payouts
   PAYOUT_TYPE_INSTANT = "instant"
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
   HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
-  # Max user ids per `User.where(id: ...)` lookup. See the comment in
-  # create_payments_for_balances_up_to_date_for_bank_account_types for why a large
-  # IN() list has to be split before it reaches MySQL.
+  # Max ids per `User.where(id: ...)` lookup, so the IN() list stays on MySQL's PK range plan.
   USER_LOOKUP_BATCH_SIZE = 1_000
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
@@ -91,13 +89,9 @@ class Payouts
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
-    # Materialize the holding-balance user ids first, then look up bank accounts in
-    # chunks by user_id (indexed). The previous single statement joined
-    # users × balances × bank_accounts, and MySQL drove it from a full scan of
-    # bank_accounts (no index on `type`), repeatedly blowing the 5-minute statement
-    # cap at the scheduled slot and aborting entire payout batches. Splitting the
-    # query leaves no join for the optimizer to get wrong, and each piece stays far
-    # under the statement cap.
+    # Materialize holding-balance user ids, then look up bank accounts in user_id chunks.
+    # The old single join (users × balances × bank_accounts) full-scanned bank_accounts
+    # and blew the statement timeout; splitting it keeps each piece cheap.
     holding_balance_user_ids = self.holding_balance_user_ids
 
     bank_account_types.each do |bank_account_type|
@@ -105,16 +99,10 @@ class Payouts
         BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
       end
 
-      # Load the matched users in id-bounded slices rather than one
-      # `User.where(id: user_ids)`. For a large bank-account cohort that id list runs
-      # to tens of thousands of ids, and MySQL abandons the primary-key range plan
-      # once the IN() list outgrows the range optimizer's memory budget
-      # (range_optimizer_max_mem_size), falling back to a full scan of the very large
-      # users table. That scan can't finish inside the statement timeout, so the whole
-      # per-bank-type payout job dies (gumroad-private#955). Slicing keeps every lookup
-      # on the fast primary-key range plan. This path is Stripe-only and enqueues one
-      # job per user, so processing the cohort a slice at a time is equivalent to
-      # processing it all at once.
+      # Load users in id-bounded slices. One `User.where(id: user_ids)` over a large
+      # cohort exceeds MySQL's range_optimizer_max_mem_size and full-scans the users
+      # table, blowing the statement timeout (gumroad-private#955); slicing keeps each
+      # lookup on the PK range plan. Enqueue is per-user, so slicing changes nothing.
       user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
         users = User.where(id: user_ids_batch)
         self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
@@ -122,42 +110,17 @@ class Payouts
     end
   end
 
-  # Returns the ids of every user holding a positive unpaid balance — the same set
-  # as User.holding_balance — but computed in bounded batches so that no single SQL
-  # statement has to aggregate the entire balances table in one go.
+  # Ids of every user holding a positive unpaid balance (same set as User.holding_balance),
+  # computed in bounded batches. The single-statement GROUP BY aggregates the whole balances
+  # table and kept blowing MySQL's 5-minute statement cap in the contended batch window.
   #
-  # The single-statement version (users JOIN balances GROUP BY user, or even
-  # User.holding_balance.ids on its own) aggregates every unpaid balance row on the
-  # platform in one query. That query's runtime grows with the size of the platform,
-  # and during the contended 10:00 UTC scheduled-jobs window it has repeatedly
-  # exceeded MySQL's 5-minute statement cap, killing whole payout batches
-  # (StatementTimeout incidents on 2026-05-26, 07-02, and 07-07). Retries don't help
-  # because they land in the same contention window.
-  #
-  # Instead we walk balances.user_id in ascending order with a keyset cursor
-  # (`user_id > last seen id`), aggregating at most HOLDING_BALANCE_ID_BATCH_SIZE
-  # users' balances per statement and applying the "sum is positive" filter in Ruby.
-  # The positivity check deliberately lives here and not in a SQL HAVING clause:
-  # HAVING filters groups after aggregation but before LIMIT, so a long run of
-  # users with zero or negative net balances would force one statement to keep
-  # aggregating until it found enough positive ones — reintroducing unbounded work.
-  # Grouping without HAVING lets MySQL stream exactly LIMIT groups off the
-  # `(state, user_id, amount_cents)` covering index and stop, so each statement's
-  # work is bounded by the batch size — not by how many sellers Gumroad has. A
-  # user's balance rows all share one user_id, so partitioning by user_id ranges
-  # never splits a user's SUM across batches, and the union of batches is exactly
-  # the users with SUM > 0.
-  #
-  # One deliberate difference from the JOIN version: this reads only the balances
-  # table, so a balance row pointing at a deleted/nonexistent user id would be
-  # included here where the JOIN would have dropped it. That cannot change who gets
-  # paid — every caller resolves these ids through `User.where(id: ...)`, which
-  # drops ids without a users row.
-  #
-  # Balances don't move out of the `unpaid` state while this worker is only reading,
-  # so re-running after a partial failure re-selects the same users; actual payout
-  # creation stays idempotent downstream (per-user jobs are deduplicated and
-  # Payouts.create_payment no-ops once a user's balances leave `unpaid`).
+  # We walk balances.user_id with a keyset cursor, aggregating HOLDING_BALANCE_ID_BATCH_SIZE
+  # users per statement, and apply the positivity filter in Ruby rather than SQL HAVING:
+  # HAVING runs before LIMIT, so a run of non-positive users would keep one statement
+  # scanning, whereas plain GROUP BY streams exactly LIMIT groups off the
+  # (state, user_id, amount_cents) covering index and stops. Grouping by user_id never
+  # splits a user's SUM, so the union is exactly SUM > 0. Reads only balances, so ids for
+  # deleted users may appear; callers resolve them via User.where(id:), which drops them.
   def self.holding_balance_user_ids
     user_ids = []
     last_user_id = 0
