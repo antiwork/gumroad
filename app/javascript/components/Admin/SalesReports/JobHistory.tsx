@@ -109,6 +109,8 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                       {countryCodeToName[job.country_code]}_{job.sales_type}_report_{job.start_date}_{job.end_date}
                     </div>
                   </a>
+                ) : job.status === "failed" ? (
+                  <span className="text-red">Failed — re-run this report</span>
                 ) : (
                   <div className="grid grid-cols-[auto_1fr] items-center gap-2">
                     <LoadingSpinner />

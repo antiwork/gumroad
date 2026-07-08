@@ -24,10 +24,40 @@ class Admin::SalesReport
   class << self
     def fetch_job_history
       job_data = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
-      job_data.map { |data| JSON.parse(data) }
+      jobs = job_data.map { |data| JSON.parse(data) }
+      reconcile_dead_jobs!(jobs)
+      jobs
     rescue JSON::ParserError
       []
     end
+
+    private
+      # A job's history entry is written as "processing" at enqueue time and only
+      # flipped to "completed" by the job itself when it finishes. If the Sidekiq
+      # process is killed while the job runs (deploy restart, OOM), the job never
+      # gets to raise an exception — Sidekiq moves it straight to the Dead set and
+      # no failure callback runs — so the entry would read "processing" forever.
+      # Reconcile at read time: any "processing" entry whose job ID is in the Dead
+      # set is marked "failed", and the correction is persisted back to Redis so
+      # the admin page tells the truth about jobs that need re-running.
+      def reconcile_dead_jobs!(jobs)
+        processing = jobs.select { |job| job["status"] == "processing" }
+        return if processing.empty?
+
+        dead_jids = Sidekiq::DeadSet.new.filter_map { |dead_job| dead_job.jid if dead_job.klass == "GenerateSalesReportJob" }.to_set
+        return if dead_jids.empty?
+
+        jobs.each_with_index do |job, index|
+          next unless job["status"] == "processing" && dead_jids.include?(job["job_id"])
+
+          job["status"] = "failed"
+          $redis.lset(RedisKey.sales_report_jobs, index, job.to_json)
+        end
+      rescue Redis::BaseError => e
+        # Reconciliation is best-effort: if Redis hiccups mid-correction, show the
+        # raw history rather than erroring the admin page.
+        Rails.logger.warn("Admin::SalesReport dead-job reconciliation failed: #{e.message}")
+      end
   end
 
   def generate_later

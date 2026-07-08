@@ -310,5 +310,71 @@ describe Admin::SalesReport do
         expect(result).to eq([])
       end
     end
+
+    context "when a processing job has landed in the Sidekiq Dead set" do
+      let(:dead_jid) { "dead_job_jid" }
+      let(:job_data) do
+        [
+          {
+            job_id: dead_jid,
+            country_code: "CH",
+            start_date: "2026-04-01",
+            end_date: "2026-06-30",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
+            enqueued_at: "2026-07-06T13:57:23Z",
+            status: "processing"
+          }.to_json,
+          {
+            job_id: "still_running_jid",
+            country_code: "KR",
+            start_date: "2026-04-01",
+            end_date: "2026-06-30",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
+            enqueued_at: "2026-07-06T13:56:11Z",
+            status: "processing"
+          }.to_json
+        ]
+      end
+
+      before do
+        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(job_data)
+        allow($redis).to receive(:lset)
+
+        dead_job = instance_double(Sidekiq::SortedEntry, jid: dead_jid, klass: "GenerateSalesReportJob")
+        unrelated_dead_job = instance_double(Sidekiq::SortedEntry, jid: "other_jid", klass: "SomeOtherJob")
+        allow(Sidekiq::DeadSet).to receive(:new).and_return([dead_job, unrelated_dead_job])
+      end
+
+      it "marks the dead job as failed and persists the correction to Redis" do
+        result = described_class.fetch_job_history
+
+        expect(result[0]["status"]).to eq("failed")
+        expect($redis).to have_received(:lset).with(RedisKey.sales_report_jobs, 0, a_string_including("\"failed\""))
+      end
+
+      it "leaves genuinely processing jobs untouched" do
+        result = described_class.fetch_job_history
+
+        expect(result[1]["status"]).to eq("processing")
+        expect($redis).not_to have_received(:lset).with(RedisKey.sales_report_jobs, 1, anything)
+      end
+
+      it "does not touch Redis when the Dead set has no sales report jobs" do
+        allow(Sidekiq::DeadSet).to receive(:new).and_return([instance_double(Sidekiq::SortedEntry, jid: "x", klass: "SomeOtherJob")])
+
+        result = described_class.fetch_job_history
+
+        expect(result.map { _1["status"] }).to eq(%w[processing processing])
+        expect($redis).not_to have_received(:lset)
+      end
+
+      it "returns the raw history if the reconciliation write fails" do
+        allow($redis).to receive(:lset).and_raise(Redis::BaseError.new("read only replica"))
+
+        result = described_class.fetch_job_history
+
+        expect(result.size).to eq(2)
+      end
+    end
   end
 end
