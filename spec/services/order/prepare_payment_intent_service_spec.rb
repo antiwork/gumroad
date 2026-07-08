@@ -512,7 +512,11 @@ describe Order::PreparePaymentIntentService, :vcr do
           create_args, = perform_with_ideal_preview(order, params)
 
           expect(create_args[:currency]).to eq(Currency::EUR)
-          expect(create_args[:payment_method_types]).to eq(%w[card link ideal])
+          # bancontact rides along because the test-mode QA surface enables both EUR
+          # forced-currency methods for flagged sellers; the USD-only methods
+          # (cashapp/us_bank_account) are what this example guards against.
+          expect(create_args[:payment_method_types]).to eq(%w[card link ideal bancontact])
+          expect(create_args[:payment_method_types]).not_to include("cashapp", "us_bank_account")
         end
       end
 

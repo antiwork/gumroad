@@ -127,9 +127,23 @@ class Checkout::PaymentMethodResolver
     # and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += forced_currency_test_mode_methods(eligible)
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched
+    end
+
+    # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered
+    # once buyer-currency presentment carries them, and the public launch is the #5362 cohort with
+    # its own approval gate. But the presentment machinery needs real manual QA before that launch,
+    # so surface them when BOTH are true: the seller has the internal buyer-currency flags on, and
+    # Stripe is in test mode (preview apps / staging). Production sellers run live-mode Stripe keys,
+    # so this branch can never add methods to a real checkout.
+    def forced_currency_test_mode_methods(eligible)
+      return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+      return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.seller_enabled?(sellers.first)
+
+      eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify
