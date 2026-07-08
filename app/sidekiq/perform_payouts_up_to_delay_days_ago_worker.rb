@@ -31,10 +31,20 @@ class PerformPayoutsUpToDelayDaysAgoWorker
 
     Rails.logger.info("AUTOMATED PAYOUTS: #{payout_period_end_date}, #{payout_processor_type}, #{bank_account_types} (Started)")
 
-    if bank_account_types
-      Payouts.create_payments_for_balances_up_to_date_for_bank_account_types(payout_period_end_date, payout_processor_type, bank_account_types)
-    else
-      Payouts.create_payments_for_balances_up_to_date(payout_period_end_date, payout_processor_type)
+    # The database connection defaults to a 5-minute statement cap (config/database.yml).
+    # The `holding_balance` eligibility query for a large bank-account-type cohort (US ACH,
+    # India, UK) regularly exceeds that cap during the 10:00 UTC batch window, and because
+    # all Sidekiq retries land in the same contention window, retries exhaust and every
+    # seller in the bucket goes unpaid for the week (4 incidents: #434, #870, #955, and the
+    # 2026-07-08 UK batch). Payouts are a weekly batch job, not a user-facing request — a
+    # long-running query here is expected, so give it a 2-hour budget instead of letting
+    # the default cap kill the batch.
+    WithMaxExecutionTime.timeout_queries(seconds: 2.hours) do
+      if bank_account_types
+        Payouts.create_payments_for_balances_up_to_date_for_bank_account_types(payout_period_end_date, payout_processor_type, bank_account_types)
+      else
+        Payouts.create_payments_for_balances_up_to_date(payout_period_end_date, payout_processor_type)
+      end
     end
 
     Rails.logger.info("AUTOMATED PAYOUTS: #{payout_period_end_date}, #{payout_processor_type} #{bank_account_types} (Finished)")
