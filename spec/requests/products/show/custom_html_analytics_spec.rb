@@ -4,9 +4,8 @@ require "spec_helper"
 
 # A custom HTML landing page renders as a bare wrapper document that embeds the
 # seller's HTML in a sandboxed, opaque-origin iframe. That bypasses the React
-# product page which normally fires the seller's analytics, so the wrapper has to
-# re-inject the tracking itself. These specs verify it does — and only in the
-# trusted wrapper, only when the seller has analytics configured and enabled.
+# product page which normally records Gumroad's internal view count and fires the
+# seller's analytics, so the trusted wrapper has to own both jobs.
 describe "Custom HTML landing page analytics", type: :request do
   let(:seller) { create(:user, username: "analyticsseller", google_analytics_id: "G-ABC123") }
   let(:product) { create(:product, user: seller, custom_html: "<main><h1>Custom landing</h1></main>") }
@@ -40,6 +39,7 @@ describe "Custom HTML landing page analytics", type: :request do
     expect(response.body).to include('<meta property="gr:google_analytics:enabled" content="true">')
     expect(response.body).to include('<meta property="gr:fb_pixel:enabled" content="true">')
     expect(response.body).to include('<meta property="gr:tiktok_pixel:enabled" content="true">')
+    expect(response.body).to include('<meta name="csrf-token"')
     expect(response.body).to include('src="/custom_html_analytics.js"')
 
     props = analytics_props(response.body)
@@ -48,6 +48,7 @@ describe "Custom HTML landing page analytics", type: :request do
       "permalink" => product.unique_permalink,
       "name" => product.name,
       "third_party_analytics_domain" => THIRD_PARTY_ANALYTICS_DOMAIN,
+      "tracking_enabled" => true,
       "has_product_third_party_analytics" => false,
     )
     expect(props["analytics"]).to include("google_analytics_id" => "G-ABC123")
@@ -61,23 +62,48 @@ describe "Custom HTML landing page analytics", type: :request do
   end
 
   context "when the seller has no analytics configured" do
-    let(:seller) { create(:user, username: "noanalytics") }
+    let(:seller) { create(:user, username: "noanalyticsseller") }
 
-    it "omits the analytics block so the wrapper stays minimal" do
+    it "still loads the entry point so Gumroad's internal view counter fires" do
       get_wrapper
 
-      expect(response.body).not_to include("gr:custom-html-analytics")
+      expect(response.body).to include("gr:custom-html-analytics")
+      expect(response.body).to include('src="/custom_html_analytics.js"')
       expect(response.body).not_to include("gr:google_analytics:enabled")
+
+      props = analytics_props(response.body)
+      expect(props).to include(
+        "tracking_enabled" => true,
+        "has_product_third_party_analytics" => false,
+        "permalink" => product.unique_permalink,
+      )
     end
   end
 
   context "when the seller disabled third-party analytics" do
     before { seller.update!(disable_third_party_analytics: true) }
 
-    it "omits the analytics block" do
+    it "still loads the entry point with third-party tracking disabled and no pixel ids in the source" do
       get_wrapper
 
-      expect(response.body).not_to include("gr:custom-html-analytics")
+      expect(response.body).to include("gr:custom-html-analytics")
+      expect(response.body).to include('src="/custom_html_analytics.js"')
+      expect(response.body).not_to include("gr:google_analytics:enabled")
+      # The seller has a configured Google Analytics id, but with tracking
+      # disabled it must not be visible anywhere in the page source.
+      expect(response.body).not_to include("G-ABC123")
+
+      props = analytics_props(response.body)
+      expect(props).to include(
+        "tracking_enabled" => false,
+        "has_product_third_party_analytics" => false,
+        "permalink" => product.unique_permalink,
+      )
+      expect(props["analytics"]).to include(
+        "google_analytics_id" => nil,
+        "facebook_pixel_id" => nil,
+        "tiktok_pixel_id" => nil,
+      )
     end
   end
 

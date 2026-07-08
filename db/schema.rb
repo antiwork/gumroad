@@ -184,6 +184,26 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_05_000001) do
     t.index ["link_id"], name: "index_affiliates_links_on_link_id"
   end
 
+  create_table "ai_conversations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.string "title"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["seller_id", "deleted_at", "updated_at", "id"], name: "index_ai_conversations_latest_per_seller"
+    t.index ["seller_id"], name: "index_ai_conversations_on_seller_id"
+  end
+
+  create_table "ai_messages", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "ai_conversation_id", null: false
+    t.string "role", null: false
+    t.text "content", size: :medium, null: false
+    t.json "metadata"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_conversation_id"], name: "index_ai_messages_on_ai_conversation_id"
+  end
+
   create_table "asset_previews", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "link_id"
     t.string "guid"
