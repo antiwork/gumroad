@@ -44,19 +44,37 @@ class Admin::SalesReport
         processing = jobs.select { |job| job["status"] == "processing" }
         return if processing.empty?
 
-        dead_jids = Sidekiq::DeadSet.new.filter_map { |dead_job| dead_job.jid if dead_job.klass == "GenerateSalesReportJob" }.to_set
+        dead_jids = dead_sales_report_jids
         return if dead_jids.empty?
 
         jobs.each_with_index do |job, index|
           next unless job["status"] == "processing" && dead_jids.include?(job["job_id"])
 
+          # Persist the correction to Redis first, and only then update the copy
+          # we're about to render. That way the page never shows a job as "failed"
+          # unless Redis agrees — if the write below raises, the entry keeps
+          # rendering as "processing" and gets another reconciliation attempt on
+          # the next page load.
+          $redis.lset(RedisKey.sales_report_jobs, index, job.merge("status" => "failed").to_json)
           job["status"] = "failed"
-          $redis.lset(RedisKey.sales_report_jobs, index, job.to_json)
         end
       rescue Redis::BaseError => e
-        # Reconciliation is best-effort: if Redis hiccups mid-correction, show the
-        # raw history rather than erroring the admin page.
+        # Reconciliation is best-effort: if Redis hiccups mid-correction, render
+        # what we have rather than erroring the admin page. Entries corrected
+        # before the failure show "failed" (already persisted); the rest keep
+        # their stored status and are retried on the next load.
         Rails.logger.warn("Admin::SalesReport dead-job reconciliation failed: #{e.message}")
+      end
+
+      # The Dead set can hold thousands of unrelated jobs, and this runs on every
+      # admin page poll. Rather than pulling every entry over the wire, ask Redis
+      # to pre-filter with a server-side substring scan for this job class, then
+      # double-check the class on the (few) matches — the substring match is
+      # against the raw job JSON, so it can catch look-alikes.
+      def dead_sales_report_jids
+        Sidekiq::DeadSet.new.scan("GenerateSalesReportJob")
+          .filter_map { |dead_job| dead_job.jid if dead_job.klass == "GenerateSalesReportJob" }
+          .to_set
       end
   end
 

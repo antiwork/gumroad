@@ -342,7 +342,9 @@ describe Admin::SalesReport do
 
         dead_job = instance_double(Sidekiq::SortedEntry, jid: dead_jid, klass: "GenerateSalesReportJob")
         unrelated_dead_job = instance_double(Sidekiq::SortedEntry, jid: "other_jid", klass: "SomeOtherJob")
-        allow(Sidekiq::DeadSet).to receive(:new).and_return([dead_job, unrelated_dead_job])
+        dead_set = instance_double(Sidekiq::DeadSet)
+        allow(dead_set).to receive(:scan).with("GenerateSalesReportJob").and_return([dead_job, unrelated_dead_job])
+        allow(Sidekiq::DeadSet).to receive(:new).and_return(dead_set)
       end
 
       it "marks the dead job as failed and persists the correction to Redis" do
@@ -360,7 +362,9 @@ describe Admin::SalesReport do
       end
 
       it "does not touch Redis when the Dead set has no sales report jobs" do
-        allow(Sidekiq::DeadSet).to receive(:new).and_return([instance_double(Sidekiq::SortedEntry, jid: "x", klass: "SomeOtherJob")])
+        empty_dead_set = instance_double(Sidekiq::DeadSet)
+        allow(empty_dead_set).to receive(:scan).with("GenerateSalesReportJob").and_return([instance_double(Sidekiq::SortedEntry, jid: "x", klass: "SomeOtherJob")])
+        allow(Sidekiq::DeadSet).to receive(:new).and_return(empty_dead_set)
 
         result = described_class.fetch_job_history
 
@@ -368,12 +372,18 @@ describe Admin::SalesReport do
         expect($redis).not_to have_received(:lset)
       end
 
-      it "returns the raw history if the reconciliation write fails" do
+      it "returns the unreconciled history if the reconciliation write fails" do
         allow($redis).to receive(:lset).and_raise(Redis::BaseError.new("read only replica"))
 
         result = described_class.fetch_job_history
 
         expect(result.size).to eq(2)
+        # The correction is persisted to Redis before the in-memory copy is
+        # updated, so when the write fails nothing is marked "failed" — the
+        # entries keep their stored status and are reconciled again on the
+        # next page load.
+        expect(result[0]["status"]).to eq("processing")
+        expect(result[1]["status"]).to eq("processing")
       end
     end
   end
