@@ -371,6 +371,23 @@ describe Payouts do
         end.to_not change { Payment.count }
       end
     end
+
+    context "when the seller is payable" do
+      # Daily-scheduled payouts must always be enqueued as instant payouts. That is what
+      # makes the daily fee identical to the manual instant payout fee: both paths go
+      # through StripePayoutProcessor#prepare_payment_and_set_amount, which deducts
+      # StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT for PAYOUT_TYPE_INSTANT payments.
+      it "enqueues the payout as an instant payout so the instant payout fee applies" do
+        creator = create(:user_with_compliance_info)
+        allow(described_class).to receive(:is_user_payable).and_return(true)
+
+        expect(StripePayoutProcessor).to receive(:enqueue_payments).with(
+          [creator.id], payout_date.to_s, payout_type: Payouts::PAYOUT_TYPE_INSTANT
+        )
+
+        described_class.create_instant_payouts_for_balances_up_to_date_for_users(payout_date, [creator], perform_async: true)
+      end
+    end
   end
 
   describe ".create_payments_for_balances_up_to_date_for_bank_account_types" do

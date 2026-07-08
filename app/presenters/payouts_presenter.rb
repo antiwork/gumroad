@@ -34,6 +34,10 @@ class PayoutsPresenter
     return nil unless seller.instant_payouts_supported?
 
     {
+      # The fee rate charged on instant (and daily-scheduled) payouts. Sent to the
+      # frontend so the fee shown to the creator is always the rate the Stripe
+      # payout processor deducts, rather than a separately maintained constant.
+      instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
       payable_amount_cents: seller.instantly_payable_unpaid_balance_cents,
       payable_balances: seller.instantly_payable_unpaid_balances.sort_by(&:date).reverse.map do |balance|
         {

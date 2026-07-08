@@ -264,6 +264,10 @@ class SettingsPresenter
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      # Daily payouts are executed as Stripe instant payouts, so they carry the same
+      # fee. Expose the canonical rate here so the settings UI can never drift from
+      # what the payout processor actually charges.
+      instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
       buyer_local_currency_enabled: Feature.active?(:buyer_local_currency, seller),
       disable_buyer_local_currency: seller.disable_buyer_local_currency?,
       can_manage_beneficial_owners: payments_policy.update? && StripeBeneficialOwnersManager.eligible?(seller),
