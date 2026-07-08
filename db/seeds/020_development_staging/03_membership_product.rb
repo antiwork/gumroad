@@ -7,10 +7,8 @@
 # publish action entirely — products are born published (draft: false), so it is purchasable at
 # its direct URL without ever being indexed.
 #
-# Besides db:seed, this file is also loaded on boot for staging branch deployments (see
-# config/initializers/stripe_apple_pay_preview_domain.rb), whose databases were seeded before
-# this file existed. find_by (not Link.fetch, which scopes to visible) keeps the re-runs
-# idempotent even if the product gets soft-deleted.
+# find_by (not Link.fetch, which scopes to visible) keeps re-runs idempotent even if the product
+# gets soft-deleted.
 seller = User.find_by(email: "seller@gumroad.com")
 if seller.present? && Link.find_by(unique_permalink: "membershipdemo").blank?
   seller.products.create!(
