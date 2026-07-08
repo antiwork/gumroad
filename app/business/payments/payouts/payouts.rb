@@ -8,6 +8,10 @@ class Payouts
   PAYOUT_TYPE_INSTANT = "instant"
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
   HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
+  # Max user ids per `User.where(id: ...)` lookup. See the comment in
+  # create_payments_for_balances_up_to_date_for_bank_account_types for why a large
+  # IN() list has to be split before it reaches MySQL.
+  USER_LOOKUP_BATCH_SIZE = 1_000
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -100,8 +104,21 @@ class Payouts
       user_ids = holding_balance_user_ids.each_slice(BANK_ACCOUNT_LOOKUP_BATCH_SIZE).flat_map do |user_ids_batch|
         BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
       end
-      users = User.where(id: user_ids)
-      self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
+
+      # Load the matched users in id-bounded slices rather than one
+      # `User.where(id: user_ids)`. For a large bank-account cohort that id list runs
+      # to tens of thousands of ids, and MySQL abandons the primary-key range plan
+      # once the IN() list outgrows the range optimizer's memory budget
+      # (range_optimizer_max_mem_size), falling back to a full scan of the very large
+      # users table. That scan can't finish inside the statement timeout, so the whole
+      # per-bank-type payout job dies (gumroad-private#955). Slicing keeps every lookup
+      # on the fast primary-key range plan. This path is Stripe-only and enqueues one
+      # job per user, so processing the cohort a slice at a time is equivalent to
+      # processing it all at once.
+      user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
+        users = User.where(id: user_ids_batch)
+        self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
+      end
     end
   end
 

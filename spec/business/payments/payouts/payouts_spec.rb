@@ -457,6 +457,24 @@ describe Payouts do
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
     end
+
+    it "loads the matched users in id-bounded batches so a large cohort cannot force a full-table scan" do
+      stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 1)
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+
+      loaded_batches = []
+      allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, users, **_options|
+        loaded_batches << users.to_a
+      end
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
+
+      # One batch per user at a batch size of 1: no single lookup ever exceeds the cap,
+      # and the union across batches is still the full Australian cohort.
+      expect(loaded_batches.size).to eq(2)
+      expect(loaded_batches.map(&:size)).to all(be <= 1)
+      expect(loaded_batches.flatten).to match_array([u1_2, u2_2])
+    end
   end
 
   describe ".holding_balance_user_ids" do
