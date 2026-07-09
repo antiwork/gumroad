@@ -183,11 +183,15 @@ class Settings::PaymentsController < Settings::BaseController
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
     end
 
-    # A rejected account has nothing left to remediate — Stripe won't create an
-    # account link for it, so instead of failing with a generic error we send
-    # the seller to the Payments page, where the rejection banner explains the
-    # terminal state.
-    if current_seller.stripe_account.stripe_rejected?
+    # A rejected account is usually terminal — Stripe won't create an account
+    # link for it, so instead of failing with a generic error we send the
+    # seller to the Payments page, where the rejection banner explains it.
+    # Exception: Stripe sometimes leaves a verification request open on a
+    # rejected account (appealable rejection, e.g. Japan `rejected.listed`
+    # with a live identity-document request). Those sellers must keep their
+    # remediation link, so we only short-circuit when nothing is left open.
+    if current_seller.stripe_account.stripe_rejected? &&
+       !current_seller.user_compliance_info_requests.requested.exists?
       redirect_to settings_payments_path and return
     end
 

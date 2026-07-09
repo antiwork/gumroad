@@ -331,7 +331,14 @@ class SettingsPresenter
         .where(field_needed: id_document_fields).exists?
 
       stripe_account = seller.stripe_account
-      stripe_rejected = stripe_account&.stripe_rejected? || false
+      # Only show the terminal "Stripe rejected your account / Gumroad cannot
+      # reverse this" banner when the rejection really is final. A rejected
+      # account that still has an open verification request is the appealable
+      # fork (e.g. Japan `rejected.listed` with a live identity-document
+      # request) — that seller keeps the normal compliance-actions UI and their
+      # remediation link instead of a dead-end banner.
+      stripe_rejected = (stripe_account&.stripe_rejected? || false) &&
+        !seller.user_compliance_info_requests.requested.exists?
 
       # Tells the rejected-account banner what will happen to the seller's
       # remaining balance, so the copy doesn't point at flows that can't work:

@@ -914,7 +914,16 @@ module StripeMerchantAccountManager
     end
     merchant_account.save! if should_save
 
-    handle_stripe_rejection(user, merchant_account) if merchant_account.stripe_rejected?
+    # A `rejected.*` disabled_reason is usually terminal, but not always: Stripe
+    # sometimes marks an account rejected while still keeping an identity
+    # document request open (seen with Japan `rejected.listed` collisions).
+    # Those sellers can still verify and be reinstated, so only treat the
+    # rejection as final when Stripe is asking for nothing more — otherwise we
+    # would close the very verification request the seller needs and tell them
+    # the rejection cannot be appealed while Stripe is mid-appeal.
+    if merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
+      handle_stripe_rejection(user, merchant_account)
+    end
 
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
@@ -985,11 +994,15 @@ module StripeMerchantAccountManager
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
         user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
-      elsif merchant_account.stripe_rejected?
-        # Stripe has permanently rejected the account, so there is nothing the
-        # seller can submit that would change the outcome. Don't open a new
-        # verification request (which would trigger a remediation email whose
-        # link dead-ends for rejected accounts).
+      elsif merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
+        # Stripe has permanently rejected the account and is asking for nothing
+        # more, so there is nothing the seller can submit that would change the
+        # outcome. Don't open a new verification request (which would trigger a
+        # remediation email whose link dead-ends for rejected accounts). When a
+        # rejected account DOES still have open requirements (the appealable
+        # fork, e.g. Japan `rejected.listed` with a live document request), we
+        # fall through and open the request so the seller keeps their
+        # remediation path.
         next
       else
         # Some info/verification is required by Stripe for supportability.
@@ -1141,6 +1154,18 @@ module StripeMerchantAccountManager
 
   def self.prefecture_kana(kanji)
     Compliance::Countries.japan_prefecture_kana(kanji)
+  end
+
+  # Stripe has nothing further the seller could submit: no currently-due or
+  # past-due requirements now, and none scheduled to become due. When a
+  # rejected account still carries open requirements, the rejection is
+  # appealable (the seller can upload the requested document and be
+  # reinstated), so it must NOT be handled as terminal.
+  def self.stripe_requirements_exhausted?(requirements, future_requirements)
+    (requirements["currently_due"] || []).empty? &&
+      (requirements["past_due"] || []).empty? &&
+      (requirements["eventually_due"] || []).empty? &&
+      (future_requirements["currently_due"] || []).empty?
   end
 
   # Runs on every account.updated webhook once Stripe has permanently rejected

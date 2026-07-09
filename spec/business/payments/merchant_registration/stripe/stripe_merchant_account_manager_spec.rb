@@ -10344,6 +10344,8 @@ describe StripeMerchantAccountManager, :vcr do
             describe "when Stripe permanently rejects the account" do
               before do
                 stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                # Terminal rejection: Stripe is asking for nothing more.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
               end
 
               it "closes open verification requests so remediation reminders stop" do
@@ -10369,13 +10371,30 @@ describe StripeMerchantAccountManager, :vcr do
                   described_class.handle_stripe_event(stripe_event)
                 end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
               end
+            end
 
-              it "does not open new verification requests for outstanding Stripe fields" do
-                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.id_number"]
+            describe "when Stripe rejects the account but still has open requirements (appealable fork)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                # e.g. Japan `rejected.listed` collision: rejected, but Stripe
+                # still wants an identity document — the seller can appeal.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.verification.document"]
+              end
 
+              it "does not close open verification requests" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("requested")
+              end
+
+              it "does not send the terminal rejection email" do
                 expect do
                   described_class.handle_stripe_event(stripe_event)
-                end.not_to change { user.user_compliance_info_requests.requested.count }
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to be_falsey
               end
             end
           end
