@@ -58,8 +58,8 @@ else
   # Only running instances: stopped or terminating ones have no private IP
   # (the CLI prints "None"), and probing those would waste 20 seconds each.
   candidate_ips=$(aws ec2 describe-instances \
-    --filter "Name=instance.group-name,Values=$PROD_SECURITY_GROUP" \
-    --filter "Name=instance-state-name,Values=running" \
+    --filters "Name=instance.group-name,Values=$PROD_SECURITY_GROUP" \
+              "Name=instance-state-name,Values=running" \
     --query "Reservations[].Instances[].[LaunchTime,PrivateIpAddress] | sort_by(@, &[0])" \
     --output text | awk '{print $2}')
 
