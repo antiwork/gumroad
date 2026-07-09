@@ -1099,10 +1099,13 @@ module StripeMerchantAccountManager
       MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
 
-    # A rejected account is terminal, so don't open new verification requests
-    # or send "we need more information" emails — there is nothing the seller
-    # can provide that would change Stripe's decision.
-    return if merchant_account.stripe_rejected?
+    # A terminally rejected account is final, so don't open new verification
+    # requests or send "we need more information" emails — there is nothing
+    # the seller can provide that would change Stripe's decision. Appealable
+    # rejections (Stripe rejected the account but is still asking for
+    # something, e.g. an identity document) fall through, so those sellers
+    # keep getting verification requests and the emails that guide them.
+    return if merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
 
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at
 

@@ -10396,6 +10396,20 @@ describe StripeMerchantAccountManager, :vcr do
 
                 expect(merchant_account.reload.stripe_rejection_email_sent).to be_falsey
               end
+
+              it "still opens a verification request for the document Stripe is asking for" do
+                described_class.handle_stripe_event(stripe_event)
+
+                request = user.user_compliance_info_requests.requested.last
+                expect(request).to be_present
+                expect(request.field_needed).to eq(UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+              end
+
+              it "still emails the seller about the outstanding verification" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed).with(user.id, [UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID])
+              end
             end
           end
 
