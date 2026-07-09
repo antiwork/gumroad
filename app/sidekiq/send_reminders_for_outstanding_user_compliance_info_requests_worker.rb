@@ -15,6 +15,12 @@ class SendRemindersForOutstandingUserComplianceInfoRequestsWorker
     user_ids.each do |user_id|
       user = User.find(user_id)
       return unless user.account_active?
+      # Rejected Stripe accounts are terminal: the verification these reminders
+      # ask for can't change Stripe's decision, so don't nag the seller. Their
+      # open requests get closed by the account.updated webhook handler; this
+      # guard covers the window before that runs (and legacy rows the backfill
+      # hasn't reached yet).
+      next if user.stripe_account&.stripe_rejected?
       requests = user.user_compliance_info_requests
 
       if user.stripe_account&.country == Compliance::Countries::SGP.alpha2

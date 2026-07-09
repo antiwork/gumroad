@@ -1,0 +1,15 @@
+<div>
+  <h2>Your payments account has been closed</h2>
+  <p>Our payments processor, Stripe, has reviewed your account and made a final decision to close it. This decision was made by Stripe, not Gumroad, and unfortunately it cannot be appealed or reversed. Sales on your account have been stopped, and you won't receive any further verification requests from us.</p>
+  <% if @balance_cents >= Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS %>
+    <% if @payouts_blocked_by_stripe %>
+      <p>Your remaining balance of <%= @formatted_balance %> is currently being held by Stripe. If Stripe releases it, we'll pay it out to you automatically. There's nothing you need to do in the meantime.</p>
+    <% else %>
+      <p>Your remaining balance of <%= @formatted_balance %> will be paid out automatically on your next scheduled payout, even if it's below the usual $100 minimum.</p>
+    <% end %>
+  <% elsif @balance_cents > 0 %>
+    <p>Your remaining balance of <%= @formatted_balance %> is below the $1 minimum our payout system can send, so we're unable to pay it out.</p>
+  <% end %>
+  <p>You can check your account status anytime on your <%= link_to "payments settings page", settings_payments_url %>.</p>
+  <p>We're sorry it ended this way, and we thank you for your time on Gumroad.</p>
+</div>

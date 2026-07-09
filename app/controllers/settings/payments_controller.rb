@@ -183,6 +183,14 @@ class Settings::PaymentsController < Settings::BaseController
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
     end
 
+    # A rejected account has nothing left to remediate — Stripe won't create an
+    # account link for it, so instead of failing with a generic error we send
+    # the seller to the Payments page, where the rejection banner explains the
+    # terminal state.
+    if current_seller.stripe_account.stripe_rejected?
+      redirect_to settings_payments_path and return
+    end
+
     has_local_requests = current_seller.user_compliance_info_requests.requested.exists?
     if !has_local_requests && !stripe_account_has_open_requirements?(current_seller.stripe_account)
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return

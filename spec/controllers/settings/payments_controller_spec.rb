@@ -2000,6 +2000,16 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
     end
 
+    it "redirects to the payments settings page without contacting Stripe when the account is rejected" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+      expect(Stripe::AccountLink).not_to receive(:create)
+
+      get :remediation
+
+      expect(response).to redirect_to settings_payments_url
+    end
+
     it "does nothing and redirects to payments settings page if there's no pending stripe information request and Stripe agrees" do
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(

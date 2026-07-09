@@ -914,6 +914,8 @@ module StripeMerchantAccountManager
     end
     merchant_account.save! if should_save
 
+    handle_stripe_rejection(user, merchant_account) if merchant_account.stripe_rejected?
+
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
     else
@@ -983,6 +985,12 @@ module StripeMerchantAccountManager
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
         user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
+      elsif merchant_account.stripe_rejected?
+        # Stripe has permanently rejected the account, so there is nothing the
+        # seller can submit that would change the outcome. Don't open a new
+        # verification request (which would trigger a remediation email whose
+        # link dead-ends for rejected accounts).
+        next
       else
         # Some info/verification is required by Stripe for supportability.
         # Send a Stripe remediation link to the creator via email so they can submit the info.
@@ -1078,6 +1086,11 @@ module StripeMerchantAccountManager
       MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
 
+    # A rejected account is terminal, so don't open new verification requests
+    # or send "we need more information" emails — there is nothing the seller
+    # can provide that would change Stripe's decision.
+    return if merchant_account.stripe_rejected?
+
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at
 
     return if fields_needed.empty?
@@ -1128,6 +1141,20 @@ module StripeMerchantAccountManager
 
   def self.prefecture_kana(kanji)
     Compliance::Countries.japan_prefecture_kana(kanji)
+  end
+
+  # Runs on every account.updated webhook once Stripe has permanently rejected
+  # the account. Closes any open verification requests — which stops both the
+  # "payouts may be blocked" reminder loop and the remediation emails whose
+  # links dead-end on rejected accounts — and sends the seller a single email
+  # explaining that the rejection is final and what happens to their balance.
+  def self.handle_stripe_rejection(user, merchant_account)
+    user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
+
+    return if merchant_account.stripe_rejection_email_sent
+
+    merchant_account.update!(stripe_rejection_email_sent: true)
+    MerchantRegistrationMailer.stripe_account_rejected(user.id).deliver_later(queue: "critical")
   end
 
   def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false)

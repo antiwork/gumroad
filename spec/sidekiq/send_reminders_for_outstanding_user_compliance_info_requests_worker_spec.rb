@@ -19,6 +19,11 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
       user.suspend_for_fraud!(author_id: admin.id)
       user
     end
+    let(:user_10) do
+      user = create(:user)
+      create(:merchant_account, user:, stripe_disabled_reason: "rejected.fraud")
+      user
+    end
 
     let!(:user_1_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_1) }
     let!(:user_1_request_2) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::LAST_NAME, user: user_1) }
@@ -32,6 +37,7 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
     let!(:user_7_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::TAX_ID, user: user_7) }
     let!(:user_8_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_8) }
     let!(:user_9_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_9) }
+    let!(:user_10_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::TAX_ID, user: user_10) }
 
     let(:time_now) { Time.current.change(usec: 0) }
 
@@ -60,6 +66,7 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
       user_6_request_1.reload
       user_6_request_2.reload
       user_7_request_1.reload
+      user_10_request_1.reload
     end
 
     it "reminds a user of all the outstanding requests, if they have never been reminded" do
@@ -96,6 +103,10 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
 
     it "does not remind a suspended user" do
       expect(user_9_request_1.emails_sent_at).to be_empty
+    end
+
+    it "does not remind a user whose Stripe account was rejected" do
+      expect(user_10_request_1.emails_sent_at).to be_empty
     end
   end
 

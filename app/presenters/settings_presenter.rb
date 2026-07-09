@@ -333,6 +333,25 @@ class SettingsPresenter
       stripe_account = seller.stripe_account
       stripe_rejected = stripe_account&.stripe_rejected? || false
 
+      # Tells the rejected-account banner what will happen to the seller's
+      # remaining balance, so the copy doesn't point at flows that can't work:
+      # - "stripe_hold": Stripe disabled payouts on the rejected account, so the
+      #   money moves only if Stripe releases it.
+      # - "auto_payout": we'll pay the balance out automatically on the normal
+      #   schedule (rejected accounts bypass the usual $100 minimum).
+      # - "too_small": the balance is under the $1 transfer floor and can't be sent.
+      stripe_rejected_balance_status = nil
+      if stripe_rejected
+        balance_cents = seller.unpaid_balance_cents
+        stripe_rejected_balance_status = if balance_cents < Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
+          "too_small"
+        elsif seller.payouts_paused_internally? && seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+          "stripe_hold"
+        else
+          "auto_payout"
+        end
+      end
+
       compliance_actions = []
       if pending_compliance && stripe_account.present? && !stripe_rejected && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
@@ -367,6 +386,7 @@ class SettingsPresenter
         needs_id_upload:,
         gumroad_status:,
         stripe_rejected:,
+        stripe_rejected_balance_status:,
       }
     end
 

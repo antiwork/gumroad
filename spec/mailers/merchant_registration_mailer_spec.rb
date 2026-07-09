@@ -111,4 +111,46 @@ describe MerchantRegistrationMailer do
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end
+
+  describe "stripe_account_rejected" do
+    let(:user) { create(:user) }
+
+    it "tells the seller the rejection is final and sales have stopped" do
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.subject).to eq("Your Gumroad payments account has been closed")
+      expect(mail.to).to include(user.email)
+      expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.body.encoded).to include("made a final decision to close it")
+      expect(mail.body.encoded).to include("cannot be appealed or reversed")
+      expect(mail.body.encoded).to include("you won't receive any further verification requests")
+    end
+
+    it "promises an automatic payout when the balance is payable and Stripe hasn't blocked payouts" do
+      create(:balance, user:, amount_cents: 68_17)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("$68.17")
+      expect(mail.body.encoded).to include("paid out automatically on your next scheduled payout")
+    end
+
+    it "explains the Stripe hold when Stripe disabled payouts on the rejected account" do
+      create(:balance, user:, amount_cents: 68_17)
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("currently being held by Stripe")
+      expect(mail.body.encoded).not_to include("next scheduled payout")
+    end
+
+    it "explains that a balance under the transfer floor cannot be sent" do
+      create(:balance, user:, amount_cents: 50)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("below the $1 minimum")
+    end
+  end
 end

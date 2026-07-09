@@ -32,6 +32,7 @@ export type AccountStatus = {
   needs_id_upload: boolean;
   gumroad_status: string | null;
   stripe_rejected: boolean;
+  stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | null;
 };
 
 export default function AccountStatusSection({
@@ -85,13 +86,23 @@ export default function AccountStatusSection({
       {!accountStatus.is_suspended && accountStatus.stripe_rejected ? (
         <Alert role="status" variant="danger">
           <p>Stripe rejected your account, so you can no longer accept payments. Gumroad cannot reverse this.</p>
-          <p className="mt-2">
-            You can still withdraw any remaining balance from the{" "}
-            <a href={Routes.balance_path()} className="underline">
-              Payouts page
-            </a>
-            .
-          </p>
+          {accountStatus.stripe_rejected_balance_status === "stripe_hold" ? (
+            <p className="mt-2">
+              Your remaining balance is currently held by Stripe. If Stripe releases it, we will pay it out to you
+              automatically.
+            </p>
+          ) : accountStatus.stripe_rejected_balance_status === "auto_payout" ? (
+            <p className="mt-2">
+              Your remaining balance will be paid out automatically on your next scheduled payout, even if it is below
+              the usual minimum. You can track it on the{" "}
+              <a href={Routes.balance_path()} className="underline">
+                Payouts page
+              </a>
+              .
+            </p>
+          ) : accountStatus.stripe_rejected_balance_status === "too_small" ? (
+            <p className="mt-2">Your remaining balance is below the $1 minimum we can send, so it cannot be paid out.</p>
+          ) : null}
         </Alert>
       ) : null}
 

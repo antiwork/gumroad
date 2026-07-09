@@ -10339,6 +10339,44 @@ describe StripeMerchantAccountManager, :vcr do
 
               expect(merchant_account.reload.stripe_disabled_reason).to be_nil
             end
+
+            describe "when Stripe permanently rejects the account" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+              end
+
+              it "closes open verification requests so remediation reminders stop" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("provided")
+              end
+
+              it "sends the one-time rejection email and records the marker" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected).with(user.id)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to eq(true)
+              end
+
+              it "does not send the rejection email again on subsequent webhooks" do
+                merchant_account.update!(stripe_rejection_email_sent: true)
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+              end
+
+              it "does not open new verification requests for outstanding Stripe fields" do
+                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.id_number"]
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to change { user.user_compliance_info_requests.requested.count }
+              end
+            end
           end
 
           describe "charges are not explicitly enabled or disabled" do

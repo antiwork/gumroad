@@ -623,6 +623,7 @@ describe SettingsPresenter do
           needs_id_upload: false,
           gumroad_status: nil,
           stripe_rejected: false,
+          stripe_rejected_balance_status: nil,
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
@@ -866,7 +867,23 @@ describe SettingsPresenter do
           show_section: true,
           compliance_actions: [],
           stripe_rejected: true,
+          stripe_rejected_balance_status: "too_small",
         ))
+      end
+
+      it "reports the auto-payout balance status when a rejected account holds a payable balance" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, amount_cents: 68_17)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("auto_payout")
+      end
+
+      it "reports the stripe-hold balance status when Stripe paused payouts on the rejected account" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, amount_cents: 68_17)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("stripe_hold")
       end
 
       it "keeps the under review status alongside Stripe verification requirements" do

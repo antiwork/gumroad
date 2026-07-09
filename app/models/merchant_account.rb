@@ -17,6 +17,7 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :unclaimed_balance_collection_transfer_id
   attr_json_data_accessor :stripe_disabled_reason
   attr_json_data_accessor :stripe_payouts_pause_email_sent
+  attr_json_data_accessor :stripe_rejection_email_sent
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }

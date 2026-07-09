@@ -4,6 +4,11 @@ class Payouts
   extend ActionView::Helpers::NumberHelper
 
   MIN_AMOUNT_CENTS = 100_00
+  # When Stripe permanently rejects a connected account, the seller can never
+  # earn their way past the normal $100 minimum, so we release whatever balance
+  # remains. $1 is the floor because internal transfers below that amount can't
+  # be sent and simply roll forward.
+  REJECTED_ACCOUNT_MIN_AMOUNT_CENTS = 1_00
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
