@@ -1,5 +1,5 @@
-import { ArrowInDownSquareHalf, Plus } from "@boxicons/react";
-import { usePoll } from "@inertiajs/react";
+import { ArrowInDownSquareHalf, Plus, RefreshCw } from "@boxicons/react";
+import { router, usePoll } from "@inertiajs/react";
 import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
@@ -29,6 +29,30 @@ type Props = {
 
 const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authenticityToken }: Props) => {
   const [showNewSalesReportForm, setShowNewSalesReportForm] = React.useState(false);
+  // Tracks which failed row's re-run request is in flight, so its button can
+  // disable immediately instead of allowing accidental double-enqueues while
+  // the new "processing" entry is still on its way back from the server.
+  const [rerunningJobId, setRerunningJobId] = React.useState<string | null>(null);
+
+  const rerunReport = (job: JobHistoryItem) => {
+    setRerunningJobId(job.job_id);
+    router.post(
+      Routes.admin_sales_reports_path(),
+      {
+        authenticity_token: authenticityToken,
+        sales_report: {
+          country_code: job.country_code,
+          start_date: job.start_date,
+          end_date: job.end_date,
+          sales_type: job.sales_type,
+        },
+      },
+      {
+        only: ["job_history", "errors", "flash"],
+        onFinish: () => setRerunningJobId(null),
+      },
+    );
+  };
 
   const hasProcessingJobs = jobHistory.some((job) => job.status === "processing");
 
@@ -110,7 +134,13 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                     </div>
                   </a>
                 ) : job.status === "failed" ? (
-                  <span className="text-red">Failed — re-run this report</span>
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                    <span className="text-red">Failed</span>
+                    <Button size="sm" onClick={() => rerunReport(job)} disabled={rerunningJobId === job.job_id}>
+                      <RefreshCw className="size-4" />
+                      Re-run
+                    </Button>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-[auto_1fr] items-center gap-2">
                     <LoadingSpinner />

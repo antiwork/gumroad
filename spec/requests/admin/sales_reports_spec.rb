@@ -102,6 +102,40 @@ describe "Admin::SalesReportsController", type: :system, js: true do
         expect(page).not_to have_text("Processing")
       end
     end
+    context "when a job has failed" do
+      it "re-enqueues the same report when the re-run button is clicked" do
+        failed_job = {
+          job_id: "dead_123",
+          country_code: "CH",
+          start_date: "2026-04-01",
+          end_date: "2026-06-30",
+          sales_type: "all_sales",
+          enqueued_at: Time.current.to_s,
+          status: "failed"
+        }
+
+        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([failed_job.to_json], [failed_job.merge(status: "processing").to_json])
+        allow(GenerateSalesReportJob).to receive(:perform_async).and_return("new_jid")
+        allow($redis).to receive(:lpush)
+        allow($redis).to receive(:ltrim)
+
+        visit admin_sales_reports_path
+
+        expect(page).to have_text("Failed")
+
+        click_on "Re-run"
+
+        # The POST re-renders job_history (mocked to now return a processing
+        # entry); Capybara's wait on this assertion also guarantees the request
+        # finished before we check the enqueue below.
+        expect(page).to have_text("Processing")
+
+        # The button re-submits the failed row's own parameters, so the admin
+        # does not have to re-enter country/date range/type in the form.
+        expect(GenerateSalesReportJob).to have_received(:perform_async)
+          .with("CH", "2026-04-01", "2026-06-30", "all_sales", true, nil)
+      end
+    end
   end
 
   describe "POST /admin/sales_reports" do
