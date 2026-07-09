@@ -130,8 +130,9 @@ export default function SettingsPage() {
   // navigation attempts (for example a caller that retries after being blocked, or several visits
   // queued while the dialog was open) reuses that answer instead of opening one dialog per attempt.
   // Without this, sellers saw the same confirm dialog dozens of times in a row. We record which
-  // URL the answer was for: "stay" safely blocks any attempt in the window, but "leave" is only
-  // reused for the same destination, so an unrelated navigation can't ride on a stale grant.
+  // URL the answer was for and only reuse the answer for that same destination: a "leave" grant
+  // must not let an unrelated navigation ride on it, and a "stay" refusal must not silently
+  // swallow a deliberate click somewhere else — a new destination always prompts again.
   const lastLeaveAnswer = React.useRef<{ time: number; allowed: boolean; href: string } | null>(null);
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -148,15 +149,15 @@ export default function SettingsPage() {
       //   the preview refresh), which keep this component mounted and its state intact
       if (visit.prefetch || visit.async || visit.url.pathname === window.location.pathname) return;
       const previousAnswer = lastLeaveAnswer.current;
-      if (previousAnswer && Date.now() - previousAnswer.time < 2000) {
-        // A "stay" answer safely blocks every retry in the window. A "leave" answer is only
-        // reused when the retry targets the same destination as the prompt the user answered —
-        // a different destination is a genuinely new navigation and must ask again.
+      if (previousAnswer && Date.now() - previousAnswer.time < 2000 && previousAnswer.href === visit.url.href) {
+        // Reuse the answer only for the same destination the user was asked about. A retry of
+        // that navigation repeats their choice — "stay" blocks it again silently, "leave" lets it
+        // through — while a click to a different destination is a genuinely new navigation and
+        // falls through to a fresh prompt.
         if (!previousAnswer.allowed) {
           event.preventDefault();
-          return;
         }
-        if (previousAnswer.href === visit.url.href) return;
+        return;
       }
       // eslint-disable-next-line no-alert
       const allowed = window.confirm(
