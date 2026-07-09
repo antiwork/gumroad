@@ -132,11 +132,16 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     profile = user.seller_profile
     if profile.update(updates)
-      # Product pages embed the profile's colors/font, so their caches must be
-      # invalidated when the design changes — same trigger the settings UI relies
-      # on via User's after_update hook, which doesn't fire on this path because
-      # only the SellerProfile row is written here.
-      user.clear_products_cache if (profile.saved_changes.keys & %w[background_color highlight_color font]).any?
+      # Product pages embed the profile's colors/font, and the subscribe preview
+      # image renders with them too, so both must be refreshed when the design
+      # changes. The settings UI gets this for free from User's update hooks
+      # (clear_products_cache on after_update, generate_subscribe_preview on
+      # after_commit), but neither fires on this path because only the
+      # SellerProfile row is written here — so trigger both explicitly.
+      if (profile.saved_changes.keys & %w[background_color highlight_color font]).any?
+        user.clear_products_cache
+        user.generate_subscribe_preview
+      end
       render_response(true, profile_design: profile_design_payload(profile))
     else
       error_with_object(:profile_design, profile)

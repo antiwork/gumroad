@@ -65,8 +65,9 @@ describe Api::V2::UsersController do
       expect(profile.font).to eq("Roboto Mono")
     end
 
-    it "invalidates the seller's product caches when the design changes" do
+    it "invalidates product caches and regenerates the subscribe preview when the design changes" do
       expect_any_instance_of(User).to receive(:clear_products_cache)
+      expect_any_instance_of(User).to receive(:generate_subscribe_preview)
 
       patch :update_profile_design, params: { format: :json, access_token: @token.token, background_color: "#123456" }
 
