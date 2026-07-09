@@ -126,16 +126,36 @@ export default function SettingsPage() {
 
   const isDirtyRef = React.useRef(isDirty);
   isDirtyRef.current = isDirty;
+  // Remembers the user's most recent answer to the unsaved-changes prompt so that a burst of
+  // navigation attempts (for example a caller that retries after being blocked, or several visits
+  // queued while the dialog was open) reuses that answer instead of opening one dialog per attempt.
+  // Without this, sellers saw the same confirm dialog dozens of times in a row.
+  const lastLeaveAnswer = React.useRef<{ time: number; allowed: boolean } | null>(null);
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current) e.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     const removeInertiaListener = router.on("before", (event) => {
-      if (!isDirtyRef.current || event.detail.visit.method !== "get") return;
+      const visit = event.detail.visit;
+      if (!isDirtyRef.current || visit.method !== "get") return;
+      // Background requests never discard the editor's local state, so they must not prompt:
+      // - prefetch: Inertia warming a link on hover
+      // - async: polling-style requests that update props in place
+      // - same-path visits: reloads of this page (including our own post-save router.reload and
+      //   the preview refresh), which keep this component mounted and its state intact
+      if (visit.prefetch || visit.async || visit.url.pathname === window.location.pathname) return;
+      const previousAnswer = lastLeaveAnswer.current;
+      if (previousAnswer && Date.now() - previousAnswer.time < 2000) {
+        if (!previousAnswer.allowed) event.preventDefault();
+        return;
+      }
       // eslint-disable-next-line no-alert
-      if (!window.confirm("You have unsaved changes that will be lost if you leave this page. Leave anyway?"))
-        event.preventDefault();
+      const allowed = window.confirm(
+        "You have unsaved changes that will be lost if you leave this page. Leave anyway?",
+      );
+      lastLeaveAnswer.current = { time: Date.now(), allowed };
+      if (!allowed) event.preventDefault();
     });
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
