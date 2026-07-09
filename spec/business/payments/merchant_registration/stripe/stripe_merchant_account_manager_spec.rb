@@ -10425,6 +10425,46 @@ describe StripeMerchantAccountManager, :vcr do
               end
             end
 
+            describe "when Stripe rejects the account with an appeal intervention open (active appeal window)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.other"
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+                # An appeal-category intervention means the seller is inside an
+                # active appeal window: the risk loop suspends them pending the
+                # appeal, so the rejection must not be handled as terminal.
+                stripe_event["data"]["object"]["requirements"]["currently_due"] =
+                  ["interv_1RWtzeAQqMpdRp2IhPb6x4q7.rejection_appeal.support"]
+              end
+
+              it "suspends the seller pending the appeal" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(ContactingCreatorMailer, :suspended_due_to_stripe_risk).with(user.id)
+
+                expect(user.reload.suspended_for_tos_violation?).to be true
+              end
+
+              it "does not send the terminal rejection email" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to be_falsey
+              end
+
+              it "leaves open verification requests untouched" do
+                # A request for the intervention field itself survives the
+                # regular request sync (Stripe still lists it), so the only
+                # thing that could close it is the terminal-rejection handling
+                # — which must not run while the appeal is open.
+                request = create(:user_compliance_info_request, user:, field_needed: "interv_1RWtzeAQqMpdRp2IhPb6x4q7.rejection_appeal.support")
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("requested")
+              end
+            end
+
             describe "when Stripe rejects the account but still has open requirements (appealable fork)" do
               before do
                 stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"

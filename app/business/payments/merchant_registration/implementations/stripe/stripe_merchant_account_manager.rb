@@ -21,6 +21,13 @@ module StripeMerchantAccountManager
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
+  # Stripe intervention categories (the middle segment of an `interv_*`
+  # requirement, e.g. `interv_XXX.rejection_appeal.support`) that mean the
+  # seller is inside an appeal window. These are actionable: the webhook
+  # handler suspends the seller pending the appeal instead of treating the
+  # rejection as final.
+  APPEAL_INTERVENTION_CATEGORIES = %w(rejection_appeal supportability_rejection_appeal)
+
   def self.stripe_payouts_pause_email_type(disabled_reason, fields_needed_present)
     return nil if disabled_reason.to_s.start_with?("rejected.") || disabled_reason == "platform_paused"
     return :action_required if fields_needed_present
@@ -993,7 +1000,7 @@ module StripeMerchantAccountManager
 
       risk_requirement_category = stripe_risk_field_needed.split(".")[1]
 
-      if %w(rejection_appeal supportability_rejection_appeal).include?(risk_requirement_category)
+      if APPEAL_INTERVENTION_CATEGORIES.include?(risk_requirement_category)
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
         user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
@@ -1174,22 +1181,34 @@ module StripeMerchantAccountManager
   # appealable (the seller can upload the requested document and be
   # reinstated), so it must NOT be handled as terminal.
   #
-  # `interv_*` entries don't count as open requirements here. On a rejected
-  # account Stripe leaves a permanent supportability intervention (e.g.
-  # `interv_....other_supportability_inquiry.support`) in `currently_due` and
-  # never clears it — there is no form the seller can fill in for it. Treating
-  # it as an open requirement made every account rejected for supportability
-  # look appealable forever: their verification requests stayed open, the
-  # rejection email never went out, reminders kept firing, and the balance
-  # release never applied. Only concrete, fillable requirements (identity
-  # documents, tax IDs, ...) keep a rejection appealable.
+  # `interv_*` entries mostly don't count as open requirements here. On a
+  # rejected account Stripe leaves a permanent supportability intervention
+  # (e.g. `interv_....other_supportability_inquiry.support`) in `currently_due`
+  # and never clears it — there is no form the seller can fill in for it.
+  # Treating it as an open requirement made every account rejected for
+  # supportability look appealable forever: their verification requests stayed
+  # open, the rejection email never went out, reminders kept firing, and the
+  # balance release never applied.
+  #
+  # The exception is appeal-category interventions (`rejection_appeal`,
+  # `supportability_rejection_appeal`): those mean the seller is inside an
+  # active appeal window, so the rejection is not final yet. The webhook
+  # handler suspends the seller pending the appeal — sending the "cannot be
+  # appealed or reversed" rejection email on top of that would contradict the
+  # appeal in progress. So concrete, fillable requirements (identity
+  # documents, tax IDs, ...) AND appeal interventions keep a rejection
+  # appealable; only permanent, non-actionable interventions are ignored.
   def self.stripe_requirements_exhausted?(requirements, future_requirements)
     [
       requirements["currently_due"],
       requirements["past_due"],
       requirements["eventually_due"],
       future_requirements["currently_due"],
-    ].all? { |fields| (fields || []).all? { |field| field.start_with?("interv_") } }
+    ].all? do |fields|
+      (fields || []).all? do |field|
+        field.start_with?("interv_") && !APPEAL_INTERVENTION_CATEGORIES.include?(field.split(".")[1])
+      end
+    end
   end
 
   # Runs on every account.updated webhook once Stripe has permanently rejected
