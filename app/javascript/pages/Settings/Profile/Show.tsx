@@ -37,6 +37,11 @@ import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 type ProfileSettingsTab = "about" | "pages" | "share";
 
+// How long the user's most recent answer to the unsaved-changes prompt stays reusable for a
+// retry of the same navigation. Long enough to absorb a burst of repeated attempts (the bug
+// this guards against), short enough that a deliberate second click a few seconds later asks again.
+const LEAVE_ANSWER_REUSE_WINDOW_MS = 2000;
+
 type ProfileSettingsForm = {
   name: string | null;
   bio: string | null;
@@ -144,12 +149,19 @@ export default function SettingsPage() {
       if (!isDirtyRef.current || visit.method !== "get") return;
       // Background requests never discard the editor's local state, so they must not prompt:
       // - prefetch: Inertia warming a link on hover
-      // - async: polling-style requests that update props in place
-      // - same-path visits: reloads of this page (including our own post-save router.reload and
-      //   the preview refresh), which keep this component mounted and its state intact
-      if (visit.prefetch || visit.async || visit.url.pathname === window.location.pathname) return;
+      // - async: polling-style requests that update props in place (router.reload sets this,
+      //   which covers our own post-save reload and the preview refresh)
+      // - preserveState visits: the component stays mounted with its state intact
+      // Note we intentionally do NOT exempt plain same-path visits: a regular GET to the current
+      // path defaults to preserveState: false, so Inertia's React adapter remounts the page with
+      // a new key and the pending edits are lost — exactly the loss this prompt protects against.
+      if (visit.prefetch || visit.async || visit.preserveState === true) return;
       const previousAnswer = lastLeaveAnswer.current;
-      if (previousAnswer && Date.now() - previousAnswer.time < 2000 && previousAnswer.href === visit.url.href) {
+      if (
+        previousAnswer &&
+        Date.now() - previousAnswer.time < LEAVE_ANSWER_REUSE_WINDOW_MS &&
+        previousAnswer.href === visit.url.href
+      ) {
         // Reuse the answer only for the same destination the user was asked about. A retry of
         // that navigation repeats their choice — "stay" blocks it again silently, "leave" lets it
         // through — while a click to a different destination is a genuinely new navigation and
