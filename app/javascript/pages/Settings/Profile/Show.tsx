@@ -129,8 +129,10 @@ export default function SettingsPage() {
   // Remembers the user's most recent answer to the unsaved-changes prompt so that a burst of
   // navigation attempts (for example a caller that retries after being blocked, or several visits
   // queued while the dialog was open) reuses that answer instead of opening one dialog per attempt.
-  // Without this, sellers saw the same confirm dialog dozens of times in a row.
-  const lastLeaveAnswer = React.useRef<{ time: number; allowed: boolean } | null>(null);
+  // Without this, sellers saw the same confirm dialog dozens of times in a row. We record which
+  // URL the answer was for: "stay" safely blocks any attempt in the window, but "leave" is only
+  // reused for the same destination, so an unrelated navigation can't ride on a stale grant.
+  const lastLeaveAnswer = React.useRef<{ time: number; allowed: boolean; href: string } | null>(null);
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current) e.preventDefault();
@@ -147,14 +149,20 @@ export default function SettingsPage() {
       if (visit.prefetch || visit.async || visit.url.pathname === window.location.pathname) return;
       const previousAnswer = lastLeaveAnswer.current;
       if (previousAnswer && Date.now() - previousAnswer.time < 2000) {
-        if (!previousAnswer.allowed) event.preventDefault();
-        return;
+        // A "stay" answer safely blocks every retry in the window. A "leave" answer is only
+        // reused when the retry targets the same destination as the prompt the user answered —
+        // a different destination is a genuinely new navigation and must ask again.
+        if (!previousAnswer.allowed) {
+          event.preventDefault();
+          return;
+        }
+        if (previousAnswer.href === visit.url.href) return;
       }
       // eslint-disable-next-line no-alert
       const allowed = window.confirm(
         "You have unsaved changes that will be lost if you leave this page. Leave anyway?",
       );
-      lastLeaveAnswer.current = { time: Date.now(), allowed };
+      lastLeaveAnswer.current = { time: Date.now(), allowed, href: visit.url.href };
       if (!allowed) event.preventDefault();
     });
     return () => {
