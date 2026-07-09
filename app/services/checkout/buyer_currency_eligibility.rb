@@ -106,19 +106,27 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   # Second eligibility entry point, sitting beside the GeoIP-driven card mode above
-  # (it does not replace it). Answers: "this checkout wants payment method
-  # `payment_method` (e.g. "ideal"), which only charges in one currency — may we
-  # present in that currency, and is the product already priced in it?"
+  # (it does not replace it). Answers: "this checkout must present in `forced_currency`
+  # (by default, the currency payment method `payment_method` forces — e.g. "eur" for
+  # "ideal") — may we, and is the product already priced in it?"
   #
   # Unlike the card mode there is NO canonical-USD fallback here: an ineligible
   # result means the payment method must not be offered for this checkout at all,
   # because the method physically cannot charge in USD. The caller reads
   # `fallback_reason` only to learn why the method was withheld.
   #
+  # `forced_currency` can be passed explicitly for methods that do not themselves force
+  # a currency (card/Link) when they are picked on a Payment Element that was MOUNTED in
+  # a forced currency: the ConfirmationToken inherits the element's currency, so the
+  # intent must be created in it no matter which method the buyer chose. The presenter
+  # only mounts a forced-currency element for a product priced in that currency
+  # (method_forced_qa_shape?), so these checkouts land in the direct-listed-amount case.
+  #
   # This mode intentionally does not look at the buyer's GeoIP location or at the
-  # buyer_currency_display params — the payment method alone fixes the currency.
-  def method_forced_decision(payment_method:)
-    forced_currency = self.class.forced_currency_for(payment_method)
+  # buyer_currency_display params — the payment method (or the element mount currency
+  # derived from the product's pricing) alone fixes the currency.
+  def method_forced_decision(payment_method:, forced_currency: nil)
+    forced_currency ||= self.class.forced_currency_for(payment_method)
     # A method not in the registry has no forced currency, so this mode has
     # nothing to decide — the caller should not offer it through this path.
     return fallback(:unsupported_payment_method) if forced_currency.blank?

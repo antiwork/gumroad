@@ -58,26 +58,34 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:buyer_local_currency, seller)
         end
 
-        it "surfaces the EUR forced-currency methods for manual presentment QA" do
-          expect(resolve.payment_method_types).to include("ideal", "bancontact")
+        it "surfaces the EUR forced-currency methods for manual presentment QA when the cart is priced in EUR" do
+          expect(resolve(cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+        end
+
+        it "keeps them off a USD-priced cart — Stripe rejects an element/intent listing EUR-only methods in USD" do
+          expect(resolve(cart_product_currency: "usd").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps them off when the cart currency is unknown (multi-item carts pass nil), failing safe" do
+          expect(resolve(cart_product_currency: nil).payment_method_types).not_to include("ideal", "bancontact")
         end
 
         it "keeps them out when the buyer-currency charging flag is off" do
           Feature.deactivate_user(:buyer_currency_charging, seller)
 
-          expect(resolve.payment_method_types).not_to include("ideal", "bancontact")
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
 
         it "keeps them out of live mode — this is a test-mode-only QA surface" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
 
-          expect(resolve.payment_method_types).not_to include("ideal", "bancontact")
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
 
         it "keeps them out when the seller opted out of buyer-local currency" do
           seller.update!(disable_buyer_local_currency: true)
 
-          expect(resolve.payment_method_types).not_to include("ideal", "bancontact")
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
       end
 

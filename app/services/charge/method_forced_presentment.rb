@@ -50,10 +50,15 @@ class Charge::MethodForcedPresentment
   end
 
   attr_reader :charge, :order, :seller, :merchant_account, :purchases, :amount_cents,
-              :gumroad_amount_cents, :payment_method_type, :params
+              :gumroad_amount_cents, :payment_method_type, :forced_currency, :params
 
+  # forced_currency: pass explicitly when the buyer picked a method that does not itself
+  # force a currency (card/Link) on a Payment Element mounted in a forced currency — the
+  # ConfirmationToken inherits the element's currency, so the intent (and therefore this
+  # presentment) must be built in it regardless of the method. When nil, the currency is
+  # looked up from the payment method's registry entry as before.
   def initialize(charge:, order:, seller:, merchant_account:, purchases:, amount_cents:,
-                 gumroad_amount_cents:, payment_method_type:, params: {})
+                 gumroad_amount_cents:, payment_method_type:, forced_currency: nil, params: {})
     @charge = charge
     @order = order
     @seller = seller
@@ -62,6 +67,7 @@ class Charge::MethodForcedPresentment
     @amount_cents = amount_cents
     @gumroad_amount_cents = gumroad_amount_cents
     @payment_method_type = payment_method_type
+    @forced_currency = forced_currency
     @params = params || {}
   end
 
@@ -102,7 +108,7 @@ class Charge::MethodForcedPresentment
         params:,
         setup_future_charges: false,
         off_session: false
-      ).method_forced_decision(payment_method: payment_method_type)
+      ).method_forced_decision(payment_method: payment_method_type, forced_currency:)
     end
 
     # Case 1: the product is priced in the forced currency, so the buyer pays the listed

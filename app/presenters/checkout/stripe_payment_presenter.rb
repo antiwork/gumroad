@@ -119,6 +119,12 @@ class Checkout::StripePaymentPresenter
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
         ppp_discounted: ppp_verification_applies?,
+        # Single-item carts pass the product's own pricing currency so the resolver's test-mode
+        # forced-currency gate can tell whether iDEAL/Bancontact are actually mountable for this
+        # cart (they only are when the cart is priced in the currency they force). Multi-item
+        # carts pass nil — they always mount the canonical USD element, where forced-currency
+        # methods must never appear.
+        cart_product_currency: items.one? ? items.first[:product_currency] : nil,
       )
     end
 
@@ -165,10 +171,11 @@ class Checkout::StripePaymentPresenter
         # Pay, ACH) are USD-only, so drop them from the element exactly as
         # Order::PreparePaymentIntentService#intent_payment_method_types drops them from a
         # non-USD intent: the element's list and the intent's list must match or Stripe
-        # rejects the ConfirmationToken. Known QA-surface limitation: a US-GeoIP buyer who
-        # picks *card* on this forced-currency element gets a USD intent whose list still
-        # includes the US-locked methods, which can mismatch the token — QA testers are
-        # expected to be non-US (where the resolver's region gate already removed them).
+        # rejects the ConfirmationToken. Every method on this element — card and Link
+        # included — charges through the forced-currency intent (the prepare service keys
+        # the presentment on the element's mount currency, not just the picked method),
+        # because the ConfirmationToken inherits the element's currency and could never
+        # confirm a USD intent.
         payment_method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
       end
       {

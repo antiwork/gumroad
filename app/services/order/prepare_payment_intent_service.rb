@@ -233,18 +233,26 @@ class Order::PreparePaymentIntentService
       charge
     end
 
-    # When the buyer picked a method-forced local payment method (iDEAL/Bancontact —
-    # methods that can only charge in one currency), the deferred intent must be created
-    # in that currency, so the presentment snapshot is built here at prepare time rather
-    # than at charge time as on the card path. Returns nil (canonical USD intent, no
-    # presentment rows — byte-for-byte today's behavior) for every other method, for
-    # ineligible checkouts, and when the feature flags are off: the eligibility service
-    # inside Charge::MethodForcedPresentment enforces all of that, and the service also
-    # swallows its own failures into a nil fallback.
+    # When the deferred intent must be created in a non-USD currency, the presentment
+    # snapshot is built here at prepare time rather than at charge time as on the card
+    # path. That happens in two cases:
+    #   1. The buyer picked a method-forced local payment method (iDEAL/Bancontact —
+    #      methods that can only charge in one currency).
+    #   2. The buyer picked ANY other method (card, Link) on a Payment Element that was
+    #      mounted in a forced currency (the method-forced QA shape: single item priced
+    #      in a forced currency, seller flags on, test mode). The ConfirmationToken
+    #      inherits the element's currency, so a canonical USD intent can never accept
+    #      it — Stripe rejects the confirm with a currency mismatch.
+    # Returns nil (canonical USD intent, no presentment rows — byte-for-byte today's
+    # behavior) for every other checkout, for ineligible carts, and when the feature
+    # flags are off: the eligibility service inside Charge::MethodForcedPresentment
+    # enforces all of that, and the service also swallows its own failures into a nil
+    # fallback.
     def method_forced_presentment_for(charge)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
-      return nil if Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).blank?
+      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
+      return nil if forced_currency.blank?
 
       Charge::MethodForcedPresentment.new(
         charge:,
@@ -255,21 +263,42 @@ class Order::PreparePaymentIntentService
         amount_cents:,
         gumroad_amount_cents:,
         payment_method_type: method_type,
+        forced_currency:,
         params:
       ).perform
     end
 
-    # Once the buyer confirmed with a forced-currency method (iDEAL/Bancontact), the canonical
-    # USD intent is never a usable fallback: Stripe rejects confirming such a ConfirmationToken
-    # against a USD intent, synchronously and without a payment_failed webhook, so the purchase
-    # would sit in_progress until the abandonment worker instead of failing cleanly here. Gated
-    # on the seller flags so the dark feature preserves today's USD behavior byte-for-byte —
-    # with the flags off, a crafted iDEAL token gets exactly the same (dead) response as before.
+    # The currency the Payment Element was mounted in when it differs from USD, derived
+    # from the same basis as Checkout::StripePaymentPresenter#method_forced_qa_shape?
+    # (test mode + seller flags + a single purchase whose product is priced in a currency
+    # some payment method forces). Nil everywhere else — flags off, live mode, USD-priced
+    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
+    def element_mount_forced_currency
+      return nil unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+      return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return nil unless purchases_to_charge.one?
+
+      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency if Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
+    end
+
+    # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
+    # method (iDEAL/Bancontact) or any other method the element offered (card, Link) — the
+    # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
+    # ConfirmationToken against a USD intent, synchronously and without a payment_failed
+    # webhook, so the purchase would sit in_progress until the abandonment worker instead of
+    # failing cleanly here. Gated on the seller flags so the dark feature preserves today's
+    # USD behavior byte-for-byte — with the flags off, a crafted iDEAL token gets exactly
+    # the same (dead) response as before.
     def method_forced_presentment_required?
       return false if @previewed_payment_method_type.blank?
-      return false if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).blank?
 
-      Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
+        Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      else
+        # element_mount_forced_currency already checks the seller flags (and test mode).
+        element_mount_forced_currency.present?
+      end
     end
 
     def create_unconfirmed_intent(charge, presentment = nil)
@@ -339,7 +368,12 @@ class Order::PreparePaymentIntentService
         recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
-        ppp_discounted: ppp_verification_applies?
+        ppp_discounted: ppp_verification_applies?,
+        # Same basis as the presenter's cart_product_currency (the single item's pricing
+        # currency, nil for multi-item carts) so both sides resolve identical method sets —
+        # the Element's list and the deferred intent's list must match or Stripe rejects
+        # the ConfirmationToken.
+        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil
       ).resolve
     end
 

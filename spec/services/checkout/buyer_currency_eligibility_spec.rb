@@ -218,6 +218,42 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(unknown_decision.fallback_reason).to eq(:unsupported_payment_method)
     end
 
+    # Scenario-4 shape (round-2 QA): a card ConfirmationToken minted on an EUR-mounted
+    # Payment Element can only confirm an EUR intent, so the prepare service passes the
+    # element's mount currency explicitly for methods with no registry entry of their own.
+    it "allows card with an explicit forced currency (EUR-mounted element) and flags the direct listed-amount case" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).to be_eligible
+      expect(card_decision.currency).to eq(Currency::EUR)
+      expect(card_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "still applies the flag gates when the forced currency is explicit" do
+      Feature.deactivate_user(described_class::FEATURE_NAME, seller)
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).not_to be_eligible
+      expect(card_decision.fallback_reason).to eq(:feature_disabled)
+    end
+
     it "withholds the method when the internal rollout flag is disabled" do
       Feature.deactivate_user(described_class::FEATURE_NAME, seller)
 
