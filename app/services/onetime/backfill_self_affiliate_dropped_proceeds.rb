@@ -253,6 +253,8 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         purchase.stripe_transaction_id,
         merchant_account: purchase.merchant_account,
       )
+      raise "Could not fetch processor charge for purchase #{purchase.id} (charge #{purchase.stripe_transaction_id})" if processor_charge.nil?
+
       flow_of_funds = processor_charge.flow_of_funds
       raise "Could not rebuild flow of funds for purchase #{purchase.id} (charge #{purchase.stripe_transaction_id})" if flow_of_funds.nil?
 

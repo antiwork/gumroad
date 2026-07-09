@@ -408,6 +408,17 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
       expect(purchase.balance_transactions.count).to eq(1)
     end
 
+    it "raises (and records an error, creating no BT) when the processor charge cannot be fetched" do
+      purchase = build_gbp_purchase
+
+      allow(ChargeProcessor).to receive(:get_charge).and_return(nil)
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id], verbose: true).process
+      expect(result[:stats][:error]).to eq(1)
+      expect(result[:skipped][:error].first[:error]).to include("Could not fetch processor charge")
+      expect(purchase.balance_transactions.count).to eq(1)
+    end
+
     it "does not call the charge processor when Gumroad holds the funds" do
       build_affected_purchase
       expect(ChargeProcessor).not_to receive(:get_charge)
