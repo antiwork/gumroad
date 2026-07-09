@@ -101,7 +101,9 @@ export default function AccountStatusSection({
               .
             </p>
           ) : accountStatus.stripe_rejected_balance_status === "too_small" ? (
-            <p className="mt-2">Your remaining balance is below the $1 minimum we can send, so it cannot be paid out.</p>
+            <p className="mt-2">
+              Your remaining balance is below the $1 minimum we can send, so it cannot be paid out.
+            </p>
           ) : null}
         </Alert>
       ) : null}
