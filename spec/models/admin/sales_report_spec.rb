@@ -347,7 +347,7 @@ describe Admin::SalesReport do
         ]
         sidekiq_connection = double("sidekiq redis connection")
         allow(sidekiq_connection).to receive(:call)
-          .with("ZRANGEBYSCORE", "dead", kind_of(Numeric), "+inf", "LIMIT", 0, described_class::DEAD_SET_SCAN_LIMIT)
+          .with("ZRANGE", "dead", kind_of(Numeric), "+inf", "BYSCORE", "LIMIT", 0, described_class::DEAD_SET_SCAN_LIMIT)
           .and_return(dead_payloads)
         allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
       end

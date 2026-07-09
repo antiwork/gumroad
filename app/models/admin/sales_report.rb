@@ -109,7 +109,11 @@ class Admin::SalesReport
           min_score = (oldest_enqueued_at || 30.days.ago).to_f
 
           dead_payloads = Sidekiq.redis do |connection|
-            connection.call("ZRANGEBYSCORE", "dead", min_score, "+inf", "LIMIT", 0, DEAD_SET_SCAN_LIMIT)
+            # ZRANGE with the BYSCORE option is the modern form of the old
+            # ZRANGEBYSCORE command, which was removed in Redis 8.0. Sidekiq 7
+            # already requires Redis 6.2+, where both forms exist, so this works
+            # across every Redis version we can be running against.
+            connection.call("ZRANGE", "dead", min_score, "+inf", "BYSCORE", "LIMIT", 0, DEAD_SET_SCAN_LIMIT)
           end
 
           dead_payloads.filter_map do |payload|
