@@ -9,6 +9,13 @@ class UpdateUserComplianceInfo
     street_address: [:country],
     business_street_address: [:business_country, :country],
   }.freeze
+  # The fields the Japanese address form submits alongside the city. If any of these arrive in a
+  # submission, the seller is (re)entering their Japanese address, so the city fields must be
+  # present too. Older records can still update unrelated fields (phone, tax id, ...) without a
+  # city — many legacy Japanese records were created before the form collected one, and blocking
+  # every update until they re-enter their address would strand them.
+  JAPAN_INDIVIDUAL_ADDRESS_FIELDS = %i[building_number building_number_kana street_address_kanji street_address_kana].freeze
+  JAPAN_BUSINESS_ADDRESS_FIELDS = %i[business_building_number business_building_number_kana business_street_address_kanji business_street_address_kana].freeze
 
   attr_reader :compliance_params, :user
 
@@ -66,6 +73,9 @@ class UpdateUserComplianceInfo
     if compliance_params.present?
       po_box_error = po_box_error_message
       return { success: false, error_message: po_box_error } if po_box_error.present?
+
+      japan_city_error = japan_city_error_message
+      return { success: false, error_message: japan_city_error } if japan_city_error.present?
 
       ENCRYPTED_FIELD_LABELS.each do |field, label|
         value = compliance_params[field]
@@ -284,6 +294,40 @@ class UpdateUserComplianceInfo
       return value.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")) if ENCRYPTED_COMPLIANCE_INFO_FIELDS.include?(field) && value.is_a?(Strongbox::Lock)
 
       value
+    end
+
+    # A Japanese address is only valid for our payment partner when it includes the city/ward as
+    # its own field. The onboarding form collects it, but a page loaded before the form gained the
+    # city fields (or any client that skips the form) can still submit a Japanese address without
+    # one — and that address shows the city duplicated inside the street line on Stripe's side.
+    # So when a submission carries Japanese address fields, require the matching city fields too.
+    # Submissions that don't touch the address (phone, tax id, ...) are left alone so legacy
+    # records without a city can still update unrelated fields.
+    def japan_city_error_message
+      if japan_address_submitted_for?(:individual)
+        city = compliance_params[:city].presence || current_compliance_info.city.presence
+        city_kana = compliance_params[:city_kana].presence || current_compliance_info.city_kana.presence
+        return "City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward." if city.blank? || city_kana.blank?
+      end
+
+      if japan_address_submitted_for?(:business)
+        business_city = compliance_params[:business_city].presence || current_compliance_info.business_city.presence
+        business_city_kana = compliance_params[:business_city_kana].presence || current_compliance_info.business_city_kana.presence
+        return "Business city/Ward is required for Japanese addresses. Please re-enter your business address including the city/ward." if business_city.blank? || business_city_kana.blank?
+      end
+
+      nil
+    end
+
+    def japan_address_submitted_for?(entity)
+      if entity == :individual
+        return false unless effective_country_code_for(:street_address) == Compliance::Countries::JPN.alpha2
+        JAPAN_INDIVIDUAL_ADDRESS_FIELDS.any? { |field| compliance_params[field].present? }
+      else
+        return false unless effective_is_business?
+        return false unless effective_country_code_for(:business_street_address) == Compliance::Countries::JPN.alpha2
+        JAPAN_BUSINESS_ADDRESS_FIELDS.any? { |field| compliance_params[field].present? }
+      end
     end
 
     def po_box_error_message
