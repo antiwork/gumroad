@@ -83,16 +83,25 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
     # Builds one subtotal row per group of activity, so each group's columns visibly add
     # up on their own before the grand total. Only emitted when the payout actually mixes
     # groups — a payout with only Gumroad-processed sales keeps its old shape.
+    #
+    # The Gumroad-paid subtotal is derived arithmetically — the grand totals minus the
+    # PayPal and Stripe Connect groups' totals — rather than by picking Gumroad rows out
+    # of `data`. That way it never depends on the rows in `data` being the same Ruby
+    # objects as the ones tracked in `paypal_rows` / `stripe_connect_rows`.
     def subtotal_rows(data)
       return [] if paypal_rows.empty? && stripe_connect_rows.empty?
 
-      grouped_row_ids = (paypal_rows + stripe_connect_rows).map(&:object_id).to_set
-      gumroad_rows = data.reject { |row| grouped_row_ids.include?(row.object_id) }
+      paypal_totals = calculate_totals(paypal_rows)
+      stripe_connect_totals = calculate_totals(stripe_connect_rows)
+      gumroad_totals = calculate_totals(data).each_with_object(Hash.new(0)) do |(column_name, value), totals|
+        totals[column_name] = value - paypal_totals[column_name] - stripe_connect_totals[column_name]
+      end
 
       rows = []
-      rows << generate_totals_row(calculate_totals(gumroad_rows), heading: CARD_SALES_SUBTOTAL_HEADING) if gumroad_rows.any?
-      rows << generate_totals_row(calculate_totals(paypal_rows), heading: PAYPAL_SALES_SUBTOTAL_HEADING) if paypal_rows.any?
-      rows << generate_totals_row(calculate_totals(stripe_connect_rows), heading: STRIPE_CONNECT_SALES_SUBTOTAL_HEADING) if stripe_connect_rows.any?
+      gumroad_rows_count = data.size - paypal_rows.size - stripe_connect_rows.size
+      rows << generate_totals_row(gumroad_totals, heading: CARD_SALES_SUBTOTAL_HEADING) if gumroad_rows_count > 0
+      rows << generate_totals_row(paypal_totals, heading: PAYPAL_SALES_SUBTOTAL_HEADING) if paypal_rows.any?
+      rows << generate_totals_row(stripe_connect_totals, heading: STRIPE_CONNECT_SALES_SUBTOTAL_HEADING) if stripe_connect_rows.any?
       rows
     end
 end

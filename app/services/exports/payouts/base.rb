@@ -12,13 +12,16 @@ class Exports::Payouts::Base
   # Rows that belong to PayPal / Stripe Connect activity. Sales made through those
   # processors are paid out to the creator by the processor directly, not through this
   # Gumroad payout, so exports can group them and show that they net out to zero here.
-  def paypal_rows
-    @paypal_rows ||= []
-  end
+  # These are implementation detail shared with subclasses (protected, not public), and
+  # they only contain meaningful data after #payout_data has run.
+  protected
+    def paypal_rows
+      @paypal_rows ||= []
+    end
 
-  def stripe_connect_rows
-    @stripe_connect_rows ||= []
-  end
+    def stripe_connect_rows
+      @stripe_connect_rows ||= []
+    end
 
   private
     def payout_data
