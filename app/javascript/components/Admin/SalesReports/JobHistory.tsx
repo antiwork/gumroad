@@ -36,17 +36,11 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
 
   const rerunReport = (job: JobHistoryItem) => {
     setRerunningJobId(job.job_id);
+    // Re-runs in place: the server swaps this row back to "processing" with a
+    // fresh job ID instead of prepending a duplicate history entry.
     router.post(
-      Routes.admin_sales_reports_path(),
-      {
-        authenticity_token: authenticityToken,
-        sales_report: {
-          country_code: job.country_code,
-          start_date: job.start_date,
-          end_date: job.end_date,
-          sales_type: job.sales_type,
-        },
-      },
+      Routes.rerun_admin_sales_report_path(job.job_id),
+      { authenticity_token: authenticityToken },
       {
         only: ["job_history", "errors", "flash"],
         onFinish: () => setRerunningJobId(null),

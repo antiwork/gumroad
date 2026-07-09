@@ -135,7 +135,11 @@ namespace :admin do
     end
   end
 
-  resources :sales_reports, only: [:index, :create]
+  resources :sales_reports, only: [:index, :create] do
+    member do
+      post :rerun
+    end
+  end
 
   resources :merchant_accounts, only: [:show], param: :external_id do
     member do

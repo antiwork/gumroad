@@ -242,6 +242,74 @@ describe Admin::SalesReport do
     end
   end
 
+  describe ".rerun_failed" do
+    let(:failed_entry) do
+      {
+        job_id: "dead_1",
+        country_code: "CH",
+        start_date: "2026-04-01",
+        end_date: "2026-06-30",
+        sales_type: GenerateSalesReportJob::ALL_SALES,
+        enqueued_at: "2026-07-07T00:00:00Z",
+        status: "failed"
+      }
+    end
+    let(:raw_entry) { failed_entry.to_json }
+
+    before do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([raw_entry])
+      allow(GenerateSalesReportJob).to receive(:perform_async).and_return("new_jid")
+      allow($redis).to receive(:eval).and_return(1)
+      allow($redis).to receive(:lpush)
+      allow($redis).to receive(:ltrim)
+    end
+
+    it "enqueues a new job with the failed entry's parameters and swaps the entry in place" do
+      expect(described_class.rerun_failed("dead_1")).to eq(true)
+
+      expect(GenerateSalesReportJob).to have_received(:perform_async)
+        .with("CH", "2026-04-01", "2026-06-30", GenerateSalesReportJob::ALL_SALES, true, nil)
+
+      expect($redis).to have_received(:eval) do |script, keys:, argv:|
+        expect(script).to eq(described_class::REPLACE_ENTRY_SCRIPT)
+        expect(keys).to eq([RedisKey.sales_report_jobs])
+        expect(argv.first).to eq(raw_entry)
+        replacement = JSON.parse(argv.last)
+        expect(replacement["job_id"]).to eq("new_jid")
+        expect(replacement["status"]).to eq("processing")
+        expect(replacement["country_code"]).to eq("CH")
+      end
+      expect($redis).not_to have_received(:lpush)
+    end
+
+    it "falls back to prepending the entry when the in-place swap loses a race" do
+      allow($redis).to receive(:eval).and_return(0)
+
+      expect(described_class.rerun_failed("dead_1")).to eq(true)
+
+      expect($redis).to have_received(:lpush) do |key, value|
+        expect(key).to eq(RedisKey.sales_report_jobs)
+        expect(JSON.parse(value)["job_id"]).to eq("new_jid")
+      end
+      expect($redis).to have_received(:ltrim).with(RedisKey.sales_report_jobs, 0, 19)
+    end
+
+    it "returns nil and enqueues nothing when no failed entry matches the job ID" do
+      expect(described_class.rerun_failed("unknown_jid")).to be_nil
+
+      expect(GenerateSalesReportJob).not_to have_received(:perform_async)
+      expect($redis).not_to have_received(:eval)
+    end
+
+    it "returns nil when the entry with that job ID is not failed" do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19)
+        .and_return([failed_entry.merge(status: "processing").to_json])
+
+      expect(described_class.rerun_failed("dead_1")).to be_nil
+      expect(GenerateSalesReportJob).not_to have_received(:perform_async)
+    end
+  end
+
   describe ".fetch_job_history" do
     context "when job data exists" do
       let(:job_data) do
@@ -357,7 +425,7 @@ describe Admin::SalesReport do
 
         expect(result[0]["status"]).to eq("failed")
         expect($redis).to have_received(:eval).with(
-          described_class::MARK_FAILED_SCRIPT,
+          described_class::REPLACE_ENTRY_SCRIPT,
           keys: [RedisKey.sales_report_jobs],
           argv: [job_data[0], a_string_including("\"failed\"")]
         )

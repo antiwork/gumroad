@@ -35,8 +35,9 @@ class Admin::SalesReport
   # index) means a concurrent LPUSH of a new report, or the job completing and
   # rewriting its own entry, can never cause us to overwrite the wrong entry:
   # if the stored value changed since we read it, LPOS finds nothing and we
-  # leave the list alone.
-  MARK_FAILED_SCRIPT = <<~LUA
+  # leave the list alone. Used both to mark dead jobs as failed and to swap a
+  # failed entry back to "processing" when it is re-run in place.
+  REPLACE_ENTRY_SCRIPT = <<~LUA
     local index = redis.call('LPOS', KEYS[1], ARGV[1])
     if index then
       redis.call('LSET', KEYS[1], index, ARGV[2])
@@ -53,6 +54,47 @@ class Admin::SalesReport
       jobs
     rescue JSON::ParserError
       []
+    end
+
+    # Re-runs the failed history entry identified by job_id without adding a
+    # new row: a fresh Sidekiq job is enqueued with the entry's own parameters,
+    # and the entry itself is swapped back to "processing" (with the new job ID
+    # and enqueue time) in place. Returns true when the entry was swapped, nil
+    # when no failed entry with that job ID exists — e.g. it already completed,
+    # was re-run from another tab, or fell off the 20-entry history.
+    def rerun_failed(job_id)
+      raw_entry = $redis.lrange(RedisKey.sales_report_jobs, 0, 19).find do |data|
+        entry = JSON.parse(data) rescue nil
+        entry && entry["job_id"] == job_id && entry["status"] == "failed"
+      end
+      return unless raw_entry
+
+      entry = JSON.parse(raw_entry)
+      new_job_id = GenerateSalesReportJob.perform_async(
+        entry["country_code"],
+        entry["start_date"],
+        entry["end_date"],
+        entry["sales_type"],
+        true,
+        nil
+      )
+      updated_entry = entry.merge(
+        "job_id" => new_job_id,
+        "enqueued_at" => Time.current.to_s,
+        "status" => "processing"
+      ).to_json
+
+      # Value-matched swap (see REPLACE_ENTRY_SCRIPT): if the stored entry
+      # changed between our read and now (concurrent re-run from another tab,
+      # completion writer), the swap is skipped. The new job is already
+      # enqueued at that point, so fall back to prepending its entry rather
+      # than losing track of a running job.
+      swapped = $redis.eval(REPLACE_ENTRY_SCRIPT, keys: [RedisKey.sales_report_jobs], argv: [raw_entry, updated_entry])
+      if swapped != 1
+        $redis.lpush(RedisKey.sales_report_jobs, updated_entry)
+        $redis.ltrim(RedisKey.sales_report_jobs, 0, 19)
+      end
+      true
     end
 
     private
@@ -76,12 +118,12 @@ class Admin::SalesReport
 
           # Persist the correction to Redis first, and only then update the copy
           # we're about to render. The Lua script only writes if the entry still
-          # holds the exact value we read (see MARK_FAILED_SCRIPT), so a stale
+          # holds the exact value we read (see REPLACE_ENTRY_SCRIPT), so a stale
           # read can't clobber a concurrent update — in that case the entry keeps
           # rendering with its stored status and gets another reconciliation
           # attempt on the next page load.
           updated_entry = job.merge("status" => "failed").to_json
-          swapped = $redis.eval(MARK_FAILED_SCRIPT, keys: [RedisKey.sales_report_jobs], argv: [raw_entries[index], updated_entry])
+          swapped = $redis.eval(REPLACE_ENTRY_SCRIPT, keys: [RedisKey.sales_report_jobs], argv: [raw_entries[index], updated_entry])
           job["status"] = "failed" if swapped == 1
         end
       rescue Redis::BaseError, RedisClient::Error => e
