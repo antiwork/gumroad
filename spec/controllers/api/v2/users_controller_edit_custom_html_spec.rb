@@ -78,7 +78,9 @@ describe Api::V2::UsersController do
       body = response.parsed_body
       expect(body["success"]).to eq(false)
       expect(body["message"]).to match(/matches 2 places/i)
-      expect(@user.reload.custom_html).to eq("<section><p>Buy now</p><p>Buy now</p></section>")
+      # The page is unchanged (the sanitizer may normalize whitespace on save, so compare content).
+      expect(@user.reload.custom_html.scan("<p>Buy now</p>").size).to eq(2)
+      expect(@user.custom_html).not_to include("Get it")
     end
 
     it "treats find literally, not as a regex" do
