@@ -14,7 +14,19 @@ class SendRemindersForOutstandingUserComplianceInfoRequestsWorker
 
     user_ids.each do |user_id|
       user = User.find(user_id)
-      return unless user.account_active?
+      # `next`, not `return`: an inactive (deleted or suspended) user should
+      # only be skipped — returning here would silently stop reminders for
+      # every user later in the list.
+      next unless user.account_active?
+      # Terminally rejected Stripe accounts are final: the verification these
+      # reminders ask for can't change Stripe's decision, so don't nag the
+      # seller. Their open requests get closed by the account.updated webhook
+      # handler; this guard covers the window before that runs (and legacy
+      # rows the backfill hasn't reached yet). Appealable rejections — Stripe
+      # rejected the account but is still asking for something, like an
+      # identity document — must keep getting reminders, so we ask Stripe
+      # whether anything is still requestable before going quiet.
+      next if terminally_rejected?(user.stripe_account)
       requests = user.user_compliance_info_requests
 
       if user.stripe_account&.country == Compliance::Countries::SGP.alpha2
@@ -42,4 +54,29 @@ class SendRemindersForOutstandingUserComplianceInfoRequestsWorker
       requests.each { |request| request.record_email_sent!(email_sent_at) }
     end
   end
+
+  private
+    # A rejected Stripe account is terminal only when Stripe has nothing
+    # further the seller could submit. When Stripe still lists open
+    # requirements on a rejected account (an appealable rejection, e.g. the
+    # Japan "rejected.listed" case where an identity document is still
+    # wanted), the seller can be reinstated, so they must keep receiving
+    # reminders. We ask Stripe directly because both forks look identical
+    # locally: each has a rejected merchant account and open compliance
+    # request rows.
+    def terminally_rejected?(merchant_account)
+      return false unless merchant_account&.stripe_rejected?
+
+      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+      StripeMerchantAccountManager.stripe_requirements_exhausted?(
+        stripe_account["requirements"] || {},
+        stripe_account["future_requirements"] || {}
+      )
+    rescue Stripe::StripeError => e
+      # Can't tell which fork this is, so stay quiet for this run rather than
+      # risk nagging a terminally rejected seller with a dead-end link. The
+      # worker runs again and will retry the lookup then.
+      Rails.logger.warn("SendRemindersForOutstandingUserComplianceInfoRequestsWorker: treating merchant account #{merchant_account.id} as terminally rejected — Stripe lookup failed (#{e.message})")
+      true
+    end
 end

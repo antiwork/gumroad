@@ -21,6 +21,13 @@ module StripeMerchantAccountManager
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
+  # Stripe intervention categories (the middle segment of an `interv_*`
+  # requirement, e.g. `interv_XXX.rejection_appeal.support`) that mean the
+  # seller is inside an appeal window. These are actionable: the webhook
+  # handler suspends the seller pending the appeal instead of treating the
+  # rejection as final.
+  APPEAL_INTERVENTION_CATEGORIES = %w(rejection_appeal supportability_rejection_appeal)
+
   def self.stripe_payouts_pause_email_type(disabled_reason, fields_needed_present)
     return nil if disabled_reason.to_s.start_with?("rejected.") || disabled_reason == "platform_paused"
     return :action_required if fields_needed_present
@@ -914,6 +921,20 @@ module StripeMerchantAccountManager
     end
     merchant_account.save! if should_save
 
+    # A `rejected.*` disabled_reason is usually terminal, but not always: Stripe
+    # sometimes marks an account rejected while still keeping an identity
+    # document request open (seen with Japan `rejected.listed` collisions).
+    # Those sellers can still verify and be reinstated, so only treat the
+    # rejection as final when Stripe is asking for nothing more — otherwise we
+    # would close the very verification request the seller needs and tell them
+    # the rejection cannot be appealed while Stripe is mid-appeal.
+    # The terminal handling itself (closing requests + the one-time rejection
+    # email) runs further down, AFTER the payouts-pause sync: the rejection
+    # email's copy depends on whether Stripe froze payouts, so the pause state
+    # from this same webhook must be committed before the email is enqueued.
+    account_terminally_rejected = merchant_account.stripe_rejected? &&
+      stripe_requirements_exhausted?(requirements, future_requirements)
+
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
     else
@@ -979,10 +1000,20 @@ module StripeMerchantAccountManager
 
       risk_requirement_category = stripe_risk_field_needed.split(".")[1]
 
-      if %w(rejection_appeal supportability_rejection_appeal).include?(risk_requirement_category)
+      if APPEAL_INTERVENTION_CATEGORIES.include?(risk_requirement_category)
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
         user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
+      elsif account_terminally_rejected
+        # Stripe has permanently rejected the account and is asking for nothing
+        # more, so there is nothing the seller can submit that would change the
+        # outcome. Don't open a new verification request (which would trigger a
+        # remediation email whose link dead-ends for rejected accounts). When a
+        # rejected account DOES still have open requirements (the appealable
+        # fork, e.g. Japan `rejected.listed` with a live document request), we
+        # fall through and open the request so the seller keeps their
+        # remediation path.
+        next
       else
         # Some info/verification is required by Stripe for supportability.
         # Send a Stripe remediation link to the creator via email so they can submit the info.
@@ -1078,6 +1109,20 @@ module StripeMerchantAccountManager
       MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
 
+    # A terminally rejected account is final, so don't open new verification
+    # requests or send "we need more information" emails — there is nothing
+    # the seller can provide that would change Stripe's decision. This runs
+    # after the payouts-pause sync above on purpose: the rejection email tells
+    # the seller what happens to their balance, and that copy reads the pause
+    # state this same webhook may have just written. Appealable rejections
+    # (Stripe rejected the account but is still asking for something, e.g. an
+    # identity document) fall through, so those sellers keep getting
+    # verification requests and the emails that guide them.
+    if account_terminally_rejected
+      handle_stripe_rejection(user, merchant_account)
+      return
+    end
+
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at
 
     return if fields_needed.empty?
@@ -1128,6 +1173,66 @@ module StripeMerchantAccountManager
 
   def self.prefecture_kana(kanji)
     Compliance::Countries.japan_prefecture_kana(kanji)
+  end
+
+  # Stripe has nothing further the seller could submit: no currently-due or
+  # past-due requirements now, and none scheduled to become due. When a
+  # rejected account still carries open requirements, the rejection is
+  # appealable (the seller can upload the requested document and be
+  # reinstated), so it must NOT be handled as terminal.
+  #
+  # `interv_*` entries mostly don't count as open requirements here. On a
+  # rejected account Stripe leaves a permanent supportability intervention
+  # (e.g. `interv_....other_supportability_inquiry.support`) in `currently_due`
+  # and never clears it — there is no form the seller can fill in for it.
+  # Treating it as an open requirement made every account rejected for
+  # supportability look appealable forever: their verification requests stayed
+  # open, the rejection email never went out, reminders kept firing, and the
+  # balance release never applied.
+  #
+  # The exception is appeal-category interventions (`rejection_appeal`,
+  # `supportability_rejection_appeal`): those mean the seller is inside an
+  # active appeal window, so the rejection is not final yet. The webhook
+  # handler suspends the seller pending the appeal — sending the "cannot be
+  # appealed or reversed" rejection email on top of that would contradict the
+  # appeal in progress. So concrete, fillable requirements (identity
+  # documents, tax IDs, ...) AND appeal interventions keep a rejection
+  # appealable; only permanent, non-actionable interventions are ignored.
+  def self.stripe_requirements_exhausted?(requirements, future_requirements)
+    [
+      requirements["currently_due"],
+      requirements["past_due"],
+      requirements["eventually_due"],
+      future_requirements["currently_due"],
+    ].all? do |fields|
+      (fields || []).all? do |field|
+        field.start_with?("interv_") && !APPEAL_INTERVENTION_CATEGORIES.include?(field.split(".")[1])
+      end
+    end
+  end
+
+  # Runs on every account.updated webhook once Stripe has permanently rejected
+  # the account. Closes any open verification requests — which stops both the
+  # "payouts may be blocked" reminder loop and the remediation emails whose
+  # links dead-end on rejected accounts — and sends the seller a single email
+  # explaining that the rejection is final and what happens to their balance.
+  def self.handle_stripe_rejection(user, merchant_account)
+    user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
+
+    # Stripe can deliver (or retry) the same account.updated webhook while an
+    # earlier job for this account is still running. Take a row lock before
+    # checking the sent marker so only one job wins and the seller can never
+    # receive the "account closed" email twice.
+    send_email = false
+    merchant_account.with_lock do
+      unless merchant_account.stripe_rejection_email_sent
+        merchant_account.update!(stripe_rejection_email_sent: true)
+        send_email = true
+      end
+    end
+    return unless send_email
+
+    MerchantRegistrationMailer.stripe_account_rejected(user.id).deliver_later(queue: "critical")
   end
 
   def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false)

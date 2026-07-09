@@ -2000,6 +2000,30 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
     end
 
+    it "redirects to the payments settings page without contacting Stripe when the account is rejected" do
+      merchant_account = create(:merchant_account, user:)
+      merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+      expect(Stripe::AccountLink).not_to receive(:create)
+
+      get :remediation
+
+      expect(response).to redirect_to settings_payments_url
+    end
+
+    it "still creates a Stripe account link for a rejected account with an open verification request (appealable fork)" do
+      # e.g. Japan `rejected.listed` collision: rejected, but Stripe still has
+      # a live identity-document request — the remediation link must keep working.
+      merchant_account = create(:merchant_account, user:)
+      merchant_account.update!(stripe_disabled_reason: "rejected.listed")
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+      allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
+
+      get :remediation
+
+      expect(Stripe::AccountLink).to have_received(:create)
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
     it "does nothing and redirects to payments settings page if there's no pending stripe information request and Stripe agrees" do
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(

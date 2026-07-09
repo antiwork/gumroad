@@ -19,6 +19,16 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
       user.suspend_for_fraud!(author_id: admin.id)
       user
     end
+    let(:user_10) do
+      user = create(:user)
+      create(:merchant_account, user:, stripe_disabled_reason: "rejected.fraud", charge_processor_merchant_id: "acct_terminal_rejected")
+      user
+    end
+    let(:user_11) do
+      user = create(:user)
+      create(:merchant_account, user:, stripe_disabled_reason: "rejected.listed", charge_processor_merchant_id: "acct_appealable_rejected")
+      user
+    end
 
     let!(:user_1_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_1) }
     let!(:user_1_request_2) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::LAST_NAME, user: user_1) }
@@ -32,6 +42,8 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
     let!(:user_7_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::TAX_ID, user: user_7) }
     let!(:user_8_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_8) }
     let!(:user_9_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME, user: user_9) }
+    let!(:user_10_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::TAX_ID, user: user_10) }
+    let!(:user_11_request_1) { create(:user_compliance_info_request, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID, user: user_11) }
 
     let(:time_now) { Time.current.change(usec: 0) }
 
@@ -40,6 +52,15 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
     end
 
     before do
+      # user_10's rejection is terminal (Stripe wants nothing more), while
+      # user_11's is appealable (Stripe still wants an identity document).
+      allow(Stripe::Account).to receive(:retrieve).with("acct_terminal_rejected").and_return(
+        { "requirements" => { "currently_due" => [], "past_due" => [], "eventually_due" => [] }, "future_requirements" => {} }
+      )
+      allow(Stripe::Account).to receive(:retrieve).with("acct_appealable_rejected").and_return(
+        { "requirements" => { "currently_due" => [], "past_due" => ["individual.verification.document"], "eventually_due" => [] }, "future_requirements" => {} }
+      )
+
       user_2_request_1.record_email_sent!(Time.current)
       user_3_request_1.record_email_sent!(1.day.ago)
       user_4_request_1.record_email_sent!(2.days.ago)
@@ -60,6 +81,8 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
       user_6_request_1.reload
       user_6_request_2.reload
       user_7_request_1.reload
+      user_10_request_1.reload
+      user_11_request_1.reload
     end
 
     it "reminds a user of all the outstanding requests, if they have never been reminded" do
@@ -96,6 +119,14 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
 
     it "does not remind a suspended user" do
       expect(user_9_request_1.emails_sent_at).to be_empty
+    end
+
+    it "does not remind a user whose Stripe account was terminally rejected" do
+      expect(user_10_request_1.emails_sent_at).to be_empty
+    end
+
+    it "still reminds a user whose Stripe rejection is appealable (Stripe is asking for a document)" do
+      expect(user_11_request_1.emails_sent_at).to eq([Time.current])
     end
   end
 

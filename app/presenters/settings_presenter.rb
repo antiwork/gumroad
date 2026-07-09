@@ -331,7 +331,51 @@ class SettingsPresenter
         .where(field_needed: id_document_fields).exists?
 
       stripe_account = seller.stripe_account
-      stripe_rejected = stripe_account&.stripe_rejected? || false
+      # Only show the terminal "Stripe rejected your account / Gumroad cannot
+      # reverse this" banner when the rejection really is final. A rejected
+      # account that still has an open verification request is the appealable
+      # fork (e.g. Japan `rejected.listed` with a live identity-document
+      # request) — that seller keeps the normal compliance-actions UI and their
+      # remediation link instead of a dead-end banner.
+      stripe_rejected = (stripe_account&.stripe_rejected? || false) &&
+        !seller.user_compliance_info_requests.requested.exists?
+
+      # Tells the rejected-account banner what will happen to the seller's
+      # remaining balance, so the copy doesn't point at flows that can't work:
+      # - "stripe_hold": Stripe disabled payouts on the rejected account, so the
+      #   money moves only if Stripe releases it.
+      # - "auto_payout": we'll pay the balance out automatically on the normal
+      #   schedule (rejected accounts bypass the usual $100 minimum).
+      # - "too_small": the balance is under the $1 transfer floor and can't be sent.
+      # A zero balance stays nil so the banner doesn't mention a balance that
+      # doesn't exist (the rejection email is likewise silent about it).
+      stripe_rejected_balance_status = nil
+      stripe_rejected_formatted_balance = nil
+      stripe_rejected_payout_date = nil
+      if stripe_rejected
+        balance_cents = seller.unpaid_balance_cents
+        stripe_rejected_formatted_balance = seller.formatted_dollar_amount(balance_cents) if balance_cents > 0
+        stripe_rejected_balance_status = if balance_cents <= 0
+          nil
+        elsif balance_cents < Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
+          "too_small"
+        elsif seller.payouts_paused_internally? && seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+          "stripe_hold"
+        elsif seller.payouts_paused?
+          # Paused by admin or by the seller themselves — the automatic payout
+          # will not run, so don't promise it ("auto_payout") and don't blame
+          # Stripe ("stripe_hold"). The generic "held" copy points at support.
+          "held"
+        else
+          "auto_payout"
+        end
+        # Only the auto-payout copy names a date — the other states can't
+        # promise one. The banner falls back to "your next scheduled payout"
+        # if the date can't be computed for any reason.
+        if stripe_rejected_balance_status == "auto_payout"
+          stripe_rejected_payout_date = seller.next_payout_date&.strftime("%B %-d, %Y")
+        end
+      end
 
       compliance_actions = []
       if pending_compliance && stripe_account.present? && !stripe_rejected && payments_policy.update?
@@ -367,6 +411,9 @@ class SettingsPresenter
         needs_id_upload:,
         gumroad_status:,
         stripe_rejected:,
+        stripe_rejected_balance_status:,
+        stripe_rejected_formatted_balance:,
+        stripe_rejected_payout_date:,
       }
     end
 
