@@ -47,15 +47,44 @@ if ! aws sts get-caller-identity >/dev/null 2>&1; then
   exit 1
 fi
 
-# Pick oldest running instance in the production security group.
-instance_ip=$(aws ec2 describe-instances \
-  --filter "Name=instance.group-name,Values=$PROD_SECURITY_GROUP" \
-  --query "Reservations[].Instances[].[LaunchTime,PrivateIpAddress] | sort_by(@, &[0])" \
-  --output text | awk '{print $2}' | head -n1)
+# Pick a healthy instance in the production security group.
+# Honor an explicit override first (set PROD_INSTANCE_IP to pin a host, e.g.
+# when you already know a specific instance is healthy or sick).
+if [ -n "${PROD_INSTANCE_IP:-}" ]; then
+  instance_ip="$PROD_INSTANCE_IP"
+  >&2 echo "Using PROD_INSTANCE_IP override: $instance_ip"
+else
+  # List all running instances, oldest first (oldest is warmest, but any works).
+  candidate_ips=$(aws ec2 describe-instances \
+    --filter "Name=instance.group-name,Values=$PROD_SECURITY_GROUP" \
+    --query "Reservations[].Instances[].[LaunchTime,PrivateIpAddress] | sort_by(@, &[0])" \
+    --output text | awk '{print $2}')
 
-if [ -z "$instance_ip" ]; then
-  echo "Error: No running instance found in security group $PROD_SECURITY_GROUP" >&2
-  exit 1
+  if [ -z "$candidate_ips" ]; then
+    echo "Error: No running instance found in security group $PROD_SECURITY_GROUP" >&2
+    exit 1
+  fi
+
+  # Probe each candidate with a cheap 20s docker-level check and take the first
+  # one that responds. A hung/recycling instance (SSH accepts but exec never
+  # returns) previously burned the full outer timeout; now it costs <=20s and
+  # we fail over to the next-oldest instance.
+  instance_ip=""
+  for ip in $candidate_ips; do
+    if LC_PAPER="$ip" timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=10 "admin@$PROD_BASTION" \
+        'sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1 | grep -q .' \
+        >/dev/null 2>&1; then
+      instance_ip="$ip"
+      break
+    fi
+    >&2 echo "Instance $ip failed health probe, trying next..."
+  done
+
+  if [ -z "$instance_ip" ]; then
+    echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe. Set PROD_INSTANCE_IP to force one." >&2
+    exit 1
+  fi
 fi
 
 >&2 echo "Connecting to $instance_ip via $PROD_BASTION..."
