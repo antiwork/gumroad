@@ -68,15 +68,17 @@ else
     exit 1
   fi
 
-  # Probe each candidate with a cheap 20s docker-level check and take the first
-  # one that responds. A hung/recycling instance (SSH accepts but exec never
-  # returns) previously burned the full outer timeout; now it costs <=20s and
-  # we fail over to the next-oldest instance.
+  # Probe each candidate with a cheap 20s check and take the first one that
+  # responds. The probe runs a no-op docker exec inside the puma container —
+  # the same operation the real query uses — because the hangs that motivated
+  # this failover happened at the docker exec step (SSH connected fine, but
+  # exec never returned). A hung/recycling instance previously burned the full
+  # outer timeout; now it costs <=20s and we fail over to the next-oldest.
   instance_ip=""
   for ip in $candidate_ips; do
     if LC_PAPER="$ip" timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
-        'sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1 | grep -q .' \
+        'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
         >/dev/null 2>&1; then
       instance_ip="$ip"
       break
