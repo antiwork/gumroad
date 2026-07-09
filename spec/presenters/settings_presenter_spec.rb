@@ -908,6 +908,22 @@ describe SettingsPresenter do
         expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("stripe_hold")
       end
 
+      it "reports the generic held balance status when payouts are paused by admin (not Stripe)" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("held")
+      end
+
+      it "reports the generic held balance status when the seller paused their own payouts" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+        seller.update!(payouts_paused_by_user: true)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("held")
+      end
+
       it "keeps the under review status alongside Stripe verification requirements" do
         create(:merchant_account, user: seller)
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)

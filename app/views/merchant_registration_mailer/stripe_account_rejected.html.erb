@@ -4,6 +4,8 @@
   <% if @balance_cents >= Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS %>
     <% if @payouts_blocked_by_stripe %>
       <p>Your remaining balance of <%= @formatted_balance %> is currently being held by Stripe. If Stripe releases it, we'll pay it out to you automatically. There's nothing you need to do in the meantime.</p>
+    <% elsif @payouts_blocked %>
+      <p>Your remaining balance of <%= @formatted_balance %> is currently on hold. Please contact support about receiving it.</p>
     <% else %>
       <p>Your remaining balance of <%= @formatted_balance %> will be paid out automatically on your next scheduled payout, even if it's below the usual $100 minimum.</p>
     <% end %>

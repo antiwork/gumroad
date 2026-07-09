@@ -358,6 +358,11 @@ class SettingsPresenter
           "too_small"
         elsif seller.payouts_paused_internally? && seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
           "stripe_hold"
+        elsif seller.payouts_paused?
+          # Paused by admin or by the seller themselves — the automatic payout
+          # will not run, so don't promise it ("auto_payout") and don't blame
+          # Stripe ("stripe_hold"). The generic "held" copy points at support.
+          "held"
         else
           "auto_payout"
         end

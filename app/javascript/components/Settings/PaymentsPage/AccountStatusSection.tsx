@@ -32,7 +32,7 @@ export type AccountStatus = {
   needs_id_upload: boolean;
   gumroad_status: string | null;
   stripe_rejected: boolean;
-  stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | null;
+  stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | "held" | null;
 };
 
 export default function AccountStatusSection({
@@ -103,6 +103,10 @@ export default function AccountStatusSection({
           ) : accountStatus.stripe_rejected_balance_status === "too_small" ? (
             <p className="mt-2">
               Your remaining balance is below the $1 minimum we can send, so it cannot be paid out.
+            </p>
+          ) : accountStatus.stripe_rejected_balance_status === "held" ? (
+            <p className="mt-2">
+              Your remaining balance is currently on hold. Please contact support about receiving it.
             </p>
           ) : null}
         </Alert>

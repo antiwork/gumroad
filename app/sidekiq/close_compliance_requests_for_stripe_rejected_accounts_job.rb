@@ -11,6 +11,10 @@ class CloseComplianceRequestsForStripeRejectedAccountsJob
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
 
   def perform
+    closed = 0
+    skipped_appealable = []
+    skipped_stripe_error = []
+
     UserComplianceInfoRequest.requested.distinct.pluck(:user_id).each do |user_id|
       user = User.find_by(id: user_id)
       next if user.nil?
@@ -27,16 +31,29 @@ class CloseComplianceRequestsForStripeRejectedAccountsJob
         requirements = stripe_account["requirements"] || {}
         future_requirements = stripe_account["future_requirements"] || {}
         unless StripeMerchantAccountManager.stripe_requirements_exhausted?(requirements, future_requirements)
-          Rails.logger.info("CloseComplianceRequestsForStripeRejectedAccountsJob: skipped user #{user.id} — rejected but Stripe still has open requirements (appealable)")
+          skipped_appealable << user.id
           next
         end
       rescue Stripe::StripeError => e
         Rails.logger.warn("CloseComplianceRequestsForStripeRejectedAccountsJob: skipped user #{user.id} — Stripe lookup failed (#{e.message})")
+        skipped_stripe_error << user.id
         next
       end
 
       user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
-      Rails.logger.info("CloseComplianceRequestsForStripeRejectedAccountsJob: closed requests for user #{user.id}")
+      closed += 1
     end
+
+    # The summary is the tripwire for the requirements-exhausted predicate: if
+    # most of the backlog lands in skipped_appealable, the predicate (notably
+    # its `eventually_due` clause) is starving the cleanup and needs
+    # re-examination. Stripe-error skips are listed so a re-run can target
+    # just those users (this job is one-time; transient API failures would
+    # otherwise be dropped silently).
+    Rails.logger.info(
+      "CloseComplianceRequestsForStripeRejectedAccountsJob: closed=#{closed} " \
+      "skipped_appealable=#{skipped_appealable.size} #{skipped_appealable.inspect} " \
+      "skipped_stripe_error=#{skipped_stripe_error.size} #{skipped_stripe_error.inspect}"
+    )
   end
 end

@@ -783,10 +783,15 @@ class User < ApplicationRecord
   end
 
   def minimum_payout_amount_cents
-    # A Stripe-rejected account is terminal: the seller can't sell anymore, so
-    # holding their balance to the normal minimum would strand it forever.
-    # Release anything above the $1 transfer floor instead.
-    return Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS if stripe_account&.stripe_rejected?
+    # A terminally Stripe-rejected account can't sell anymore, so holding its
+    # balance to the normal minimum would strand the money forever — release
+    # anything above the $1 transfer floor instead. Appealable rejections
+    # (open verification requests remain) keep the normal minimum: the seller
+    # may be reinstated, and flushing their balance early at the rejected-
+    # account floor would be premature.
+    if stripe_account&.stripe_rejected? && !user_compliance_info_requests.requested.exists?
+      return Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
+    end
 
     [payout_threshold_cents, minimum_payout_threshold_cents].max
   end

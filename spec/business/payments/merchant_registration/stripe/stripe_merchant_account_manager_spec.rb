@@ -10389,6 +10389,17 @@ describe StripeMerchantAccountManager, :vcr do
                 expect(request.reload.state).to eq("requested")
               end
 
+              it "re-creates a verification request when none is open locally (failed-document re-request path)" do
+                # After a failed upload Stripe re-adds the requirement while the
+                # local request was already closed by verify_stripe_remediation —
+                # the webhook must recreate it or the appeal path is lost.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.id_number"]
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to change { user.user_compliance_info_requests.requested.count }.by(1)
+              end
+
               it "does not send the terminal rejection email" do
                 expect do
                   described_class.handle_stripe_event(stripe_event)

@@ -51,12 +51,14 @@ class MerchantRegistrationMailer < ApplicationMailer
 
   def stripe_account_rejected(user_id)
     @user = User.find(user_id)
-    # Whether the remaining balance pays out automatically depends on Stripe:
-    # if Stripe disabled payouts on the rejected account, the money can't move
-    # until Stripe releases it, so the email tells the seller to contact
-    # support instead of promising a payout date.
+    # Whether the remaining balance pays out automatically depends on whether
+    # anything is pausing payouts: if Stripe disabled payouts on the rejected
+    # account (or an admin/seller pause is active), the money can't move
+    # automatically, so the email tells the seller to contact support instead
+    # of promising a payout date.
     @payouts_blocked_by_stripe = @user.payouts_paused_internally? &&
       @user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+    @payouts_blocked = @payouts_blocked_by_stripe || @user.payouts_paused?
     @balance_cents = @user.unpaid_balance_cents
     @formatted_balance = @user.formatted_dollar_amount(@balance_cents)
     mail(subject: "Your Gumroad payments account has been closed", from: NOREPLY_EMAIL_WITH_NAME, to: @user.email)

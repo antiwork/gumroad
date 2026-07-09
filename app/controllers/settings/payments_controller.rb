@@ -206,8 +206,8 @@ class Settings::PaymentsController < Settings::BaseController
                                              return_url: verify_stripe_remediation_settings_payments_url,
                                              type: "account_update",
                                            }).url, allow_other_host: true
-  rescue Stripe::InvalidRequestError => e
-    sync_stripe_disabled_reason(current_seller.stripe_account) if current_seller.stripe_account.stripe_disabled_reason.blank?
+  rescue Stripe::StripeError => e
+    sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
     ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end
