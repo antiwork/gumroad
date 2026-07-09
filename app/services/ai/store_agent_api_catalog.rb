@@ -89,7 +89,9 @@ module Ai::StoreAgentApiCatalog
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
-    ep("update_user_custom_html", :patch, "/user/custom_html", "Update the creator's profile custom HTML.", scope: "edit_profile", params: %w[custom_html]),
+    ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile page with custom HTML (hides the native storefront: products, sections, nav). Never use this for color/font/appearance tweaks — use update_profile_design instead.", scope: "edit_profile", params: %w[custom_html]),
+    ep("get_profile_design", :get, "/user/profile_design", "Get the native storefront design settings: background color, highlight/accent color, and font.", read: true, scope: "view_profile"),
+    ep("update_profile_design", :patch, "/user/profile_design", "Change the native storefront's design: background_color and highlight_color as hex (e.g. #ff90e8), font from the returned font choices. Use this for any 'change my store color/font' request — it keeps the storefront intact.", scope: "edit_profile", params: %w[background_color highlight_color font]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
     ep("get_refund_policy", :get, "/refund_policy", "Get the creator's account-level refund policy.", read: true, scope: "view_profile"),
     # Account-level refund policy is changed via Settings in the dashboard, which is owner-only

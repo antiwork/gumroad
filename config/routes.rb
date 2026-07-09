@@ -70,6 +70,8 @@ Rails.application.routes.draw do
       get "/user/custom_html", to: "users#custom_html"
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
       post "/user/preview_custom_html", to: "users#preview_custom_html"
+      get "/user/profile_design", to: "users#profile_design"
+      match "/user/profile_design", to: "users#update_profile_design", via: [:put, :patch]
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do

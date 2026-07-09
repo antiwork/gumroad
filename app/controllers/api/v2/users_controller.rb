@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class Api::V2::UsersController < Api::V2::BaseController
-  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html]
-  before_action(only: [:update, :update_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
+  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :profile_design]
+  before_action(only: [:update, :update_custom_html, :preview_custom_html, :update_profile_design]) { doorkeeper_authorize! :edit_profile }
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :preview_custom_html]
 
   def show
@@ -105,6 +105,44 @@ class Api::V2::UsersController < Api::V2::BaseController
     end
   end
 
+  # GET the native storefront design settings (SellerProfile). This exists so API
+  # clients — the store agent in particular — can inspect the storefront's colors
+  # and font without touching the custom-HTML page surface.
+  def profile_design
+    profile = current_resource_owner.seller_profile
+    render_response(true, profile_design: profile_design_payload(profile))
+  end
+
+  # PATCH the native storefront design settings: background_color, highlight_color,
+  # and/or font on SellerProfile. This is the safe way to fulfill "change my store
+  # color/font" requests. It deliberately does NOT touch the custom-HTML landing
+  # page: before this endpoint existed, the agent's only appearance write surface
+  # was update_custom_html, so a color-change request would replace the entire
+  # native storefront (products, sections, nav) with a generated page — see
+  # gumroad-private#984. Model validations enforce hex colors and the font choices.
+  def update_profile_design
+    user = current_resource_owner
+
+    return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
+
+    updates = params.permit(:background_color, :highlight_color, :font).to_h
+    if updates.empty?
+      return render_response(false, message: "Provide at least one of: background_color, highlight_color, font.")
+    end
+
+    profile = user.seller_profile
+    if profile.update(updates)
+      # Product pages embed the profile's colors/font, so their caches must be
+      # invalidated when the design changes — same trigger the settings UI relies
+      # on via User's after_update hook, which doesn't fire on this path because
+      # only the SellerProfile row is written here.
+      user.clear_products_cache if (profile.saved_changes.keys & %w[background_color highlight_color font]).any?
+      render_response(true, profile_design: profile_design_payload(profile))
+    else
+      error_with_object(:profile_design, profile)
+    end
+  end
+
   def ifttt_status
     render json: { status: "success" }
   end
@@ -134,6 +172,18 @@ class Api::V2::UsersController < Api::V2::BaseController
   private
     def permitted_update_params
       params.permit(:name, :bio)
+    end
+
+    # The design fields an API client may read back after a profile_design call.
+    # Kept to the three agent-editable knobs so the payload is exactly the surface
+    # the endpoint can write.
+    def profile_design_payload(profile)
+      {
+        background_color: profile.background_color,
+        highlight_color: profile.highlight_color,
+        font: profile.font,
+        font_choices: SellerProfile::FONT_CHOICES,
+      }
     end
 
     def ensure_custom_html_pages_enabled
