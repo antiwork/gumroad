@@ -116,11 +116,14 @@ const suggestEmail = (email: string): EmailSuggestion | null => {
     POPULAR_SECOND_LEVEL_DOMAINS,
     SECOND_LEVEL_THRESHOLD,
   );
-  const closestTopLevelDomain = findClosestDomain(
-    emailParts.topLevelDomain,
-    POPULAR_TOP_LEVEL_DOMAINS,
-    TOP_LEVEL_THRESHOLD,
-  );
+  // Never "correct" a TLD the buyer typed if it's a real, registrable TLD (e.g. .land, .dev).
+  // Fuzzy matching on strings this short (2-4 chars) produces nonsense like .land -> .ca,
+  // which nags buyers with legitimate addresses on every checkout.
+  const closestTopLevelDomain =
+    VALID_TOP_LEVEL_DOMAINS.has(emailParts.topLevelDomain) ||
+    VALID_TOP_LEVEL_DOMAINS.has(lastLabel(emailParts.topLevelDomain))
+      ? null
+      : findClosestDomain(emailParts.topLevelDomain, POPULAR_TOP_LEVEL_DOMAINS, TOP_LEVEL_THRESHOLD);
 
   let domain = emailParts.domain;
   let hasSuggestion = false;
@@ -151,7 +154,14 @@ export const checkEmailForTypos = (email: string, cb: (suggestion: EmailSuggesti
 
 const DOMAIN_THRESHOLD = 2;
 const SECOND_LEVEL_THRESHOLD = 2;
-const TOP_LEVEL_THRESHOLD = 2;
+// Threshold 1 (not 2) because TLDs are only 2-4 characters long: at distance 2 almost any
+// short TLD "matches" a popular one (sift3Distance("land", "ca") === 2), producing bogus
+// suggestions for correctly-typed addresses.
+const TOP_LEVEL_THRESHOLD = 1;
+
+// The buyer's top-level domain may be multi-label (e.g. "co.uk"); the last label is the
+// actual TLD to check against the known-valid list.
+const lastLabel = (topLevelDomain: string): string => topLevelDomain.split(".").at(-1) ?? topLevelDomain;
 
 const POPULAR_SECOND_LEVEL_DOMAINS = ["yahoo", "hotmail", "mail", "live", "outlook", "gmx"];
 
@@ -357,3 +367,141 @@ const POPULAR_TOP_LEVEL_DOMAINS = [
   "uk",
   "us",
 ];
+
+// Real, registrable TLDs that are NOT in POPULAR_TOP_LEVEL_DOMAINS but are commonly used for
+// email. If a buyer's TLD is on this list we assume they typed it on purpose and never offer a
+// fuzzy "did you mean" replacement for it. Without this guard, valid newer TLDs get "corrected"
+// to whichever popular TLD happens to be within edit distance (e.g. .land -> .ca), which nags
+// buyers with perfectly good addresses.
+const VALID_TOP_LEVEL_DOMAINS = new Set([
+  ...POPULAR_TOP_LEVEL_DOMAINS,
+  "academy",
+  "agency",
+  "ai",
+  "app",
+  "art",
+  "band",
+  "bar",
+  "blog",
+  "build",
+  "business",
+  "cafe",
+  "capital",
+  "care",
+  "cash",
+  "cc",
+  "center",
+  "cloud",
+  "club",
+  "co",
+  "codes",
+  "coffee",
+  "community",
+  "company",
+  "consulting",
+  "creative",
+  "day",
+  "design",
+  "dev",
+  "digital",
+  "direct",
+  "earth",
+  "email",
+  "energy",
+  "engineering",
+  "expert",
+  "family",
+  "farm",
+  "finance",
+  "fit",
+  "fitness",
+  "fm",
+  "foundation",
+  "fun",
+  "fund",
+  "gallery",
+  "games",
+  "gg",
+  "global",
+  "gold",
+  "group",
+  "guide",
+  "guru",
+  "health",
+  "help",
+  "house",
+  "id",
+  "im",
+  "ink",
+  "institute",
+  "international",
+  "io",
+  "is",
+  "land",
+  "law",
+  "legal",
+  "life",
+  "link",
+  "live",
+  "llc",
+  "love",
+  "ltd",
+  "market",
+  "marketing",
+  "media",
+  "money",
+  "network",
+  "news",
+  "ninja",
+  "one",
+  "online",
+  "page",
+  "partners",
+  "photography",
+  "photos",
+  "pictures",
+  "plus",
+  "press",
+  "pro",
+  "productions",
+  "pub",
+  "pw",
+  "rocks",
+  "run",
+  "school",
+  "services",
+  "sh",
+  "shop",
+  "site",
+  "social",
+  "software",
+  "solutions",
+  "space",
+  "store",
+  "studio",
+  "style",
+  "support",
+  "systems",
+  "tax",
+  "team",
+  "tech",
+  "technology",
+  "today",
+  "tools",
+  "top",
+  "trade",
+  "training",
+  "travel",
+  "tv",
+  "video",
+  "vip",
+  "watch",
+  "website",
+  "wiki",
+  "work",
+  "works",
+  "world",
+  "wtf",
+  "xyz",
+  "zone",
+]);
