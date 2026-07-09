@@ -862,6 +862,7 @@ describe SettingsPresenter do
       it "flags the Stripe account as rejected and hides the remediation link when Stripe has rejected it" do
         create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
         create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        create(:balance, user: seller, amount_cents: 50)
 
         expect(presenter.payments_props[:account_status]).to eq(@base_us_props[:account_status].merge(
           show_section: true,
@@ -869,6 +870,13 @@ describe SettingsPresenter do
           stripe_rejected: true,
           stripe_rejected_balance_status: "too_small",
         ))
+      end
+
+      it "reports no balance status when a rejected account has nothing left to pay out" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected]).to eq(true)
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to be_nil
       end
 
       it "reports the auto-payout balance status when a rejected account holds a payable balance" do

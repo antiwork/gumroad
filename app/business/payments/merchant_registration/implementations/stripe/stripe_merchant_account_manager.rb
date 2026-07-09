@@ -1151,9 +1151,19 @@ module StripeMerchantAccountManager
   def self.handle_stripe_rejection(user, merchant_account)
     user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
 
-    return if merchant_account.stripe_rejection_email_sent
+    # Stripe can deliver (or retry) the same account.updated webhook while an
+    # earlier job for this account is still running. Take a row lock before
+    # checking the sent marker so only one job wins and the seller can never
+    # receive the "account closed" email twice.
+    send_email = false
+    merchant_account.with_lock do
+      unless merchant_account.stripe_rejection_email_sent
+        merchant_account.update!(stripe_rejection_email_sent: true)
+        send_email = true
+      end
+    end
+    return unless send_email
 
-    merchant_account.update!(stripe_rejection_email_sent: true)
     MerchantRegistrationMailer.stripe_account_rejected(user.id).deliver_later(queue: "critical")
   end
 

@@ -340,10 +340,14 @@ class SettingsPresenter
       # - "auto_payout": we'll pay the balance out automatically on the normal
       #   schedule (rejected accounts bypass the usual $100 minimum).
       # - "too_small": the balance is under the $1 transfer floor and can't be sent.
+      # A zero balance stays nil so the banner doesn't mention a balance that
+      # doesn't exist (the rejection email is likewise silent about it).
       stripe_rejected_balance_status = nil
       if stripe_rejected
         balance_cents = seller.unpaid_balance_cents
-        stripe_rejected_balance_status = if balance_cents < Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
+        stripe_rejected_balance_status = if balance_cents <= 0
+          nil
+        elsif balance_cents < Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
           "too_small"
         elsif seller.payouts_paused_internally? && seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
           "stripe_hold"
