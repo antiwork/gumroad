@@ -7,6 +7,9 @@ class Payouts
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
+  HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
+  # Max ids per `User.where(id: ...)` lookup, so the IN() list stays on MySQL's PK range plan.
+  USER_LOOKUP_BATCH_SIZE = 1_000
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -86,22 +89,56 @@ class Payouts
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
-    # Materialize the holding-balance user ids first, then look up bank accounts in
-    # chunks by user_id (indexed). The previous single statement joined
-    # users × balances × bank_accounts, and MySQL drove it from a full scan of
-    # bank_accounts (no index on `type`), repeatedly blowing the 5-minute statement
-    # cap at the scheduled slot and aborting entire payout batches. Splitting the
-    # query leaves no join for the optimizer to get wrong, and each piece stays far
-    # under the statement cap.
-    holding_balance_user_ids = User.holding_balance.ids
+    # Materialize holding-balance user ids, then look up bank accounts in user_id chunks.
+    # The old single join (users × balances × bank_accounts) full-scanned bank_accounts
+    # and blew the statement timeout; splitting it keeps each piece cheap.
+    holding_balance_user_ids = self.holding_balance_user_ids
 
     bank_account_types.each do |bank_account_type|
       user_ids = holding_balance_user_ids.each_slice(BANK_ACCOUNT_LOOKUP_BATCH_SIZE).flat_map do |user_ids_batch|
         BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
       end
-      users = User.where(id: user_ids)
-      self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
+
+      # Load users in id-bounded slices. One `User.where(id: user_ids)` over a large
+      # cohort exceeds MySQL's range_optimizer_max_mem_size and full-scans the users
+      # table, blowing the statement timeout (gumroad-private#955); slicing keeps each
+      # lookup on the PK range plan. Enqueue is per-user, so slicing changes nothing.
+      user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
+        users = User.where(id: user_ids_batch)
+        self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
+      end
     end
+  end
+
+  # Ids of every user holding a positive unpaid balance (same set as User.holding_balance),
+  # computed in bounded batches. The single-statement GROUP BY aggregates the whole balances
+  # table and kept blowing MySQL's 5-minute statement cap in the contended batch window.
+  #
+  # We walk balances.user_id with a keyset cursor, aggregating HOLDING_BALANCE_ID_BATCH_SIZE
+  # users per statement, and apply the positivity filter in Ruby rather than SQL HAVING:
+  # HAVING runs before LIMIT, so a run of non-positive users would keep one statement
+  # scanning, whereas plain GROUP BY streams exactly LIMIT groups off the
+  # (state, user_id, amount_cents) covering index and stops. Grouping by user_id never
+  # splits a user's SUM, so the union is exactly SUM > 0. Reads only balances, so ids for
+  # deleted users may appear; callers resolve them via User.where(id:), which drops them.
+  def self.holding_balance_user_ids
+    user_ids = []
+    last_user_id = 0
+
+    loop do
+      batch = Balance.unpaid
+                     .where("user_id > ?", last_user_id)
+                     .group(:user_id)
+                     .order(:user_id)
+                     .limit(HOLDING_BALANCE_ID_BATCH_SIZE)
+                     .pluck(:user_id, Arel.sql("SUM(amount_cents)"))
+      break if batch.empty?
+
+      user_ids.concat(batch.filter_map { |user_id, amount_cents| user_id if amount_cents > 0 })
+      last_user_id = batch.last.first
+    end
+
+    user_ids
   end
 
   def self.create_instant_payouts_for_balances_up_to_date(date)

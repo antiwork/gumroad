@@ -827,13 +827,13 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def serialize_admin_links(user, merchant_account)
       links = {
-        impersonate: admin_impersonate_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol),
+        impersonate: admin_impersonate_url(user_identifier: user.external_id, host: UrlService.domain_with_protocol),
         admin_user: admin_user_url(user, host: UrlService.domain_with_protocol),
         admin_purchases: admin_search_purchases_url(query: user.email, host: UrlService.domain_with_protocol)
       }
 
       if merchant_account&.charge_processor_merchant_id
-        links[:stripe_dashboard] = admin_stripe_dashboard_helper_action_url(user_external_id: user.external_id, host: UrlService.domain_with_protocol)
+        links[:stripe_dashboard] = admin_redirect_to_stripe_dashboard_url(user_identifier: user.external_id, host: UrlService.domain_with_protocol)
       end
 
       links

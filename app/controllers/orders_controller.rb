@@ -114,7 +114,7 @@ class OrdersController < ApplicationController
 
       # Verify reCAPTCHA response
       if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
-        render_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+        render_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
       end
     end
 

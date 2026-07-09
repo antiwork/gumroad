@@ -107,6 +107,22 @@ describe UpdateUserComplianceInfo do
         expect(user.reload.alive_user_compliance_info.first_name).to eq("Morgan")
         expect(user.alive_user_compliance_info.id).not_to eq(compliance_info.id)
       end
+
+      it "persists the Japanese city kana fields (city_kana and business_city_kana)" do
+        params = ActionController::Parameters.new(
+          city_kana: "シブヤク",
+          business_city_kana: "チヨダク",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: user).process
+
+        expect(result[:success]).to be true
+        new_compliance_info = user.reload.alive_user_compliance_info
+        expect(new_compliance_info.city_kana).to eq("シブヤク")
+        expect(new_compliance_info.business_city_kana).to eq("チヨダク")
+      end
     end
 
     context "with a US business that already has a 9-digit business_tax_id saved" do

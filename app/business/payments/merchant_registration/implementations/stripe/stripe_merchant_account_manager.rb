@@ -675,25 +675,32 @@ module StripeMerchantAccountManager
       }
 
       if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
+        address_kanji = {
+          line1: user_compliance_info.building_number,
+          town: user_compliance_info.street_address_kanji,
+          state: user_compliance_info.state,
+          country: "JP",
+          postal_code: user_compliance_info.zip_code
+        }
+        address_kana = {
+          line1: user_compliance_info.building_number_kana,
+          town: user_compliance_info.street_address_kana,
+          state: prefecture_kana(user_compliance_info.state),
+          country: "JP",
+          postal_code: user_compliance_info.zip_code
+        }
+        # Compliance records saved before the dedicated Japanese city fields existed have no city
+        # value. Stripe rejects an address update that includes an explicit null city, so only add
+        # the key when the seller has actually provided one.
+        address_kanji[:city] = user_compliance_info.city if user_compliance_info.city.present?
+        address_kana[:city] = user_compliance_info.city_kana if user_compliance_info.city_kana.present?
         hash.deep_merge!({
                            first_name_kanji: user_compliance_info.first_name_kanji,
                            last_name_kanji: user_compliance_info.last_name_kanji,
                            first_name_kana: user_compliance_info.first_name_kana,
                            last_name_kana: user_compliance_info.last_name_kana,
-                           address_kanji: {
-                             line1: user_compliance_info.building_number,
-                             town: user_compliance_info.street_address_kanji,
-                             state: user_compliance_info.state,
-                             country: "JP",
-                             postal_code: user_compliance_info.zip_code
-                           },
-                           address_kana: {
-                             line1: user_compliance_info.building_number_kana,
-                             town: user_compliance_info.street_address_kana,
-                             state: prefecture_kana(user_compliance_info.state),
-                             country: "JP",
-                             postal_code: user_compliance_info.zip_code
-                           }
+                           address_kanji:,
+                           address_kana:
                          })
       else
         hash.deep_merge!({
@@ -760,24 +767,31 @@ module StripeMerchantAccountManager
     }
 
     if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
+      business_address_kanji = {
+        line1: user_compliance_info.business_building_number,
+        town: user_compliance_info.business_street_address_kanji,
+        state: user_compliance_info.business_state,
+        country: "JP",
+        postal_code: user_compliance_info.legal_entity_zip_code
+      }
+      business_address_kana = {
+        line1: user_compliance_info.business_building_number_kana,
+        town: user_compliance_info.business_street_address_kana,
+        state: prefecture_kana(user_compliance_info.business_state),
+        country: "JP",
+        postal_code: user_compliance_info.legal_entity_zip_code
+      }
+      # Compliance records saved before the dedicated Japanese city fields existed have no city
+      # value. Stripe rejects an address update that includes an explicit null city, so only add
+      # the key when the seller has actually provided one.
+      business_address_kanji[:city] = user_compliance_info.business_city if user_compliance_info.business_city.present?
+      business_address_kana[:city] = user_compliance_info.business_city_kana if user_compliance_info.business_city_kana.present?
       hash.deep_merge!({
                          company: {
                            name_kanji: user_compliance_info.business_name_kanji,
                            name_kana: user_compliance_info.business_name_kana,
-                           address_kanji: {
-                             line1: user_compliance_info.business_building_number,
-                             town: user_compliance_info.business_street_address_kanji,
-                             state: user_compliance_info.business_state,
-                             country: "JP",
-                             postal_code: user_compliance_info.legal_entity_zip_code
-                           },
-                           address_kana: {
-                             line1: user_compliance_info.business_building_number_kana,
-                             town: user_compliance_info.business_street_address_kana,
-                             state: prefecture_kana(user_compliance_info.business_state),
-                             country: "JP",
-                             postal_code: user_compliance_info.legal_entity_zip_code
-                           }
+                           address_kanji: business_address_kanji,
+                           address_kana: business_address_kana
                          }
                        })
     end

@@ -547,7 +547,7 @@ describe Api::Internal::Admin::UsersController do
       get :info, params: { email: user.email }
 
       links = response.parsed_body["user"]["admin_links"]
-      expect(links["impersonate"]).to include("/admin/helper_actions/impersonate/#{user.external_id}")
+      expect(links["impersonate"]).to include("/admin/impersonate?user_identifier=#{user.external_id}")
       expect(links["admin_user"]).to include("/admin/users/#{user.id}")
       expect(links["admin_purchases"]).to include("query=#{CGI.escape(user.email)}")
       expect(links).not_to have_key("stripe_dashboard")
@@ -564,7 +564,7 @@ describe Api::Internal::Admin::UsersController do
       get :info, params: { email: user.email }
 
       expect(response.parsed_body["user"]["admin_links"]["stripe_dashboard"]).to include(
-        "/admin/helper_actions/stripe_dashboard/#{user.external_id}"
+        "/admin/redirect_to_stripe_dashboard?user_identifier=#{user.external_id}"
       )
     end
   end

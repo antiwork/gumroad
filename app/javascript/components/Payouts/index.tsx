@@ -234,6 +234,7 @@ export type PayoutsProps = {
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
+    instant_payout_fee_percent: number;
     payable_amount_cents: number;
     payable_balances: {
       id: string;

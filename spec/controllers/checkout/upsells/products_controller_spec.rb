@@ -89,6 +89,56 @@ describe Checkout::Upsells::ProductsController do
       expect(response.parsed_body.length).to eq(2)
     end
 
+    context "with a search query" do
+      it "returns only products whose name contains the query, matching case-insensitively" do
+        sign_in seller
+        get :index, params: { query: "product 1" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.map { |product| product["name"] }).to eq(["Product 1"])
+      end
+
+      it "finds products outside the newest-MAX_PRODUCTS window" do
+        # This is the bug the query param exists to fix: without server-side
+        # search, a product older than the seller's 25 newest could never be
+        # selected as an upsell.
+        old_product = create(:product, user: seller, name: "Ancient Relic", created_at: 5.years.ago)
+        sign_in seller
+
+        stub_const("Checkout::Upsells::ProductsController::MAX_PRODUCTS", 2)
+
+        get :index
+        expect(response.parsed_body.map { |product| product["name"] }).not_to include("Ancient Relic")
+
+        get :index, params: { query: "ancient" }
+        expect(response.parsed_body.map { |product| product["id"] }).to eq([old_product.external_id])
+      end
+
+      it "matches variant names, since the picker lists variants as options" do
+        sign_in seller
+        get :index, params: { query: "Untitled 1" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.map { |product| product["name"] }).to eq(["Versioned Product"])
+      end
+
+      it "treats SQL LIKE wildcards in the query as literal characters" do
+        sign_in seller
+        get :index, params: { query: "%" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq([])
+      end
+
+      it "returns all products when the query is blank" do
+        sign_in seller
+        get :index, params: { query: "" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.length).to eq(3)
+      end
+    end
+
     context "when no seller is found" do
       it "returns an empty array" do
         get :index

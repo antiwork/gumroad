@@ -6,6 +6,11 @@ class Checkout::StripePaymentPresenter
 
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
+  # When active for every seller in the cart, subscription checkouts declare recurring intent on
+  # the Apple Pay payment sheet so Apple issues a merchant token (MPAN) — a token tied to the
+  # buyer's card and Gumroad rather than to the physical device — instead of a device token that
+  # dies when the buyer wipes or replaces their phone. Rollout flag for antiwork/gumroad#5727.
+  APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME = :apple_pay_merchant_tokens
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -69,6 +74,7 @@ class Checkout::StripePaymentPresenter
         integration: STRIPE_CARD_ELEMENT_INTEGRATION,
         fallback_reason:,
         disable_wallets:,
+        request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: nil,
       }
     end
@@ -78,6 +84,7 @@ class Checkout::StripePaymentPresenter
         integration: STRIPE_PAYMENT_ELEMENT_INTEGRATION,
         fallback_reason: nil,
         disable_wallets: false,
+        request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
@@ -111,6 +118,14 @@ class Checkout::StripePaymentPresenter
         buyer_country:,
         ppp_discounted: ppp_verification_applies?,
       )
+    end
+
+    # Keyed on every seller in the cart so a multi-seller cart only declares recurring intent when
+    # all sellers are in the rollout. (Recurring declarations only fire on single-subscription
+    # carts anyway — the frontend enforces that — but keeping the flag seller-complete means
+    # enabling it for one seller never changes another seller's checkout.)
+    def request_apple_pay_merchant_tokens?
+      sellers.present? && sellers.all? { _1.present? && Feature.active?(APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, _1) }
     end
 
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
@@ -147,6 +162,7 @@ class Checkout::StripePaymentPresenter
         # above), so wallets stay enabled; emit the field so every integration variant
         # carries the same wallet contract the frontend reads.
         disable_wallets: false,
+        request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: CLIENT_CONFIRM_CURRENCY,

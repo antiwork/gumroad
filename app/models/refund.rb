@@ -32,6 +32,12 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :presentment_seller_tax_cents
   attr_json_data_accessor :presentment_gumroad_tax_cents
   attr_json_data_accessor :presentment_shipping_cents
+  # Live-rate settlement facts from the Stripe refund balance transaction. Stripe converts
+  # refunds at the live rate (not the locked FX quote rate), so the settled amount differs
+  # from the amount originally settled for the charge; the delta against the canonical
+  # balance debit is platform-side FX gain or loss. Persisted for treasury reconciliation.
+  attr_json_data_accessor :presentment_settled_currency
+  attr_json_data_accessor :presentment_settled_amount_cents
 
   private
     def assign_product

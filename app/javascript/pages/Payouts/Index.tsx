@@ -37,7 +37,6 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
-const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10000;
 const MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 999900;
 
@@ -465,8 +464,11 @@ export default function PayoutsIndex() {
       return selectedBalance && balance.date <= selectedBalance.date ? sum + balance.amount_cents : sum;
     }, 0) ?? 0;
 
+  // The fee rate comes from the backend (StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT)
+  // so the amount previewed here always matches what the payout processor deducts.
+  const instantPayoutFeeFraction = instant_payout ? instant_payout.instant_payout_fee_percent / 100 : 0;
   const instantPayoutFee = instant_payout
-    ? instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + INSTANT_PAYOUT_FEE_PERCENTAGE))
+    ? instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + instantPayoutFeeFraction))
     : 0;
 
   const onRequestInstantPayout = () => {
@@ -686,7 +688,7 @@ export default function PayoutsIndex() {
                       price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
                     />
                     <PayoutLineItem
-                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                      title={`Instant payout fee (${instant_payout.instant_payout_fee_percent}%)`}
                       price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
                     />
                   </div>

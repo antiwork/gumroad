@@ -7,7 +7,6 @@ import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
-import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -67,6 +66,7 @@ import {
   computeTip,
   computeTipForPrice,
   getErrors,
+  getFutureInstallmentsTotal,
   getTotalPrice,
   getTotalPriceFromProducts,
   isProcessing,
@@ -207,17 +207,9 @@ export const Checkout = ({
   const commissionCompletionTotal =
     (commissionTotal + (computeTipForPrice(state, commissionTotal) ?? 0)) * (1 - COMMISSION_DEPOSIT_PROPORTION);
 
-  // The full tip amount is charged upfront for installment plans.
-  const futureInstallmentsWithoutTipsTotal = cart.items.reduce((sum, item) => {
-    if (!item.product.installment_plan || !item.pay_in_installments) return sum;
-
-    const price = convertToUSD(item, getDiscountedPrice(cart, item).price);
-    const firstInstallmentPrice = calculateFirstInstallmentPaymentPriceCents(
-      price,
-      item.product.installment_plan.number_of_installments,
-    );
-    return sum + (price - firstInstallmentPrice);
-  }, 0);
+  // The full tip amount is charged upfront for installment plans. Shared with the wallet payment
+  // sheets (getChargeTodayPrice) so the sheet total always matches the "Payment today" row.
+  const futureInstallmentsWithoutTipsTotal = getFutureInstallmentsTotal(state);
 
   const isDesktop = useIsAboveBreakpoint("lg");
   const displayTipSelector = isTippingEnabled(state);

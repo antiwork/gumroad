@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
+  getChargeTodayPrice,
+  getFutureInstallmentsTotal,
   getStripePaymentElementAmount,
   isCardReadyToPay,
   reduceCheckoutState,
@@ -22,6 +24,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
   disable_wallets: false,
+  request_apple_pay_merchant_tokens: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -34,6 +37,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   integration: "payment_element",
   fallback_reason: null,
   disable_wallets: false,
+  request_apple_pay_merchant_tokens: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
@@ -47,6 +51,7 @@ const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
   fallback_reason: "stripe_payment_element_flag_disabled",
   disable_wallets: false,
+  request_apple_pay_merchant_tokens: false,
   elements_options: null,
 };
 
@@ -54,6 +59,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   integration: "payment_element_client_confirm",
   fallback_reason: null,
   disable_wallets: false,
+  request_apple_pay_merchant_tokens: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -644,5 +650,152 @@ describe("reduceCheckoutState", () => {
     const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
 
     expect(next.surcharges).toEqual({ type: "pending" });
+  });
+});
+
+const loadedSurcharges = (
+  overrides: Partial<{ subtotal: number; tax_cents: number; shipping_rate_cents: number }> = {},
+) =>
+  ({
+    type: "loaded",
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      buyer_currency_quote: null,
+      ...overrides,
+    },
+  }) as const;
+
+describe("getChargeTodayPrice", () => {
+  it("returns null until surcharges load", () => {
+    expect(getChargeTodayPrice(state({ surcharges: { type: "pending" } }))).toBeNull();
+  });
+
+  it("matches the full total for carts without installments", () => {
+    expect(
+      getChargeTodayPrice(state({ surcharges: loadedSurcharges({ tax_cents: 100, shipping_rate_cents: 50 }) })),
+    ).toBe(1_150);
+  });
+
+  it("matches the checkout table's Payment today row for an installment cart", () => {
+    // $10 in 2 installments at 20% tax: the table presents the full tax with "Payment today"
+    // ($5 first installment + $2 tax = $7) and "Future installments" pre-tax ($5).
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }),
+        }),
+      ),
+    ).toBe(700);
+  });
+
+  it("gives the first installment the rounding remainder", () => {
+    // $100.01 in 4 installments: today charges $25.01 (three future installments of $25.00).
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 10_001, payInInstallments: true, installmentPlan: { numberOfInstallments: 4 } })],
+          surcharges: loadedSurcharges({ subtotal: 10_001 }),
+        }),
+      ),
+    ).toBe(2_501);
+  });
+
+  it("only splits the installment item in a mixed cart", () => {
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [
+            product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } }),
+            product({ permalink: "b", price: 500 }),
+          ],
+          surcharges: loadedSurcharges({ subtotal: 1_500 }),
+        }),
+      ),
+    ).toBe(1_000);
+  });
+
+  it("handles a mixed cart with tips and taxes like the checkout table does", () => {
+    // $10 one-time + $200 in 2 installments, $21 fixed tip, 10% tax. The surcharges quote's
+    // subtotal already includes the tip (loadSurcharges sends tipped prices). Today =
+    // total ($23,100 + $2,310 tax) minus the pre-tax future installment ($10,000): $154.10.
+    // Tips and taxes are entirely part of today's number, mirroring the table.
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [
+            product({ permalink: "one-time", price: 1_000, hasTippingEnabled: true }),
+            product({
+              permalink: "installments",
+              price: 20_000,
+              hasTippingEnabled: true,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 2 },
+            }),
+          ],
+          tip: { type: "fixed", amount: 2_100 },
+          surcharges: loadedSurcharges({ subtotal: 23_100, tax_cents: 2_310 }),
+        }),
+      ),
+    ).toBe(15_410);
+  });
+});
+
+describe("getFutureInstallmentsTotal", () => {
+  it("is zero for carts without installment items", () => {
+    expect(getFutureInstallmentsTotal(state({ products: [product({ price: 1_000 })] }))).toBe(0);
+  });
+
+  it("sums the pre-tax future payments of installment items", () => {
+    // $10 in 2 installments + $200 in 2 installments: $5 + $100 remain after today.
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [
+            product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } }),
+            product({
+              permalink: "b",
+              price: 20_000,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 2 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(10_500);
+  });
+
+  it("ignores items not paying in installments even when the product offers a plan", () => {
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [product({ price: 1_000, payInInstallments: false, installmentPlan: { numberOfInstallments: 2 } })],
+        }),
+      ),
+    ).toBe(0);
+  });
+
+  // On the subscription manage page `price` is today's charge alone — the future installments
+  // were never folded into it, so there is nothing to deduct from the wallet sheet's total.
+  it("skips items whose plan reports remaining installments (subscription manage page)", () => {
+    expect(
+      getFutureInstallmentsTotal(
+        state({
+          products: [
+            product({
+              price: 0,
+              renewalPriceCents: 2_500,
+              payInInstallments: true,
+              installmentPlan: { numberOfInstallments: 4, remainingInstallments: 2 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(0);
   });
 });

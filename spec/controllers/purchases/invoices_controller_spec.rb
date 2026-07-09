@@ -265,8 +265,13 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(Refund.last.total_transaction_cents).to be(20)
           end
 
-          it "redirects with an alert when a buyer-presentment tax refund is blocked" do
-            create(:purchase_presentment, purchase: @purchase)
+          it "redirects with an alert when a buyer-presentment tax refund fails closed" do
+            # No presentment Gumroad-tax component remains, so a tax-only presentment
+            # refund amount cannot be computed and the refund must fail closed.
+            create(:purchase_presentment, purchase: @purchase,
+                                          presentment_gumroad_tax_cents: 0,
+                                          presentment_price_cents: 13_50,
+                                          presentment_total_cents: 13_50)
             allow(ErrorNotifier).to receive(:notify)
 
             expect do

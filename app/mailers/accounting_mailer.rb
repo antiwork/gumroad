@@ -30,6 +30,22 @@ class AccountingMailer < ApplicationMailer
          cc: %w[gumclaw@gumroad.com]
   end
 
+  def daily_finance_ledger_report(date)
+    WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+      @report = FinanceEventLedgerReports.daily_report(date)
+    end
+
+    # The JSON attachment (not the HTML body) is the machine-readable artifact gumclaw
+    # ingests into the daily ledger — its shape is versioned via report_version.
+    attachments["daily-finance-ledger-report-#{date.iso8601}.json"] = {
+      data: JSON.pretty_generate(@report),
+      mime_type: "application/json",
+    }
+    mail subject: "#{SUBJECT_PREFIX}Daily Finance Ledger Report – #{date.iso8601}",
+         to: FINANCE_EMAIL,
+         cc: %w[gumclaw@gumroad.com]
+  end
+
   def stripe_currency_balances_report(balances_csv)
     last_month = Time.current.last_month
     month = last_month.month

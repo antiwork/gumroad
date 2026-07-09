@@ -355,6 +355,39 @@ describe Charge::Disputable, :vcr do
         Purchase.handle_charge_event(event)
       end
 
+      describe "buyer-presentment purchases" do
+        let(:event) do
+          event = build(:charge_event_dispute_formalized, charge_id: "ch_zitkxbhds3zqlt")
+          # Stripe pulls the disputed amount in the buyer's (charge) currency.
+          event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -135)
+          event
+        end
+
+        before do
+          create(:purchase_presentment, purchase:, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+          purchase.association(:purchase_presentment).reset
+        end
+
+        it "books the dispute balance debit in canonical USD, not the buyer currency" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(balance_transaction).to be_present
+          expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+          expect(balance_transaction.issued_amount_gross_cents).to eq(-purchase.gross_amount_refundable_cents)
+          expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+        end
+
+        it "snapshots the canonical gross the debit booked so the dispute-won re-credit can reuse it" do
+          Purchase.handle_charge_event(event)
+          purchase.reload
+
+          balance_transaction = BalanceTransaction.where(dispute: purchase.dispute).last
+          expect(purchase.presentment_dispute_debited_gross_cents).to eq(-balance_transaction.issued_amount_gross_cents)
+        end
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }
@@ -545,6 +578,165 @@ describe Charge::Disputable, :vcr do
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.reload.payment_cents
         end
       end
+
+      describe "webhook replay safety" do
+        let!(:purchase_event) { create(:event, event_name: "purchase", purchase_id: purchase.id, link_id: product.id) }
+
+        context "when the first delivery crashes partway through the side effects" do
+          before do
+            # Simulate a crash on a late step: the creator notification raises on the first
+            # delivery only, leaving the dispute formalized with unfinished side effects.
+            call_count = 0
+            allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_wrap_original do |original, *args|
+              call_count += 1
+              raise "simulated crash" if call_count == 1
+              original.call(*args)
+            end
+          end
+
+          it "resumes and completes the side effects on replay without applying them twice" do
+            expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+            dispute = purchase.reload.dispute
+            expect(dispute.state).to eq("formalized")
+            expect(dispute.formalized_side_effects_finished_at).to be_nil
+            seller_contacted_at_after_crash = dispute.dispute_evidence.seller_contacted_at
+            expect(seller_contacted_at_after_crash).to be_present
+
+            expect { Purchase.handle_charge_event(event) }.not_to raise_error
+
+            dispute.reload
+            purchase.reload
+            seller.reload
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+            # Balance decremented exactly once across both deliveries.
+            expect(seller.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+            expect(purchase.purchase_chargeback_balance).to be_present
+            expect(Event.where(purchase_id: purchase.id, event_name: "chargeback").count).to eq(1)
+            # The replay must not move the evidence-submission window.
+            expect(dispute.dispute_evidence.reload.seller_contacted_at).to eq(seller_contacted_at_after_crash)
+            expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+          end
+
+          context "when the product is a subscription" do
+            let(:product) { create(:subscription_product, user: seller) }
+            let!(:purchase) do
+              subscription = create(:subscription, link: product, cancelled_at: nil)
+              purchase = create(:purchase, link: product, is_original_subscription_purchase: true, subscription:, stripe_transaction_id: "ch_zitkxbhds3zqlt")
+              purchase.update(is_original_subscription_purchase: true, subscription:)
+              purchase
+            end
+
+            it "does not cancel the already-deactivated subscription again on replay" do
+              expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+              subscription = purchase.reload.subscription
+              deactivated_at_after_crash = subscription.deactivated_at
+              expect(deactivated_at_after_crash).to be_present
+
+              expect_any_instance_of(Subscription).not_to receive(:cancel_effective_immediately!)
+              expect { Purchase.handle_charge_event(event) }.not_to raise_error
+
+              expect(subscription.reload.deactivated_at).to eq(deactivated_at_after_crash)
+              expect(purchase.reload.dispute.formalized_side_effects_finished_at).to be_present
+            end
+          end
+        end
+
+        context "when the first delivery fully succeeded" do
+          before do
+            Purchase.handle_charge_event(event)
+          end
+
+          it "does not re-run the side effects but still enqueues the enforcement job" do
+            purchase.reload
+            seller.reload
+            dispute = purchase.dispute
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+            balance_after_first_delivery = seller.unpaid_balance_cents
+            seller_contacted_at_after_first_delivery = dispute.dispute_evidence.seller_contacted_at
+            marker_after_first_delivery = dispute.formalized_side_effects_finished_at
+
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+            expect(AdminMailer).not_to receive(:chargeback_notify)
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            Purchase.handle_charge_event(event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq(balance_after_first_delivery)
+            expect(Event.where(purchase_id: purchase.id, event_name: "chargeback").count).to eq(1)
+            dispute.reload
+            expect(dispute.dispute_evidence.seller_contacted_at).to eq(seller_contacted_at_after_first_delivery)
+            expect(dispute.formalized_side_effects_finished_at).to eq(marker_after_first_delivery)
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)
+          end
+
+          it "keeps the enqueue-only replay behavior once the dispute has been won" do
+            purchase.reload.dispute.update!(state: "won")
+
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            Purchase.handle_charge_event(event)
+
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)
+          end
+        end
+
+        context "for a charge" do
+          let(:transaction_id) { "ch_charge_884" }
+          let!(:charge_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: transaction_id, price_cents: 100,
+                              total_transaction_cents: 100, fee_cents: 30)
+          end
+          let!(:charge) { create(:charge, seller:, processor_transaction_id: transaction_id, amount_cents: 100, purchases: [charge_purchase]) }
+          let!(:charge_purchase_event) { create(:event, event_name: "purchase", purchase_id: charge_purchase.id, link_id: product.id) }
+          let(:charge_event) { build(:charge_event_dispute_formalized, charge_id: transaction_id) }
+
+          before do
+            sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+            allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+          end
+
+          it "resumes unfinished side effects on replay without double-applying them" do
+            call_count = 0
+            allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_wrap_original do |original, *args|
+              call_count += 1
+              raise "simulated crash" if call_count == 1
+              original.call(*args)
+            end
+
+            expect { charge.handle_event(charge_event) }.to raise_error("simulated crash")
+
+            dispute = charge.reload.dispute
+            expect(dispute.state).to eq("formalized")
+            expect(dispute.formalized_side_effects_finished_at).to be_nil
+
+            expect { charge.handle_event(charge_event) }.not_to raise_error
+
+            expect(dispute.reload.formalized_side_effects_finished_at).to be_present
+            expect(charge_purchase.reload.purchase_chargeback_balance).to be_present
+            expect(seller.reload.unpaid_balance_cents).to eq initial_balance - charge_purchase.payment_cents
+            expect(Event.where(purchase_id: charge_purchase.id, event_name: "chargeback").count).to eq(1)
+          end
+
+          it "does not re-run the side effects when replayed after a fully successful delivery" do
+            charge.handle_event(charge_event)
+            balance_after_first_delivery = seller.reload.unpaid_balance_cents
+            expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_present
+
+            expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
+
+            EnforceRefundPolicyForSellerJob.jobs.clear
+            charge.handle_event(charge_event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq(balance_after_first_delivery)
+            expect(Event.where(purchase_id: charge_purchase.id, event_name: "chargeback").count).to eq(1)
+            expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(charge_purchase.id)
+          end
+        end
+      end
     end
 
     describe "dispute closed" do
@@ -603,6 +795,101 @@ describe Charge::Disputable, :vcr do
         it "sets the chargeback reversed flag" do
           Purchase.handle_charge_event(@e)
           expect(@p.reload.chargeback_reversed).to be(true)
+        end
+
+        describe "buyer-presentment purchases" do
+          before do
+            create(:purchase_presentment, purchase: @p, presentment_total_cents: 135, presentment_price_cents: 135, presentment_gumroad_tax_cents: 0)
+            @p.association(:purchase_presentment).reset
+            # Stripe returns the disputed amount in the buyer's (charge) currency.
+            @e.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, 135)
+          end
+
+          it "books the dispute-won re-credit from the snapshotted debit gross in canonical USD, not the buyer currency" do
+            # The dispute debit snapshots the canonical gross right before it books.
+            @p.update!(presentment_dispute_debited_gross_cents: @p.gross_amount_refundable_cents)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(Credit.last.user).to eq @p.seller
+            expect(Credit.last.amount_cents).to eq @p.payment_cents
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
+          end
+
+          it "books the re-credit from the snapshotted debit gross when a refund lands after the debit" do
+            create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            # The debit snapshotted the gross it booked. A refund webhook arriving while
+            # the dispute is active then creates a refund row (no balance decrement) and
+            # shrinks gross_amount_refundable_cents — the re-credit must not follow it.
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+            expect(balance_transaction.issued_amount_gross_cents).not_to eq(@p.gross_amount_refundable_cents)
+          end
+
+          it "settles a mid-dispute refund by crediting the reduced seller net, not the full debited split" do
+            create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            @p.update!(presentment_dispute_debited_gross_cents: 135)
+            # A briefly-shipped version of the dispute debit also snapshotted the
+            # seller/affiliate split into json_data so the win could reuse it. Seed those
+            # keys the way that code left them to pin that they are ignored: reusing the
+            # split would over-credit the seller (see below).
+            @p.json_data["presentment_dispute_debited_seller_cents"] = @p.payment_cents
+            @p.json_data["presentment_dispute_debited_affiliate_cents"] = 0
+            @p.save!
+            # A refund webhook arriving while the dispute is active creates the refund row
+            # but skips the seller balance debit (the dispute debit already took the full
+            # amount). The dispute-won credit settles that skipped debit by recomputing the
+            # seller net from the reduced refundable amount: crediting the full split the
+            # loss debited would leave the seller whole while the buyer also keeps the
+            # refund, over-crediting the seller by the refund's net share.
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(Credit.last.user).to eq @p.seller
+            # amount_refundable_cents (70) minus its proportional fee share, same as the
+            # non-presentment settlement above ("credits only remaining balance").
+            expect(Credit.last.amount_cents).to eq 5
+            expect(Credit.last.amount_cents).to be < @p.payment_cents
+            # The canonical gross still mirrors the debit's snapshot; only the net settles
+            # the skipped refund decrement.
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+          end
+
+          it "mirrors the processor flow of funds when the dispute predates the debit snapshot" do
+            # Disputes debited before the snapshot existed had their debit booked straight
+            # from the processor flow of funds, so the re-credit must mirror the same flow
+            # of funds — reconstructing a canonical amount could diverge from what was
+            # actually debited (e.g. when a refund landed after formalization but before
+            # the debit read the refundable gross).
+            dispute = create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
+            create(:refund, purchase: @p, amount_cents: 30, total_transaction_cents: 30, creator_tax_cents: 0, gumroad_tax_cents: 0)
+            @p.update!(stripe_partially_refunded: true)
+            expect(@p.presentment_dispute_debited_gross_cents).to be_nil
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            expect(dispute.reload.state).to eq("won")
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.issued_amount_currency).to eq(Currency::CAD)
+            expect(balance_transaction.issued_amount_gross_cents).to eq(135)
+          end
         end
 
         describe "purchase involves an affiliate" do

@@ -99,15 +99,25 @@ module Charge::Disputable
 
     dispute = find_or_build_dispute(event)
 
+    if dispute.formalized? && dispute.formalized_side_effects_finished_at.nil?
+      # The first webhook attempt marked the dispute formalized but crashed partway through
+      # the side effects (balance decrement, payout pause, notifications). The processor
+      # re-delivers the webhook; resume the remaining work instead of skipping it.
+      # Every step inside is guarded so already-completed work is not applied twice.
+      perform_dispute_formalized_side_effects!(event, dispute)
+      return
+    end
+
     unless dispute.initiated? || dispute.created?
-      # The dispute is already past its initial state, which means this event is a replay —
-      # the payment processor re-delivers the webhook when an earlier attempt failed partway
-      # through. Refund-policy enforcement is enqueued late in the first attempt (after the
-      # dispute is marked formalized), so a failure at that point — say, a Redis outage during
-      # the Sidekiq enqueue — would otherwise leave the seller's enforcement check unscheduled
-      # forever, because the replay returns here without reaching that code. Re-enqueueing on
-      # every replay is safe: the job no-ops once the seller is already enforced (or doesn't
-      # cross the dispute-rate thresholds), so duplicates do nothing.
+      # The dispute is already past its initial state AND its side effects finished (or it has
+      # since been won/lost), which means this event is a replay — the payment processor
+      # re-delivers the webhook when an earlier attempt failed partway through. Refund-policy
+      # enforcement is enqueued late in the first attempt (after the dispute is marked
+      # formalized), so a failure at that point — say, a Redis outage during the Sidekiq
+      # enqueue — would otherwise leave the seller's enforcement check unscheduled forever,
+      # because the replay returns here without reaching that code. Re-enqueueing on every
+      # replay is safe: the job no-ops once the seller is already enforced (or doesn't cross
+      # the dispute-rate thresholds), so duplicates do nothing.
       disputed_purchases.each { |purchase| EnforceRefundPolicyForSellerJob.perform_async(purchase.id) }
       return
     end
@@ -115,6 +125,11 @@ module Charge::Disputable
     mark_as_disputed!(disputed_at: event.created_at)
 
     disputed_purchases.each do |purchase|
+      # A replay that crashed after creating this event but before mark_formalized! re-enters
+      # this normal path (the dispute is still in its initial state), so skip purchases that
+      # already have their chargeback event to avoid duplicate analytics rows.
+      next if Event.where(purchase_id: purchase.id, event_name: "chargeback").exists?
+
       purchase_event = Event.where(purchase_id: purchase.id, event_name: "purchase").last
       if purchase_event.present?
         Event.create(
@@ -128,49 +143,7 @@ module Charge::Disputable
 
     dispute.mark_formalized!
 
-    disputed_purchases.each do |purchase|
-      flow_of_funds = build_flow_of_funds(event.flow_of_funds, purchase)
-      purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
-
-      if purchase.link.is_recurring_billing
-        subscription = Subscription.find_by(id: purchase.subscription_id)
-        subscription.cancel_effective_immediately!(by_buyer: true)
-        subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
-      end
-
-      purchase.enqueue_update_sales_related_products_infos_job(false)
-      purchase.mark_giftee_purchase_as_chargeback if purchase.is_gift_sender_purchase
-
-      purchase.chargeback_date = event.created_at
-      purchase.chargeback_reason = event.extras.try(:[], :reason)
-      purchase.save!
-
-      purchase.mark_product_purchases_as_chargedback!
-
-      purchase.pause_payouts_for_seller_based_on_chargeback_rate!
-      # Enforcement runs as a background job rather than inline: the dispute was already
-      # marked formalized above, so an inline failure here would be skipped forever on
-      # webhook retry (the handler returns early for formalized disputes). The job gets
-      # its own Sidekiq retries and the enforcement method is idempotent.
-      EnforceRefundPolicyForSellerJob.perform_async(purchase.id)
-      purchase.block_buyer_based_on_chargeback_count!
-    end
-
-    dispute_evidence = create_dispute_evidence_if_needed!
-    dispute_evidence&.update_as_seller_contacted!
-
-    ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
-    AdminMailer.chargeback_notify(dispute.id).deliver_later
-    CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
-
-    disputed_purchases.each do |purchase|
-      # Check for low balance and put the creator on probation
-      LowBalanceFraudCheckWorker.perform_in(5.seconds, purchase.id)
-
-      PostToPingEndpointsWorker.perform_in(5.seconds, purchase.id, purchase.url_parameters, ResourceSubscription::DISPUTE_RESOURCE_NAME)
-    end
-
-    FightDisputeJob.perform_async(dispute_evidence.dispute.id) if dispute_evidence.present?
+    perform_dispute_formalized_side_effects!(event, dispute)
   end
 
   def resolve_pending_dispute_evidence_if_any!(error_message)
@@ -286,4 +259,78 @@ module Charge::Disputable
 
     ChargeProcessor.fight_chargeback(charge_processor, charge_processor_transaction_id, dispute_evidence)
   end
+
+  private
+    # Everything that must happen after a dispute is formalized: seller balance decrement,
+    # subscription cancellation, chargeback flags, payout pause, buyer block, notifications.
+    # Runs on the first delivery and again on webhook replay if a previous attempt crashed
+    # before writing formalized_side_effects_finished_at, so each step is either guarded here
+    # or idempotent on its own.
+    def perform_dispute_formalized_side_effects!(event, dispute)
+      disputed_purchases.each do |purchase|
+        flow_of_funds = build_flow_of_funds(event.flow_of_funds, purchase)
+        # Replay-safe without a guard here: decrement_balance_for_refund_or_chargeback! checks
+        # seller_balance_update_eligible? internally and returns early once the purchase already
+        # has a purchase_chargeback_balance, so a replay never debits the seller twice.
+        purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
+
+        if purchase.link.is_recurring_billing
+          subscription = Subscription.find_by(id: purchase.subscription_id)
+          # Only cancel a live subscription: re-cancelling one that a previous attempt already
+          # deactivated would re-fire the cancellation webhooks and customer emails on replay.
+          # The review exclusion stays inside this guard because it is tied to the cancellation.
+          if subscription.present? && subscription.deactivated_at.nil?
+            subscription.cancel_effective_immediately!(by_buyer: true)
+            subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
+          end
+        end
+
+        purchase.enqueue_update_sales_related_products_infos_job(false)
+        purchase.mark_giftee_purchase_as_chargeback if purchase.is_gift_sender_purchase
+
+        # No replay guard needed for these writes: the same event always carries the same
+        # date and reason, so rewriting them is a no-op.
+        purchase.chargeback_date = event.created_at
+        purchase.chargeback_reason = event.extras.try(:[], :reason)
+        purchase.save!
+
+        purchase.mark_product_purchases_as_chargedback!
+
+        # pause_payouts_for_seller_based_on_chargeback_rate! and block_buyer_based_on_chargeback_count!
+        # are both idempotent (they recompute from current data and re-apply the same state),
+        # so replays can safely call them again.
+        purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        # Enforcement runs as a background job rather than inline: the dispute was already
+        # marked formalized above, so an inline failure here would otherwise be skipped on
+        # webhook retry. The job gets its own Sidekiq retries and the enforcement method is
+        # idempotent.
+        EnforceRefundPolicyForSellerJob.perform_async(purchase.id)
+        purchase.block_buyer_based_on_chargeback_count!
+      end
+
+      dispute_evidence = create_dispute_evidence_if_needed!
+      # Don't re-stamp seller_contacted_at on replay: it anchors the 72-hour evidence-submission
+      # window, and moving it forward would silently extend the seller's deadline.
+      dispute_evidence.update_as_seller_contacted! if dispute_evidence.present? && !dispute_evidence.seller_contacted?
+
+      # No per-step guards from here down: the completion marker written at the end prevents
+      # any re-delivery from reaching this code, except for a crash inside the tiny window
+      # between these enqueues and the marker write — that degrades to at-least-once
+      # email/webhook delivery, which is normal for crash-retry semantics.
+      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
+      AdminMailer.chargeback_notify(dispute.id).deliver_later
+      CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
+
+      disputed_purchases.each do |purchase|
+        # Check for low balance and put the creator on probation
+        LowBalanceFraudCheckWorker.perform_in(5.seconds, purchase.id)
+
+        PostToPingEndpointsWorker.perform_in(5.seconds, purchase.id, purchase.url_parameters, ResourceSubscription::DISPUTE_RESOURCE_NAME)
+      end
+
+      FightDisputeJob.perform_async(dispute.id) if dispute_evidence.present?
+
+      # Completion marker: a replayed webhook only re-runs these side effects while this is nil.
+      dispute.update!(formalized_side_effects_finished_at: Time.current)
+    end
 end

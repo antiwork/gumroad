@@ -8,6 +8,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
+import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -54,23 +55,30 @@ export type PaymentElementClientConfirmConfig = {
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };
+// Every integration variant also carries `request_apple_pay_merchant_tokens` — a per-seller
+// rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
+// Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
+// to the wallet button regardless of which card integration is active.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: null;
     }
   | {
       integration: "payment_element";
       fallback_reason: null;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
       disable_wallets: boolean;
+      request_apple_pay_merchant_tokens: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -80,7 +88,23 @@ export type Product = {
   creator: Creator;
   quantity: number;
   price: number;
+  // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
+  // limited to the first billing cycle, or a payment-method update on the subscription manage
+  // page where `price` is today's charge — often zero — rather than the plan price). For
+  // installment plans it overrides the per-installment amount otherwise derived from `price`.
+  // Used to describe the recurring agreement on the Apple Pay sheet; null/absent means future
+  // payments charge the same as today.
+  renewalPriceCents?: number | null;
   payInInstallments: boolean;
+  // Present when the buyer chose to pay in installments; describes the fixed monthly schedule so
+  // the Apple Pay sheet can state it. `remainingInstallments` is set only on the subscription
+  // manage page, where some installments have already been paid and `price` is today's charge
+  // (not the plan total the future payments derive from at checkout).
+  installmentPlan?: { numberOfInstallments: number; remainingInstallments?: number } | null;
+  // For memberships that automatically end after a fixed period (product duration_in_months):
+  // bounds the recurring agreement shown on the Apple Pay sheet instead of describing it as
+  // billing until cancellation.
+  durationInMonths?: number | null;
   requireShipping: boolean;
   customFields: CustomFieldDescriptor[];
   bundleProductCustomFields: { product: { id: string; name: string }; customFields: CustomFieldDescriptor[] }[];
@@ -377,6 +401,34 @@ export function getTotalPrice(state: State) {
     : null;
 }
 
+// The pre-tax sum of all future (not-charged-today) installment payments in the cart — the
+// checkout table's "Future installments" row. Tips are excluded because the full tip amount is
+// charged upfront with the first payment; taxes are excluded because the checkout table
+// presents the full tax amount as part of "Payment today".
+//
+// Items with remainingInstallments set (subscription manage page) are skipped: there `price` is
+// today's charge alone — future installments were never part of it, so nothing needs deducting.
+export function getFutureInstallmentsTotal(state: State) {
+  return state.products.reduce((sum, item) => {
+    if (!item.payInInstallments || item.installmentPlan == null) return sum;
+    if (item.installmentPlan.remainingInstallments != null) return sum;
+    return (
+      sum +
+      (item.price - calculateFirstInstallmentPaymentPriceCents(item.price, item.installmentPlan.numberOfInstallments))
+    );
+  }, 0);
+}
+
+// What the buyer pays TODAY as the checkout table presents it ("Payment today"): the cart's full
+// value minus the future installment payments. Wallet payment sheets (Apple Pay / Google Pay)
+// display this as their total, so it must match the table the buyer just read — a single source
+// of numbers for both, derived from the same server surcharges quote the table renders.
+export function getChargeTodayPrice(state: State) {
+  const total = getTotalPrice(state);
+  if (total === null) return null;
+  return total - getFutureInstallmentsTotal(state);
+}
+
 export function getCustomFieldKey(
   field: CustomFieldDescriptor,
   product: { permalink: string; bundleProductId?: string | null },
@@ -571,6 +623,7 @@ export function createReducer(initial: {
         integration: "card_element",
         fallback_reason: "not_checkout",
         disable_wallets: false,
+        request_apple_pay_merchant_tokens: false,
         elements_options: null,
       },
       paymentMethod: "card",

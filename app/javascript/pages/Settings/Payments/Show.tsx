@@ -99,6 +99,7 @@ type PaymentsPageProps = {
   payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  instant_payout_fee_percent: number;
   buyer_local_currency_enabled: boolean;
   disable_buyer_local_currency: boolean;
   can_manage_beneficial_owners: boolean;
@@ -567,6 +568,12 @@ export default function PaymentsPage() {
       if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
+      if (!form.data.user.city) {
+        markFieldInvalid("city");
+      }
+      if (!form.data.user.city_kana) {
+        markFieldInvalid("city_kana");
+      }
       validateKanaField(
         "first_name_kana",
         form.data.user.first_name_kana,
@@ -600,6 +607,14 @@ export default function PaymentsPage() {
         form.data.user.street_address_kana,
         HAS_KATAKANA,
         "Street address (Kana)",
+        "must include katakana characters.",
+      );
+      validateKanaField("city_kana", form.data.user.city_kana, KANA_ADDRESS_REGEX, "City (Kana)", KANA_ADDRESS_ERROR);
+      validateKanaField(
+        "city_kana",
+        form.data.user.city_kana,
+        HAS_KATAKANA,
+        "City (Kana)",
         "must include katakana characters.",
       );
     } else if (
@@ -691,6 +706,12 @@ export default function PaymentsPage() {
         if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
+        if (!form.data.user.business_city) {
+          markFieldInvalid("business_city");
+        }
+        if (!form.data.user.business_city_kana) {
+          markFieldInvalid("business_city_kana");
+        }
         validateKanaField(
           "business_name_kana",
           form.data.user.business_name_kana,
@@ -717,6 +738,20 @@ export default function PaymentsPage() {
           form.data.user.business_street_address_kana,
           HAS_KATAKANA,
           "Business street address (Kana)",
+          "must include katakana characters.",
+        );
+        validateKanaField(
+          "business_city_kana",
+          form.data.user.business_city_kana,
+          KANA_ADDRESS_REGEX,
+          "Business city (Kana)",
+          KANA_ADDRESS_ERROR,
+        );
+        validateKanaField(
+          "business_city_kana",
+          form.data.user.business_city_kana,
+          HAS_KATAKANA,
+          "Business city (Kana)",
           "must include katakana characters.",
         );
         if (form.data.user.business_name && HAS_JAPANESE_CHARS.test(form.data.user.business_name)) {
@@ -990,7 +1025,7 @@ export default function PaymentsPage() {
               <Alert variant="info" role="status">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
-                  <b>3% fee</b>.
+                  <b>{props.instant_payout_fee_percent}% fee</b> — the same fee as a one-off instant payout.
                 </div>
               </Alert>
             ) : null}

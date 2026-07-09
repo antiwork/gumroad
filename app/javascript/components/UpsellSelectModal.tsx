@@ -16,6 +16,7 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export type ProductOption = {
@@ -54,23 +55,36 @@ export const UpsellSelectModal = ({
   const [selectedVariant, setSelectedVariant] = React.useState<ProductOption | null>(null);
 
   const [products, setProducts] = React.useState<Product[]>([]);
-  useRunOnce(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await request({
-          method: "GET",
-          accept: "json",
-          url: Routes.checkout_upsells_products_path(),
-        });
-        const responseData = typia.assert<Product[]>(await response.json());
-        setProducts(responseData);
-      } catch (error) {
-        assertResponseError(error);
-        showAlert(error.message, "error");
-      }
-    };
+  const [isLoading, setIsLoading] = React.useState(false);
+  const activeRequestId = React.useRef(0);
 
-    void fetchProducts();
+  // The server returns at most 25 products per request, so sellers with larger
+  // catalogs must search server-side to reach their older products. Each
+  // keystroke (debounced below) re-fetches the option list with the typed text.
+  const fetchProducts = async (query: string) => {
+    const requestId = ++activeRequestId.current;
+    setIsLoading(true);
+    try {
+      const response = await request({
+        method: "GET",
+        accept: "json",
+        url: Routes.checkout_upsells_products_path(query.trim() !== "" ? { query: query.trim() } : {}),
+      });
+      const responseData = typia.assert<Product[]>(await response.json());
+      // Ignore out-of-order responses: only the latest request may update the list.
+      if (requestId === activeRequestId.current) setProducts(responseData);
+    } catch (error) {
+      assertResponseError(error);
+      if (requestId === activeRequestId.current) showAlert(error.message, "error");
+    } finally {
+      if (requestId === activeRequestId.current) setIsLoading(false);
+    }
+  };
+
+  const debouncedFetchProducts = useDebouncedCallback((query: string) => void fetchProducts(query), 300);
+
+  useRunOnce(() => {
+    void fetchProducts("");
   });
 
   const handleInsert = () => {
@@ -145,11 +159,24 @@ export const UpsellSelectModal = ({
               selectProductOption(newValue);
             } else {
               selectProductOption(null);
+              // Clearing the selection also resets the option list to the full
+              // (unfiltered) catalog — otherwise the dropdown would keep showing
+              // only the results of the last search. Cancel any search that is
+              // still waiting on the debounce timer first, so it can't fire
+              // after this reset and put the stale filtered results back.
+              debouncedFetchProducts.cancel();
+              void fetchProducts("");
             }
           }}
+          onInputChange={(inputValue, { action }) => {
+            // Only refetch on real typing. react-select also fires this event with
+            // an empty value when the input blurs or an option is chosen, and
+            // refetching then would needlessly reset the list.
+            if (action === "input-change") debouncedFetchProducts(inputValue);
+          }}
+          isLoading={isLoading}
           placeholder="Select a product"
           isClearable
-          isDisabled={products.length === 0}
         />
       </Fieldset>
 

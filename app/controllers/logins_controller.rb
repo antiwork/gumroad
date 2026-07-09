@@ -32,7 +32,7 @@ class LoginsController < Devise::SessionsController
     unless Feature.active?(:disable_login_recaptcha)
       site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
       if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :login)
-        return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+        return redirect_with_login_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
       end
     end
 

@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 module ValidateRecaptcha
+  # Buyer/user-facing message for a failed CAPTCHA verification. Names the most common
+  # self-fixable causes (ad blockers / privacy extensions blocking the reCAPTCHA script)
+  # so people aren't stranded with "try again" that never works — the only way they used
+  # to discover the cause was emailing support (gumroad-private#927). Kept in sync with
+  # RECAPTCHA_UNAVAILABLE_MESSAGE in app/javascript/components/useRecaptcha.tsx.
+  CAPTCHA_FAILURE_MESSAGE = "Sorry, we could not verify the CAPTCHA. This can be caused by ad blockers, " \
+    "privacy extensions, or VPNs — try disabling them for this page or using a " \
+    "private/incognito window, then try again."
+
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"

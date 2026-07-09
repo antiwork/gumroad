@@ -353,6 +353,7 @@ class UsersController < ApplicationController
       props = {
         seller_id: user.external_id,
         analytics:,
+        tracking_enabled: true,
         has_universal_third_party_analytics:,
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
         username: user.username,

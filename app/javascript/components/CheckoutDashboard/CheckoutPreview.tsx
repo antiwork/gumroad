@@ -43,6 +43,7 @@ export const CheckoutPreview = ({
           integration: "card_element",
           fallback_reason: "checkout_preview",
           disable_wallets: false,
+          request_apple_pay_merchant_tokens: false,
           elements_options: null,
         },
         availablePaymentMethods: [],

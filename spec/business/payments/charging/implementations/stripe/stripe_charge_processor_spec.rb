@@ -2279,6 +2279,65 @@ describe StripeChargeProcessor, :vcr do
 
           expect(recurring_membership_purchase.reload.failed?).to be true
         end
+
+        it "carries the decline reason from last_payment_error on the charge event" do
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.type).to eq(ChargeEvent::TYPE_PAYMENT_INTENT_FAILED)
+            expect(event.extras["stripe_error_code"]).to eq("card_declined_debit_notification_undelivered")
+          end
+
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+
+        it "builds the charge event without an error code when last_payment_error is absent" do
+          stripe_event["data"]["object"]["last_payment_error"] = nil
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.type).to eq(ChargeEvent::TYPE_PAYMENT_INTENT_FAILED)
+            expect(event.extras).to be_nil
+          end
+
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+
+        it "leaves extras unset when last_payment_error carries neither a code nor a type" do
+          stripe_event["data"]["object"]["last_payment_error"] = { "message" => "Something went wrong." }
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.type).to eq(ChargeEvent::TYPE_PAYMENT_INTENT_FAILED)
+            expect(event.extras).to be_nil
+          end
+
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+      end
+    end
+
+    describe ".error_code_from_last_payment_error" do
+      it "appends the decline code to the error code when both are present" do
+        expect(described_class.error_code_from_last_payment_error(
+                 "code" => "payment_method_provider_decline", "decline_code" => "insufficient_funds", "type" => "card_error"
+               )).to eq("payment_method_provider_decline_insufficient_funds")
+      end
+
+      it "returns the bare error code when there is no decline code" do
+        expect(described_class.error_code_from_last_payment_error(
+                 "code" => "payment_intent_payment_attempt_failed", "type" => "invalid_request_error"
+               )).to eq("payment_intent_payment_attempt_failed")
+      end
+
+      it "does not duplicate the code when the decline code repeats it" do
+        expect(described_class.error_code_from_last_payment_error(
+                 "code" => "generic_decline", "decline_code" => "generic_decline", "type" => "card_error"
+               )).to eq("generic_decline")
+      end
+
+      it "falls back to the error type when Stripe sends no code" do
+        expect(described_class.error_code_from_last_payment_error("type" => "card_error")).to eq("card_error")
+      end
+
+      it "returns nil when the error carries neither a code nor a type" do
+        expect(described_class.error_code_from_last_payment_error({})).to be_nil
       end
     end
 

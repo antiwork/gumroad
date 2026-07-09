@@ -264,6 +264,10 @@ class SettingsPresenter
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      # Daily payouts are executed as Stripe instant payouts, so they carry the same
+      # fee. Expose the canonical rate here so the settings UI can never drift from
+      # what the payout processor actually charges.
+      instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
       buyer_local_currency_enabled: Feature.active?(:buyer_local_currency, seller),
       disable_buyer_local_currency: seller.disable_buyer_local_currency?,
       can_manage_beneficial_owners: payments_policy.update? && StripeBeneficialOwnersManager.eligible?(seller),
@@ -417,6 +421,7 @@ class SettingsPresenter
         business_street_address_kanji: user_compliance_info.business_street_address_kanji,
         business_street_address_kana: user_compliance_info.business_street_address_kana,
         business_city: user_compliance_info.business_city,
+        business_city_kana: user_compliance_info.business_city_kana,
         business_state: user_compliance_info.business_state,
         business_country: user_compliance_info.business_country_code || user_compliance_info.country_code,
         business_zip_code: user_compliance_info.business_zip_code,
@@ -434,6 +439,7 @@ class SettingsPresenter
         street_address_kanji: user_compliance_info.street_address_kanji,
         street_address_kana: user_compliance_info.street_address_kana,
         city: user_compliance_info.city,
+        city_kana: user_compliance_info.city_kana,
         state: user_compliance_info.state,
         country: user_compliance_info.country_code,
         zip_code: user_compliance_info.zip_code,

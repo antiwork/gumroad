@@ -37,6 +37,18 @@ describe Product::Prices do
     end
   end
 
+  describe "#associate_price" do
+    it "rejects creating a product with no price using the public field name, not the internal column" do
+      # The message can surface verbatim in API responses and the store agent chat, so it must say
+      # "price" (the name the public API accepts) rather than the internal `price_cents` column —
+      # otherwise it teaches API/agent callers to send a param that doesn't exist.
+      product = build(:product, price_cents: nil)
+
+      expect { product.save }.to raise_error(Link::LinkInvalid)
+      expect(product.errors[:base]).to include("New products should be created with a price")
+    end
+  end
+
   describe "#suggested_price_greater_than_price" do
     it "skips validation when the default price is missing" do
       product = create(:product)

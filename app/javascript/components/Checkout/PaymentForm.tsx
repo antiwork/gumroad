@@ -30,11 +30,13 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
+import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { classNames } from "$app/utils/classNames";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
+import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import {
@@ -43,7 +45,7 @@ import {
   canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
-  getTotalPrice,
+  getChargeTodayPrice,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -71,7 +73,12 @@ import { Radio } from "$app/components/ui/Radio";
 import { Select } from "$app/components/ui/Select";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
-import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
+import {
+  RECAPTCHA_UNAVAILABLE_MESSAGE,
+  RecaptchaCancelledError,
+  RecaptchaUnavailableError,
+  useRecaptcha,
+} from "$app/components/useRecaptcha";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -1124,11 +1131,44 @@ const useStripePaymentRequest = (disabled: boolean) => {
   const [paymentMethodEvent, setPaymentMethodEvent] = React.useState<PaymentRequestPaymentMethodEvent | null>(null);
   const [paymentMethods, setPaymentMethods] = React.useState<CanMakePaymentResult | null>(null);
 
-  const getTotalItem = () => ({ amount: getTotalPrice(state) ?? 0, label: "Gumroad" });
+  // The wallet sheet's total mirrors the checkout table's "Payment today" row (the cart total
+  // minus future installment payments) so the sheet always shows the same number the buyer just
+  // read at checkout. The amount actually charged is decided server-side.
+  const getTotalItem = () => ({ amount: getChargeTodayPrice(state) ?? 0, label: "Gumroad" });
   const stateRef = useRefToLatest(state);
+
+  // When the cart contains a subscription, describe the recurring agreement on the Apple Pay
+  // sheet. This makes Apple issue a merchant token (MPAN) — a token tied to the buyer's card and
+  // Gumroad rather than to the physical device — so renewals keep working after the buyer wipes
+  // or replaces their phone. Behind a per-seller flag while we verify token issuance in
+  // production; without the flag the sheet stays a plain one-time request and Apple issues a
+  // device token, exactly as before.
+  //
+  // Reads `state` directly (NOT stateRef): this is called during render from the useMemo below,
+  // and stateRef only catches up in an effect AFTER render — inside the memo it still holds the
+  // previous products, which would rebuild the PaymentRequest from exactly the stale declaration
+  // the rebuild was meant to discard (e.g. switching an item from installments to pay-in-full
+  // kept declaring the installment plan).
+  const getApplePayOption = () => {
+    if (!state.checkoutPayment.request_apple_pay_merchant_tokens) return null;
+    return getApplePayRecurringPaymentRequest(state.products, Routes.library_url());
+  };
+
+  // Stripe's PaymentRequest#update can change an existing recurring declaration but not remove
+  // one, so whenever cart edits change what the recurring agreement should say — the cart flips
+  // between recurring-eligible and not, one membership is swapped for another, or the renewal
+  // price changes — rebuild the PaymentRequest from scratch instead of letting a stale recurring
+  // agreement linger on the Apple Pay sheet. The key serializes the declaration's content so any
+  // change to it triggers a rebuild; the end date is excluded because it's computed from "now"
+  // (so it would differ on every call) and every change that moves it also changes another field
+  // in the declaration (the billing agreement text spells out the number of payments).
+  const applePayRecurringDeclarationKey = JSON.stringify(getApplePayOption(), (key, value: unknown) =>
+    key === "recurringPaymentEndDate" ? undefined : value,
+  );
 
   const paymentRequest = React.useMemo(() => {
     if (!stripe || disabled) return null;
+    const applePayRecurringPaymentRequest = getApplePayOption();
     const paymentRequest = stripe.paymentRequest({
       country: "US",
       currency: "usd",
@@ -1136,6 +1176,9 @@ const useStripePaymentRequest = (disabled: boolean) => {
       requestPayerEmail: true,
       requestShipping: state.products.some((item) => item.requireShipping),
       requestPayerName: true,
+      ...(applePayRecurringPaymentRequest
+        ? { applePay: { recurringPaymentRequest: applePayRecurringPaymentRequest } }
+        : {}),
     });
     const getAddress = (address: PaymentRequestShippingAddress) => ({
       state: (address.region || address.city) ?? "",
@@ -1155,9 +1198,43 @@ const useStripePaymentRequest = (disabled: boolean) => {
       (async () => {
         const state = stateRef.current;
         if (hasShipping(state) && e.shippingAddress) dispatch({ type: "set-value", ...getAddress(e.shippingAddress) });
-        if (!hasShipping(state) && e.paymentMethod.billing_details.address?.country === "US") {
-          dispatch({ type: "set-value", country: "US" });
-          dispatch({ type: "set-value", zipCode: e.paymentMethod.billing_details.address.postal_code || undefined });
+        if (!hasShipping(state) && e.paymentMethod.billing_details.address?.country) {
+          // Honor the wallet's billing country for ALL countries, not just US. Checkout state
+          // defaults `country` to "US" when the account has no country and geo-detection fails,
+          // so without this a non-US Apple Pay / Google Pay buyer submits taxCountryElection "US"
+          // with an empty ZIP and the server's US-only ZIP validation rejects the purchase with
+          // "You entered a ZIP Code that doesn't exist within your country" — an error the buyer
+          // can't fix because the wallet flow never shows a ZIP field. The billing state/province
+          // is copied too because Canadian tax lookup requires it alongside the country. When the
+          // wallet omits a state we clear the field rather than keep the old value, so a stale
+          // province from a previous selection can't pair with the new country and produce a
+          // wrong tax calculation. For Canada specifically, some wallets share only the postal
+          // code without the province — since every Canadian postal code's first letter maps to
+          // exactly one province or territory, we derive the province from the postal code so
+          // Canadian tax can still be calculated (the wallet flow has no province field the
+          // buyer could fill in manually). If the wallet gives neither a state nor a usable
+          // Canadian postal code, we still must not submit a blank province: Canadian tax is only
+          // calculated when a province is present, so "CA" with an empty province would silently
+          // collect no tax, and the wallet flow gives the buyer no province field to correct it.
+          // In that case we keep the existing checkout state when the wallet's billing country
+          // matches the country checkout already had (it came from the buyer's saved address or
+          // geo-detection for that same country, so it isn't stale). As a true last resort for
+          // Canada — the wallet gave no province, no usable postal code, and checkout had no
+          // prior Canadian province — we elect Alberta. That choice is deliberate, not an
+          // arbitrary list default: Alberta charges only the 5% federal GST, which applies to
+          // buyers in every province and territory. Electing it when the real province is
+          // unknowable means we always collect the federal portion the buyer owes regardless of
+          // where they live, and we never charge them another province's higher HST/PST or remit
+          // provincial tax to a jurisdiction they may not be in.
+          const billingAddress = e.paymentMethod.billing_details.address;
+          const billingState =
+            billingAddress.state ||
+            (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
+            (billingAddress.country === state.country ? state.state : null) ||
+            (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
+          dispatch({ type: "set-value", country: billingAddress.country });
+          dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
+          dispatch({ type: "set-value", state: billingState ?? "" });
         }
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
@@ -1171,7 +1248,7 @@ const useStripePaymentRequest = (disabled: boolean) => {
       })().catch(fail),
     );
     return paymentRequest;
-  }, [stripe, disabled]);
+  }, [stripe, disabled, applePayRecurringDeclarationKey]);
 
   // Use a layout effect because `paymentRequest.show` needs to be called synchronously
   useOnChangeSync(() => {
@@ -1219,8 +1296,17 @@ const useStripePaymentRequest = (disabled: boolean) => {
       // to the Apple Pay billing ZIP code during payment.
       (state.status.type === "input" || state.status.type === "validating") &&
       state.surcharges.type === "loaded"
-    )
-      paymentRequest.update({ total: getTotalItem() });
+    ) {
+      const applePayRecurringPaymentRequest = getApplePayOption();
+      paymentRequest.update({
+        total: getTotalItem(),
+        // Keep the renewal amount on the Apple Pay sheet in sync when discounts, taxes, or cart
+        // edits change prices after the payment request was created.
+        ...(applePayRecurringPaymentRequest
+          ? { applePay: { recurringPaymentRequest: applePayRecurringPaymentRequest } }
+          : {}),
+      });
+    }
   }, [state.surcharges, shippingAddressChangeEvent]);
 
   const canPay = paymentMethods && (paymentMethods.googlePay || paymentMethods.applePay);
@@ -1380,7 +1466,14 @@ export const PaymentForm = ({
           .execute()
           .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
           .catch((e: unknown) => {
-            assert(e instanceof RecaptchaCancelledError);
+            // The security check being unloadable (ad blocker / privacy extension / restricted
+            // network) is fixable by the buyer, but only if we say so — a silent reset here
+            // strands them with no way to complete checkout (see gumroad-private#927).
+            if (e instanceof RecaptchaUnavailableError) {
+              showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
+            } else {
+              assert(e instanceof RecaptchaCancelledError);
+            }
             dispatch({ type: "cancel" });
           });
       }
