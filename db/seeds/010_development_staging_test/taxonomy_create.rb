@@ -2,12 +2,11 @@
 
 return if ENV["SKIP_TAXONOMY_CREATION"] == "1"
 
-# Skip this file when the taxonomy data is already up to date. The check uses the most
-# recently added slug (not an early one like "3d") so that databases seeded before a new
-# category existed will re-run the file and pick it up — every call below is an idempotent
-# find_or_create_by!, so re-running is safe. When adding a new taxonomy here, update this
-# guard to reference one of the slugs you are adding.
-return if Taxonomy.where(slug: "php-scripts").exists?
+# There is intentionally no "already seeded" early-return here. Every call below is an
+# idempotent find_or_create_by!, so re-running the file is safe and only costs a few
+# hundred cheap SELECT queries. Skipping based on a sentinel slug (as this file used to do)
+# silently left previously-seeded databases without newly added categories whenever someone
+# forgot to update the sentinel.
 
 three_d = Taxonomy.find_or_create_by!(slug: "3d")
 Taxonomy.find_or_create_by!(slug: "3d-modeling", parent: three_d)
