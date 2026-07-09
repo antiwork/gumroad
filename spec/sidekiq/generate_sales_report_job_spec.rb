@@ -214,4 +214,62 @@ describe GenerateSalesReportJob do
       described_class.new.perform(country_code, start_date, end_date, GenerateSalesReportJob::ALL_SALES, true, "")
     end
   end
+
+  describe "#update_job_status_to_completed" do
+    let(:job_attributes) do
+      {
+        job_id: "some_jid",
+        country_code: "GB",
+        start_date: "2015-01-01",
+        end_date: "2015-03-31",
+        sales_type: GenerateSalesReportJob::ALL_SALES,
+        enqueued_at: "2015-01-01T00:00:00Z",
+      }
+    end
+
+    def stub_history_with(status:)
+      entry = job_attributes.merge(status:).to_json
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([entry])
+      allow($redis).to receive(:lset)
+    end
+
+    def run_update
+      described_class.new.send(
+        :update_job_status_to_completed,
+        "GB",
+        Date.parse("2015-01-01").beginning_of_day,
+        Date.parse("2015-03-31").end_of_day,
+        GenerateSalesReportJob::ALL_SALES,
+        "https://example.com/report.csv"
+      )
+    end
+
+    it "flips a processing entry to completed" do
+      stub_history_with(status: "processing")
+
+      run_update
+
+      expect($redis).to have_received(:lset).with(RedisKey.sales_report_jobs, 0, a_string_including("\"completed\""))
+    end
+
+    it "flips a failed entry to completed when the job was retried from the Dead set and succeeded" do
+      # The admin page marks an entry "failed" when its job lands in the Dead
+      # set. Retrying that job from the Sidekiq UI re-runs this same code, so
+      # a successful retry must be able to overwrite the "failed" status —
+      # otherwise the report shows as failed forever despite the file existing.
+      stub_history_with(status: "failed")
+
+      run_update
+
+      expect($redis).to have_received(:lset).with(RedisKey.sales_report_jobs, 0, a_string_including("\"completed\""))
+    end
+
+    it "does not touch entries that are already completed" do
+      stub_history_with(status: "completed")
+
+      run_update
+
+      expect($redis).not_to have_received(:lset)
+    end
+  end
 end

@@ -109,7 +109,13 @@ class GenerateSalesReportJob
            job["start_date"] == start_time.to_date.to_s &&
            job["end_date"] == end_time.to_date.to_s &&
            job["sales_type"] == sales_type &&
-           job["status"] == "processing"
+           # "failed" is accepted alongside "processing" because the admin page
+           # marks a history entry "failed" when its job lands in the Sidekiq
+           # Dead set. If an operator then retries that job from the Sidekiq UI
+           # and it succeeds, this is the only writer that can flip the entry to
+           # "completed" — matching only "processing" would leave a successful
+           # report showing as failed forever.
+           ["processing", "failed"].include?(job["status"])
           job["status"] = "completed"
           job["download_url"] = download_url
           $redis.lset(RedisKey.sales_report_jobs, index, job.to_json)

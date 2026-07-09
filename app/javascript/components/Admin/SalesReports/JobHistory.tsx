@@ -16,7 +16,7 @@ export type JobHistoryItem = {
   end_date: string;
   sales_type: string;
   enqueued_at: string;
-  status: string;
+  status: "processing" | "completed" | "failed";
   download_url?: string;
 };
 

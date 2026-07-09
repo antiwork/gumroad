@@ -21,11 +21,35 @@ class Admin::SalesReport
   validates :start_date, comparison: { less_than_or_equal_to: -> { Date.current }, message: "cannot be in the future", if: :start_date? }
   validates_inclusion_of :sales_type, in: GenerateSalesReportJob::SALES_TYPES, message: "Invalid sales type, should be #{GenerateSalesReportJob::SALES_TYPES.join(" or ")}."
 
+  # How many recent Dead-set entries we are willing to read when looking for
+  # dead sales report jobs, and how long the result may be reused across page
+  # loads. Both exist to keep reconciliation cheap: the admin page polls every
+  # few seconds while a report is running, and the Dead set in production can
+  # hold hundreds of thousands of unrelated jobs.
+  DEAD_SET_SCAN_LIMIT = 1_000
+  DEAD_JIDS_CACHE_TTL = 1.minute
+  DEAD_JIDS_CACHE_KEY = "admin/sales_report/dead_jids/v1"
+
+  # Finds the history entry whose current value is exactly ARGV[1] and swaps it
+  # for ARGV[2], atomically. Matching by value (not by a previously computed
+  # index) means a concurrent LPUSH of a new report, or the job completing and
+  # rewriting its own entry, can never cause us to overwrite the wrong entry:
+  # if the stored value changed since we read it, LPOS finds nothing and we
+  # leave the list alone.
+  MARK_FAILED_SCRIPT = <<~LUA
+    local index = redis.call('LPOS', KEYS[1], ARGV[1])
+    if index then
+      redis.call('LSET', KEYS[1], index, ARGV[2])
+      return 1
+    end
+    return 0
+  LUA
+
   class << self
     def fetch_job_history
-      job_data = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
-      jobs = job_data.map { |data| JSON.parse(data) }
-      reconcile_dead_jobs!(jobs)
+      raw_entries = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
+      jobs = raw_entries.map { |data| JSON.parse(data) }
+      reconcile_dead_jobs!(jobs, raw_entries)
       jobs
     rescue JSON::ParserError
       []
@@ -40,41 +64,61 @@ class Admin::SalesReport
       # Reconcile at read time: any "processing" entry whose job ID is in the Dead
       # set is marked "failed", and the correction is persisted back to Redis so
       # the admin page tells the truth about jobs that need re-running.
-      def reconcile_dead_jobs!(jobs)
+      def reconcile_dead_jobs!(jobs, raw_entries)
         processing = jobs.select { |job| job["status"] == "processing" }
         return if processing.empty?
 
-        dead_jids = dead_sales_report_jids
+        dead_jids = dead_sales_report_jids(processing)
         return if dead_jids.empty?
 
         jobs.each_with_index do |job, index|
           next unless job["status"] == "processing" && dead_jids.include?(job["job_id"])
 
           # Persist the correction to Redis first, and only then update the copy
-          # we're about to render. That way the page never shows a job as "failed"
-          # unless Redis agrees — if the write below raises, the entry keeps
-          # rendering as "processing" and gets another reconciliation attempt on
-          # the next page load.
-          $redis.lset(RedisKey.sales_report_jobs, index, job.merge("status" => "failed").to_json)
-          job["status"] = "failed"
+          # we're about to render. The Lua script only writes if the entry still
+          # holds the exact value we read (see MARK_FAILED_SCRIPT), so a stale
+          # read can't clobber a concurrent update — in that case the entry keeps
+          # rendering with its stored status and gets another reconciliation
+          # attempt on the next page load.
+          updated_entry = job.merge("status" => "failed").to_json
+          swapped = $redis.eval(MARK_FAILED_SCRIPT, keys: [RedisKey.sales_report_jobs], argv: [raw_entries[index], updated_entry])
+          job["status"] = "failed" if swapped == 1
         end
-      rescue Redis::BaseError => e
-        # Reconciliation is best-effort: if Redis hiccups mid-correction, render
-        # what we have rather than erroring the admin page. Entries corrected
-        # before the failure show "failed" (already persisted); the rest keep
-        # their stored status and are retried on the next load.
-        Rails.logger.warn("Admin::SalesReport dead-job reconciliation failed: #{e.message}")
+      rescue Redis::BaseError, RedisClient::Error => e
+        # Reconciliation is best-effort: if either Redis (the app's $redis or
+        # Sidekiq's, which raises RedisClient errors) hiccups mid-correction,
+        # render what we have rather than erroring the admin page. Entries
+        # corrected before the failure show "failed" (already persisted); the
+        # rest keep their stored status and are retried on the next load.
+        Rails.logger.warn("Admin::SalesReport dead-job reconciliation failed (#{e.class}): #{e.message} jids=#{processing.map { _1["job_id"] }.join(",")}")
       end
 
-      # The Dead set can hold thousands of unrelated jobs, and this runs on every
-      # admin page poll. Rather than pulling every entry over the wire, ask Redis
-      # to pre-filter with a server-side substring scan for this job class, then
-      # double-check the class on the (few) matches — the substring match is
-      # against the raw job JSON, so it can catch look-alikes.
-      def dead_sales_report_jids
-        Sidekiq::DeadSet.new.scan("GenerateSalesReportJob")
-          .filter_map { |dead_job| dead_job.jid if dead_job.klass == "GenerateSalesReportJob" }
-          .to_set
+      # The Dead set is a sorted set scored by the time each job died, so
+      # instead of scanning all of it (it can hold hundreds of thousands of
+      # unrelated jobs) we only read jobs that died after the oldest
+      # still-"processing" history entry was enqueued — nothing older can
+      # belong to an entry we are reconciling. The result is cached briefly
+      # because the admin page polls every few seconds while a report runs,
+      # and the answer rarely changes between polls. A job that is retried
+      # from the Dead set within the cache window can be briefly re-marked
+      # "failed"; the completion writer accepts "failed" entries, so a
+      # successful retry still flips the entry to "completed".
+      def dead_sales_report_jids(processing_entries)
+        Rails.cache.fetch(DEAD_JIDS_CACHE_KEY, expires_in: DEAD_JIDS_CACHE_TTL) do
+          oldest_enqueued_at = processing_entries.filter_map { |job| Time.zone.parse(job["enqueued_at"].to_s) rescue nil }.min
+          min_score = (oldest_enqueued_at || 30.days.ago).to_f
+
+          dead_payloads = Sidekiq.redis do |connection|
+            connection.call("ZRANGEBYSCORE", "dead", min_score, "+inf", "LIMIT", 0, DEAD_SET_SCAN_LIMIT)
+          end
+
+          dead_payloads.filter_map do |payload|
+            dead_job = JSON.parse(payload)
+            dead_job["jid"] if dead_job["class"] == "GenerateSalesReportJob"
+          rescue JSON::ParserError
+            nil
+          end.to_set
+        end
       end
   end
 

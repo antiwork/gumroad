@@ -337,43 +337,64 @@ describe Admin::SalesReport do
       end
 
       before do
+        Rails.cache.delete(described_class::DEAD_JIDS_CACHE_KEY)
         allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(job_data)
-        allow($redis).to receive(:lset)
+        allow($redis).to receive(:eval).and_return(1)
 
-        dead_job = instance_double(Sidekiq::SortedEntry, jid: dead_jid, klass: "GenerateSalesReportJob")
-        unrelated_dead_job = instance_double(Sidekiq::SortedEntry, jid: "other_jid", klass: "SomeOtherJob")
-        dead_set = instance_double(Sidekiq::DeadSet)
-        allow(dead_set).to receive(:scan).with("GenerateSalesReportJob").and_return([dead_job, unrelated_dead_job])
-        allow(Sidekiq::DeadSet).to receive(:new).and_return(dead_set)
+        dead_payloads = [
+          { jid: dead_jid, class: "GenerateSalesReportJob" }.to_json,
+          { jid: "other_jid", class: "SomeOtherJob" }.to_json,
+        ]
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call)
+          .with("ZRANGEBYSCORE", "dead", kind_of(Numeric), "+inf", "LIMIT", 0, described_class::DEAD_SET_SCAN_LIMIT)
+          .and_return(dead_payloads)
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
       end
 
       it "marks the dead job as failed and persists the correction to Redis" do
         result = described_class.fetch_job_history
 
         expect(result[0]["status"]).to eq("failed")
-        expect($redis).to have_received(:lset).with(RedisKey.sales_report_jobs, 0, a_string_including("\"failed\""))
+        expect($redis).to have_received(:eval).with(
+          described_class::MARK_FAILED_SCRIPT,
+          keys: [RedisKey.sales_report_jobs],
+          argv: [job_data[0], a_string_including("\"failed\"")]
+        )
       end
 
       it "leaves genuinely processing jobs untouched" do
         result = described_class.fetch_job_history
 
         expect(result[1]["status"]).to eq("processing")
-        expect($redis).not_to have_received(:lset).with(RedisKey.sales_report_jobs, 1, anything)
+        expect($redis).not_to have_received(:eval).with(anything, keys: anything, argv: [job_data[1], anything])
       end
 
       it "does not touch Redis when the Dead set has no sales report jobs" do
-        empty_dead_set = instance_double(Sidekiq::DeadSet)
-        allow(empty_dead_set).to receive(:scan).with("GenerateSalesReportJob").and_return([instance_double(Sidekiq::SortedEntry, jid: "x", klass: "SomeOtherJob")])
-        allow(Sidekiq::DeadSet).to receive(:new).and_return(empty_dead_set)
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call).and_return([{ jid: "x", class: "SomeOtherJob" }.to_json])
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
 
         result = described_class.fetch_job_history
 
         expect(result.map { _1["status"] }).to eq(%w[processing processing])
-        expect($redis).not_to have_received(:lset)
+        expect($redis).not_to have_received(:eval)
+      end
+
+      it "keeps the stored status when the entry changed between read and write" do
+        # The Lua script returns 0 when the entry's value no longer matches what
+        # we read (e.g. another admin enqueued a report, shifting indices, or
+        # the job completed in the meantime) — the in-memory copy must not be
+        # flipped to "failed" in that case.
+        allow($redis).to receive(:eval).and_return(0)
+
+        result = described_class.fetch_job_history
+
+        expect(result[0]["status"]).to eq("processing")
       end
 
       it "returns the unreconciled history if the reconciliation write fails" do
-        allow($redis).to receive(:lset).and_raise(Redis::BaseError.new("read only replica"))
+        allow($redis).to receive(:eval).and_raise(Redis::BaseError.new("read only replica"))
 
         result = described_class.fetch_job_history
 
@@ -384,6 +405,20 @@ describe Admin::SalesReport do
         # next page load.
         expect(result[0]["status"]).to eq("processing")
         expect(result[1]["status"]).to eq("processing")
+      end
+
+      it "returns the unreconciled history if the Sidekiq Dead set read fails" do
+        # Sidekiq talks to Redis through redis-client, whose errors are a
+        # separate hierarchy from Redis::BaseError — the rescue must cover both
+        # or a Sidekiq-Redis hiccup 500s the admin page.
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call).and_raise(RedisClient::CommandError.new("LOADING Redis is loading"))
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
+
+        result = described_class.fetch_job_history
+
+        expect(result.map { _1["status"] }).to eq(%w[processing processing])
+        expect($redis).not_to have_received(:eval)
       end
     end
   end
