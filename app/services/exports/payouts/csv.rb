@@ -5,6 +5,22 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
   TOTALS_COLUMN_NAME = "Totals"
   TOTALS_FIELDS = ["Taxes ($)", "Shipping ($)", "Sale Price ($)", "Gumroad Fees ($)", "Net Total ($)"]
 
+  # Labels for the per-group subtotal rows that precede the grand total. PayPal and
+  # Stripe Connect sales are paid out to the creator by those processors directly, so
+  # their rows (sales, refunds, fees, and the offsetting "Payouts" deduction) add up to
+  # zero within this payout. Splitting the subtotals out lets a seller verify each group's
+  # math on its own instead of reading one blind grand total. See gumroad-private#999.
+  CARD_SALES_SUBTOTAL_HEADING = "Subtotal — activity paid out by Gumroad"
+  PAYPAL_SALES_SUBTOTAL_HEADING = "Subtotal — PayPal sales (paid out by PayPal, nets to zero here)"
+  STRIPE_CONNECT_SALES_SUBTOTAL_HEADING = "Subtotal — Stripe Connect sales (paid out by Stripe, nets to zero here)"
+
+  # One-line explanation placed in the "Item Name" column of the deduction rows, so the
+  # negative amount is self-explanatory: the fee shown on each PayPal / Stripe Connect
+  # sale row was already collected by that processor, and this line removes the group's
+  # net amount from the Gumroad payout.
+  PAYPAL_PAYOUTS_NOTE = "PayPal sales (and their Gumroad fees) are settled by PayPal directly; this line removes their net amount so they don't count toward this payout."
+  STRIPE_CONNECT_PAYOUTS_NOTE = "Stripe Connect sales (and their Gumroad fees) are settled by Stripe directly; this line removes their net amount so they don't count toward this payout."
+
   def initialize(payment:)
     @payment = payment
   end
@@ -14,6 +30,9 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
     CsvSafe.generate do |csv|
       csv << HEADERS
       data.each do |row|
+        csv << annotate_payout_deduction_row(row)
+      end
+      subtotal_rows(data).each do |row|
         csv << row
       end
       totals = calculate_totals(data)
@@ -35,14 +54,45 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
       totals
     end
 
-    def generate_totals_row(totals)
+    def generate_totals_row(totals, heading: TOTALS_COLUMN_NAME)
       totals_row = Array.new(HEADERS.size)
 
-      totals_row[0] = TOTALS_COLUMN_NAME
+      totals_row[0] = heading
       totals.each do |column_name, value|
         totals_row[HEADERS.index(column_name)] = value.round(2)
       end
 
       totals_row
+    end
+
+    # Adds the explanatory note to the "PayPal Payouts" / "Stripe Connect Payouts"
+    # deduction rows without mutating the shared row arrays built in the base class
+    # (the API export reuses those rows and should stay unchanged).
+    def annotate_payout_deduction_row(row)
+      note = case row[0]
+             when PAYPAL_PAYOUTS_HEADING then PAYPAL_PAYOUTS_NOTE
+             when STRIPE_CONNECT_PAYOUTS_HEADING then STRIPE_CONNECT_PAYOUTS_NOTE
+      end
+      return row if note.nil?
+
+      annotated = row.dup
+      annotated[HEADERS.index("Item Name")] = note
+      annotated
+    end
+
+    # Builds one subtotal row per group of activity, so each group's columns visibly add
+    # up on their own before the grand total. Only emitted when the payout actually mixes
+    # groups — a payout with only Gumroad-processed sales keeps its old shape.
+    def subtotal_rows(data)
+      return [] if paypal_rows.empty? && stripe_connect_rows.empty?
+
+      grouped_row_ids = (paypal_rows + stripe_connect_rows).map(&:object_id).to_set
+      gumroad_rows = data.reject { |row| grouped_row_ids.include?(row.object_id) }
+
+      rows = []
+      rows << generate_totals_row(calculate_totals(gumroad_rows), heading: CARD_SALES_SUBTOTAL_HEADING) if gumroad_rows.any?
+      rows << generate_totals_row(calculate_totals(paypal_rows), heading: PAYPAL_SALES_SUBTOTAL_HEADING) if paypal_rows.any?
+      rows << generate_totals_row(calculate_totals(stripe_connect_rows), heading: STRIPE_CONNECT_SALES_SUBTOTAL_HEADING) if stripe_connect_rows.any?
+      rows
     end
 end
