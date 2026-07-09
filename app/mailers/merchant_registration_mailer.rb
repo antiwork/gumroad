@@ -61,6 +61,10 @@ class MerchantRegistrationMailer < ApplicationMailer
     @payouts_blocked = @payouts_blocked_by_stripe || @user.payouts_paused?
     @balance_cents = @user.unpaid_balance_cents
     @formatted_balance = @user.formatted_dollar_amount(@balance_cents)
-    mail(subject: "Your Gumroad payments account has been closed", from: NOREPLY_EMAIL_WITH_NAME, to: @user.email)
+    # When the payout will run automatically, tell the seller the actual date
+    # (their two questions are "how much" and "when"). The template falls back
+    # to "your next scheduled payout" if the date can't be computed.
+    @next_payout_date = @user.next_payout_date unless @payouts_blocked
+    mail(subject: "You can no longer accept payments on Gumroad", from: NOREPLY_EMAIL_WITH_NAME, to: @user.email)
   end
 end

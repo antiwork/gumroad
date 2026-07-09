@@ -624,6 +624,8 @@ describe SettingsPresenter do
           gumroad_status: nil,
           stripe_rejected: false,
           stripe_rejected_balance_status: nil,
+          stripe_rejected_formatted_balance: nil,
+          stripe_rejected_payout_date: nil,
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
@@ -868,6 +870,7 @@ describe SettingsPresenter do
           compliance_actions: [],
           stripe_rejected: true,
           stripe_rejected_balance_status: "too_small",
+          stripe_rejected_formatted_balance: "$0.50",
         ))
       end
 
@@ -897,7 +900,10 @@ describe SettingsPresenter do
         merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
         create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
 
-        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("auto_payout")
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:stripe_rejected_balance_status]).to eq("auto_payout")
+        expect(account_status[:stripe_rejected_formatted_balance]).to eq("$68.17")
+        expect(account_status[:stripe_rejected_payout_date]).to eq(seller.next_payout_date.strftime("%B %-d, %Y"))
       end
 
       it "reports the stripe-hold balance status when Stripe paused payouts on the rejected account" do

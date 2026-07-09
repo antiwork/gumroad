@@ -33,6 +33,8 @@ export type AccountStatus = {
   gumroad_status: string | null;
   stripe_rejected: boolean;
   stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | "held" | null;
+  stripe_rejected_formatted_balance: string | null;
+  stripe_rejected_payout_date: string | null;
 };
 
 export default function AccountStatusSection({
@@ -88,13 +90,17 @@ export default function AccountStatusSection({
           <p>Stripe rejected your account, so you can no longer accept payments. Gumroad cannot reverse this.</p>
           {accountStatus.stripe_rejected_balance_status === "stripe_hold" ? (
             <p className="mt-2">
-              Your remaining balance is currently held by Stripe. If Stripe releases it, we will pay it out to you
-              automatically.
+              Your remaining balance of {accountStatus.stripe_rejected_formatted_balance} is held by Stripe. If Stripe
+              releases it, we'll pay it out to you automatically — you don't need to do anything.
             </p>
           ) : accountStatus.stripe_rejected_balance_status === "auto_payout" ? (
             <p className="mt-2">
-              Your remaining balance will be paid out automatically on your next scheduled payout, even if it is below
-              the usual minimum. You can track it on the{" "}
+              Your remaining balance of {accountStatus.stripe_rejected_formatted_balance} will be paid out to your bank
+              account automatically{" "}
+              {accountStatus.stripe_rejected_payout_date
+                ? `on ${accountStatus.stripe_rejected_payout_date}`
+                : "on your next scheduled payout"}{" "}
+              — you don't need to do anything. You can track it on the{" "}
               <a href={Routes.balance_path()} className="underline">
                 Payouts page
               </a>
@@ -102,11 +108,16 @@ export default function AccountStatusSection({
             </p>
           ) : accountStatus.stripe_rejected_balance_status === "too_small" ? (
             <p className="mt-2">
-              Your remaining balance is below the $1 minimum we can send, so it cannot be paid out.
+              Your remaining balance of {accountStatus.stripe_rejected_formatted_balance} is below the $1 minimum we can
+              send, so we're unable to pay it out.
             </p>
           ) : accountStatus.stripe_rejected_balance_status === "held" ? (
             <p className="mt-2">
-              Your remaining balance is currently on hold. Please contact support about receiving it.
+              Your remaining balance of {accountStatus.stripe_rejected_formatted_balance} is on hold.{" "}
+              <a href={Routes.help_center_root_path()} className="underline">
+                Contact support
+              </a>{" "}
+              and we'll help you get it paid out.
             </p>
           ) : null}
         </Alert>

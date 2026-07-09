@@ -350,8 +350,11 @@ class SettingsPresenter
       # A zero balance stays nil so the banner doesn't mention a balance that
       # doesn't exist (the rejection email is likewise silent about it).
       stripe_rejected_balance_status = nil
+      stripe_rejected_formatted_balance = nil
+      stripe_rejected_payout_date = nil
       if stripe_rejected
         balance_cents = seller.unpaid_balance_cents
+        stripe_rejected_formatted_balance = seller.formatted_dollar_amount(balance_cents) if balance_cents > 0
         stripe_rejected_balance_status = if balance_cents <= 0
           nil
         elsif balance_cents < Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS
@@ -365,6 +368,12 @@ class SettingsPresenter
           "held"
         else
           "auto_payout"
+        end
+        # Only the auto-payout copy names a date — the other states can't
+        # promise one. The banner falls back to "your next scheduled payout"
+        # if the date can't be computed for any reason.
+        if stripe_rejected_balance_status == "auto_payout"
+          stripe_rejected_payout_date = seller.next_payout_date&.strftime("%B %-d, %Y")
         end
       end
 
@@ -403,6 +412,8 @@ class SettingsPresenter
         gumroad_status:,
         stripe_rejected:,
         stripe_rejected_balance_status:,
+        stripe_rejected_formatted_balance:,
+        stripe_rejected_payout_date:,
       }
     end
 
