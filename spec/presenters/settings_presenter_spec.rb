@@ -623,6 +623,9 @@ describe SettingsPresenter do
           needs_id_upload: false,
           gumroad_status: nil,
           stripe_rejected: false,
+          stripe_rejected_balance_status: nil,
+          stripe_rejected_formatted_balance: nil,
+          stripe_rejected_payout_date: nil,
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
@@ -858,15 +861,73 @@ describe SettingsPresenter do
                                                                      }))
       end
 
-      it "flags the Stripe account as rejected and hides the remediation link when Stripe has rejected it" do
-        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
-        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+      it "flags the Stripe account as rejected and hides the remediation link when the rejection is terminal" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 50)
 
         expect(presenter.payments_props[:account_status]).to eq(@base_us_props[:account_status].merge(
           show_section: true,
           compliance_actions: [],
           stripe_rejected: true,
+          stripe_rejected_balance_status: "too_small",
+          stripe_rejected_formatted_balance: "$0.50",
         ))
+      end
+
+      it "treats a rejected account with an open verification request as appealable, keeping the remediation link instead of the banner" do
+        # e.g. Japan `rejected.listed` collision: Stripe marks the account
+        # rejected but still has a live identity-document request open.
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        create(:balance, user: seller, merchant_account:, amount_cents: 50)
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:stripe_rejected]).to eq(false)
+        expect(account_status[:stripe_rejected_balance_status]).to be_nil
+        expect(account_status[:compliance_actions]).to include(
+          hash_including(href: Rails.application.routes.url_helpers.remediation_settings_payments_path)
+        )
+      end
+
+      it "reports no balance status when a rejected account has nothing left to pay out" do
+        create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected]).to eq(true)
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to be_nil
+      end
+
+      it "reports the auto-payout balance status when a rejected account holds a payable balance" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:stripe_rejected_balance_status]).to eq("auto_payout")
+        expect(account_status[:stripe_rejected_formatted_balance]).to eq("$68.17")
+        expect(account_status[:stripe_rejected_payout_date]).to eq(seller.next_payout_date.strftime("%B %-d, %Y"))
+      end
+
+      it "reports the stripe-hold balance status when Stripe paused payouts on the rejected account" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("stripe_hold")
+      end
+
+      it "reports the generic held balance status when payouts are paused by admin (not Stripe)" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("held")
+      end
+
+      it "reports the generic held balance status when the seller paused their own payouts" do
+        merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
+        create(:balance, user: seller, merchant_account:, amount_cents: 68_17)
+        seller.update!(payouts_paused_by_user: true)
+
+        expect(presenter.payments_props[:account_status][:stripe_rejected_balance_status]).to eq("held")
       end
 
       it "keeps the under review status alongside Stripe verification requirements" do

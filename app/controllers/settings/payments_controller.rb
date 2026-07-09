@@ -183,6 +183,18 @@ class Settings::PaymentsController < Settings::BaseController
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
     end
 
+    # A rejected account is usually terminal — Stripe won't create an account
+    # link for it, so instead of failing with a generic error we send the
+    # seller to the Payments page, where the rejection banner explains it.
+    # Exception: Stripe sometimes leaves a verification request open on a
+    # rejected account (appealable rejection, e.g. Japan `rejected.listed`
+    # with a live identity-document request). Those sellers must keep their
+    # remediation link, so we only short-circuit when nothing is left open.
+    if current_seller.stripe_account.stripe_rejected? &&
+       !current_seller.user_compliance_info_requests.requested.exists?
+      redirect_to settings_payments_path and return
+    end
+
     has_local_requests = current_seller.user_compliance_info_requests.requested.exists?
     if !has_local_requests && !stripe_account_has_open_requirements?(current_seller.stripe_account)
       redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
@@ -194,8 +206,8 @@ class Settings::PaymentsController < Settings::BaseController
                                              return_url: verify_stripe_remediation_settings_payments_url,
                                              type: "account_update",
                                            }).url, allow_other_host: true
-  rescue Stripe::InvalidRequestError => e
-    sync_stripe_disabled_reason(current_seller.stripe_account) if current_seller.stripe_account.stripe_disabled_reason.blank?
+  rescue Stripe::StripeError => e
+    sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
     ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end

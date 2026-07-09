@@ -111,4 +111,75 @@ describe MerchantRegistrationMailer do
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end
+
+  describe "stripe_account_rejected" do
+    let(:user) { create(:user) }
+    # The rejected merchant account makes the $1 payout floor apply, which is
+    # what lets next_payout_date return a real date for a sub-$100 balance —
+    # the same state the email is sent in.
+    let!(:merchant_account) { create(:merchant_account, user:, stripe_disabled_reason: "rejected.listed") }
+
+    it "tells the seller the rejection is final and sales have stopped" do
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.subject).to eq("You can no longer accept payments on Gumroad")
+      expect(mail.to).to include(user.email)
+      expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.body.encoded).to include("made a final decision to reject it")
+      expect(mail.body.encoded).to include("cannot be appealed or reversed")
+      expect(mail.body.encoded).to include("Buyers can no longer purchase your products")
+      expect(mail.body.encoded).to include("you won't receive any further verification requests")
+    end
+
+    it "promises an automatic payout with the date when the balance is payable and Stripe hasn't blocked payouts" do
+      create(:balance, user:, amount_cents: 68_17)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("$68.17")
+      expect(mail.body.encoded).to include("will be paid out to your bank account automatically on #{user.next_payout_date.strftime("%B %-d, %Y")}")
+      expect(mail.body.encoded).to include("even though it's below the usual $100 minimum")
+      expect(mail.body.encoded).to include("You don't need to do anything")
+    end
+
+    it "doesn't claim the balance is below the minimum when it isn't" do
+      create(:balance, user:, amount_cents: 250_00)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("$250")
+      expect(mail.body.encoded).to include("will be paid out to your bank account automatically")
+      expect(mail.body.encoded).not_to include("below the usual $100 minimum")
+    end
+
+    it "explains the Stripe hold when Stripe disabled payouts on the rejected account" do
+      create(:balance, user:, amount_cents: 68_17)
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("is held by Stripe")
+      expect(mail.body.encoded).to include("you don't need to do anything")
+      expect(mail.body.encoded).not_to include("next scheduled payout")
+    end
+
+    it "links support when payouts are paused by something other than Stripe" do
+      create(:balance, user:, amount_cents: 68_17)
+      user.update!(payouts_paused_by_user: true)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("is on hold")
+      expect(mail.body.encoded).to include("Contact support")
+      expect(mail.body.encoded).to include("we'll help you get it paid out")
+    end
+
+    it "explains that a balance under the transfer floor cannot be sent" do
+      create(:balance, user:, amount_cents: 50)
+
+      mail = described_class.stripe_account_rejected(user.id)
+
+      expect(mail.body.encoded).to include("below the $1 minimum")
+    end
+  end
 end

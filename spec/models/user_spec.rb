@@ -3443,6 +3443,29 @@ describe User, :vcr do
         expect(user.minimum_payout_amount_cents).to eq(20_000)
       end
     end
+
+    describe "when Stripe has rejected the user's account" do
+      it "returns the rejected-account floor so the remaining balance can be released" do
+        create(:merchant_account, user:, stripe_disabled_reason: "rejected.listed")
+        user.payout_threshold_cents = 20_000
+
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS)
+      end
+
+      it "keeps the normal minimum while a verification request is open (appealable rejection)" do
+        create(:merchant_account, user:, stripe_disabled_reason: "rejected.listed")
+        create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        user.payout_threshold_cents = 20_000
+
+        expect(user.minimum_payout_amount_cents).to eq(20_000)
+      end
+
+      it "keeps the normal minimum for non-rejected disabled reasons" do
+        create(:merchant_account, user:, stripe_disabled_reason: "under_review")
+
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+      end
+    end
   end
 
   describe "#made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?" do
