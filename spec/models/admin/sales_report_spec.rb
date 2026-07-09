@@ -242,6 +242,74 @@ describe Admin::SalesReport do
     end
   end
 
+  describe ".rerun_failed" do
+    let(:failed_entry) do
+      {
+        job_id: "dead_1",
+        country_code: "CH",
+        start_date: "2026-04-01",
+        end_date: "2026-06-30",
+        sales_type: GenerateSalesReportJob::ALL_SALES,
+        enqueued_at: "2026-07-07T00:00:00Z",
+        status: "failed"
+      }
+    end
+    let(:raw_entry) { failed_entry.to_json }
+
+    before do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([raw_entry])
+      allow(GenerateSalesReportJob).to receive(:perform_async).and_return("new_jid")
+      allow($redis).to receive(:eval).and_return(1)
+      allow($redis).to receive(:lpush)
+      allow($redis).to receive(:ltrim)
+    end
+
+    it "enqueues a new job with the failed entry's parameters and swaps the entry in place" do
+      expect(described_class.rerun_failed("dead_1")).to eq(true)
+
+      expect(GenerateSalesReportJob).to have_received(:perform_async)
+        .with("CH", "2026-04-01", "2026-06-30", GenerateSalesReportJob::ALL_SALES, true, nil)
+
+      expect($redis).to have_received(:eval) do |script, keys:, argv:|
+        expect(script).to eq(described_class::REPLACE_ENTRY_SCRIPT)
+        expect(keys).to eq([RedisKey.sales_report_jobs])
+        expect(argv.first).to eq(raw_entry)
+        replacement = JSON.parse(argv.last)
+        expect(replacement["job_id"]).to eq("new_jid")
+        expect(replacement["status"]).to eq("processing")
+        expect(replacement["country_code"]).to eq("CH")
+      end
+      expect($redis).not_to have_received(:lpush)
+    end
+
+    it "falls back to prepending the entry when the in-place swap loses a race" do
+      allow($redis).to receive(:eval).and_return(0)
+
+      expect(described_class.rerun_failed("dead_1")).to eq(true)
+
+      expect($redis).to have_received(:lpush) do |key, value|
+        expect(key).to eq(RedisKey.sales_report_jobs)
+        expect(JSON.parse(value)["job_id"]).to eq("new_jid")
+      end
+      expect($redis).to have_received(:ltrim).with(RedisKey.sales_report_jobs, 0, 19)
+    end
+
+    it "returns nil and enqueues nothing when no failed entry matches the job ID" do
+      expect(described_class.rerun_failed("unknown_jid")).to be_nil
+
+      expect(GenerateSalesReportJob).not_to have_received(:perform_async)
+      expect($redis).not_to have_received(:eval)
+    end
+
+    it "returns nil when the entry with that job ID is not failed" do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19)
+        .and_return([failed_entry.merge(status: "processing").to_json])
+
+      expect(described_class.rerun_failed("dead_1")).to be_nil
+      expect(GenerateSalesReportJob).not_to have_received(:perform_async)
+    end
+  end
+
   describe ".fetch_job_history" do
     context "when job data exists" do
       let(:job_data) do
@@ -308,6 +376,117 @@ describe Admin::SalesReport do
         result = described_class.fetch_job_history
 
         expect(result).to eq([])
+      end
+    end
+
+    context "when a processing job has landed in the Sidekiq Dead set" do
+      let(:dead_jid) { "dead_job_jid" }
+      let(:job_data) do
+        [
+          {
+            job_id: dead_jid,
+            country_code: "CH",
+            start_date: "2026-04-01",
+            end_date: "2026-06-30",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
+            enqueued_at: "2026-07-06T13:57:23Z",
+            status: "processing"
+          }.to_json,
+          {
+            job_id: "still_running_jid",
+            country_code: "KR",
+            start_date: "2026-04-01",
+            end_date: "2026-06-30",
+            sales_type: GenerateSalesReportJob::ALL_SALES,
+            enqueued_at: "2026-07-06T13:56:11Z",
+            status: "processing"
+          }.to_json
+        ]
+      end
+
+      before do
+        Rails.cache.delete(described_class::DEAD_JIDS_CACHE_KEY)
+        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(job_data)
+        allow($redis).to receive(:eval).and_return(1)
+
+        dead_payloads = [
+          { jid: dead_jid, class: "GenerateSalesReportJob" }.to_json,
+          { jid: "other_jid", class: "SomeOtherJob" }.to_json,
+        ]
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call)
+          .with("ZRANGE", "dead", kind_of(Numeric), "+inf", "BYSCORE", "LIMIT", 0, described_class::DEAD_SET_SCAN_LIMIT)
+          .and_return(dead_payloads)
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
+      end
+
+      it "marks the dead job as failed and persists the correction to Redis" do
+        result = described_class.fetch_job_history
+
+        expect(result[0]["status"]).to eq("failed")
+        expect($redis).to have_received(:eval).with(
+          described_class::REPLACE_ENTRY_SCRIPT,
+          keys: [RedisKey.sales_report_jobs],
+          argv: [job_data[0], a_string_including("\"failed\"")]
+        )
+      end
+
+      it "leaves genuinely processing jobs untouched" do
+        result = described_class.fetch_job_history
+
+        expect(result[1]["status"]).to eq("processing")
+        expect($redis).not_to have_received(:eval).with(anything, keys: anything, argv: [job_data[1], anything])
+      end
+
+      it "does not touch Redis when the Dead set has no sales report jobs" do
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call).and_return([{ jid: "x", class: "SomeOtherJob" }.to_json])
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
+
+        result = described_class.fetch_job_history
+
+        expect(result.map { _1["status"] }).to eq(%w[processing processing])
+        expect($redis).not_to have_received(:eval)
+      end
+
+      it "keeps the stored status when the entry changed between read and write" do
+        # The Lua script returns 0 when the entry's value no longer matches what
+        # we read (e.g. another admin enqueued a report, shifting indices, or
+        # the job completed in the meantime) — the in-memory copy must not be
+        # flipped to "failed" in that case.
+        allow($redis).to receive(:eval).and_return(0)
+
+        result = described_class.fetch_job_history
+
+        expect(result[0]["status"]).to eq("processing")
+      end
+
+      it "returns the unreconciled history if the reconciliation write fails" do
+        allow($redis).to receive(:eval).and_raise(Redis::BaseError.new("read only replica"))
+
+        result = described_class.fetch_job_history
+
+        expect(result.size).to eq(2)
+        # The correction is persisted to Redis before the in-memory copy is
+        # updated, so when the write fails nothing is marked "failed" — the
+        # entries keep their stored status and are reconciled again on the
+        # next page load.
+        expect(result[0]["status"]).to eq("processing")
+        expect(result[1]["status"]).to eq("processing")
+      end
+
+      it "returns the unreconciled history if the Sidekiq Dead set read fails" do
+        # Sidekiq talks to Redis through redis-client, whose errors are a
+        # separate hierarchy from Redis::BaseError — the rescue must cover both
+        # or a Sidekiq-Redis hiccup 500s the admin page.
+        sidekiq_connection = double("sidekiq redis connection")
+        allow(sidekiq_connection).to receive(:call).and_raise(RedisClient::CommandError.new("LOADING Redis is loading"))
+        allow(Sidekiq).to receive(:redis).and_yield(sidekiq_connection)
+
+        result = described_class.fetch_job_history
+
+        expect(result.map { _1["status"] }).to eq(%w[processing processing])
+        expect($redis).not_to have_received(:eval)
       end
     end
   end

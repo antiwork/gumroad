@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 return if ENV["SKIP_TAXONOMY_CREATION"] == "1"
-return if Taxonomy.where(slug: "3d").exists?
+
+# There is intentionally no "already seeded" early-return here. Every call below is an
+# idempotent find_or_create_by!, so re-running the file is safe and only costs a few
+# hundred cheap SELECT queries. Skipping based on a sentinel slug (as this file used to do)
+# silently left previously-seeded databases without newly added categories whenever someone
+# forgot to update the sentinel.
 
 three_d = Taxonomy.find_or_create_by!(slug: "3d")
 Taxonomy.find_or_create_by!(slug: "3d-modeling", parent: three_d)
@@ -75,11 +80,21 @@ software_development = Taxonomy.find_or_create_by!(slug: "software-development")
 programming = Taxonomy.find_or_create_by!(slug: "programming", parent: software_development)
 Taxonomy.find_or_create_by!(slug: "c-sharp", parent: programming)
 Taxonomy.find_or_create_by!(slug: "python", parent: programming)
+Taxonomy.find_or_create_by!(slug: "php", parent: programming)
+Taxonomy.find_or_create_by!(slug: "dotnet", parent: programming)
 web = Taxonomy.find_or_create_by!(slug: "web-development", parent: software_development)
 Taxonomy.find_or_create_by!(slug: "aws", parent: web)
 Taxonomy.find_or_create_by!(slug: "ruby", parent: web)
 js = Taxonomy.find_or_create_by!(slug: "javascript", parent: web)
 Taxonomy.find_or_create_by!(slug: "react-js", parent: js)
+Taxonomy.find_or_create_by!(slug: "web-templates", parent: web)
+php_scripts = Taxonomy.find_or_create_by!(slug: "php-scripts", parent: software_development)
+Taxonomy.find_or_create_by!(slug: "cms", parent: php_scripts)
+Taxonomy.find_or_create_by!(slug: "ecommerce", parent: php_scripts)
+Taxonomy.find_or_create_by!(slug: "crm", parent: php_scripts)
+Taxonomy.find_or_create_by!(slug: "booking", parent: php_scripts)
+Taxonomy.find_or_create_by!(slug: "membership", parent: php_scripts)
+Taxonomy.find_or_create_by!(slug: "ai-tools", parent: php_scripts)
 mobile = Taxonomy.find_or_create_by!(slug: "app-development", parent: software_development)
 Taxonomy.find_or_create_by!(slug: "swift", parent: mobile)
 Taxonomy.find_or_create_by!(slug: "react-native", parent: mobile)

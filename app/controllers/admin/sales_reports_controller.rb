@@ -21,6 +21,17 @@ class Admin::SalesReportsController < Admin::BaseController
     end
   end
 
+  # Re-runs a failed report in place: the row keeps its position in the history
+  # and flips back to "processing" instead of a duplicate row being added on
+  # top. The :id parameter is the failed entry's job ID.
+  def rerun
+    if Admin::SalesReport.rerun_failed(params[:id])
+      redirect_to admin_sales_reports_path, status: :see_other, notice: "Sales report job re-enqueued successfully!"
+    else
+      redirect_to admin_sales_reports_path, status: :see_other, alert: "This report is no longer marked as failed — refresh to see its current status."
+    end
+  end
+
   private
     def sales_report_params
       params.require(:sales_report).permit(:country_code, :start_date, :end_date, :sales_type)
