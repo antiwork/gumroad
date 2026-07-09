@@ -13,7 +13,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { loadAcknowledgedEmails, persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
+import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -540,10 +540,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.status = { type: "starting" };
       break;
     case "acknowledge-email-typo":
+      // The localStorage persistence of this dismissal happens in the event handlers that
+      // dispatch this action (see PaymentForm.tsx), keeping this reducer free of side effects.
       state.acknowledgedEmails.add(action.email);
-      // Also persist the dismissal so the buyer isn't re-asked about this address on their
-      // next visit (the in-memory Set is rebuilt on every page load).
-      persistAcknowledgedEmail(action.email);
       state.emailTypoSuggestion = null;
       break;
     case "cancel":

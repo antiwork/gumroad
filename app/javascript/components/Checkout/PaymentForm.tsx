@@ -36,6 +36,7 @@ import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
+import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
@@ -224,11 +225,15 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
   };
 
   const rejectEmailTypoSuggestion = () => {
+    // Persist here (not in the reducer) so the reducer stays a pure function: React 18 Strict
+    // Mode runs reducers twice in development, which would double every localStorage write.
+    persistAcknowledgedEmail(state.email);
     dispatch({ type: "acknowledge-email-typo", email: state.email });
   };
 
   const acceptEmailTypoSuggestion = () => {
     if (!state.emailTypoSuggestion) return;
+    persistAcknowledgedEmail(state.emailTypoSuggestion);
     dispatch({ type: "set-value", email: state.emailTypoSuggestion });
     dispatch({ type: "acknowledge-email-typo", email: state.emailTypoSuggestion });
   };
