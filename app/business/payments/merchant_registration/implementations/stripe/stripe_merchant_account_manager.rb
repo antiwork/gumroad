@@ -921,9 +921,12 @@ module StripeMerchantAccountManager
     # rejection as final when Stripe is asking for nothing more — otherwise we
     # would close the very verification request the seller needs and tell them
     # the rejection cannot be appealed while Stripe is mid-appeal.
-    if merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
-      handle_stripe_rejection(user, merchant_account)
-    end
+    # The terminal handling itself (closing requests + the one-time rejection
+    # email) runs further down, AFTER the payouts-pause sync: the rejection
+    # email's copy depends on whether Stripe froze payouts, so the pause state
+    # from this same webhook must be committed before the email is enqueued.
+    account_terminally_rejected = merchant_account.stripe_rejected? &&
+      stripe_requirements_exhausted?(requirements, future_requirements)
 
     individual = if stripe_account["business_type"] == "individual"
       stripe_account["individual"] || {}
@@ -994,7 +997,7 @@ module StripeMerchantAccountManager
         # Account not supportable under Stripe supportability.
         # Suspend the account and inform the creator via email.
         user.suspend_due_to_stripe_risk(disabled_reason: requirements["disabled_reason"])
-      elsif merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
+      elsif account_terminally_rejected
         # Stripe has permanently rejected the account and is asking for nothing
         # more, so there is nothing the seller can submit that would change the
         # outcome. Don't open a new verification request (which would trigger a
@@ -1101,11 +1104,17 @@ module StripeMerchantAccountManager
 
     # A terminally rejected account is final, so don't open new verification
     # requests or send "we need more information" emails — there is nothing
-    # the seller can provide that would change Stripe's decision. Appealable
-    # rejections (Stripe rejected the account but is still asking for
-    # something, e.g. an identity document) fall through, so those sellers
-    # keep getting verification requests and the emails that guide them.
-    return if merchant_account.stripe_rejected? && stripe_requirements_exhausted?(requirements, future_requirements)
+    # the seller can provide that would change Stripe's decision. This runs
+    # after the payouts-pause sync above on purpose: the rejection email tells
+    # the seller what happens to their balance, and that copy reads the pause
+    # state this same webhook may have just written. Appealable rejections
+    # (Stripe rejected the account but is still asking for something, e.g. an
+    # identity document) fall through, so those sellers keep getting
+    # verification requests and the emails that guide them.
+    if account_terminally_rejected
+      handle_stripe_rejection(user, merchant_account)
+      return
+    end
 
     last_outstanding_request_at = user.user_compliance_info_requests.requested.last&.created_at
 
@@ -1164,11 +1173,23 @@ module StripeMerchantAccountManager
   # rejected account still carries open requirements, the rejection is
   # appealable (the seller can upload the requested document and be
   # reinstated), so it must NOT be handled as terminal.
+  #
+  # `interv_*` entries don't count as open requirements here. On a rejected
+  # account Stripe leaves a permanent supportability intervention (e.g.
+  # `interv_....other_supportability_inquiry.support`) in `currently_due` and
+  # never clears it — there is no form the seller can fill in for it. Treating
+  # it as an open requirement made every account rejected for supportability
+  # look appealable forever: their verification requests stayed open, the
+  # rejection email never went out, reminders kept firing, and the balance
+  # release never applied. Only concrete, fillable requirements (identity
+  # documents, tax IDs, ...) keep a rejection appealable.
   def self.stripe_requirements_exhausted?(requirements, future_requirements)
-    (requirements["currently_due"] || []).empty? &&
-      (requirements["past_due"] || []).empty? &&
-      (requirements["eventually_due"] || []).empty? &&
-      (future_requirements["currently_due"] || []).empty?
+    [
+      requirements["currently_due"],
+      requirements["past_due"],
+      requirements["eventually_due"],
+      future_requirements["currently_due"],
+    ].all? { |fields| (fields || []).all? { |field| field.start_with?("interv_") } }
   end
 
   # Runs on every account.updated webhook once Stripe has permanently rejected

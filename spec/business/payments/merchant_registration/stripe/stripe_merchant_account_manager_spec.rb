@@ -10371,6 +10371,58 @@ describe StripeMerchantAccountManager, :vcr do
                   described_class.handle_stripe_event(stripe_event)
                 end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
               end
+
+              it "syncs the payouts pause before enqueueing the rejection email when the same webhook disables payouts" do
+                # The rejection email's copy depends on whether Stripe froze
+                # payouts, so the pause written by this same webhook must be
+                # committed by the time the email is enqueued.
+                stripe_event["data"]["object"]["payouts_enabled"] = false
+
+                payouts_paused_when_email_enqueued = nil
+                allow(MerchantRegistrationMailer).to receive(:stripe_account_rejected).with(user.id) do
+                  payouts_paused_when_email_enqueued = user.reload.payouts_paused_internally?
+                  double(deliver_later: true)
+                end
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(payouts_paused_when_email_enqueued).to eq(true)
+              end
+            end
+
+            describe "when Stripe permanently rejects the account but leaves a non-actionable interv_* entry open (the gumroad-private#965 signature)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+                # Stripe leaves this permanent supportability intervention in
+                # currently_due on rejected accounts and never clears it. There
+                # is no form the seller can fill in for it, so the rejection is
+                # terminal despite currently_due being non-empty.
+                stripe_event["data"]["object"]["requirements"]["currently_due"] =
+                  ["interv_1RWtzeAQqMpdRp2IhPb6x4q7.other_supportability_inquiry.support"]
+              end
+
+              it "treats the rejection as terminal: closes open verification requests" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("provided")
+              end
+
+              it "sends the one-time rejection email" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected).with(user.id)
+              end
+
+              it "does not open a verification request or send a remediation email for the interv_* entry" do
+                expect do
+                  expect do
+                    described_class.handle_stripe_event(stripe_event)
+                  end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_remediation)
+                end.not_to change { user.user_compliance_info_requests.requested.count }
+              end
             end
 
             describe "when Stripe rejects the account but still has open requirements (appealable fork)" do

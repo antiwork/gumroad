@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-describe CloseComplianceRequestsForStripeRejectedAccountsJob do
-  describe "#perform" do
+describe Onetime::CloseComplianceRequestsForStripeRejectedAccounts do
+  describe ".process" do
     def stub_stripe_account(merchant_account, requirements: {}, future_requirements: {})
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
         Stripe::Account.construct_from(
@@ -28,11 +28,26 @@ describe CloseComplianceRequestsForStripeRejectedAccountsJob do
       no_stripe_user = create(:user)
       no_stripe_request = create(:user_compliance_info_request, user: no_stripe_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
 
-      described_class.new.perform
+      described_class.process
 
       expect(rejected_request.reload.state).to eq("provided")
       expect(active_request.reload.state).to eq("requested")
       expect(no_stripe_request.reload.state).to eq("requested")
+    end
+
+    it "closes requests when the only remaining Stripe requirement is a permanent interv_* supportability entry" do
+      # The real terminal signature from the SMCC cluster: rejected.listed with
+      # a non-actionable `interv_*` entry Stripe never clears. There is no form
+      # behind it, so the account is terminal despite currently_due being
+      # non-empty.
+      rejected_user = create(:user)
+      rejected_ma = create(:merchant_account, user: rejected_user, stripe_disabled_reason: "rejected.listed")
+      request = create(:user_compliance_info_request, user: rejected_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+      stub_stripe_account(rejected_ma, requirements: { "currently_due" => ["interv_1RWtzeAQqMpdRp2IhPb6x4q7.other_supportability_inquiry.support"] })
+
+      described_class.process
+
+      expect(request.reload.state).to eq("provided")
     end
 
     it "leaves requests open for rejected accounts that still have open Stripe requirements (appealable fork)" do
@@ -43,7 +58,7 @@ describe CloseComplianceRequestsForStripeRejectedAccountsJob do
       appealable_request = create(:user_compliance_info_request, user: appealable_user, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
       stub_stripe_account(appealable_ma, requirements: { "past_due" => ["individual.verification.document"] })
 
-      described_class.new.perform
+      described_class.process
 
       expect(appealable_request.reload.state).to eq("requested")
     end
@@ -56,7 +71,7 @@ describe CloseComplianceRequestsForStripeRejectedAccountsJob do
         .and_raise(Stripe::APIConnectionError.new("timeout"))
 
       expect do
-        described_class.new.perform
+        described_class.process
       end.not_to raise_error
 
       expect(request.reload.state).to eq("requested")
