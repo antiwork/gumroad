@@ -46,6 +46,10 @@ module ValidateRecaptcha
 
     def recaptcha_passes?(site_key:, surface:, require_hostname:)
       return true if Rails.env.test?
+      # TEMP (preview QA only, reverted with the seed-hook commit): preview apps run in
+      # the staging environment and have no console access, so automated QA logins can't
+      # solve a CAPTCHA. Skip verification there; production behavior is unchanged.
+      return true if Rails.env.staging?
 
       surface = surface.to_sym
       assessment = recaptcha_assessment(site_key:)
