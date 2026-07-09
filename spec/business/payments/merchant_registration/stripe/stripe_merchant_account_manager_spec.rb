@@ -9732,7 +9732,8 @@ describe StripeMerchantAccountManager, :vcr do
         alive?: true,
         charge_processor_alive?: true,
         user:,
-        stripe_disabled_reason: nil
+        stripe_disabled_reason: nil,
+        stripe_rejected?: false
       )
     end
     let(:merchant_account_relation) { double(last: merchant_account) }
