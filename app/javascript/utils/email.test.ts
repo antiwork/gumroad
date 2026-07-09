@@ -56,6 +56,12 @@ describe("checkEmailForTypos", () => {
     expect(suggestionFor("buyer@example.con")).toBe("buyer@example.com");
   });
 
+  it("only rewrites the TLD even when the same string appears in the rest of the domain", () => {
+    // A plain String.replace would rewrite the first "con" it finds, producing
+    // "comcast.con" here. The correction must land on the TLD at the end.
+    expect(suggestionFor("buyer@concast.con")).toBe("buyer@concast.com");
+  });
+
   it("does not rewrite an unknown TLD that is not close to any popular one", () => {
     expect(suggestionFor("buyer@example.pizza")).toBeNull();
   });

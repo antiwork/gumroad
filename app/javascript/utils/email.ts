@@ -125,18 +125,24 @@ const suggestEmail = (email: string): EmailSuggestion | null => {
       ? null
       : findClosestDomain(emailParts.topLevelDomain, POPULAR_TOP_LEVEL_DOMAINS, TOP_LEVEL_THRESHOLD);
 
-  let domain = emailParts.domain;
+  // Rebuild the domain from its parts instead of using String.replace, which substitutes the
+  // FIRST occurrence of the substring: "concast.con".replace("con", "com") would yield
+  // "comcast.con" because "con" also appears at the start of the second-level domain.
+  let secondLevelDomain = emailParts.secondLevelDomain;
+  let topLevelDomain = emailParts.topLevelDomain;
   let hasSuggestion = false;
 
   if (closestSecondLevelDomain && closestSecondLevelDomain !== emailParts.secondLevelDomain) {
-    domain = domain.replace(emailParts.secondLevelDomain, closestSecondLevelDomain);
+    secondLevelDomain = closestSecondLevelDomain;
     hasSuggestion = true;
   }
 
   if (closestTopLevelDomain && closestTopLevelDomain !== emailParts.topLevelDomain) {
-    domain = domain.replace(emailParts.topLevelDomain, closestTopLevelDomain);
+    topLevelDomain = closestTopLevelDomain;
     hasSuggestion = true;
   }
+
+  const domain = secondLevelDomain === "" ? topLevelDomain : `${secondLevelDomain}.${topLevelDomain}`;
 
   return hasSuggestion
     ? {
