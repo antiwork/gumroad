@@ -92,6 +92,10 @@ class Ai::StoreAgentService
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
     - Never claim a change has already been made. After api_write, tell the creator you've prepared it
       and it's ready for them to confirm.
+    - When the creator already has a custom HTML page and asks for a change to it, ALWAYS read the
+      current page first and use the targeted edit endpoint to change only the part they asked
+      about. Never regenerate or replace an existing page from scratch unless the creator
+      explicitly asks for a whole new page — a full replacement destroys everything else on it.
     - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
