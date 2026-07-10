@@ -179,6 +179,26 @@ describe Exports::Payouts::Csv, :vcr do
     end
   end
 
+  # Regression for gumroad-private#1028: sellers re-parse this CSV with Excel's
+  # "Text to Columns" (comma delimiter), which splits inside quoted fields, and
+  # Windows Excel reads non-ASCII bytes in this BOM-less UTF-8 file as cp1252
+  # mojibake. Every free-text label we add must therefore be ASCII-only and
+  # comma-free.
+  describe "subtotal headings and deduction notes" do
+    it "keeps all label constants ASCII-only and comma-free" do
+      [
+        Exports::Payouts::Csv::CARD_SALES_SUBTOTAL_HEADING,
+        Exports::Payouts::Csv::PAYPAL_SALES_SUBTOTAL_HEADING,
+        Exports::Payouts::Csv::STRIPE_CONNECT_SALES_SUBTOTAL_HEADING,
+        Exports::Payouts::Csv::PAYPAL_PAYOUTS_NOTE,
+        Exports::Payouts::Csv::STRIPE_CONNECT_PAYOUTS_NOTE,
+      ].each do |label|
+        expect(label).to match(/\A[[:ascii:]]+\z/), "expected ASCII-only label, got: #{label}"
+        expect(label).not_to include(","), "expected comma-free label, got: #{label}"
+      end
+    end
+  end
+
   describe "affiliate credits involving several balances" do
     let!(:now) { Time.current }
     let!(:payout_date) { 1.week.ago }
