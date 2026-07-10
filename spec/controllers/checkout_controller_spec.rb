@@ -31,6 +31,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                  fallback_reason: "stripe_payment_element_flag_disabled",
                                                  disable_wallets: false,
                                                  request_apple_pay_merchant_tokens: false,
+                                                 payment_element_wallets: false,
                                                  elements_options: nil,
                                                },
                                                clear_cart: false,
