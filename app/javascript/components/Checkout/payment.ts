@@ -540,8 +540,6 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.status = { type: "starting" };
       break;
     case "acknowledge-email-typo":
-      // The localStorage persistence of this dismissal happens in the event handlers that
-      // dispatch this action (see PaymentForm.tsx), keeping this reducer free of side effects.
       state.acknowledgedEmails.add(action.email);
       state.emailTypoSuggestion = null;
       break;

@@ -50,10 +50,9 @@ describe("checkEmailForTypos", () => {
   });
 
   it("still suggests a fix for a genuinely mistyped TLD", () => {
-    // "con" is not a real TLD and is one edit away from "com". (Transpositions like "cmo"
-    // measure as distance 2 under sift3 and are intentionally no longer corrected — the
-    // tighter threshold is what stops valid TLDs from being rewritten.)
     expect(suggestionFor("buyer@example.con")).toBe("buyer@example.com");
+    expect(suggestionFor("buyer@example.cmo")).toBe("buyer@example.com");
+    expect(suggestionFor("buyer@example.nte")).toBe("buyer@example.net");
   });
 
   it("only rewrites the TLD even when the same string appears in the rest of the domain", () => {
@@ -62,7 +61,7 @@ describe("checkEmailForTypos", () => {
     expect(suggestionFor("buyer@concast.con")).toBe("buyer@concast.com");
   });
 
-  it("does not rewrite an unknown TLD that is not close to any popular one", () => {
+  it("does not rewrite an unknown TLD", () => {
     expect(suggestionFor("buyer@example.pizza")).toBeNull();
   });
 });

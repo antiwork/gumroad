@@ -225,8 +225,7 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
   };
 
   const rejectEmailTypoSuggestion = () => {
-    // Persist here (not in the reducer) so the reducer stays a pure function: React 18 Strict
-    // Mode runs reducers twice in development, which would double every localStorage write.
+    // Persist here rather than in the reducer so the reducer stays free of side effects.
     persistAcknowledgedEmail(state.email);
     dispatch({ type: "acknowledge-email-typo", email: state.email });
   };
