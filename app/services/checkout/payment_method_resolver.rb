@@ -162,9 +162,10 @@ class Checkout::PaymentMethodResolver
       return US_LOCKED_PAYMENT_METHOD_TYPES if buyer_country != US_ALPHA2
       return [] unless direct_charge_seller?
 
-      availability = StripeConnectPaymentMethodAvailabilityService.new(sellers.first.stripe_connect_account)
+      connect_account = sellers.first.stripe_connect_account
+      availability = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
       unless availability.cache_present?
-        RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(sellers.first.stripe_connect_account.id)
+        RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
         return US_LOCKED_PAYMENT_METHOD_TYPES
       end
 

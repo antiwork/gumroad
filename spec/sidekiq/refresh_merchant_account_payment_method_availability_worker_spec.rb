@@ -41,4 +41,11 @@ describe RefreshMerchantAccountPaymentMethodAvailabilityWorker do
 
     expect { described_class.new.perform(merchant_account.id) }.not_to raise_error
   end
+
+  it "swallows an authentication error — some deauthorized accounts return this instead of a permission error" do
+    allow_any_instance_of(StripeConnectPaymentMethodAvailabilityService).to receive(:refresh!)
+      .and_raise(Stripe::AuthenticationError.new("The provided key does not have access to this account."))
+
+    expect { described_class.new.perform(merchant_account.id) }.not_to raise_error
+  end
 end
