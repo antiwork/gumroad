@@ -171,8 +171,8 @@ describe Checkout::PaymentMethodResolver do
 
       context "when the snapshot says the account accepts both US-locked methods" do
         before do
-          connect_account.update!(us_locked_payment_method_availability: {
-                                    "payment_method_types" => %w[cashapp us_bank_account],
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end
@@ -190,8 +190,8 @@ describe Checkout::PaymentMethodResolver do
 
       context "when the snapshot says the account accepts only Cash App Pay" do
         before do
-          connect_account.update!(us_locked_payment_method_availability: {
-                                    "payment_method_types" => %w[cashapp],
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "cashapp_payments" => "active", "us_bank_account_ach_payments" => "inactive" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end
@@ -203,8 +203,8 @@ describe Checkout::PaymentMethodResolver do
 
       context "when the snapshot says the account accepts neither" do
         before do
-          connect_account.update!(us_locked_payment_method_availability: {
-                                    "payment_method_types" => [],
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "card_payments" => "active" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end

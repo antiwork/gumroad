@@ -164,12 +164,13 @@ class Checkout::PaymentMethodResolver
 
       connect_account = sellers.first.stripe_connect_account
       availability = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
-      unless availability.cache_present?
+      available = availability.available_payment_method_types(US_LOCKED_PAYMENT_METHOD_TYPES)
+      if available.nil?
         RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
         return US_LOCKED_PAYMENT_METHOD_TYPES
       end
 
-      US_LOCKED_PAYMENT_METHOD_TYPES - availability.cached_payment_method_types
+      US_LOCKED_PAYMENT_METHOD_TYPES - available
     end
 
     # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered
