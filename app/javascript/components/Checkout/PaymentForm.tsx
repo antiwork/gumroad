@@ -36,6 +36,7 @@ import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
+import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
@@ -224,11 +225,14 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
   };
 
   const rejectEmailTypoSuggestion = () => {
+    // Persist here rather than in the reducer so the reducer stays free of side effects.
+    persistAcknowledgedEmail(state.email);
     dispatch({ type: "acknowledge-email-typo", email: state.email });
   };
 
   const acceptEmailTypoSuggestion = () => {
     if (!state.emailTypoSuggestion) return;
+    persistAcknowledgedEmail(state.emailTypoSuggestion);
     dispatch({ type: "set-value", email: state.emailTypoSuggestion });
     dispatch({ type: "acknowledge-email-typo", email: state.emailTypoSuggestion });
   };
@@ -362,7 +366,9 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                     onBlur={checkForEmailTypos}
                   />
                 </PopoverAnchor>
-                <PopoverContent className="grid gap-2" matchTriggerWidth>
+                {/* Open upward: the pay/download button sits right below the email field, and a
+                    downward popover covers it, blocking the purchase until the buyer answers. */}
+                <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
                   <div>Did you mean {state.emailTypoSuggestion}?</div>
                   <div className="flex gap-2">
                     <Button onClick={rejectEmailTypoSuggestion}>No</Button>

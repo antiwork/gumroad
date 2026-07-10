@@ -129,14 +129,23 @@ class Checkout::PaymentMethodResolver
     end
 
     # What Stripe actually receives: the eligible policy set intersected with the launched set, then
-    # region-gated, then PPP-gated. A US-locked method (ACH, Cash App Pay) is only offered when the
-    # buyer's GeoIP country is US, so a non-US buyer never sees a method they can't complete. When the
-    # buyer country is unknown (nil), US-locked methods are dropped to fail safe. Card always survives,
-    # and Link (inline, not US-locked) is unaffected by the region gate.
+    # account-gated, then region-gated, then PPP-gated. A US-locked method (ACH, Cash App Pay) is only
+    # offered when the buyer's GeoIP country is US, so a non-US buyer never sees a method they can't
+    # complete. When the buyer country is unknown (nil), US-locked methods are dropped to fail safe.
+    # Card always survives, and Link (inline, not US-locked) is unaffected by either gate.
+    #
+    # The account gate: on a direct-charge (Stripe Connect) seller, the PaymentIntent is created on
+    # the SELLER's Stripe account, not Gumroad's platform account — and payment method capabilities
+    # live per-account. Cash App Pay and ACH are activated on the platform account, but connected
+    # accounts routinely lack them (non-US accounts can't have them at all, and even US connect
+    # accounts usually haven't activated them in their own dashboard). Listing a method the account
+    # doesn't have makes Stripe reject the intent create outright, which failed every US buyer's
+    # checkout on those sellers with a misleading "stripe_unavailable" error — so only offer the
+    # US-locked methods when the charge lands on the platform account, where we control activation.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
       launched += forced_currency_test_mode_methods(eligible)
-      launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
+      launched -= US_LOCKED_PAYMENT_METHOD_TYPES if buyer_country != US_ALPHA2 || direct_charge_seller?
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched
     end

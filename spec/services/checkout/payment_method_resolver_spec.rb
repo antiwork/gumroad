@@ -159,7 +159,14 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.client_confirm_eligible?).to be(true)
         expect(resolution.fallback_reason).to be_nil
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
-        expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+      end
+
+      it "drops the US-locked methods even for a US buyer — the intent is created on the seller's own Stripe account, which lacks the Cash App/ACH capabilities the platform account has" do
+        expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+      end
+
+      it "resolves card-only for a US PPP buyer — Link is PPP-gated and the US-locked methods are account-gated" do
+        expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(["card"])
       end
 
       it "drops US-locked methods for a non-US buyer while keeping the connected-account scope" do

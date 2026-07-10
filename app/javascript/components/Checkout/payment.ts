@@ -13,6 +13,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
+import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -646,7 +647,9 @@ export function createReducer(initial: {
       status: { type: "input", errors: new Set() },
       availablePaymentMethods: [],
       emailTypoSuggestion: null,
-      acknowledgedEmails: new Set<string>(),
+      // Seed with previously-dismissed addresses so a buyer who already said "No, my email is
+      // right" on an earlier visit isn't asked about the same address again.
+      acknowledgedEmails: loadAcknowledgedEmails(),
       requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
     };
   });
