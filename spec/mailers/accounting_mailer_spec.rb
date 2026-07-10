@@ -89,8 +89,12 @@ describe AccountingMailer, :vcr do
         expect(funds_received["count"]).to eq(1)
         expect(funds_received["total_transaction_cents"]).to eq(purchase.total_transaction_cents)
 
-        html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body
+        html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body.to_s
         expect(html_body).to include("Daily Finance Ledger Report")
+        expect(html_body).to include("attached")
+        # The JSON belongs only in the attachment — the body must not dump the ledger.
+        expect(html_body).not_to include("report_version")
+        expect(html_body).not_to include("funds_received")
       end
     end
   end

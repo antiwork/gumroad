@@ -1,4 +1,4 @@
-<%= header_section("Daily Finance Ledger Report") %>
+<%= header_section("Daily Finance Ledger Report", @report["date"]) %>
 <div>
-  <pre><code><%= JSON.pretty_generate(@report) %></code></pre>
+  <p>The finance event ledger for <%= @report["date"] %> is attached as a JSON file.</p>
 </div>
