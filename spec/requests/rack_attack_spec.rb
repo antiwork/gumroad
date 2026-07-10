@@ -427,4 +427,36 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
   end
+
+  describe "POST /api/v2/media per-token throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "throttles past 20 uploads/10min per token even when the source IP rotates" do
+      user = create(:user)
+      app = create(:oauth_application, owner: create(:user))
+      token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_profile").token
+
+      # The controller would run CreatePublicMediaService (which downloads the URL); the throttle
+      # fires before the app anyway, but stub the service so under-limit requests stay cheap.
+      allow(CreatePublicMediaService).to receive(:new).and_return(
+        instance_double(CreatePublicMediaService, process: CreatePublicMediaService::Result.new(success: false, error_message: "stubbed"))
+      )
+
+      travel_to(Time.current) do
+        20.times do |i|
+          post "/api/v2/media",
+               params: { access_token: token, url: "https://example.com/#{i}.png" },
+               headers: { "HTTP_CF_CONNECTING_IP" => "10.4.0.#{i + 1}" }
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
+        post "/api/v2/media",
+             params: { access_token: token, url: "https://example.com/over.png" },
+             headers: { "HTTP_CF_CONNECTING_IP" => "10.4.0.99" }
+
+        expect(response.status).to eq(429)
+      end
+    end
+  end
 end

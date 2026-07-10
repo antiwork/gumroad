@@ -796,6 +796,24 @@ describe User, :vcr do
         end
       end
 
+      it "deletes the account's public media files and purges their blobs from public storage" do
+        public_file = PublicFile.new(seller: @user, resource: @user, display_name: "Logo")
+        public_file.file.attach(
+          io: File.open(Rails.root.join("spec/support/fixtures/smilie.png")),
+          filename: "smilie.png",
+          content_type: "image/png",
+        )
+        public_file.save!
+
+        # purge_later enqueues an ActiveStorage job that deletes the blob's bytes from the public
+        # bucket — without it the file would keep serving from the CDN after account closure.
+        expect_any_instance_of(ActiveStorage::Attached::One).to receive(:purge_later)
+
+        @user.deactivate!
+
+        expect(public_file.reload).to be_deleted
+      end
+
       context "when user has a saved credit card" do
         before do
           @credit_card = create(:credit_card, users: [@user])

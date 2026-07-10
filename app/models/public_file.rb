@@ -25,6 +25,20 @@ class PublicFile < ApplicationRecord
     file&.blob
   end
 
+  # Soft-deletes the record and removes the underlying file from public storage. Because the file
+  # lives on Gumroad's PUBLIC bucket, marking the record deleted isn't enough — the URL would keep
+  # serving the bytes. The blob is only purged when no other attachment still references it (blobs
+  # can be shared between records). Used when a creator deletes a media file, and during account
+  # closure / GDPR erasure, where a closed account must not keep hosting files on Gumroad's CDN.
+  def mark_deleted_and_purge_file!
+    ActiveRecord::Base.transaction do
+      mark_deleted!
+      if blob && !ActiveStorage::Attachment.where(blob_id: blob.id).where.not(record: self).exists?
+        file.purge_later
+      end
+    end
+  end
+
   def analyzed?
     blob&.analyzed? || false
   end

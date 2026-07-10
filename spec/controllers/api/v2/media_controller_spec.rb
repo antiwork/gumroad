@@ -109,6 +109,30 @@ describe Api::V2::MediaController do
         expect(body["success"]).to be(false)
         expect(body["message"]).to match(/only image, audio, and video/i)
       end
+
+      it "rejects uploads from a suspended seller with a 403 and never calls the service" do
+        @user.update!(user_risk_state: "suspended_for_fraud")
+        expect(CreatePublicMediaService).not_to receive(:new)
+
+        post @action, params: @params.merge(url: "https://example.com/logo.png")
+
+        expect(response).to have_http_status(:forbidden)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Your account is not active.")
+      end
+
+      it "rejects uploads from a deleted (closed) account with a 403 and never calls the service" do
+        @user.update!(deleted_at: Time.current)
+        expect(CreatePublicMediaService).not_to receive(:new)
+
+        post @action, params: @params.merge(url: "https://example.com/logo.png")
+
+        expect(response).to have_http_status(:forbidden)
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Your account is not active.")
+      end
     end
   end
 
@@ -145,6 +169,17 @@ describe Api::V2::MediaController do
         expect(body["success"]).to be(false)
         expect(body["message"]).to match(/not found/i)
         expect(file.reload).to be_alive
+      end
+
+      it "still lets a suspended seller delete their media (deletion is remediation, not hosting)" do
+        file = create_media_file(@user)
+        @user.update!(user_risk_state: "suspended_for_fraud")
+
+        delete @action, params: @params.merge(id: file.public_id)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(file.reload).to be_deleted
       end
     end
   end

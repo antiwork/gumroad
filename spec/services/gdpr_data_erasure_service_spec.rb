@@ -128,6 +128,24 @@ describe GdprDataErasureService do
       expect(product.reload.deleted?).to eq(true)
     end
 
+    it "deletes the user's public media files and purges their blobs from public storage" do
+      public_file = PublicFile.new(seller: user, resource: user, display_name: "Logo")
+      public_file.file.attach(
+        io: File.open(Rails.root.join("spec/support/fixtures/smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png",
+      )
+      public_file.save!
+
+      # purge_later enqueues an ActiveStorage purge job that deletes the blob's stored bytes;
+      # asserting on the call keeps the spec independent of the test queue adapter.
+      expect_any_instance_of(ActiveStorage::Attached::One).to receive(:purge_later)
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(public_file.reload).to be_deleted
+    end
+
     it "reports only alive products in the erasure summary" do
       create(:product, user: user)
       deleted_product = create(:product, user: user)

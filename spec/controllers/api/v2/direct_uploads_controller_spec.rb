@@ -157,6 +157,56 @@ describe Api::V2::DirectUploadsController do
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
       end
+
+      describe "with purpose=media (media library reservations)" do
+        it "rejects audio without the media purpose but accepts it with it" do
+          audio_params = @params.deep_merge(blob: { filename: "track.mp3", content_type: "audio/mpeg" })
+
+          expect do
+            post @action, params: audio_params
+          end.not_to change { ActiveStorage::Blob.count }
+          expect(response).to have_http_status(:bad_request)
+
+          expect do
+            post @action, params: audio_params.merge(purpose: "media")
+          end.to change { ActiveStorage::Blob.count }.by(1)
+          expect(response).to be_successful
+          expect(response.parsed_body["content_type"]).to eq("audio/mpeg")
+        end
+
+        it "rejects images above the media pipeline's image cap before creating a blob" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { byte_size: CreatePublicMediaService::MAX_IMAGE_BYTES + 1 }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("byte_size exceeds the 10 MB maximum for media uploads")
+        end
+
+        it "rejects video above the media pipeline's audio/video cap before creating a blob" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { filename: "clip.mp4", content_type: "video/mp4", byte_size: CreatePublicMediaService::MAX_AUDIO_VIDEO_BYTES + 1 }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("byte_size exceeds the 100 MB maximum for media uploads")
+        end
+
+        it "still rejects SVG (scriptable, would be served from a Gumroad public host)" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { filename: "logo.svg", content_type: "image/svg+xml" }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("content_type must be an image, audio, or video type.")
+        end
+
+        it "keeps the 20 GB product-file cap for requests without the media purpose" do
+          post @action, params: @params.deep_merge(blob: { filename: "clip.mp4", content_type: "video/mp4", byte_size: 1.gigabyte })
+
+          expect(response).to be_successful
+        end
+      end
     end
 
     it "grants access with the account scope" do

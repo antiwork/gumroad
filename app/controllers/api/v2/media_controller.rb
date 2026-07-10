@@ -17,6 +17,13 @@
 class Api::V2::MediaController < Api::V2::BaseController
   before_action(only: [:index]) { doorkeeper_authorize! :view_profile }
   before_action(only: [:create, :destroy]) { doorkeeper_authorize! :edit_profile }
+  # Suspended or closed accounts must not be able to keep hosting files on Gumroad's public
+  # storage. The app-wide suspended-account guard only covers browser sessions (logged_in_user),
+  # not OAuth bearer tokens, so without this check a suspended seller's still-valid API token
+  # could continue using this endpoint as a free public file host. `destroy` is deliberately NOT
+  # guarded: deleting hosted media is remediation (it reduces what the account hosts), so a
+  # suspended seller should still be able to take their files down.
+  before_action(only: [:create]) { render_account_inactive unless current_resource_owner&.account_active? }
 
   def index
     files = media_files.order(id: :desc).with_attached_file
@@ -45,19 +52,19 @@ class Api::V2::MediaController < Api::V2::BaseController
     # The creator asked for this file to be gone, so delete now rather than reusing the delayed
     # "unused file" cleanup. Any page still embedding the URL will show it broken — which is the
     # honest outcome of deleting a file that's still referenced.
-    ActiveRecord::Base.transaction do
-      file.mark_deleted!
-      blob = file.blob
-      if blob && !ActiveStorage::Attachment.where(blob_id: blob.id).where.not(record: file).exists?
-        file.file.purge_later
-      end
-    end
+    file.mark_deleted_and_purge_file!
     render_response(true, message: "The file was deleted.")
   end
 
   private
     def media_files
       PublicFile.alive.where(seller: current_resource_owner, resource: current_resource_owner)
+    end
+
+    # 403 with the standard v2 `{ success: false, message: ... }` body. Rendering from a
+    # before_action halts the request, so the action never runs for inactive accounts.
+    def render_account_inactive
+      render json: { success: false, message: "Your account is not active." }, status: :forbidden
     end
 
     def media_json(public_file)
