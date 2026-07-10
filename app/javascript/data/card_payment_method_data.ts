@@ -78,6 +78,13 @@ type WalletPaymentMethodPayload = {
 const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): WalletPaymentMethodDetails | null => {
   const walletType = paymentMethod.card?.wallet?.type;
   if (typeof walletType !== "string") return null;
+  // Only Apple Pay / Google Pay count as wallet payments here. A card PaymentMethod can also
+  // carry other card-wallet markers — notably Link in its card-passthrough mode, which is
+  // enabled on the element independently of the payment_element_wallets flag. Link buyers type
+  // their address into the Gumroad form like any card buyer (there is no wallet sheet supplying
+  // a verified billing address), so treating Link as a wallet would wrongly report it as a
+  // wallet payment to the server and feed form values back through the wallet tax-location path.
+  if (!isWalletPaymentElementType(walletType)) return null;
   const address = paymentMethod.billing_details?.address;
   return {
     type: walletType,
@@ -253,11 +260,17 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
+  // The wallet details on the card params are client-side context (checkout tax location and
+  // the wallet_type reported with the purchase) — the setup-intent endpoint has no contract for
+  // them, so keep them out of the request body while preserving them on the returned reusable
+  // params, which the purchase submission still needs.
+  const setupIntentCardParams: Partial<Record<string, unknown>> = { ...data.cardParams };
+  delete setupIntentCardParams.wallet;
   const response = await request({
     method: "POST",
     url: Routes.stripe_setup_intents_path(),
     accept: "json",
-    data: { ...data.cardParams, products: data.products },
+    data: { ...setupIntentCardParams, products: data.products },
   });
 
   if (response.ok) {

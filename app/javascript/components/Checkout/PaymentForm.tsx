@@ -748,6 +748,13 @@ const CreditCardContent = ({
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
     paymentElementRef.current = controller;
+    // A fresh (re)mounted element always starts on the card form, but the ref outlives element
+    // remounts (mode/currency switches, toggling a saved card). Without this reset, a buyer who
+    // selected Apple Pay before a remount would still be recorded as paying by wallet even
+    // though the remounted element is showing the card form — and the card submission would then
+    // skip the checkout-form billing details it depends on. Reset to the safe default and let
+    // the element's change event re-establish any wallet selection.
+    paymentElementTypeRef.current = "card";
     setPaymentElementReady(controller !== null);
   }, []);
 
