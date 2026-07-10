@@ -57,8 +57,8 @@ import {
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
-import { PaymentElementController, PaymentElementInput } from "$app/components/Checkout/PaymentElementInput";
 import { getPaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
+import { PaymentElementController, PaymentElementInput } from "$app/components/Checkout/PaymentElementInput";
 import { applyWalletBillingAddressToCheckout } from "$app/components/Checkout/walletBillingAddress";
 import { Dropdown } from "$app/components/Dropdown";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
