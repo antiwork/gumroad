@@ -890,6 +890,7 @@ module StripeMerchantAccountManager
     merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
                                              charge_processor_merchant_id: stripe_account_id)
                                       .alive.charge_processor_alive.last
+    refresh_payment_method_availability(merchant_account)
     return unless merchant_account&.country == Compliance::Countries::JPN.alpha2
 
     stripe_account = Stripe::Account.retrieve(stripe_account_id)
@@ -901,7 +902,24 @@ module StripeMerchantAccountManager
     stripe_account = stripe_event["data"]["object"]
     stripe_previous_attributes = stripe_event["data"]["previous_attributes"] || {}
     raise "Stripe Event #{stripe_event_id} does not contain an 'account' object." if stripe_account["object"] != "account"
+    refresh_payment_method_availability(
+      MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                            charge_processor_merchant_id: stripe_account["id"]).alive.charge_processor_alive.last
+    )
     handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)
+  end
+
+  # A capability or account change on a Stripe Connect (direct-charge) account may mean the
+  # seller (de)activated Cash App Pay or ACH in their own Stripe dashboard, which changes what
+  # checkout may offer on their account (see Checkout::PaymentMethodResolver). Refresh the
+  # cached availability snapshot in the background. This must run BEFORE the early returns
+  # below/around it: the JP-only guard and the standard-account guard in
+  # handle_stripe_info_requirements would otherwise skip connect accounts entirely — and connect
+  # accounts are exactly the population this cache is for.
+  def self.refresh_payment_method_availability(merchant_account)
+    return unless merchant_account&.is_a_stripe_connect_account?
+
+    RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(merchant_account.id)
   end
 
   def self.handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)

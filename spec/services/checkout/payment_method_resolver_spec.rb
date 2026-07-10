@@ -161,12 +161,63 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
       end
 
-      it "drops the US-locked methods even for a US buyer — the intent is created on the seller's own Stripe account, which lacks the Cash App/ACH capabilities the platform account has" do
-        expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+      context "when the account has no availability snapshot yet" do
+        it "fails safe to card and Link for a US buyer and enqueues a background refresh" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+        end
       end
 
-      it "resolves card-only for a US PPP buyer — Link is PPP-gated and the US-locked methods are account-gated" do
-        expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(["card"])
+      context "when the snapshot says the account accepts both US-locked methods" do
+        before do
+          connect_account.update!(us_locked_payment_method_availability: {
+                                    "payment_method_types" => %w[cashapp us_bank_account],
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "offers them to a US buyer without enqueueing a refresh" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
+        it "still drops them for a non-US buyer — the region gate applies before the account gate" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+      end
+
+      context "when the snapshot says the account accepts only Cash App Pay" do
+        before do
+          connect_account.update!(us_locked_payment_method_availability: {
+                                    "payment_method_types" => %w[cashapp],
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "offers exactly the accepted method to a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
+        end
+      end
+
+      context "when the snapshot says the account accepts neither" do
+        before do
+          connect_account.update!(us_locked_payment_method_availability: {
+                                    "payment_method_types" => [],
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "resolves card and Link for a US buyer without enqueueing a refresh — the empty snapshot is an answer, not a miss" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+        end
+
+        it "resolves card-only for a US PPP buyer — Link is PPP-gated and the account accepts no US-locked methods" do
+          expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(["card"])
+        end
       end
 
       it "drops US-locked methods for a non-US buyer while keeping the connected-account scope" do

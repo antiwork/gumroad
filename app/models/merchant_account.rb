@@ -18,6 +18,16 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :stripe_disabled_reason
   attr_json_data_accessor :stripe_payouts_pause_email_sent
   attr_json_data_accessor :stripe_rejection_email_sent
+  # For Stripe Connect (direct-charge) accounts: a cached snapshot of which US-locked payment
+  # methods (Cash App Pay, ACH Direct Debit) the SELLER's own Stripe account can accept. Charges
+  # for these sellers are created on their account, not Gumroad's platform account, and Stripe
+  # rejects a PaymentIntent whose payment_method_types lists a method the account hasn't
+  # activated — so checkout must only offer what the account actually supports. Shape:
+  # { "payment_method_types" => ["cashapp", ...], "refreshed_at" => <iso8601> }. Refreshed by
+  # RefreshMerchantAccountPaymentMethodAvailabilityWorker (Stripe account.updated / capability.updated
+  # webhooks, plus a lazy checkout-time backfill). A missing snapshot means "not yet fetched" and
+  # checkout fails safe by offering none of these methods.
+  attr_json_data_accessor :us_locked_payment_method_availability
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
