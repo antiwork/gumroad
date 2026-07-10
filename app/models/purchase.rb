@@ -3181,7 +3181,14 @@ class Purchase < ApplicationRecord
 
   def validate_purchasing_power_parity
     return if purchasing_power_parity_card_country_verified?(card_country)
-    errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
+    message = "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
+    # QA-ONLY (throwaway preview branch, PR #5737 — never merges): surface the two
+    # values the check compared so preview QA can diagnose mismatch failures without
+    # console access. Test-mode Stripe keys only, so production never shows this.
+    if Stripe.api_key.to_s.start_with?("sk_test_")
+      message += " [qa-debug: card_country=#{card_country.inspect}, card_country_source=#{try(:card_country_source).inspect}, ip_country=#{ip_country.inspect}, card_type=#{card_type.inspect}, card_visual=#{card_visual.inspect}]"
+    end
+    errors.add :base, message
     self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
   end
 
