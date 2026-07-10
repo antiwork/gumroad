@@ -173,6 +173,27 @@ describe Checkout::PaymentMethodResolver do
 
           expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card])
         end
+
+        it "keeps the checkout render alive when the refresh enqueue itself fails — the refresh is best-effort" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card])
+        end
+      end
+
+      context "when the snapshot is older than SNAPSHOT_MAX_AGE" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                    "refreshed_at" => (StripeConnectPaymentMethodAvailabilityService::SNAPSHOT_MAX_AGE + 1.hour).ago.iso8601,
+                                  })
+        end
+
+        it "still uses the stale snapshot (checkout never blocks) but enqueues a background re-fetch — the self-heal for webhooks dropped by the worker's until_executed lock" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
       end
 
       context "when the snapshot says the account accepts both US-locked methods" do

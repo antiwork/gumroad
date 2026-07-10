@@ -48,4 +48,18 @@ describe RefreshMerchantAccountPaymentMethodAvailabilityWorker do
 
     expect { described_class.new.perform(merchant_account.id) }.not_to raise_error
   end
+
+  it "swallows an invalid-request error for a Stripe-side-deleted account — the race before our deauth webhook is processed" do
+    allow_any_instance_of(StripeConnectPaymentMethodAvailabilityService).to receive(:refresh!)
+      .and_raise(Stripe::InvalidRequestError.new("The account acct_123 does not exist.", "account"))
+
+    expect { described_class.new.perform(merchant_account.id) }.not_to raise_error
+  end
+
+  it "re-raises any other invalid-request error so sidekiq retries it" do
+    allow_any_instance_of(StripeConnectPaymentMethodAvailabilityService).to receive(:refresh!)
+      .and_raise(Stripe::InvalidRequestError.new("Invalid array", "capabilities"))
+
+    expect { described_class.new.perform(merchant_account.id) }.to raise_error(Stripe::InvalidRequestError)
+  end
 end

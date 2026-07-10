@@ -39,6 +39,27 @@ class StripeConnectPaymentMethodAvailabilityService
     @merchant_account = merchant_account
   end
 
+  # How long a snapshot is trusted before checkout resolution asks for a background re-fetch.
+  # The webhooks are the primary freshness mechanism; this is the self-heal for the events they
+  # can drop — sidekiq's until_executed lock discards an enqueue that lands while a refresh for
+  # the same account is already MID-EXECUTION, so a capability deactivated in that window would
+  # otherwise stay "active" in the snapshot forever (re-listing a method the account no longer
+  # accepts — gumroad-private#1026's failure). A stale snapshot is still USED (checkout never
+  # blocks); it just also triggers a refresh so the staleness is bounded.
+  SNAPSHOT_MAX_AGE = 24.hours
+
+  def snapshot_stale?
+    snapshot = merchant_account.stripe_capabilities_snapshot
+    return false if snapshot.nil?
+
+    refreshed_at = begin
+      Time.zone.parse(snapshot["refreshed_at"].to_s)
+    rescue ArgumentError
+      nil
+    end
+    refreshed_at.nil? || refreshed_at < SNAPSHOT_MAX_AGE.ago
+  end
+
   # Fetches the account's full capabilities hash from Stripe and persists it. Returns the
   # capabilities hash. Raises on Stripe/API errors — callers decide whether to retry (the
   # refresh worker) or fail safe (checkout resolution reads the cache only).

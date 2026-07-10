@@ -180,13 +180,31 @@ class Checkout::PaymentMethodResolver
 
       connect_account = sellers.first.stripe_connect_account
       gated = launched - ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES
-      available = StripeConnectPaymentMethodAvailabilityService.new(connect_account).available_payment_method_types(gated)
+      availability = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
+      available = availability.available_payment_method_types(gated)
       if available.nil?
-        RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
+        # Prefetch even when nothing is gated on THIS checkout (e.g. a PPP card-only cart):
+        # the snapshot is per-seller, and the next buyer may need it.
+        enqueue_availability_refresh(connect_account)
         return ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES
       end
 
+      # Self-heal for dropped webhooks: a stale snapshot is still used (checkout never blocks),
+      # but triggers a background re-fetch so a capability change whose webhook was lost — e.g.
+      # discarded by the refresh worker's until_executed lock mid-refresh — is bounded by
+      # SNAPSHOT_MAX_AGE instead of persisting forever.
+      enqueue_availability_refresh(connect_account) if availability.snapshot_stale?
+
       ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES + available
+    end
+
+    # Best-effort: the refresh improves FUTURE checkouts and must never break THIS one. A raise
+    # here (e.g. Redis unavailable at enqueue) would otherwise fail a checkout render that could
+    # have completed fine with the methods already resolved.
+    def enqueue_availability_refresh(connect_account)
+      RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
+    rescue => e
+      Rails.logger.error("Failed to enqueue payment method availability refresh for merchant account #{connect_account.id}: #{e.class} => #{e.message}")
     end
 
     # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered

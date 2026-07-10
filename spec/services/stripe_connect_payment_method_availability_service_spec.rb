@@ -109,4 +109,36 @@ describe StripeConnectPaymentMethodAvailabilityService do
       expect(service.cache_present?).to be(true)
     end
   end
+
+  describe "#snapshot_stale?" do
+    it "is false when there is no snapshot — a miss is a miss, not staleness" do
+      expect(service.snapshot_stale?).to be(false)
+    end
+
+    it "is false for a snapshot refreshed within SNAPSHOT_MAX_AGE" do
+      merchant_account.update!(stripe_capabilities_snapshot: {
+                                 "capabilities" => {},
+                                 "refreshed_at" => 1.hour.ago.iso8601,
+                               })
+
+      expect(service.snapshot_stale?).to be(false)
+    end
+
+    it "is true for a snapshot older than SNAPSHOT_MAX_AGE" do
+      merchant_account.update!(stripe_capabilities_snapshot: {
+                                 "capabilities" => {},
+                                 "refreshed_at" => (described_class::SNAPSHOT_MAX_AGE + 1.hour).ago.iso8601,
+                               })
+
+      expect(service.snapshot_stale?).to be(true)
+    end
+
+    it "is true when refreshed_at is missing or unparseable — treat unknown age as stale" do
+      merchant_account.update!(stripe_capabilities_snapshot: { "capabilities" => {} })
+      expect(service.snapshot_stale?).to be(true)
+
+      merchant_account.update!(stripe_capabilities_snapshot: { "capabilities" => {}, "refreshed_at" => "garbage" })
+      expect(service.snapshot_stale?).to be(true)
+    end
+  end
 end
