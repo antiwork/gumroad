@@ -88,14 +88,16 @@ describe "Checkout payment", :js, type: :system do
       end
     end
 
-    it "preserves the host when suggesting multi-part TLD corrections" do
+    it "preserves the host when correcting a mistyped TLD" do
       visit @product.long_url
       add_to_cart(@product)
 
-      fill_in "Email address", with: "hi@example.co.uj"
+      # The host here intentionally contains the same letters as the typo ("con"): the
+      # suggestion must only rewrite the TLD at the end, not the first occurrence in the host.
+      fill_in "Email address", with: "hi@concast.con"
       unfocus
 
-      expect(page).to have_text "Did you mean hi@example.co.uk?"
+      expect(page).to have_text "Did you mean hi@concast.com?"
       expect(page).to have_button "Pay", disabled: true
     end
 
