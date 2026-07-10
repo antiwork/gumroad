@@ -6457,6 +6457,73 @@ describe Purchase, :vcr do
       expect(purchase.flow_of_funds).to be_nil
       expect(charge.reload.processor_transaction_id).to eq("ch_pending_settlement")
     end
+
+    describe "Indian card e-mandate registration check" do
+      # Indian cards must register an RBI e-mandate on the purchase that sets up a recurring
+      # payment; if Stripe completes that charge without creating a Mandate object, every
+      # future renewal is declined by the issuer. save_charge_data reports that case.
+      let(:credit_card) { create(:credit_card, card_country: "IN") }
+
+      def build_processor_charge(mandate: nil)
+        stripe_charge = BaseProcessorCharge.new
+        stripe_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        stripe_charge.id = "ch_india_registration"
+        stripe_charge.refunded = false
+        stripe_charge.card_fingerprint = "card-fingerprint"
+        stripe_charge.card_mandate = mandate
+        stripe_charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 100)
+        stripe_charge
+      end
+
+      def build_purchase(**attrs)
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product, credit_card:)
+        create(:purchase_in_progress, link: product, subscription:, credit_card:,
+                                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                      card_country: "IN", **attrs)
+      end
+
+      it "reports an original subscription purchase whose charge carries no mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+          purchase: purchase.external_id,
+          stripe_charge: "ch_india_registration"
+        )
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report when the charge carries a mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: "mandate_123"))
+      end
+
+      it "does not report recurring renewal charges (only the registering purchase carries a mandate)" do
+        purchase = build_purchase(is_original_subscription_purchase: false)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report non-Indian cards" do
+        non_indian_card = create(:credit_card, card_country: "US")
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product, credit_card: non_indian_card)
+        purchase = create(:purchase_in_progress, link: product, subscription:, credit_card: non_indian_card,
+                                                 charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                 is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+    end
   end
 
   describe "#refunded?" do
