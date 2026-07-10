@@ -176,6 +176,21 @@ describe UpdateUserComplianceInfo do
         expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
       end
 
+      it "rejects a postal-code-only update on a record with no city" do
+        # Changing just the postal code (or prefecture) still re-syncs the whole address to
+        # Stripe, so it must count as an address change and require the city like any other
+        # address edit — otherwise a legacy no-city record can keep updating its address
+        # piecemeal without ever entering one.
+        params = ActionController::Parameters.new(zip_code: "1130023")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
+      end
+
       it "accepts an address submission that includes the city fields" do
         params = ActionController::Parameters.new(
           street_address_kanji: "千駄木3丁目",
@@ -282,6 +297,23 @@ describe UpdateUserComplianceInfo do
           is_business: true,
           business_street_address_kanji: "千代田区丸の内1丁目",
           business_street_address_kana: "チヨダクマルノウチ1チョウメ",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Business city/Ward is required for Japanese addresses. Please re-enter your business address including the city/ward.")
+      end
+
+      it "rejects a business postal-code-only update on a record with no business city" do
+        # Same reasoning as the individual case: a postal code (or prefecture) change alone
+        # still re-syncs the business address to Stripe, so the business city pair must be
+        # present before it goes through.
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_zip_code: "1000005",
         )
 
         expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)

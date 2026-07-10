@@ -9,15 +9,17 @@ class UpdateUserComplianceInfo
     street_address: [:country],
     business_street_address: [:business_country, :country],
   }.freeze
-  # The fields that make up a Japanese address, including the city pair. A submission is treated
+  # The fields that make up a Japanese address, including the city pair and the prefecture
+  # (state) / postal code — changing only the prefecture or postal code still re-syncs the
+  # address to Stripe, so it must count as an address change. A submission is treated
   # as (re)entering the Japanese address only when one of these fields actually CHANGES compared
   # to the stored record — the Payments settings form echoes back every stored field on save, so
   # a value merely being present does not mean the seller touched their address. Older records
   # can still update unrelated fields (phone, payout frequency, ...) without a city — many legacy
   # Japanese records were created before the form collected one, and blocking every save until
   # they re-enter their address would strand them.
-  JAPAN_INDIVIDUAL_ADDRESS_FIELDS = %i[building_number building_number_kana street_address_kanji street_address_kana city city_kana].freeze
-  JAPAN_BUSINESS_ADDRESS_FIELDS = %i[business_building_number business_building_number_kana business_street_address_kanji business_street_address_kana business_city business_city_kana].freeze
+  JAPAN_INDIVIDUAL_ADDRESS_FIELDS = %i[building_number building_number_kana street_address_kanji street_address_kana city city_kana state zip_code].freeze
+  JAPAN_BUSINESS_ADDRESS_FIELDS = %i[business_building_number business_building_number_kana business_street_address_kanji business_street_address_kana business_city business_city_kana business_state business_zip_code].freeze
 
   attr_reader :compliance_params, :user
 
