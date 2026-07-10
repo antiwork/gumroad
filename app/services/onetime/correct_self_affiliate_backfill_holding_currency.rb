@@ -39,7 +39,7 @@
 class Onetime::CorrectSelfAffiliateBackfillHoldingCurrency
   include Onetime::RebuildsSellerSettlementAmounts
 
-  # The five-minute window in which the June 3 backfill wrote its balance transactions.
+  # The 20-minute window in which the June 3 backfill wrote its balance transactions.
   # Used as a guard so this service refuses to touch transactions from any other source.
   BACKFILL_WINDOW = Time.utc(2026, 6, 3, 12, 0)..Time.utc(2026, 6, 3, 12, 20)
 
