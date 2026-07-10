@@ -17,10 +17,12 @@ Rails.application.config.after_initialize do
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
 
   service = PurchasingPowerParityService.new
-  { "ID" => 0.35, "IN" => 0.3, "BR" => 0.45, "PH" => 0.35, "MX" => 0.5 }.each do |country, factor|
+  # US included (0.5) purely so headless QA driven from US egress IPs can exercise
+  # PPP-discounted checkouts too — production PPP would never discount US buyers.
+  { "ID" => 0.35, "IN" => 0.3, "BR" => 0.45, "PH" => 0.35, "MX" => 0.5, "US" => 0.5 }.each do |country, factor|
     service.set_factor(country, factor)
   end
-  Rails.logger.info("[preview-qa] Seeded PPP factors for ID/IN/BR/PH/MX")
+  Rails.logger.info("[preview-qa] Seeded PPP factors for ID/IN/BR/PH/MX/US")
 rescue => e
   Rails.logger.warn("[preview-qa] PPP factor seeding failed: #{e.class}: #{e.message}")
 end
