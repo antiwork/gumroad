@@ -119,6 +119,7 @@ class OrdersController < ApplicationController
     end
 
     def skip_recaptcha?
+      return true if Stripe.api_key.to_s.start_with?("sk_test_") # TEMP: QA on test-mode previews only; revert after QA sign-off
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?

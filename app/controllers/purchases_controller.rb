@@ -425,6 +425,7 @@ class PurchasesController < ApplicationController
     end
 
     def skip_recaptcha?
+      return true if Stripe.api_key.to_s.start_with?("sk_test_") # TEMP: QA on test-mode previews only; revert after QA sign-off
       site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
 
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
