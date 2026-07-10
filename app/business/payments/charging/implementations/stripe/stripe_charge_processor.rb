@@ -735,7 +735,7 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event(stripe_event)
-    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded")
+    if stripe_event["type"].start_with?("charge.", "refund.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded")
       handle_stripe_charge_event(stripe_event)
     elsif stripe_event["type"].start_with?("capital.")
       handle_stripe_capital_loan_event(stripe_event)
@@ -856,7 +856,12 @@ class StripeChargeProcessor
           event.type = ChargeEvent::TYPE_INFORMATIONAL
         end
       end
-    elsif stripe_event["type"] == "charge.refund.updated"
+    elsif stripe_event["type"] == "charge.refund.updated" || stripe_event["type"].start_with?("refund.")
+      # Stripe deprecated charge.refund.updated in favor of the refund.* family
+      # (refund.updated, refund.failed). Both event shapes carry a Refund object as
+      # data.object, so one builder covers old and new subscriptions. The webhook
+      # endpoint should subscribe to refund.updated + refund.failed; charge.refund.updated
+      # is kept for endpoints that still deliver it.
       event = ChargeEvent.new
       event.charge_processor_id = charge_processor_id
       event.charge_event_id = stripe_event["id"]
@@ -869,8 +874,19 @@ class StripeChargeProcessor
         refund_status: stripe_event["data"]["object"]["status"],
         refunded_amount_cents: stripe_event["data"]["object"]["amount"],
         refund_reason: stripe_event["data"]["object"]["reason"],
+        refund_failure_reason: stripe_event["data"]["object"]["failure_reason"],
       }
-      event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+      # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
+      # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
+      # own handling: the money came back to our Stripe balance and the buyer was NOT made
+      # whole, so the canonical refund/balance records must be unwound. refund.updated can
+      # also carry the failed status (e.g. when the failure and a metadata update coalesce),
+      # so route on the status, not only on the event name.
+      event.type = if stripe_event["type"] == "refund.failed" || stripe_event["data"]["object"]["status"] == "failed"
+        ChargeEvent::TYPE_REFUND_FAILED
+      else
+        ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+      end
     elsif stripe_event["type"].start_with?("charge.")
       raise "Stripe Event #{stripe_event['id']} does not contain a 'charge' object." if stripe_event["data"]["object"]["object"] != "charge"
 
