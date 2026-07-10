@@ -6,6 +6,7 @@ import {
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
   getStripePaymentElementAmount,
+  getStripePaymentElementPresentment,
   isCardReadyToPay,
   reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
@@ -28,8 +29,24 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
+  },
+};
+
+const buyerCurrencyPresentmentPaymentElementConfig: CheckoutPaymentConfig = {
+  integration: "payment_element",
+  fallback_reason: null,
+  disable_wallets: true,
+  request_apple_pay_merchant_tokens: false,
+  elements_options: {
+    stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+    currency: "usd",
+    buyer_currency_presentment: true,
+    payment_method_types: ["card"],
+    payment_method_creation: "manual",
+    stripe_link_enabled: true,
   },
 };
 
@@ -41,6 +58,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
     stripe_link_enabled: false,
@@ -605,6 +623,75 @@ describe("getStripePaymentElementAmount", () => {
         }),
       ),
     ).toBe(98);
+  });
+});
+
+describe("buyer-currency presentment lane", () => {
+  const buyerCurrencyQuote = {
+    token: "quote-token",
+    currency: "cad" as const,
+    canonical_total_cents: 1_300,
+    presentment_total_cents: 1_625,
+    rate: 1.25,
+    subunit_to_unit: 100,
+    expires_at: "2026-07-10T00:00:00Z",
+  };
+  const loadedSurchargesWithQuote = {
+    type: "loaded" as const,
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 200,
+      tax_cents: 100,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      buyer_currency_quote: buyerCurrencyQuote,
+    },
+  };
+
+  it("mounts the element with the quote's currency and locked local-currency total", () => {
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 1_625 });
+    expect(getStripePaymentElementAmount(s)).toBe(1_625);
+  });
+
+  it("mounts canonical USD when the surcharge response has no quote", () => {
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: {
+        type: "loaded",
+        result: { ...loadedSurchargesWithQuote.result, buyer_currency_quote: null },
+      },
+    });
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("mounts canonical USD when the buyer opts to save the card (canonical charge path)", () => {
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+      willSaveCard: true,
+    });
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("ignores the quote when the server did not choose the presentment lane", () => {
+    const s = state({ surcharges: loadedSurchargesWithQuote });
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("returns null until surcharges load", () => {
+    expect(
+      getStripePaymentElementPresentment(
+        state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges: { type: "pending" } }),
+      ),
+    ).toBeNull();
   });
 });
 
