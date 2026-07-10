@@ -172,7 +172,7 @@ describe Checkout::PaymentMethodResolver do
       context "when the snapshot says the account accepts both US-locked methods" do
         before do
           connect_account.update!(stripe_capabilities_snapshot: {
-                                    "capabilities" => { "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end
@@ -183,7 +183,7 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
         end
 
-        it "still drops them for a non-US buyer — the region gate applies before the account gate" do
+        it "still drops them for a non-US buyer — our region policy applies regardless of the account's capabilities" do
           expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
         end
       end
@@ -191,7 +191,7 @@ describe Checkout::PaymentMethodResolver do
       context "when the snapshot says the account accepts only Cash App Pay" do
         before do
           connect_account.update!(stripe_capabilities_snapshot: {
-                                    "capabilities" => { "cashapp_payments" => "active", "us_bank_account_ach_payments" => "inactive" },
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "inactive" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end
@@ -201,10 +201,23 @@ describe Checkout::PaymentMethodResolver do
         end
       end
 
-      context "when the snapshot says the account accepts neither" do
+      context "when the snapshot says the account's Link capability is not active" do
         before do
           connect_account.update!(stripe_capabilities_snapshot: {
-                                    "capabilities" => { "card_payments" => "active" },
+                                    "capabilities" => { "cashapp_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "drops Link too — the capability intersection covers every method, not just the US-locked pair" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card cashapp])
+        end
+      end
+
+      context "when the snapshot says the account accepts neither US-locked method" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "card_payments" => "active", "link_payments" => "active" },
                                     "refreshed_at" => Time.current.iso8601,
                                   })
         end

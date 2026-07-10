@@ -41,6 +41,16 @@ class Checkout::PaymentMethodResolver
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
+  # Never gated by the per-account capability check on direct-charge sellers. Card processing is
+  # the baseline capability of any chargeable Stripe account — an account that truly can't take
+  # cards is unusable no matter what we render, and an empty method list would just break the
+  # Payment Element mount.
+  ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES = %w[card].freeze
+  # What a direct-charge checkout offers (beyond card) while the account's capability snapshot
+  # hasn't been fetched yet: Link only — the pre-capability-cache status quo, safe because Link
+  # auto-enables with the Payment Element on effectively every chargeable account. The US-locked
+  # methods stay off until the snapshot confirms them (gumroad-private#1026's failure mode).
+  CACHE_MISS_ASSUMED_PAYMENT_METHOD_TYPES = [LINK_PAYMENT_METHOD_TYPE].freeze
   US_ALPHA2 = "US"
   # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
   # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
@@ -128,49 +138,54 @@ class Checkout::PaymentMethodResolver
       methods
     end
 
-    # What Stripe actually receives: the eligible policy set intersected with the launched set, then
-    # account-gated, then region-gated, then PPP-gated. A US-locked method (ACH, Cash App Pay) is only
-    # offered when the buyer's GeoIP country is US, so a non-US buyer never sees a method they can't
-    # complete. When the buyer country is unknown (nil), US-locked methods are dropped to fail safe.
-    # Card always survives, and Link (inline, not US-locked) is unaffected by either gate.
+    # What Stripe actually receives, built in two conceptually separate passes:
+    #
+    #   1. OUR policy decisions — launch gating, the US region gate on Cash App Pay/ACH (US-GeoIP
+    #      buyers only; unknown country fails safe), the test-mode forced-currency QA methods, and
+    #      the PPP verifiability matrix. These express what Gumroad is willing to offer this buyer
+    #      on this cart.
+    #   2. A final intersection with what the charged ACCOUNT can accept. On a direct-charge
+    #      (Stripe Connect) seller the PaymentIntent is created on the seller's own Stripe account,
+    #      and payment method capabilities live per-account — Stripe rejects an intent create whose
+    #      payment_method_types lists a method the account hasn't activated, which fails the whole
+    #      checkout no matter which method the buyer picked (gumroad-private#1026). Policy never
+    #      needs to know about capabilities and capabilities never need to know about policy; the
+    #      intersection at the end is the whole relationship.
+    #
+    # Card always survives, and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
       launched += forced_currency_test_mode_methods(eligible)
-      launched -= us_locked_methods_to_exclude
+      launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
-      launched
+      launched & account_supported_methods(launched)
     end
 
-    # The account gate + region gate for the US-locked methods, combined because both answer the
-    # same question: can this buyer complete this method on the account the PaymentIntent will be
-    # created on?
+    # The methods (from our policy-resolved set) that the account the PaymentIntent will be created
+    # on can actually accept.
     #
-    # Region: Cash App Pay and ACH only work for US buyers, so a non-US (or unknown) GeoIP country
-    # drops them.
+    # Platform-account (Gumroad-managed) sellers: everything — the platform account's activations
+    # are under our control and every launched method is activated there.
     #
-    # Account: on a direct-charge (Stripe Connect) seller, the PaymentIntent is created on the
-    # SELLER's Stripe account, not Gumroad's platform account — and payment method capabilities
-    # live per-account. Cash App Pay and ACH are activated on the platform account, but connected
-    # accounts often lack them (non-US accounts can't have them at all), and Stripe rejects an
-    # intent create whose payment_method_types lists a method the account doesn't have. That
-    # rejection failed the entire checkout for every US buyer on those sellers, even when the
-    # buyer paid with a plain card (gumroad-private#1026). So on a connect seller we only keep the
-    # methods the account's cached capability snapshot says it can accept. No snapshot yet means
-    # fail safe (offer neither) and enqueue a background refresh so the next checkout has the
-    # answer — checkout must never block on, or fail with, a live Stripe API call.
-    def us_locked_methods_to_exclude
-      return US_LOCKED_PAYMENT_METHOD_TYPES if buyer_country != US_ALPHA2
-      return [] unless direct_charge_seller?
+    # Direct-charge (connect) sellers: whatever the account's cached capability snapshot says, with
+    # two carve-outs. Card is always kept: card processing is the baseline capability of any
+    # chargeable Stripe account, and an account that truly can't take cards is unusable regardless
+    # of what we render — an empty method list would just break the Payment Element mount. And when
+    # no snapshot exists yet, fall back to card + Link (the pre-capability-cache status quo) and
+    # enqueue a background refresh so the next checkout has the real answer — checkout must never
+    # block on, or fail with, a live Stripe API call.
+    def account_supported_methods(launched)
+      return launched unless direct_charge_seller?
 
       connect_account = sellers.first.stripe_connect_account
-      availability = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
-      available = availability.available_payment_method_types(US_LOCKED_PAYMENT_METHOD_TYPES)
+      gated = launched - ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES
+      available = StripeConnectPaymentMethodAvailabilityService.new(connect_account).available_payment_method_types(gated)
       if available.nil?
         RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
-        return US_LOCKED_PAYMENT_METHOD_TYPES
+        return ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES + CACHE_MISS_ASSUMED_PAYMENT_METHOD_TYPES
       end
 
-      US_LOCKED_PAYMENT_METHOD_TYPES - available
+      ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES + available
     end
 
     # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered
