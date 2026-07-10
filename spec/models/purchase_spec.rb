@@ -4704,9 +4704,9 @@ describe Purchase, :vcr do
       expect(purchase.has_payment_network_error?).to eq true
     end
 
-    it "returns false if error_code is PROCESSOR_INVALID_REQUEST — a deterministic rejection, not a network problem" do
+    it "returns true if error_code is PROCESSOR_INVALID_REQUEST, keeping subscription/preorder retries so a fixed deploy bug can self-heal" do
       purchase = build(:purchase, error_code: PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
-      expect(purchase.has_payment_network_error?).to eq false
+      expect(purchase.has_payment_network_error?).to eq true
     end
 
     it "returns false if error_code or stripe_error_code are other errors" do

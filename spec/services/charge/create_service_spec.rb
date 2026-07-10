@@ -387,8 +387,8 @@ describe Charge::CreateService, :vcr do
                         purchase_state: "in_progress",
                         total_transaction_cents: 10_00)
       # An invalid-request rejection is deterministic — our request was malformed, Stripe is
-      # healthy — so it must not be recorded as stripe_unavailable (a transient outage code
-      # that retry logic keys on).
+      # healthy — so it gets its own error code instead of stripe_unavailable (the transient
+      # outage code monitoring keys on).
       stripe_error = Stripe::InvalidRequestError.new("Invalid parameter.", nil, code: "payment_intent_invalid_parameter")
       allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!)
         .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
@@ -407,7 +407,7 @@ describe Charge::CreateService, :vcr do
 
       expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
       expect(purchase.stripe_error_code).to eq("payment_intent_invalid_parameter")
-      expect(purchase.has_payment_network_error?).to eq(false)
+      expect(purchase.has_payment_network_error?).to eq(true)
     end
 
     it "stops before Stripe and marks purchases when the locked buyer-currency quote is invalid" do

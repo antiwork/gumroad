@@ -74,7 +74,8 @@ class CreditCard < ApplicationRecord
       credit_card.save!
     rescue ChargeProcessorInvalidRequestError => e
       # The processor rejected our request as malformed — a deterministic failure on our side,
-      # not an outage. Record it distinctly so callers don't treat it as transient.
+      # not an outage. Record it under its own code so a code regression shows up in monitoring
+      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
       logger.error("Error while persisting card with #{credit_card.charge_processor_id}: #{e.message} - card visual: #{credit_card.visual}")
       credit_card.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
       credit_card.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST

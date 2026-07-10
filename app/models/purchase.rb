@@ -1975,7 +1975,8 @@ class Purchase < ApplicationRecord
     nil
   rescue ChargeProcessorInvalidRequestError => e
     # The processor rejected our request as malformed — a deterministic failure on our side,
-    # not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+    # not an outage. Record it under its own code so a code regression shows up in monitoring
+    # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
     self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
@@ -3561,7 +3562,8 @@ class Purchase < ApplicationRecord
         self.card_expiry_year = chargeable.expiry_year
       rescue ChargeProcessorInvalidRequestError => e
         # The processor rejected our request as malformed — a deterministic failure on our
-        # side, not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+        # side, not an outage. Record it under its own code so a code regression shows up in
+        # monitoring instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
         logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
         errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
         self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
@@ -3660,7 +3662,8 @@ class Purchase < ApplicationRecord
       yield
     rescue ChargeProcessorInvalidRequestError => e
       # The processor rejected our request as malformed — a deterministic failure on our side,
-      # not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+      # not an outage. Record it under its own code so a code regression shows up in monitoring
+      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
       errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
       self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
