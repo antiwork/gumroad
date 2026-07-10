@@ -4261,6 +4261,12 @@ class Purchase < ApplicationRecord
       settling = settling.where("purchases.id != ?", id) if id
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
+      # No gift join is needed here, even though gift purchases are stored under the sender's
+      # email rather than the giftee's. The gift lookup in `not_double_charged` above
+      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
+      # so an in_progress gift — including one settling over a bank debit for days — already
+      # blocks repeat gifts to the same giftee until it resolves.
+
       if variant_attributes.present?
         settling = settling.select do |purchase|
           purchase.variant_attributes.sort == variant_attributes.sort

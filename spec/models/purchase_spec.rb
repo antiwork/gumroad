@@ -2608,6 +2608,31 @@ describe Purchase, :vcr do
         purchase2.variant_attributes << variant_b
         expect(purchase2).to be_valid
       end
+
+      it "already blocks a repeat gift to the same giftee via the gift join in the parent check, without any time window" do
+        # Gift purchases are stored under the sender's email, so the settling check's email
+        # match can't see them. They don't need it: the gift join in `not_double_charged`
+        # has no created_at window, so an in_progress gift (including one settling over ACH
+        # for days) blocks repeat gifts to the same giftee until it resolves.
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        second_gift = build(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        purchase2 = build(:purchase, link: @product, email: "another-sender@gumroad.com", ip_address: @ip_address,
+                                     gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["You have already attempted to purchase this product. We will email you shortly if the purchase is successful."]
+      end
+
+      it "already blocks a direct purchase by the giftee while a gift to them is in progress" do
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "giftee@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+      end
     end
 
     context "purchasing physical products" do
