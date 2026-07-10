@@ -119,6 +119,13 @@ class OrdersController < ApplicationController
     end
 
     def skip_recaptcha?
+      # QA-ONLY (throwaway preview branch, PR #5737 — never merges): per-PR preview
+      # apps run Stripe test keys, and reCAPTCHA Enterprise reliably fails for real
+      # human testers on the preview hostname, blocking the manual checkout QA for
+      # antiwork/gumroad#5640. Production runs live keys, so this can never skip
+      # CAPTCHA on a real checkout.
+      return true if Stripe.api_key.to_s.start_with?("sk_test_")
+
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
