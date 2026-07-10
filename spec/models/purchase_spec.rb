@@ -6462,7 +6462,24 @@ describe Purchase, :vcr do
       # Indian cards must register an RBI e-mandate on the purchase that sets up a recurring
       # payment; if Stripe completes that charge without creating a Mandate object, every
       # future renewal is declined by the issuer. save_charge_data reports that case.
-      let(:credit_card) { create(:credit_card, card_country: "IN") }
+      #
+      # The credit card is built directly rather than via the :credit_card factory: the
+      # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+      # cassette for these examples. The check under test only reads card_country.
+      def create_credit_card(card_country:)
+        CreditCard.create!(
+          card_type: CardType::VISA,
+          visual: "**** **** **** 4242",
+          stripe_fingerprint: "india_mandate_check_fp",
+          stripe_customer_id: "cus_india_mandate_check",
+          expiry_month: 12,
+          expiry_year: 5.years.from_now.year,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          card_country:
+        )
+      end
+
+      let(:credit_card) { create_credit_card(card_country: "IN") }
 
       def build_processor_charge(mandate: nil)
         stripe_charge = BaseProcessorCharge.new
@@ -6475,12 +6492,20 @@ describe Purchase, :vcr do
         stripe_charge
       end
 
-      def build_purchase(**attrs)
+      def build_purchase(is_original_subscription_purchase:, card: nil, card_country: "IN")
+        card ||= credit_card
         product = create(:membership_product)
-        subscription = create(:subscription, link: product, credit_card:)
-        create(:purchase_in_progress, link: product, subscription:, credit_card:,
+        subscription = create(:subscription, link: product, credit_card: card)
+        original_purchase = create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                          card_country:, is_original_subscription_purchase: true)
+        return original_purchase if is_original_subscription_purchase
+
+        # Renewal purchases validate their price against the subscription's original
+        # purchase, so that record must exist before the renewal can be created.
+        create(:purchase_in_progress, link: product, subscription:, credit_card: card,
                                       charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                      card_country: "IN", **attrs)
+                                      card_country:, is_original_subscription_purchase: false)
       end
 
       it "reports an original subscription purchase whose charge carries no mandate" do
@@ -6512,12 +6537,8 @@ describe Purchase, :vcr do
       end
 
       it "does not report non-Indian cards" do
-        non_indian_card = create(:credit_card, card_country: "US")
-        product = create(:membership_product)
-        subscription = create(:subscription, link: product, credit_card: non_indian_card)
-        purchase = create(:purchase_in_progress, link: product, subscription:, credit_card: non_indian_card,
-                                                 charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                                 is_original_subscription_purchase: true)
+        non_indian_card = create_credit_card(card_country: "US")
+        purchase = build_purchase(is_original_subscription_purchase: true, card: non_indian_card, card_country: "US")
 
         expect(ErrorNotifier).not_to receive(:notify)
 
