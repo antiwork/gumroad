@@ -223,8 +223,11 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
   // the viewport does — most notably a modal dialog, whose content box is overflow-y-auto
   // (see Modal.tsx). In that case clamping only against the window leaves the menu taller
   // than the space inside the dialog, so results past the dialog's bottom edge are cut off
-  // and unreachable. Clamp against the nearest clipping ancestor's bottom edge as well, so
-  // the menu grows its own internal scrollbar instead.
+  // and unreachable. Clamp against every clipping ancestor's bottom edge as well, so the menu
+  // grows its own internal scrollbar instead. We check all ancestors (not just the nearest
+  // clipping one) because an element's bounding box doesn't account for clipping by ancestors
+  // further up — an inner scroll container can report a bottom edge that extends past an outer
+  // clipping wrapper, and the tightest visible boundary is what matters.
   React.useLayoutEffect(() => {
     const control = listRef.current?.offsetParent;
     if (!(control instanceof HTMLElement)) return;
@@ -233,7 +236,6 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       const { overflowY } = getComputedStyle(ancestor);
       if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden" || overflowY === "clip") {
         bottomLimit = Math.min(bottomLimit, ancestor.getBoundingClientRect().bottom);
-        break;
       }
     }
     const spaceBelow = bottomLimit - control.getBoundingClientRect().bottom - MENU_VIEWPORT_MARGIN;
