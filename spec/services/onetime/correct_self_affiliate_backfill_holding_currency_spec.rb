@@ -78,6 +78,9 @@ describe Onetime::CorrectSelfAffiliateBackfillHoldingCurrency do
         result = described_class.new(balance_ids: [balance.id]).process
       end.to not_change { balance.reload.holding_currency }
         .and not_change { BalanceTransaction.count }
+        .and not_change { bt.reload.holding_amount_currency }
+        .and not_change { bt.reload.holding_amount_net_cents }
+        .and not_change { balance.reload.holding_amount_cents }
 
       expect(result[:stats][:corrected]).to eq(1)
       summary = result[:corrected].first
@@ -233,6 +236,47 @@ describe Onetime::CorrectSelfAffiliateBackfillHoldingCurrency do
     it "skips unknown balance ids" do
       result = described_class.new(balance_ids: [0], dry_run: false).process
       expect(result[:stats][:not_found]).to eq(1)
+    end
+
+    it "skips balances carrying a transaction credited to someone other than the purchase's seller" do
+      balance, bt, _purchase = create_stranded_balance
+      other_user = create(:user)
+      bt.update_columns(user_id: other_user.id)
+      balance.update_columns(user_id: other_user.id)
+
+      result = described_class.new(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_wrong_user]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::USD)
+    end
+
+    it "skips balances carrying a transaction whose holding currency is not USD" do
+      balance, bt, _purchase = create_stranded_balance
+      bt.update_columns(holding_amount_currency: Currency::EUR)
+
+      result = described_class.new(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_not_usd_labeled]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::USD)
+    end
+
+    it "skips balances whose purchase has been repointed to a different merchant account" do
+      balance, _bt, purchase = create_stranded_balance
+      other_account = create(:merchant_account, user: seller, currency: "gbp",
+                                                charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      purchase.update_columns(merchant_account_id: other_account.id)
+
+      result = described_class.new(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_wrong_merchant_account]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::USD)
+    end
+
+    it "errors (not corrupts) when the merchant account is Gumroad-held: the rebuilt USD flow cannot match a non-USD account" do
+      balance, _bt, _purchase = create_stranded_balance
+      allow_any_instance_of(MerchantAccount).to receive(:holder_of_funds).and_return(HolderOfFunds::GUMROAD)
+
+      result = described_class.new(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:error]).to eq(1)
+      expect(result[:skipped].first[:error]).to include("does not match merchant account currency")
+      expect(balance.reload.holding_currency).to eq(Currency::USD)
     end
   end
 end

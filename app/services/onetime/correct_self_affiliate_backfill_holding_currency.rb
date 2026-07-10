@@ -156,6 +156,13 @@ class Onetime::CorrectSelfAffiliateBackfillHoldingCurrency
         return :bt_outside_backfill_window unless BACKFILL_WINDOW.cover?(bt.created_at)
         return :bt_wrong_user unless bt.user_id == bt.purchase&.seller_id
         return :bt_not_usd_labeled unless bt.holding_amount_currency.to_s.downcase == Currency::USD
+        # The settlement rebuild reads the purchase's merchant account while the balance
+        # pays out from its own. For backfill rows these are the same account by
+        # construction, but if a purchase has since been repointed to a different account
+        # (even one in the same currency) we would relabel using settlement data from the
+        # wrong account — refuse instead.
+        return :bt_wrong_merchant_account unless bt.merchant_account_id == balance.merchant_account_id &&
+          bt.purchase.merchant_account_id == balance.merchant_account_id
       end
 
       :eligible

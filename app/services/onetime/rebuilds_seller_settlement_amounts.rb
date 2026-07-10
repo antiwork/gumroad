@@ -41,6 +41,11 @@ module Onetime::RebuildsSellerSettlementAmounts
     # seller's own Stripe account.
     def flow_of_funds_for(purchase)
       if purchase.merchant_account.holder_of_funds == HolderOfFunds::GUMROAD
+        # For charges presented in the buyer's currency, the gross booked here is the
+        # canonical USD transaction amount rather than a replay of Stripe's exact
+        # post-conversion settled cents, so it can differ from the original booking by
+        # FX rounding. The net cents — the figure balances and payouts actually use —
+        # is computed the same way either way, so payability is unaffected.
         return FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents)
       end
 
