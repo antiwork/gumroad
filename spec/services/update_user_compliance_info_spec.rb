@@ -342,6 +342,28 @@ describe UpdateUserComplianceInfo do
         expect(new_compliance_info.business_city).to eq("千代田区")
         expect(new_compliance_info.business_city_kana).to eq("チヨダク")
       end
+
+      it "accepts a business address submission without business city params when the record already has a business city" do
+        _result, with_business_city = japan_business_compliance_info.dup_and_save! do |n|
+          n.business_city = "千代田区"
+          n.business_city_kana = "チヨダク"
+          n.skip_stripe_job_on_create = true
+        end
+        expect(with_business_city.business_city).to eq("千代田区")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address_kanji: "丸の内2丁目",
+          business_street_address_kana: "マルノウチ2チョウメ",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be true
+        expect(japan_business_user.reload.alive_user_compliance_info.business_street_address_kanji).to eq("丸の内2丁目")
+      end
     end
 
     context "with a US business that already has a 9-digit business_tax_id saved" do
