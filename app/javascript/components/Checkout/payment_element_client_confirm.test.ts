@@ -40,7 +40,7 @@ describe("createPaymentElementConfirmationToken", () => {
 
     const result = await createPaymentElementConfirmationToken(cardData(stripe, submitOk()));
 
-    expect(result).toEqual({ status: "success", confirmationTokenId: "ctoken_123", cardCountry: "US" });
+    expect(result).toEqual({ status: "success", confirmationTokenId: "ctoken_123", cardCountry: "US", wallet: null });
   });
 
   it("reports a null card country when the previewed method is not a card", async () => {
@@ -52,7 +52,34 @@ describe("createPaymentElementConfirmationToken", () => {
 
     const result = await createPaymentElementConfirmationToken(cardData(stripe, submitOk()));
 
-    expect(result).toEqual({ status: "success", confirmationTokenId: "ctoken_456", cardCountry: null });
+    expect(result).toEqual({ status: "success", confirmationTokenId: "ctoken_456", cardCountry: null, wallet: null });
+  });
+
+  it("skips the checkout-form billing_details override and reports wallet details for a wallet submission", async () => {
+    const createConfirmationToken = vi.fn().mockResolvedValue({
+      confirmationToken: {
+        id: "ctoken_789",
+        payment_method_preview: {
+          card: { country: "CA", wallet: { type: "apple_pay" } },
+          billing_details: { address: { country: "CA", postal_code: "H2X 1Y4", state: "QC" } },
+        },
+      },
+    });
+    const elements = submitOk();
+
+    const result = await createPaymentElementConfirmationToken({
+      ...cardData(stripeWith(createConfirmationToken), elements),
+      walletSelected: true,
+    });
+
+    // The wallet sheet's billing details must survive; the checkout form override is omitted.
+    expect(createConfirmationToken).toHaveBeenCalledWith({ elements });
+    expect(result).toEqual({
+      status: "success",
+      confirmationTokenId: "ctoken_789",
+      cardCountry: "CA",
+      wallet: { type: "apple_pay", billingAddress: { country: "CA", postal_code: "H2X 1Y4", state: "QC" } },
+    });
   });
 
   it("surfaces a validation error from elements.submit without minting a token", async () => {

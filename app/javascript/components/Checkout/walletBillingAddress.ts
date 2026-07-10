@@ -1,0 +1,48 @@
+import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
+
+// Applies a wallet's billing address to checkout's tax-location state. Shared by BOTH wallet
+// surfaces — the standalone Payment Request Button and wallets rendered inside the Stripe
+// Payment Element — so the tax-critical rules below can never drift between them.
+//
+// Honor the wallet's billing country for ALL countries, not just US. Checkout state
+// defaults `country` to "US" when the account has no country and geo-detection fails,
+// so without this a non-US Apple Pay / Google Pay buyer submits taxCountryElection "US"
+// with an empty ZIP and the server's US-only ZIP validation rejects the purchase with
+// "You entered a ZIP Code that doesn't exist within your country" — an error the buyer
+// can't fix because the wallet flow never shows a ZIP field. The billing state/province
+// is copied too because Canadian tax lookup requires it alongside the country. When the
+// wallet omits a state we clear the field rather than keep the old value, so a stale
+// province from a previous selection can't pair with the new country and produce a
+// wrong tax calculation. For Canada specifically, some wallets share only the postal
+// code without the province — since every Canadian postal code's first letter maps to
+// exactly one province or territory, we derive the province from the postal code so
+// Canadian tax can still be calculated (the wallet flow has no province field the
+// buyer could fill in manually). If the wallet gives neither a state nor a usable
+// Canadian postal code, we still must not submit a blank province: Canadian tax is only
+// calculated when a province is present, so "CA" with an empty province would silently
+// collect no tax, and the wallet flow gives the buyer no province field to correct it.
+// In that case we keep the existing checkout state when the wallet's billing country
+// matches the country checkout already had (it came from the buyer's saved address or
+// geo-detection for that same country, so it isn't stale). As a true last resort for
+// Canada — the wallet gave no province, no usable postal code, and checkout had no
+// prior Canadian province — we elect Alberta. That choice is deliberate, not an
+// arbitrary list default: Alberta charges only the 5% federal GST, which applies to
+// buyers in every province and territory. Electing it when the real province is
+// unknowable means we always collect the federal portion the buyer owes regardless of
+// where they live, and we never charge them another province's higher HST/PST or remit
+// provincial tax to a jurisdiction they may not be in.
+export const applyWalletBillingAddressToCheckout = (
+  billingAddress: { country: string | null; postal_code: string | null; state: string | null } | null | undefined,
+  checkout: { country: string; state: string },
+  dispatch: (action: { type: "set-value"; country?: string; zipCode?: string | undefined; state?: string }) => void,
+) => {
+  if (!billingAddress?.country) return;
+  const billingState =
+    billingAddress.state ||
+    (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
+    (billingAddress.country === checkout.country ? checkout.state : null) ||
+    (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
+  dispatch({ type: "set-value", country: billingAddress.country });
+  dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
+  dispatch({ type: "set-value", state: billingState ?? "" });
+};

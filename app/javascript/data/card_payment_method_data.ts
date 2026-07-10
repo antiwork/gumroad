@@ -7,6 +7,7 @@ import {
   ReusableCardPaymentMethodParams,
   ReusablePaymentRequestPaymentMethodParams,
   StripeErrorParams,
+  WalletPaymentMethodDetails,
 } from "$app/data/payment_method_params";
 import { request } from "$app/utils/request";
 import { getStripeInstance } from "$app/utils/stripe_loader";
@@ -66,6 +67,26 @@ export type PaymentElementCardData = {
 const WALLET_PAYMENT_ELEMENT_TYPES = ["apple_pay", "google_pay"];
 export const isWalletPaymentElementType = (type: string) => WALLET_PAYMENT_ELEMENT_TYPES.includes(type);
 
+// Client-side details about the wallet that paid through the Payment Element, read off the
+// tokenized PaymentMethod (or ConfirmationToken preview). The billing address feeds the
+// tax-location logic in checkout (the wallet sheet is the buyer's source of truth for wallet
+// payments), and the wallet type is reported to the server for analytics.
+type WalletPaymentMethodPayload = {
+  billing_details?: { address?: { country: string | null; postal_code: string | null; state: string | null } | null };
+  card?: { wallet?: Record<string, unknown> | null } | null;
+};
+const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): WalletPaymentMethodDetails | null => {
+  const walletType = paymentMethod.card?.wallet?.type;
+  if (typeof walletType !== "string") return null;
+  const address = paymentMethod.billing_details?.address;
+  return {
+    type: walletType,
+    billingAddress: address
+      ? { country: address.country, postal_code: address.postal_code, state: address.state }
+      : null,
+  };
+};
+
 type PaymentElementBillingDetailsData = Pick<
   PaymentElementCardData,
   "address" | "city" | "country" | "email" | "fullName" | "state" | "zipCode"
@@ -113,11 +134,24 @@ export const preparePaymentElementPaymentMethodData = async (
     return { status: "error", stripe_error: paymentMethodResult.error };
   }
 
-  return cardPaymentMethodParams(paymentMethodResult.paymentMethod);
+  const walletDetails = walletPaymentMethodDetails(paymentMethodResult.paymentMethod);
+  return {
+    ...cardPaymentMethodParams(paymentMethodResult.paymentMethod),
+    // When a wallet paid, surface its type and billing address so checkout can update the tax
+    // location from the wallet's verified address and report the wallet type to the server.
+    // The key is omitted entirely for card payments so the params object — which callers
+    // spread into server requests (see prepareFutureCharges) — is unchanged for them.
+    ...(walletDetails ? { wallet: walletDetails } : {}),
+  };
 };
 
 export type PaymentElementConfirmationTokenResult =
-  | { status: "success"; confirmationTokenId: string; cardCountry: string | null }
+  | {
+      status: "success";
+      confirmationTokenId: string;
+      cardCountry: string | null;
+      wallet: WalletPaymentMethodDetails | null;
+    }
   | StripeErrorParams;
 
 // Use a ConfirmationToken so the server can inspect card country before client confirmation.
@@ -147,6 +181,7 @@ export const createPaymentElementConfirmationToken = async (
     status: "success",
     confirmationTokenId: result.confirmationToken.id,
     cardCountry: result.confirmationToken.payment_method_preview.card?.country ?? null,
+    wallet: walletPaymentMethodDetails(result.confirmationToken.payment_method_preview),
   };
 };
 
