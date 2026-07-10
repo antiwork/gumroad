@@ -97,6 +97,9 @@ describe Order::PreparePaymentIntentService, :vcr do
         response = responses["unique-id-0"]
         expect(response[:success]).to eq(false)
         expect(response[:error_code]).to eq(PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING)
+        # The buyer must receive the actionable explanation, not a null message that the UI
+        # renders as a generic "something went wrong" (#5784).
+        expect(response[:error_message]).to include("purchasing power parity discount")
         expect(order.charges).to be_empty
         expect(purchase.reload).to be_failed
         expect(ProcessorPaymentIntent.where(purchase:)).to be_empty
