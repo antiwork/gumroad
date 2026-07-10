@@ -227,6 +227,28 @@ class Purchase::CreateService < Purchase::BaseService
         return nil, error_message
       end
 
+      # A brand-new membership purchase paid with a slow payment method (like an ACH bank
+      # debit) stays "in progress" for several business days before the subscription becomes
+      # active. The active-subscription check above can't see it, so without this check the
+      # buyer could accidentally start (and pay for) the same membership twice while the
+      # first payment settles. `stripe_status` is only ever set once the payment processor
+      # confirms a real payment, so abandoned checkout attempts (which never get that far)
+      # don't block the buyer from trying again.
+      #
+      # The Purchase-level `not_double_charged` validation already covers repeat attempts
+      # from the same checkout email; matching on the buyer account here additionally covers
+      # a signed-in buyer retrying with a different email.
+      if buyer.present?
+        settling_membership_purchase = Purchase.in_progress
+          .is_original_subscription_purchase
+          .where(link_id: product.id, purchaser_id: buyer.id)
+          .where.not(stripe_status: nil)
+
+        if settling_membership_purchase.exists?
+          return nil, "Your payment for this membership is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        end
+      end
+
       # Then check for restartable subscriptions
       restartable_subscription = buyer.present? ?
         Subscription.restartable_for_product_and_buyer(product:, buyer:) :

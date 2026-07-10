@@ -4233,6 +4233,43 @@ class Purchase < ApplicationRecord
       end
 
       add_errors_for_existing_purchase(already)
+      return if errors.present?
+
+      not_double_charged_while_payment_settling(recipient_email)
+    end
+
+    # Blocks a repeat purchase while an earlier attempt's payment is still settling.
+    #
+    # The time-boxed check above assumes payments resolve within minutes, which is true for
+    # cards but not for delayed-notification methods like ACH bank debits: those stay
+    # `in_progress` for several business days while the debit clears, leaving a window where
+    # the same buyer can accidentally pay for the same product twice.
+    #
+    # We only want to block attempts whose payment was actually confirmed and is now settling —
+    # not attempts the buyer started and walked away from. The differentiator is
+    # `stripe_status`: it is only ever written once Stripe acknowledges a real payment
+    # (the checkout return page sets it to "processing", and every subsequent Stripe webhook
+    # updates it), so an abandoned attempt keeps it nil until FailAbandonedPurchaseWorker
+    # fails the purchase ~15 minutes in. That means a buyer who abandoned checkout can always
+    # come back and buy, while a buyer whose bank debit is mid-flight is told to wait.
+    def not_double_charged_while_payment_settling(recipient_email)
+      settling = self.class.in_progress.where(
+        email: recipient_email,
+        link_id: link.id
+      ).where.not(stripe_status: nil)
+
+      settling = settling.where("purchases.id != ?", id) if id
+      settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
+
+      if variant_attributes.present?
+        settling = settling.select do |purchase|
+          purchase.variant_attributes.sort == variant_attributes.sort
+        end
+      end
+
+      if settling.any?
+        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+      end
     end
 
     def cancel_parallel_charge_intents

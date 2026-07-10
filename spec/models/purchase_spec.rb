@@ -2556,6 +2556,60 @@ describe Purchase, :vcr do
       end
     end
 
+    context "when an earlier purchase's payment is still settling" do
+      # A delayed-notification payment (like an ACH bank debit) leaves the purchase
+      # in_progress for days with stripe_status set once the processor confirms it.
+      it "disallows a repeat purchase while a confirmed payment is settling, even outside the recent-purchase window" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."]
+      end
+
+      it "disallows the repeat purchase from a different IP address" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: generate(:ip), created_at: Time.current)
+        expect(purchase2).to_not be_valid
+      end
+
+      it "allows a repeat purchase when the earlier attempt was abandoned before payment confirmation" do
+        # An abandoned attempt never gets a stripe_status; the buyer should be able to try again.
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: nil, created_at: 1.hour.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase once the earlier attempt has failed" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "failed", stripe_status: "payment_intent.payment_failed", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a purchase from a different buyer email" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "alice@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase of a different variant" do
+        product = create(:product)
+        category = create(:variant_category, link: product)
+        variant_a = create(:variant, variant_category: category)
+        variant_b = create(:variant, variant_category: category)
+        settling = create(:purchase, link: product, seller: product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                                     purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        settling.variant_attributes << variant_a
+        purchase2 = build(:purchase, link: product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        purchase2.variant_attributes << variant_b
+        expect(purchase2).to be_valid
+      end
+    end
+
     context "purchasing physical products" do
       let(:product) { create(:physical_product) }
 
