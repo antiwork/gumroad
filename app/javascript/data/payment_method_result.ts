@@ -43,6 +43,9 @@ export type NewPaymentElementSelectedPaymentMethod = {
   state: string;
   city: string;
   address: string;
+  // Whether the buyer paid with a wallet (Apple Pay / Google Pay) inside the Payment Element.
+  // Wallet submissions keep the wallet's own billing details instead of the checkout form's.
+  walletSelected: boolean;
 };
 export type NewPayPalBraintreeSelectedPaymentMethod = {
   type: "paypal-braintree";
@@ -208,6 +211,7 @@ export async function getPaymentMethodResult(
         state: selected.state,
         city: selected.city,
         address: selected.address,
+        walletSelected: selected.walletSelected,
       });
       if (paymentMethodData.status === "success") {
         return {

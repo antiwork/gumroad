@@ -82,6 +82,7 @@ const selectedPaymentMethod = (): NewPaymentElementSelectedPaymentMethod => ({
   state: "NY",
   city: "New York",
   address: "123 Main St",
+  walletSelected: false,
 });
 
 describe("getReusablePaymentMethodResult", () => {
@@ -117,6 +118,7 @@ describe("getReusablePaymentMethodResult", () => {
       state: "NY",
       city: "New York",
       address: "123 Main St",
+      walletSelected: false,
     });
     expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams });
     expect(confirmCardIfNeeded).toHaveBeenCalledWith({ cardParams: reusableCardParams, requiresCardSetup: false });

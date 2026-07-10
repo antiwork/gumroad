@@ -25,6 +25,7 @@ const cardData = (stripe: Stripe, elements: StripeElements): PaymentElementCardD
   state: "NY",
   city: "New York",
   address: "1 Test St",
+  walletSelected: false,
 });
 
 const submitOk = () => elementsWith(vi.fn().mockResolvedValue({ error: undefined }));

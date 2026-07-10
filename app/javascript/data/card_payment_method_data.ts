@@ -52,7 +52,19 @@ export type PaymentElementCardData = {
   state: string | null;
   city: string | null;
   address: string | null;
+  // True when the buyer picked Apple Pay / Google Pay inside the Payment Element (see
+  // isWalletPaymentElementType). Wallet payments carry their own verified billing details from
+  // the wallet sheet, so tokenization must NOT overwrite them with the checkout form's values.
+  walletSelected: boolean;
 };
+
+// Payment-method types the Payment Element reports (via its change event's `value.type`) when
+// the buyer selects a wallet row instead of the card form. Detection happens on the change
+// event — i.e. before tokenization — because the billing-details decision has to be made when
+// calling createPaymentMethod/createConfirmationToken; once the PaymentMethod exists with
+// overridden billing details there is no way to un-clobber the wallet's own values.
+const WALLET_PAYMENT_ELEMENT_TYPES = ["apple_pay", "google_pay"];
+export const isWalletPaymentElementType = (type: string) => WALLET_PAYMENT_ELEMENT_TYPES.includes(type);
 
 type PaymentElementBillingDetailsData = Pick<
   PaymentElementCardData,
@@ -81,11 +93,20 @@ export const preparePaymentElementPaymentMethodData = async (
     return { status: "error", stripe_error: submitResult.error };
   }
 
+  // The Payment Element mounts with every billingDetails field set to "never" (checkout collects
+  // them itself), which normally REQUIRES us to supply billing_details here. Wallet submissions
+  // are the exception: the wallet sheet collects the buyer's verified billing details itself and
+  // Stripe attaches them to the PaymentMethod, so we must not clobber them with the checkout
+  // form's values (the form may hold a stale/geo-guessed country the wallet buyer never saw).
   const paymentMethodResult = await cardData.stripe.createPaymentMethod({
     elements: cardData.elements,
-    params: {
-      billing_details: paymentElementBillingDetails(cardData),
-    },
+    ...(cardData.walletSelected
+      ? {}
+      : {
+          params: {
+            billing_details: paymentElementBillingDetails(cardData),
+          },
+        }),
   });
 
   if (paymentMethodResult.error) {
@@ -108,9 +129,14 @@ export const createPaymentElementConfirmationToken = async (
     return { status: "error", stripe_error: submitResult.error };
   }
 
+  // Same wallet exception as preparePaymentElementPaymentMethodData above: for wallet
+  // submissions the wallet sheet supplies the billing details, so the checkout-form override
+  // must be skipped or it would overwrite them on the resulting PaymentMethod.
   const result = await cardData.stripe.createConfirmationToken({
     elements: cardData.elements,
-    params: { payment_method_data: { billing_details: paymentElementBillingDetails(cardData) } },
+    ...(cardData.walletSelected
+      ? {}
+      : { params: { payment_method_data: { billing_details: paymentElementBillingDetails(cardData) } } }),
   });
 
   if (result.error) {

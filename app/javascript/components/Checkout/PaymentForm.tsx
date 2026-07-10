@@ -17,6 +17,7 @@ import * as React from "react";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import {
   createPaymentElementConfirmationToken,
+  isWalletPaymentElementType,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 import {
@@ -692,6 +693,14 @@ const CreditCardContent = ({
   }, [dispatch, willSaveCard]);
 
   const [cardError, setCardError] = React.useState(false);
+  // The Payment Element's change event reports which payment-method row the buyer selected
+  // (`value.type` — "card", "apple_pay", "google_pay", ...). We remember it in a ref so that at
+  // submit time tokenization knows whether a wallet is paying — wallet submissions must keep the
+  // wallet sheet's own billing details instead of the checkout form's (see
+  // card_payment_method_data.ts). A ref (not state) because it's only read inside the submit
+  // effect and shouldn't cause re-renders. Defaults to "card": with wallets disabled the element
+  // only ever shows the card form.
+  const paymentElementTypeRef = React.useRef("card");
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
@@ -746,6 +755,7 @@ const CreditCardContent = ({
           state: state.state,
           city: state.city,
           address: state.address,
+          walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
         });
         if (tokenResult.status === "error") {
           setCardError(true);
@@ -782,6 +792,7 @@ const CreditCardContent = ({
               state: state.state,
               city: state.city,
               address: state.address,
+              walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
             }
           : {
               type: "card",
@@ -835,6 +846,7 @@ const CreditCardContent = ({
             onReady={handlePaymentElementReady}
             invalid={cardError}
             onChange={(evt) => {
+              paymentElementTypeRef.current = evt.value.type;
               if (evt.complete) setCardError(false);
             }}
           />
