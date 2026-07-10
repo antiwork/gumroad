@@ -146,10 +146,10 @@ describe UpdateUserComplianceInfo do
 
       it "rejects an address submission without a city" do
         params = ActionController::Parameters.new(
-          street_address_kanji: "文京区千駄木3丁目",
-          street_address_kana: "ブンキョウクセンダギ3チョウメ",
-          building_number: "1-1",
-          building_number_kana: "1-1",
+          street_address_kanji: "文京区千駄木4丁目",
+          street_address_kana: "ブンキョウクセンダギ4チョウメ",
+          building_number: "2-2",
+          building_number_kana: "2-2",
         )
 
         expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
@@ -158,6 +158,19 @@ describe UpdateUserComplianceInfo do
         expect do
           result = described_class.new(compliance_params: params, user: japan_user).process
         end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
+      end
+
+      it "rejects a submission that fills in only one of the city pair" do
+        # A direct request (bypassing the form) that sets `city` without `city_kana` would
+        # otherwise sync a half-populated address to Stripe.
+        params = ActionController::Parameters.new(city: "文京区")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
 
         expect(result[:success]).to be false
         expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
@@ -184,8 +197,29 @@ describe UpdateUserComplianceInfo do
         expect(new_compliance_info.street_address_kanji).to eq("千駄木3丁目")
       end
 
-      it "accepts a non-address update on a legacy record that has no city" do
-        params = ActionController::Parameters.new(phone: "+81312345678")
+      it "accepts a full settings-form save that changes only the phone on a legacy record with no city" do
+        # The Payments settings form echoes back every stored compliance field on save, so a
+        # phone-only change still arrives with the whole stored (city-less) Japanese address.
+        # That must not trip the city requirement — the seller didn't touch their address.
+        params = ActionController::Parameters.new(
+          is_business: false,
+          first_name: japan_compliance_info.first_name,
+          last_name: japan_compliance_info.last_name,
+          street_address: japan_compliance_info.street_address,
+          building_number: "1-1",
+          building_number_kana: "1-1",
+          street_address_kanji: "文京区千駄木3丁目",
+          street_address_kana: "ブンキョウクセンダギ3チョウメ",
+          city: "",
+          city_kana: "",
+          state: "東京都",
+          zip_code: "1130022",
+          country: "JP",
+          dob_month: japan_compliance_info.birthday.month.to_s,
+          dob_day: japan_compliance_info.birthday.day.to_s,
+          dob_year: japan_compliance_info.birthday.year.to_s,
+          phone: "+81312345678",
+        )
 
         allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
 

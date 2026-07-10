@@ -9,13 +9,15 @@ class UpdateUserComplianceInfo
     street_address: [:country],
     business_street_address: [:business_country, :country],
   }.freeze
-  # The fields the Japanese address form submits alongside the city. If any of these arrive in a
-  # submission, the seller is (re)entering their Japanese address, so the city fields must be
-  # present too. Older records can still update unrelated fields (phone, tax id, ...) without a
-  # city — many legacy Japanese records were created before the form collected one, and blocking
-  # every update until they re-enter their address would strand them.
-  JAPAN_INDIVIDUAL_ADDRESS_FIELDS = %i[building_number building_number_kana street_address_kanji street_address_kana].freeze
-  JAPAN_BUSINESS_ADDRESS_FIELDS = %i[business_building_number business_building_number_kana business_street_address_kanji business_street_address_kana].freeze
+  # The fields that make up a Japanese address, including the city pair. A submission is treated
+  # as (re)entering the Japanese address only when one of these fields actually CHANGES compared
+  # to the stored record — the Payments settings form echoes back every stored field on save, so
+  # a value merely being present does not mean the seller touched their address. Older records
+  # can still update unrelated fields (phone, payout frequency, ...) without a city — many legacy
+  # Japanese records were created before the form collected one, and blocking every save until
+  # they re-enter their address would strand them.
+  JAPAN_INDIVIDUAL_ADDRESS_FIELDS = %i[building_number building_number_kana street_address_kanji street_address_kana city city_kana].freeze
+  JAPAN_BUSINESS_ADDRESS_FIELDS = %i[business_building_number business_building_number_kana business_street_address_kanji business_street_address_kana business_city business_city_kana].freeze
 
   attr_reader :compliance_params, :user
 
@@ -300,9 +302,10 @@ class UpdateUserComplianceInfo
     # its own field. The onboarding form collects it, but a page loaded before the form gained the
     # city fields (or any client that skips the form) can still submit a Japanese address without
     # one — and that address shows the city duplicated inside the street line on Stripe's side.
-    # So when a submission carries Japanese address fields, require the matching city fields too.
-    # Submissions that don't touch the address (phone, tax id, ...) are left alone so legacy
-    # records without a city can still update unrelated fields.
+    # So when a submission actually changes the Japanese address (see
+    # japan_address_change_detected?), require the matching city fields too. Saves that don't
+    # touch the address are left alone so legacy records without a city can still update
+    # unrelated fields.
     def japan_city_error_message
       if japan_address_submitted_for?(:individual)
         city = compliance_params[:city].presence || current_compliance_info.city.presence
@@ -322,12 +325,26 @@ class UpdateUserComplianceInfo
     def japan_address_submitted_for?(entity)
       if entity == :individual
         return false unless effective_country_code_for(:street_address) == Compliance::Countries::JPN.alpha2
-        JAPAN_INDIVIDUAL_ADDRESS_FIELDS.any? { |field| compliance_params[field].present? }
+        japan_address_change_detected?(JAPAN_INDIVIDUAL_ADDRESS_FIELDS, :street_address)
       else
         return false unless effective_is_business?
         return false unless effective_country_code_for(:business_street_address) == Compliance::Countries::JPN.alpha2
-        JAPAN_BUSINESS_ADDRESS_FIELDS.any? { |field| compliance_params[field].present? }
+        japan_address_change_detected?(JAPAN_BUSINESS_ADDRESS_FIELDS, :business_street_address)
       end
+    end
+
+    # The Payments settings form loads every stored compliance field and submits them all back on
+    # save, so a Japanese address field merely being present in the params does not mean the
+    # seller touched their address. Treat the address as (re)submitted only when a submitted field
+    # actually differs from what's stored, or when the validation context changed (the country
+    # switched to Japan, or the account switched between individual and business) while a Japanese
+    # address is on the record — in both cases the address is about to be synced to Stripe under
+    # rules it wasn't checked against before.
+    def japan_address_change_detected?(fields, address_field)
+      return true if fields.any? { |field| address_changed?(field) }
+
+      validation_context_changed_for?(address_field) &&
+        fields.any? { |field| compliance_params[field].present? || current_compliance_info.public_send(field).present? }
     end
 
     def po_box_error_message
