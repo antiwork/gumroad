@@ -629,6 +629,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect(described_class.send(:normalize_postal_code, "L-9767", "LU")).to eq("9767")
           expect(described_class.send(:normalize_postal_code, "l-9767", "LU")).to eq("9767")
           expect(described_class.send(:normalize_postal_code, "L 9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "L9767", "LU")).to eq("9767")
           expect(described_class.send(:normalize_postal_code, " L-9767 ", "LU")).to eq("9767")
           expect(described_class.send(:normalize_postal_code, "9767", "LU")).to eq("9767")
           # Not the L-prefix shape: pass through so Stripe can report its own validation error.
