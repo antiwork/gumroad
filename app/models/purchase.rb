@@ -600,6 +600,14 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
+  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
+  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
+  # is only ever written once Stripe acknowledges a real payment (the checkout return page
+  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
+  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
+  # purchase must still be in_progress — once it reaches a terminal state (failed,
+  # successful), stripe_status remains set but the payment is no longer in flight.
+  scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
   scope :not_successful, -> { without_purchase_state(:successful) }
@@ -4245,18 +4253,15 @@ class Purchase < ApplicationRecord
     # `in_progress` for several business days while the debit clears, leaving a window where
     # the same buyer can accidentally pay for the same product twice.
     #
-    # We only want to block attempts whose payment was actually confirmed and is now settling —
-    # not attempts the buyer started and walked away from. The differentiator is
-    # `stripe_status`: it is only ever written once Stripe acknowledges a real payment
-    # (the checkout return page sets it to "processing", and every subsequent Stripe webhook
-    # updates it), so an abandoned attempt keeps it nil until FailAbandonedPurchaseWorker
-    # fails the purchase ~15 minutes in. That means a buyer who abandoned checkout can always
-    # come back and buy, while a buyer whose bank debit is mid-flight is told to wait.
+    # The `payment_settling` scope only matches attempts whose payment was actually confirmed
+    # and is now clearing — not attempts the buyer started and walked away from (see the scope
+    # definition for how the two are told apart). That means a buyer who abandoned checkout
+    # can always come back and buy, while a buyer whose bank debit is mid-flight is told to wait.
     def not_double_charged_while_payment_settling(recipient_email)
-      settling = self.class.in_progress.where(
+      settling = self.class.payment_settling.where(
         email: recipient_email,
         link_id: link.id
-      ).where.not(stripe_status: nil)
+      )
 
       settling = settling.where("purchases.id != ?", id) if id
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase

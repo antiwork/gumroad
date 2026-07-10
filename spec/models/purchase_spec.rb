@@ -43,6 +43,25 @@ describe Purchase, :vcr do
       end
     end
 
+    describe "payment_settling" do
+      it "returns in-progress purchases whose payment the processor has confirmed" do
+        settling = create(:purchase, purchase_state: "in_progress", stripe_status: "processing")
+        expect(Purchase.payment_settling).to include settling
+      end
+
+      it "does not return abandoned attempts, which never receive a processor confirmation" do
+        abandoned = create(:purchase, purchase_state: "in_progress", stripe_status: nil)
+        expect(Purchase.payment_settling).to_not include abandoned
+      end
+
+      it "does not return purchases that reached a terminal state, even though stripe_status remains set" do
+        failed = create(:purchase, purchase_state: "failed", stripe_status: "payment_intent.payment_failed")
+        successful = create(:purchase, purchase_state: "successful", stripe_status: "charge.succeeded")
+        expect(Purchase.payment_settling).to_not include failed
+        expect(Purchase.payment_settling).to_not include successful
+      end
+    end
+
     describe "successful" do
       before do
         @successful_purchase = create(:purchase, purchase_state: "successful")
