@@ -496,6 +496,12 @@ describe Checkout::StripePaymentPresenter do
       seller = create(:user, check_merchant_account_is_linked: true)
       product = create(:product, user: seller, price_cents: 1234)
       connect_account = create(:merchant_account_stripe_connect, user: seller)
+      # A capability snapshot must exist for the account to offer anything beyond card
+      # (an uncached connect account resolves card-only while the refresh worker runs).
+      connect_account.update!(stripe_capabilities_snapshot: {
+                                "capabilities" => { "link_payments" => "active" },
+                                "refreshed_at" => Time.current.iso8601,
+                              })
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
 

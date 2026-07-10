@@ -162,10 +162,16 @@ describe Checkout::PaymentMethodResolver do
       end
 
       context "when the account has no availability snapshot yet" do
-        it "fails safe to card and Link for a US buyer and enqueues a background refresh" do
+        it "fails safe to card only for a US buyer and enqueues a background refresh — even Link waits for the snapshot, since link_payments is absent on many connected accounts and listing it fails the intent create" do
           expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
 
-          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card])
+        end
+
+        it "resolves card only for a non-US buyer too" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card])
         end
       end
 
@@ -234,6 +240,11 @@ describe Checkout::PaymentMethodResolver do
       end
 
       it "drops US-locked methods for a non-US buyer while keeping the connected-account scope" do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+
         resolution = resolve(buyer_country: "GB")
 
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)

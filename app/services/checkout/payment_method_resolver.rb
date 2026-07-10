@@ -44,13 +44,10 @@ class Checkout::PaymentMethodResolver
   # Never gated by the per-account capability check on direct-charge sellers. Card processing is
   # the baseline capability of any chargeable Stripe account — an account that truly can't take
   # cards is unusable no matter what we render, and an empty method list would just break the
-  # Payment Element mount.
+  # Payment Element mount. Everything else — including Link, which is absent or inactive on a
+  # meaningful share of connected accounts and makes Stripe reject the intent create when listed
+  # (verified live, gumroad-private#1026) — waits for the account's capability snapshot.
   ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES = %w[card].freeze
-  # What a direct-charge checkout offers (beyond card) while the account's capability snapshot
-  # hasn't been fetched yet: Link only — the pre-capability-cache status quo, safe because Link
-  # auto-enables with the Payment Element on effectively every chargeable account. The US-locked
-  # methods stay off until the snapshot confirms them (gumroad-private#1026's failure mode).
-  CACHE_MISS_ASSUMED_PAYMENT_METHOD_TYPES = [LINK_PAYMENT_METHOD_TYPE].freeze
   US_ALPHA2 = "US"
   # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
   # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
@@ -171,9 +168,13 @@ class Checkout::PaymentMethodResolver
     # two carve-outs. Card is always kept: card processing is the baseline capability of any
     # chargeable Stripe account, and an account that truly can't take cards is unusable regardless
     # of what we render — an empty method list would just break the Payment Element mount. And when
-    # no snapshot exists yet, fall back to card + Link (the pre-capability-cache status quo) and
-    # enqueue a background refresh so the next checkout has the real answer — checkout must never
-    # block on, or fail with, a live Stripe API call.
+    # no snapshot exists yet, fall back to card ONLY and enqueue a background refresh so the next
+    # checkout has the real answer — checkout must never block on, or fail with, a live Stripe API
+    # call. Link is deliberately NOT assumed on a miss: link_payments is absent/inactive on a
+    # meaningful share of connected accounts (a live 40-account sample found it absent on half),
+    # and listing it on such an account makes Stripe reject the intent create — failing the whole
+    # checkout, the exact gumroad-private#1026 failure mode. One card-only checkout per uncached
+    # seller beats gambling their (often first) sale on it.
     def account_supported_methods(launched)
       return launched unless direct_charge_seller?
 
@@ -182,7 +183,7 @@ class Checkout::PaymentMethodResolver
       available = StripeConnectPaymentMethodAvailabilityService.new(connect_account).available_payment_method_types(gated)
       if available.nil?
         RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(connect_account.id)
-        return ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES + CACHE_MISS_ASSUMED_PAYMENT_METHOD_TYPES
+        return ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES
       end
 
       ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES + available
