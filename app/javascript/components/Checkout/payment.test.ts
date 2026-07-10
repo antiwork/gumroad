@@ -25,6 +25,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -38,6 +39,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
@@ -52,6 +54,7 @@ const cardElementConfig: CheckoutPaymentConfig = {
   fallback_reason: "stripe_payment_element_flag_disabled",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: null,
 };
 
@@ -60,6 +63,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",

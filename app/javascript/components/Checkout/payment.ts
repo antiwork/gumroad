@@ -65,12 +65,17 @@ export type PaymentElementClientConfirmConfig = {
 // rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
 // Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
 // to the wallet button regardless of which card integration is active.
+// `payment_element_wallets` is another per-seller rollout flag: when true, the Payment Element
+// renders Apple Pay/Google Pay natively and the separate Payment Request Button is not mounted
+// for that cart (antiwork/gumroad#5768). It is always false on the card_element fallback lane,
+// which has no Payment Element to render wallets in.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: null;
     }
   | {
@@ -78,6 +83,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
@@ -85,6 +91,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -638,6 +645,7 @@ export function createReducer(initial: {
         fallback_reason: "not_checkout",
         disable_wallets: false,
         request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
         elements_options: null,
       },
       paymentMethod: "card",
