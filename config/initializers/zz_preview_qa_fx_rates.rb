@@ -28,36 +28,3 @@ Rails.application.config.after_initialize do
     Rails.logger.warn("[preview-qa] FX rate seed skipped: #{e.class} #{e.message}")
   end
 end
-
-# TEMP QA debug endpoint (test-mode only): tells apart a GeoIP miss from a missing FX
-# rate when the buyer-local-currency display falls back to USD on the preview.
-# GET /qa/preview_debug returns what the display chain sees for the requesting IP.
-class PreviewQaDebugMiddleware
-  def initialize(app)
-    @app = app
-  end
-
-  def call(env)
-    req = Rack::Request.new(env)
-    return @app.call(env) unless req.path == "/qa/preview_debug" && Stripe.api_key.to_s.start_with?("sk_test_")
-
-    helper = Class.new { include CurrencyHelper }.new
-    ip = req.ip
-    geo = begin
-      GeoIp.lookup(ip)
-    rescue StandardError => e
-      { error: "#{e.class}: #{e.message}" }
-    end
-    body = {
-      remote_ip: ip,
-      cf_connecting_ip: env["HTTP_CF_CONNECTING_IP"],
-      x_forwarded_for: env["HTTP_X_FORWARDED_FOR"],
-      geo_country_code: geo.respond_to?(:country_code) ? geo.country_code : geo,
-      buyer_currency_for_ip: helper.buyer_currency_for_ip(ip),
-      cached_cad_rate: helper.cached_usd_rate("cad")&.to_s,
-      cached_eur_rate: helper.cached_usd_rate("eur")&.to_s,
-    }
-    [200, { "Content-Type" => "application/json" }, [body.to_json]]
-  end
-end
-Rails.application.config.middleware.insert_before(0, PreviewQaDebugMiddleware) if Rails.env.staging? || Rails.env.development?
