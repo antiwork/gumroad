@@ -77,6 +77,13 @@ describe Api::V2::DirectUploadsController do
         expect(blob.metadata).not_to include("analyzed", "width", "height", "duration")
       end
 
+      it "stamps the uploader's user id into the blob metadata" do
+        post @action, params: @params
+
+        expect(response).to be_successful
+        expect(ActiveStorage::Blob.last.metadata["uploaded_by_user_id"]).to eq(@user.id)
+      end
+
       it "rejects missing content type before creating a blob" do
         expect do
           post @action, params: @params.deep_dup.tap { |params| params[:blob].delete(:content_type) }

@@ -18,7 +18,13 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     return error_400("byte_size exceeds the #{MAX_FILE_SIZE_GB} GB maximum") if blob_args[:byte_size].to_i > MAX_FILE_SIZE
     return error_400("content_type must be JPEG, PNG, GIF, or video.") unless allowed_content_type?(blob_args[:content_type])
 
-    blob = ActiveStorage::Blob.create_before_direct_upload!(**blob_args)
+    # Record who reserved this blob. A signed blob id alone doesn't identify the uploader, so
+    # consumers that accept one (e.g. CreatePublicMediaService for the media library) use this
+    # stamp to make sure a seller can only attach blobs they uploaded themselves.
+    blob = ActiveStorage::Blob.create_before_direct_upload!(
+      **blob_args,
+      metadata: { uploaded_by_user_id: current_resource_owner.id },
+    )
 
     render json: direct_upload_json(blob)
   rescue ActionController::ParameterMissing => e

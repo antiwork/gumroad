@@ -9,11 +9,12 @@ describe CreatePublicMediaService do
     Rails.root.join("spec", "support", "fixtures", name)
   end
 
-  def uploaded_blob(fixture_name, content_type)
+  def uploaded_blob(fixture_name, content_type, uploaded_by: seller)
     ActiveStorage::Blob.create_and_upload!(
       io: Rack::Test::UploadedFile.new(fixture_path(fixture_name), content_type),
       filename: fixture_name,
       content_type:,
+      metadata: uploaded_by ? { uploaded_by_user_id: uploaded_by.id } : {},
     )
   end
 
@@ -116,7 +117,7 @@ describe CreatePublicMediaService do
       expect(PublicFile.count).to eq(0)
     end
 
-    it "rejects an image larger than the image cap" do
+    it "rejects an image larger than the image cap while streaming, before anything is stored" do
       url = "https://example.com/big.png"
       stub_remote_file(url, "smilie.png", "image/png")
       stub_const("#{described_class}::MAX_IMAGE_BYTES", 1.kilobyte)
@@ -125,6 +126,9 @@ describe CreatePublicMediaService do
 
       expect(result).not_to be_success
       expect(result.error_message).to match(/too large/i)
+      # The image cap must abort the download itself — the file should never reach public
+      # storage, not get uploaded and purged afterwards.
+      expect(ActiveStorage::Blob.count).to eq(0)
     end
 
     it "reports an invalid url instead of raising when the SSRF guard rejects the host" do
@@ -170,6 +174,40 @@ describe CreatePublicMediaService do
 
       expect(result).not_to be_success
       expect(result.error_message).to match(/invalid or expired/i)
+    end
+
+    it "rejects a blob uploaded by another seller, with the same message as an invalid id" do
+      other_seller = create(:user)
+      blob = uploaded_blob("smilie.png", "image/png", uploaded_by: other_seller)
+
+      result = described_class.new(seller:, signed_blob_id: blob.signed_id).process
+
+      expect(result).not_to be_success
+      expect(result.error_message).to match(/invalid or expired/i)
+      expect(PublicFile.count).to eq(0)
+      # The victim's blob must not be purged just because someone probed with its signed id.
+      expect(blob.reload).to be_persisted
+    end
+
+    it "rejects a blob with no uploader stamp" do
+      blob = uploaded_blob("smilie.png", "image/png", uploaded_by: nil)
+
+      result = described_class.new(seller:, signed_blob_id: blob.signed_id).process
+
+      expect(result).not_to be_success
+      expect(result.error_message).to match(/invalid or expired/i)
+    end
+
+    it "rejects a blob that is already attached to another record" do
+      blob = uploaded_blob("smilie.png", "image/png")
+      existing = create(:public_file, seller:, resource: seller)
+      existing.file.attach(blob.signed_id)
+
+      result = described_class.new(seller:, signed_blob_id: blob.signed_id).process
+
+      expect(result).not_to be_success
+      expect(result.error_message).to match(/invalid or expired/i)
+      expect(blob.reload).to be_persisted
     end
   end
 

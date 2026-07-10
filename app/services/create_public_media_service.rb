@@ -50,7 +50,12 @@ class CreatePublicMediaService
 
   MODERATION_NOUN = "file"
 
+  # How many leading bytes we buffer from a download before sniffing the content type mid-stream.
+  # Magic bytes for every format we accept live in the first few hundred bytes, so 512 is plenty.
+  TYPE_SNIFF_BYTES = 512
+
   RemoteFileTooLarge = Class.new(StandardError)
+  BlobNotEligible = Class.new(StandardError)
 
   # @param seller [User] the store owner the file will belong to
   # @param url [String, nil] a public URL to download the file from (SSRF-guarded)
@@ -103,7 +108,9 @@ class CreatePublicMediaService
     failure("Please provide a valid public URL.")
   rescue RemoteFileTooLarge
     failure("That file is too large. Images can be up to #{MAX_IMAGE_BYTES / 1.megabyte} MB and audio/video up to #{MAX_AUDIO_VIDEO_BYTES / 1.megabyte} MB.")
-  rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound, BlobNotEligible
+    # BlobNotEligible gets the same reply as a bad signature on purpose: a caller probing with
+    # someone else's signed id shouldn't learn that the blob exists but belongs to another account.
     failure("The signed_blob_id is invalid or expired.")
   rescue ActiveStorage::FileNotFoundError, *INTERNET_EXCEPTIONS
     failure("We couldn't download that file, please check the URL and try again.")
@@ -132,6 +139,16 @@ class CreatePublicMediaService
       # find_signed! raises InvalidSignature/RecordNotFound for tampered or expired ids — both are
       # rescued above and reported as an invalid signed_blob_id.
       blob = ActiveStorage::Blob.find_signed!(signed_blob_id)
+      # A signed blob id proves the id wasn't tampered with — it says nothing about WHO uploaded
+      # the blob. Without an ownership check, anyone holding another seller's signed id could
+      # attach that seller's upload to their own account. The v2 direct-upload endpoint stamps the
+      # uploader's user id into the blob's metadata; only accept blobs stamped for this seller.
+      # Blobs already attached to another record are also refused — this path is for ingesting a
+      # fresh upload, not for aliasing files that already belong somewhere else.
+      uploaded_by = blob.metadata.with_indifferent_access[:uploaded_by_user_id]
+      raise BlobNotEligible unless uploaded_by.present? && uploaded_by.to_s == seller.id.to_s
+      raise BlobNotEligible if blob.attachments.exists?
+
       # Direct-upload blobs carry the client-declared content type; identify from the actual bytes
       # so the allowlist below judges what the file IS, not what the uploader claimed.
       blob.identify unless blob.identified?
@@ -141,7 +158,11 @@ class CreatePublicMediaService
     # Download the remote file to a tempfile with SSRF protection and a hard size ceiling, then
     # store it as a blob. The size is enforced while streaming (both via the Content-Length header
     # and by counting actual bytes) so a huge file is cut off mid-download instead of filling disk.
-    # Mirrors the hardened fetch the product thumbnail's URL path already uses (Thumbnail#url=).
+    # The per-type limit is applied mid-stream too: once enough leading bytes have arrived to sniff
+    # the content type, an image download is held to the much smaller image cap — otherwise a
+    # 10–100 MB image would be fully downloaded (and uploaded to public storage) only to be
+    # rejected by the size check afterwards. Mirrors the hardened fetch the product thumbnail's
+    # URL path already uses (Thumbnail#url=).
     def download_blob_from_url
       normalized_url = normalize_url(url)
       uri = URI.parse(normalized_url)
@@ -155,9 +176,21 @@ class CreatePublicMediaService
 
           write_file = http_response.is_a?(Net::HTTPSuccess)
           received_bytes = 0
+          sniff_buffer = "".b
+          # Until the type is sniffed we only know the overall ceiling; after sniffing, images are
+          # held to the smaller image cap so an oversized image is cut off mid-transfer.
+          byte_limit = MAX_AUDIO_VIDEO_BYTES
           http_response.read_body do |chunk|
             received_bytes += chunk.bytesize
-            raise RemoteFileTooLarge if received_bytes > MAX_AUDIO_VIDEO_BYTES
+            if write_file && sniff_buffer && sniff_buffer.bytesize < TYPE_SNIFF_BYTES
+              sniff_buffer << chunk
+              if sniff_buffer.bytesize >= TYPE_SNIFF_BYTES
+                sniffed = Marcel::MimeType.for(StringIO.new(sniff_buffer), name: filename_from(uri))
+                byte_limit = MAX_IMAGE_BYTES if sniffed.to_s.start_with?("image/")
+                sniff_buffer = nil
+              end
+            end
+            raise RemoteFileTooLarge if received_bytes > byte_limit
 
             tempfile.write(chunk) if write_file
           end
