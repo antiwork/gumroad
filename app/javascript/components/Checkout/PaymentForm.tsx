@@ -1370,7 +1370,13 @@ const PaymentMethodsSection = ({
   isTestPurchase: boolean;
 }) => {
   const [state] = useState();
-  const { canPay, isGooglePay } = useStripePaymentRequest(state.checkoutPayment.disable_wallets);
+  // The Payment Request Button is disabled when the Payment Element renders wallets itself
+  // (payment_element_wallets — see antiwork/gumroad#5768): showing both would give the buyer two
+  // Apple Pay buttons. Carts on the CardElement fallback lane never mount a Payment Element, and
+  // the presenter always sends payment_element_wallets: false for them, so they keep the button.
+  const { canPay, isGooglePay } = useStripePaymentRequest(
+    state.checkoutPayment.disable_wallets || state.checkoutPayment.payment_element_wallets,
+  );
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
 
