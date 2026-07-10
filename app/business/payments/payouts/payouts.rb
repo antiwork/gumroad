@@ -81,16 +81,33 @@ class Payouts
   private_class_method :add_below_minimum_payout_note
 
   def self.create_payments_for_balances_up_to_date(date, processor_type)
-    users = User.holding_balance
+    # Walk the holding-balance cohort in bounded id slices, enqueueing each slice's
+    # payments as we go — the same shape as the bank-account-type path below. The old
+    # `User.holding_balance` relation evaluated the whole ~200k-user cohort in one
+    # `users × balances` GROUP BY and then iterated every user before enqueueing a
+    # single payment. On Fridays (PayPal + Stripe Connect, no bank-account-type
+    # filter) that single pass ran for ~110 minutes; any worker restart mid-pass
+    # (deploys, instance recycling) threw ALL progress away, and sidekiq-pro's
+    # orphan recovery restarted it from the top until the job was buried in the
+    # dead set with the whole cohort unpaid (gumroad-private#1021, 2026-07-10).
+    # Slicing makes progress durable: payments for completed slices are already
+    # enqueued, so a killed pass only re-walks users whose payments were not yet
+    # created — and Payouts.create_payment no-ops once a user's balances leave
+    # `unpaid`, so overlap is safe.
+    holding_balance_user_ids = self.holding_balance_user_ids
 
-    if processor_type == PayoutProcessorType::STRIPE
-      users = users.joins(:merchant_accounts)
-                   .where("merchant_accounts.deleted_at IS NULL")
-                   .where("merchant_accounts.charge_processor_id = ?", StripeChargeProcessor.charge_processor_id)
-                   .where("merchant_accounts.json_data->'$.meta.stripe_connect' = 'true'")
+    holding_balance_user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
+      users = User.where(id: user_ids_batch)
+
+      if processor_type == PayoutProcessorType::STRIPE
+        users = users.joins(:merchant_accounts)
+                     .where("merchant_accounts.deleted_at IS NULL")
+                     .where("merchant_accounts.charge_processor_id = ?", StripeChargeProcessor.charge_processor_id)
+                     .where("merchant_accounts.json_data->'$.meta.stripe_connect' = 'true'")
+      end
+
+      self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true)
     end
-
-    self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true)
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
