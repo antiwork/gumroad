@@ -334,7 +334,10 @@ describe Payouts do
       users = create_list(:user, 5, unpaid_balance_cents: 100)
 
       enqueued = []
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).exactly(3).times do |_date, _processor, slice_users, **|
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).exactly(3).times do |_date, _processor, slice_users, **kwargs|
+        # Each slice must be enqueued asynchronously; a synchronous call would
+        # reintroduce the long single pass this test exists to prevent.
+        expect(kwargs[:perform_async]).to eq(true)
         enqueued.concat(slice_users.to_a)
       end
 
