@@ -58,6 +58,7 @@ import {
   useState,
 } from "$app/components/Checkout/payment";
 import { PaymentElementController, PaymentElementInput } from "$app/components/Checkout/PaymentElementInput";
+import { getPaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
 import { applyWalletBillingAddressToCheckout } from "$app/components/Checkout/walletBillingAddress";
 import { Dropdown } from "$app/components/Dropdown";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -712,6 +713,38 @@ const CreditCardContent = ({
     usesPaymentElement && state.checkoutPayment.integration !== "card_element"
       ? state.checkoutPayment.elements_options
       : null;
+
+  // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
+  // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration
+  // the Payment Request Button path builds below (getApplePayOption in useStripePaymentRequest),
+  // via the same shared builder, so the two wallet surfaces can't drift. Applies to both element
+  // modes the server-confirm lane uses: "payment" (subscriptions — regular recurring billing) and
+  // "setup" (free trials / preorders — the builder emits the zero-amount trialBilling line there).
+  // The client-confirm lane never gets a declaration: Checkout::PaymentMethodResolver only routes
+  // one-time, non-recurring carts to it, so there is never a recurring agreement to declare.
+  //
+  // The builder computes the end date from "now", so it returns a fresh object every call; the
+  // useMemo below keys on the declaration's content (end-date excluded, same reasoning as the
+  // PRB's applePayRecurringDeclarationKey) so the options object keeps its identity between
+  // renders and react-stripe-js only pushes an element.update() when the declaration really
+  // changed — e.g. the cart flips between recurring-eligible and not, or the renewal price moves.
+  const paymentElementApplePayOption =
+    state.checkoutPayment.integration === "payment_element"
+      ? getPaymentElementApplePayOption({
+          products: state.products,
+          managementURL: Routes.library_url(),
+          requestApplePayMerchantTokens: state.checkoutPayment.request_apple_pay_merchant_tokens,
+          paymentElementWallets: state.checkoutPayment.payment_element_wallets,
+        })
+      : undefined;
+  const paymentElementApplePayOptionKey = JSON.stringify(paymentElementApplePayOption ?? null, (key, value: unknown) =>
+    key === "recurringPaymentEndDate" ? undefined : value,
+  );
+  const memoizedPaymentElementApplePayOption = React.useMemo(
+    () => paymentElementApplePayOption,
+    // Intentionally keyed on the serialized content instead of the object, see the comment above.
+    [paymentElementApplePayOptionKey],
+  );
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
     paymentElementRef.current = controller;
@@ -868,6 +901,7 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             elementsOptions={stripePaymentElementConfig}
             walletsEnabled={state.checkoutPayment.payment_element_wallets}
+            applePayOption={memoizedPaymentElementApplePayOption}
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}

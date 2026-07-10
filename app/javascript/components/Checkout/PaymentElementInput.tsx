@@ -16,6 +16,7 @@ import {
   type PaymentElementConfig,
   type PaymentElementClientConfirmConfig,
 } from "$app/components/Checkout/payment";
+import { type PaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -47,6 +48,7 @@ export const PaymentElementInput = ({
   amount,
   elementsOptions,
   walletsEnabled,
+  applePayOption,
   disabled,
   defaultEmail,
   defaultName,
@@ -59,6 +61,12 @@ export const PaymentElementInput = ({
   // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
   // Payment Element instead of via the separate Payment Request Button.
   walletsEnabled: boolean;
+  // Apple Pay recurring declaration (merchant-token rollout): describes the cart's recurring
+  // agreement on the Apple Pay sheet so Apple issues a device-independent merchant token. The
+  // caller derives it from cart state (see paymentElementApplePayOption.ts) and memoizes it on
+  // its content so option updates only reach the mounted element when the declaration actually
+  // changes. Undefined leaves the element's options untouched (flags off / client-confirm lane).
+  applePayOption?: PaymentElementApplePayOption | undefined;
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
@@ -103,6 +111,7 @@ export const PaymentElementInput = ({
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
             walletsEnabled={walletsEnabled}
+            applePayOption={applePayOption}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
             onReady={onReady}
@@ -124,6 +133,7 @@ const PaymentElementControllerInput = ({
   disabled,
   stripeLinkEnabled,
   walletsEnabled,
+  applePayOption,
   defaultEmail,
   defaultName,
   onReady,
@@ -134,6 +144,7 @@ const PaymentElementControllerInput = ({
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
   walletsEnabled: boolean;
+  applePayOption?: PaymentElementApplePayOption | undefined;
   defaultEmail: string;
   defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
@@ -189,6 +200,13 @@ const PaymentElementControllerInput = ({
           },
         },
         wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
+        // The recurring declaration attaches to the PaymentElement's own options (that's where
+        // Stripe's typings put `applePay`), not to the Elements provider. react-stripe-js diffs
+        // these options on every render and pushes real changes to the mounted element via
+        // element.update(), so cart edits that change the declaration update the sheet without a
+        // remount — and the provider's mode+currency key already remounts everything when the
+        // element switches between payment and setup mode.
+        ...(applePayOption ? { applePay: applePayOption } : {}),
       }}
       onReady={() => setReady(true)}
       onFocus={onTouched}
