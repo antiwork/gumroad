@@ -168,8 +168,13 @@ class Order::PreparePaymentIntentService
 
       purchases_to_charge.each do |purchase|
         purchase.errors.add(:base, GENERIC_CHARGE_ERROR) if purchase.errors.empty?
+        # MarkFailedService saves the purchase, and that save re-runs validations, which clears
+        # `purchase.errors` — so the message must be read before marking failed or the buyer gets
+        # a null error_message (surfaced as a generic "something went wrong") instead of the
+        # actionable validation message (e.g. the PPP card-country explanation, see #5784).
+        error_message = purchase.errors.first&.message
         Purchase::MarkFailedService.new(purchase).perform
-        responses[line_item_uid_for(purchase)] = error_response(purchase.errors.first&.message, purchase:)
+        responses[line_item_uid_for(purchase)] = error_response(error_message, purchase:)
       end
       true
     end
@@ -432,8 +437,10 @@ class Order::PreparePaymentIntentService
       purchases_to_charge.each do |purchase|
         purchase.errors.add(:base, message) if purchase.errors.empty?
         purchase.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE if purchase.error_code.blank?
+        # Read before MarkFailedService: its save re-runs validations and clears errors (#5784).
+        error_message = purchase.errors.first&.message
         Purchase::MarkFailedService.new(purchase).perform
-        responses[line_item_uid_for(purchase)] = error_response(purchase.errors.first&.message, purchase:)
+        responses[line_item_uid_for(purchase)] = error_response(error_message, purchase:)
       end
     end
 
