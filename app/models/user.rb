@@ -693,7 +693,14 @@ class User < ApplicationRecord
       # them deleted and purge the underlying blobs from public storage too — soft-deleting the
       # records alone would leave the URLs serving. Scoped to account-level media
       # (resource = the user); per-product public files are handled by the product deletions above.
-      PublicFile.alive.where(seller: self, resource: self).find_each(&:mark_deleted_and_purge_file!)
+      # Rescue per file rather than letting one failure bubble up: an uncaught error here would
+      # stop the loop at the first bad file (leaving the rest publicly accessible) and roll back
+      # the whole account closure via the surrounding transaction.
+      PublicFile.alive.where(seller: self, resource: self).find_each do |file|
+        file.mark_deleted_and_purge_file!
+      rescue => e
+        Rails.logger.warn("deactivate!: Failed to purge media file #{file.id} for user #{id}: #{e.message}")
+      end
       cancel_active_subscriptions!
       invalidate_active_sessions!
 

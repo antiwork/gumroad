@@ -814,6 +814,31 @@ describe User, :vcr do
         expect(public_file.reload).to be_deleted
       end
 
+      it "still purges the remaining public media files when deleting one of them fails" do
+        first_file, second_file = 2.times.map do |i|
+          public_file = PublicFile.new(seller: @user, resource: @user, display_name: "Logo #{i}")
+          public_file.file.attach(
+            io: File.open(Rails.root.join("spec/support/fixtures/smilie.png")),
+            filename: "smilie-#{i}.png",
+            content_type: "image/png",
+          )
+          public_file.save!
+          public_file
+        end
+
+        # Simulate a transient failure on the first file: account closure should log it and keep
+        # going instead of leaving the second file publicly accessible on a closed account.
+        allow_any_instance_of(PublicFile).to receive(:mark_deleted_and_purge_file!).and_wrap_original do |original, *args|
+          raise "boom" if original.receiver.id == first_file.id
+          original.call(*args)
+        end
+
+        expect(@user.deactivate!).to eq(true)
+
+        expect(first_file.reload).not_to be_deleted
+        expect(second_file.reload).to be_deleted
+      end
+
       context "when user has a saved credit card" do
         before do
           @credit_card = create(:credit_card, users: [@user])
