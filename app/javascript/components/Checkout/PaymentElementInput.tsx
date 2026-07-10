@@ -29,9 +29,15 @@ type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClient
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 type LinkPrefillContact = { email: string; name: string };
 
-const paymentElementWallets = (stripeLinkEnabled: boolean): PaymentElementWallets => ({
-  applePay: "never",
-  googlePay: "never",
+// When the payment_element_wallets rollout flag is off, Apple Pay and Google Pay are pinned to
+// "never" — that was the Phase-1 duplication guard while the separate Payment Request Button
+// rendered next to the element, and it stays in place for sellers not yet on the flag. When the
+// flag is on, the Payment Request Button is not mounted for the cart (that suppression lives in
+// PaymentForm.tsx), so the element itself can show the wallet buttons without duplicates.
+// See antiwork/gumroad#5768 (and #5362 for the original duplication guard).
+const paymentElementWallets = (stripeLinkEnabled: boolean, walletsEnabled: boolean): PaymentElementWallets => ({
+  applePay: walletsEnabled ? "auto" : "never",
+  googlePay: walletsEnabled ? "auto" : "never",
   link: stripeLinkEnabled ? "auto" : "never",
 });
 
@@ -40,6 +46,7 @@ const CONTACT_PREFILL_DEBOUNCE_MS = 800;
 export const PaymentElementInput = ({
   amount,
   elementsOptions,
+  walletsEnabled,
   disabled,
   defaultEmail,
   defaultName,
@@ -49,6 +56,9 @@ export const PaymentElementInput = ({
 }: {
   amount: number | null;
   elementsOptions: CheckoutPaymentElementOptions;
+  // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
+  // Payment Element instead of via the separate Payment Request Button.
+  walletsEnabled: boolean;
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
@@ -83,11 +93,16 @@ export const PaymentElementInput = ({
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
-        <StripePaymentElementProvider amount={mountedAmount} elementsOptions={elementsOptions}>
+        <StripePaymentElementProvider
+          amount={mountedAmount}
+          elementsOptions={elementsOptions}
+          walletsEnabled={walletsEnabled}
+        >
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
+            walletsEnabled={walletsEnabled}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
             onReady={onReady}
@@ -108,6 +123,7 @@ const PaymentElementControllerInput = ({
   amount,
   disabled,
   stripeLinkEnabled,
+  walletsEnabled,
   defaultEmail,
   defaultName,
   onReady,
@@ -117,6 +133,7 @@ const PaymentElementControllerInput = ({
   amount: number | null;
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
+  walletsEnabled: boolean;
   defaultEmail: string;
   defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
@@ -150,7 +167,11 @@ const PaymentElementControllerInput = ({
     <PaymentElement
       options={{
         readOnly: disabled ?? false,
-        layout: { type: "tabs" },
+        // With wallets enabled the element must actually show its payment-method surface, so we
+        // use the accordion layout (wallet buttons render as express-checkout-style rows). With
+        // wallets disabled we keep the tabs layout, whose tabs are hidden via the ".Tab" appearance
+        // rule in StripePaymentElementProvider — the exact pre-flag behavior.
+        layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
         fields: {
           billingDetails: {
@@ -167,7 +188,7 @@ const PaymentElementControllerInput = ({
             },
           },
         },
-        wallets: paymentElementWallets(stripeLinkEnabled),
+        wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
       }}
       onReady={() => setReady(true)}
       onFocus={onTouched}
@@ -179,10 +200,12 @@ const PaymentElementControllerInput = ({
 const StripePaymentElementProvider = ({
   amount,
   elementsOptions,
+  walletsEnabled,
   children,
 }: {
   amount: number | null;
   elementsOptions: CheckoutPaymentElementOptions;
+  walletsEnabled: boolean;
   children: React.ReactNode;
 }) => {
   const [stripePromise] = React.useState(() =>
@@ -228,9 +251,23 @@ const StripePaymentElementProvider = ({
           focusBoxShadow: "none",
         },
         rules: {
-          ".Tab": {
-            display: "none",
-          },
+          // With wallets disabled the element uses the tabs layout purely as an internal card
+          // form, so the tabs themselves are hidden. With wallets enabled the element switches to
+          // the accordion layout and must show its payment-method rows, so the tabs rule is
+          // dropped and the accordion items are styled to match our inputs.
+          ...(walletsEnabled
+            ? {
+                ".AccordionItem": {
+                  borderColor,
+                  boxShadow: "none",
+                  borderRadius: "4px",
+                },
+              }
+            : {
+                ".Tab": {
+                  display: "none",
+                },
+              }),
           ".TabLabel": {
             fontSize: "1rem",
             fontWeight: "400",
@@ -264,6 +301,7 @@ const StripePaymentElementProvider = ({
       fontFamily,
       initialAmount,
       placeholderColor,
+      walletsEnabled,
     ],
   );
 

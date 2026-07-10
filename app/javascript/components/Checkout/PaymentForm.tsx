@@ -828,6 +828,7 @@ const CreditCardContent = ({
           <PaymentElementInput
             amount={stripePaymentElementAmount}
             elementsOptions={stripePaymentElementConfig}
+            walletsEnabled={state.checkoutPayment.payment_element_wallets}
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}
