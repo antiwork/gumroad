@@ -139,6 +139,13 @@ module Purchase::ChargeEventsHandler
         purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
         purchase.mark_failed!
       end
+      # A method-forced local method (iDEAL/Bancontact) checkout snapshots its
+      # buyer-currency presentment rows at intent-*prepare* time, before the buyer
+      # confirms. When the intent fails, that snapshot describes a payment that will
+      # never settle, so drop it here; the buyer's retry runs prepare again and
+      # persists a fresh snapshot for the new intent. (Card checkouts never reach
+      # this with rows attached — their presentment is built at charge time.)
+      destroy_presentment_records!
       return
     end
 

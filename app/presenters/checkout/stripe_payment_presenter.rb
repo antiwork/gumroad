@@ -25,7 +25,9 @@ class Checkout::StripePaymentPresenter
   # The client-confirm payment_method_types are computed per cart by Checkout::PaymentMethodResolver and
   # threaded into the deferred PaymentIntent by Order::PreparePaymentIntentService, so the Payment Element
   # and the intent cannot drift (Stripe rejects a payment_method_types-scoped ConfirmationToken against a
-  # mismatched intent). Currency stays fixed here until buyer-currency charging lands (out of scope).
+  # mismatched intent). Currency stays fixed here until buyer-currency charging lands (out of scope) —
+  # except for the method-forced test-mode QA surface (see method_forced_element_currency), where the
+  # Payment Element must mount in the forced currency or Stripe hides the EUR-only method tabs.
   CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card, :ip
@@ -117,6 +119,12 @@ class Checkout::StripePaymentPresenter
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
         ppp_discounted: ppp_verification_applies?,
+        # Single-item carts pass the product's own pricing currency so the resolver's test-mode
+        # forced-currency gate can tell whether iDEAL/Bancontact are actually mountable for this
+        # cart (they only are when the cart is priced in the currency they force). Multi-item
+        # carts pass nil — they always mount the canonical USD element, where forced-currency
+        # methods must never appear.
+        cart_product_currency: items.one? ? items.first[:product_currency] : nil,
       )
     end
 
@@ -155,17 +163,42 @@ class Checkout::StripePaymentPresenter
     def client_confirm_props
       resolution = payment_method_resolver.resolve
       payment_method_types = resolution.payment_method_types
+      method_forced = method_forced_qa_shape?(items)
+      if method_forced
+        # The EUR-only methods (iDEAL/Bancontact) never render on a USD-mode Payment Element —
+        # Stripe hides methods that can't charge in the element's currency — so the QA surface
+        # mounts the element in the forced currency instead. The US-locked methods (Cash App
+        # Pay, ACH) are USD-only, so drop them from the element exactly as
+        # Order::PreparePaymentIntentService#intent_payment_method_types drops them from a
+        # non-USD intent: the element's list and the intent's list must match or Stripe
+        # rejects the ConfirmationToken. Every method on this element — card and Link
+        # included — charges through the forced-currency intent (the prepare service keys
+        # the presentment on the element's mount currency, not just the picked method),
+        # because the ConfirmationToken inherits the element's currency and could never
+        # confirm a USD intent.
+        payment_method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
+      end
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
-        # Presentment candidates never reach client-confirm (they fall back to CardElement
-        # above), so wallets stay enabled; emit the field so every integration variant
-        # carries the same wallet contract the frontend reads.
-        disable_wallets: false,
+        # Presentment candidates only reach client-confirm through the method-forced QA shape
+        # (every other candidate still falls back to CardElement above); for them the PR-1
+        # wallet-disable rationale carries over — a wallet payment would charge through the
+        # canonical USD path while the cart displays buyer-currency totals. Everyone else
+        # keeps wallets enabled, exactly as before.
+        disable_wallets: items.any? { buyer_currency_presentment_candidate?(_1) },
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
-          currency: CLIENT_CONFIRM_CURRENCY,
+          currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
+          # The forced-currency listed amount the element mounts with in the QA shape (nil
+          # otherwise, where the frontend keeps deriving the amount from the USD total). QA
+          # surface only, so scope is intentionally minimal: the single item's listed price
+          # in its own currency, without tip/tax/shipping tracking — the element amount only
+          # drives method filtering and wallet display, while the charged amount comes from
+          # the deferred intent, which Charge::MethodForcedPresentment builds with the full
+          # tax/tip/shipping composition at prepare time.
+          presentment_amount_cents: method_forced ? items.first[:price_cents].to_i : nil,
           payment_method_types:,
           # Derived from the resolver's method list (not a second flag check) so the Element's Link
           # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
@@ -188,9 +221,42 @@ class Checkout::StripePaymentPresenter
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
-      return "buyer_currency_presentment_unsupported" if items.any? { buyer_currency_presentment_candidate?(_1) }
+      if items.any? { buyer_currency_presentment_candidate?(_1) }
+        # PR-1 safety gate: presentment candidates ride CardElement because the canonical USD
+        # Payment Element can't carry buyer-currency presentment. The one exception is the
+        # method-forced QA shape (test mode + seller flags + single item priced in a forced
+        # currency) when the cart is client-confirm eligible: that path now handles presentment
+        # end-to-end (forced-currency element in client_confirm_props, forced-currency intent in
+        # Order::PreparePaymentIntentService), so kicking it back to CardElement would make the
+        # iDEAL/Bancontact tabs unreachable for any tester whose GeoIP currency differs from the
+        # product's. Live mode and non-flagged sellers never produce a candidate
+        # (buyer_presentment_candidate? checks both), so this branch cannot change production
+        # behavior.
+        return "buyer_currency_presentment_unsupported" unless method_forced_qa_shape?(items) && client_confirm_eligible?
+      end
 
       nil
+    end
+
+    # The method-forced QA surface's cart shape, mirroring the gates under which
+    # Checkout::PaymentMethodResolver#forced_currency_test_mode_methods offers iDEAL/Bancontact:
+    # Stripe test mode + the seller's buyer-currency flags + a single item whose product is
+    # priced in a currency some payment method forces (EUR today — the eligibility service's
+    # "direct listed amount" case, where the buyer pays the listed price as-is with no FX
+    # quote). Only this simple shape is supported by the QA surface; USD-priced products keep
+    # today's behavior. Inert in live mode and for non-flagged sellers by construction.
+    def method_forced_qa_shape?(items)
+      return false unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+      return false unless items.one?
+
+      item = items.first
+      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller])
+
+      Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
+    end
+
+    def method_forced_element_currency
+      items.first[:product_currency]
     end
 
     def buyer_currency_presentment_candidate?(item)
@@ -222,6 +288,7 @@ class Checkout::StripePaymentPresenter
           has_free_trial: product.free_trial_enabled,
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
+          product_currency: product.price_currency_type.to_s.downcase,
           ppp_discounted: product.ppp_details(ip).present?
         )
       end
@@ -242,12 +309,15 @@ class Checkout::StripePaymentPresenter
           has_free_trial: product[:free_trial].present?,
           native_type: product[:native_type],
           buyer_currency_display: product[:buyer_currency_display],
+          # currency_code is the product's own pricing currency (price_currency_type), set by
+          # CheckoutPresenter#product_common on every add_products entry.
+          product_currency: product[:currency_code].to_s.downcase.presence,
           ppp_discounted: product[:ppp_details].present?
         )
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, ppp_discounted: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
       {
         seller:,
         price_cents:,
@@ -257,6 +327,7 @@ class Checkout::StripePaymentPresenter
         has_free_trial:,
         native_type:,
         buyer_currency_display:,
+        product_currency:,
         ppp_discounted:,
       }
     end

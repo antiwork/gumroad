@@ -74,6 +74,13 @@ describe StripeDeferredPaymentIntent do
       expect(captured_params.last[:opts][:idempotency_key]).to eq(idempotency_key)
     end
 
+    it "passes an FX quote and pins the Stripe API version when provided" do
+      create_deferred_intent(stripe_fx_quote_id: "fxq_deferred")
+
+      expect(captured_params.last[:params][:fx_quote]).to eq("fxq_deferred")
+      expect(captured_params.last[:opts][:stripe_version]).to eq(StripeFxQuote::API_VERSION)
+    end
+
     it "routes a Gumroad-managed account through a destination transfer" do
       seller = create(:user)
       merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed")

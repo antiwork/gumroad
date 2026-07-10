@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Onetime::BackfillSelfAffiliateDroppedProceeds
+  include Onetime::RebuildsSellerSettlementAmounts
+
   BUG_INTRODUCED_AT = Time.utc(2026, 4, 28)
   BUG_FIXED_AT = Time.utc(2026, 6, 2)
   REMEDIATION_WINDOW = BUG_INTRODUCED_AT...BUG_FIXED_AT
@@ -90,7 +92,20 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       end
 
       new_bt = nil
-      purchase = nil
+      purchase = Purchase.find(purchase_id)
+      reason = check_eligibility(purchase)
+
+      if reason != :eligible
+        @stats[reason] += 1
+        @skipped[reason] << purchase_id if @verbose
+        return
+      end
+
+      # Recover the real settlement amounts from the charge processor BEFORE opening the
+      # database transaction — this is a network call and must not run while we hold row
+      # locks. Eligibility is re-checked under lock below in case anything changed.
+      prefetched_net_cents = purchase.payment_cents.to_i - purchase.affiliate_credit_cents.to_i
+      holding_amount = seller_holding_amount(purchase)
 
       ApplicationRecord.transaction do
         purchase = Purchase.lock.find(purchase_id)
@@ -102,7 +117,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
           next
         end
 
-        new_bt = insert_seller_bt!(purchase)
+        new_bt = insert_seller_bt!(purchase, holding_amount, prefetched_net_cents)
       end
 
       return unless new_bt
@@ -180,17 +195,22 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       :eligible
     end
 
-    def insert_seller_bt!(p)
+    def insert_seller_bt!(p, holding_amount, prefetched_net_cents)
       existing_bt = p.balance_transactions.first
       missing_net_cents = p.payment_cents.to_i - p.affiliate_credit_cents.to_i
 
+      # The holding amount was built from a read of the purchase taken before this row
+      # lock. If the purchase's fee or affiliate-credit figures changed in that window,
+      # the issued and holding nets would silently disagree — refuse to book rather than
+      # write a mismatched pair. (The holding amount's own net may legitimately be in the
+      # settlement currency, so we compare the USD net it was derived from instead.)
+      if prefetched_net_cents != missing_net_cents
+        raise "Missing net changed between prefetch and lock for purchase #{p.id} " \
+              "(holding built for #{prefetched_net_cents}, locked purchase implies #{missing_net_cents})"
+      end
+
       issued = BalanceTransaction::Amount.new(
         currency: existing_bt.issued_amount_currency,
-        gross_cents: p.total_transaction_cents,
-        net_cents: missing_net_cents,
-      )
-      holding = BalanceTransaction::Amount.new(
-        currency: existing_bt.holding_amount_currency,
         gross_cents: p.total_transaction_cents,
         net_cents: missing_net_cents,
       )
@@ -200,9 +220,65 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
         merchant_account: p.merchant_account,
         purchase: p,
         issued_amount: issued,
-        holding_amount: holding,
+        holding_amount:,
         update_user_balance: false,
       )
+    end
+
+    # Builds the seller-leg holding amount from the charge processor's settlement data,
+    # the same way the normal purchase flow does.
+    #
+    # We can NOT copy the holding currency from the purchase's existing balance
+    # transaction: for a self-affiliate sale the only existing transaction is the
+    # affiliate leg, and affiliate holding amounts are always denominated in Gumroad's
+    # own currency (USD). A seller-leg holding amount must instead be in the currency of
+    # the merchant account the funds actually settled into (GBP, CAD, ...). Copying the
+    # affiliate leg's currency wrote "usd" holding amounts onto non-USD merchant
+    # accounts, and payout runs exclude balances whose holding currency does not match
+    # the account — leaving that money permanently stranded as "unpaid".
+    def seller_holding_amount(purchase)
+      missing_net_cents = purchase.payment_cents.to_i - purchase.affiliate_credit_cents.to_i
+
+      BalanceTransaction::Amount.create_holding_amount_for_seller(
+        flow_of_funds: flow_of_funds_for(purchase),
+        issued_net_cents: missing_net_cents,
+        # For buyer-currency (presentment) charges the processor-issued amount is in the
+        # buyer's currency; this substitutes the canonical USD amount, exactly like the
+        # normal purchase flow does. The method is private on Purchase because only
+        # balance-booking code should use it — which is what this is.
+        canonical_issued_amount: purchase.send(:presentment_canonical_issued_amount),
+      )
+    end
+
+    # Rebuilds the flow of funds for an already-settled charge. The purchase's original
+    # in-memory flow_of_funds is not persisted, so when the funds live in the seller's
+    # own Stripe account we re-fetch the charge (and its balance transactions) from
+    # Stripe to recover the real settlement currency and amounts. When Gumroad itself
+    # holds the funds, settlement is always in USD, so a simple USD flow matches what
+    # the normal purchase flow builds and no processor call is needed.
+    def flow_of_funds_for(purchase)
+      if purchase.merchant_account.holder_of_funds == HolderOfFunds::GUMROAD
+        # For charges presented in the buyer's currency, the gross booked here is the
+        # canonical USD transaction amount rather than a replay of Stripe's exact
+        # post-conversion settled cents, so it can differ from the original booking by
+        # FX rounding. The net cents — the figure balances and payouts actually use —
+        # is computed the same way either way, so payability is unaffected.
+        return FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents)
+      end
+
+      processor_charge = ChargeProcessor.get_charge(
+        purchase.charge_processor_id,
+        purchase.stripe_transaction_id,
+        merchant_account: purchase.merchant_account,
+      )
+      raise "Could not fetch processor charge for purchase #{purchase.id} (charge #{purchase.stripe_transaction_id})" if processor_charge.nil?
+
+      flow_of_funds = processor_charge.flow_of_funds
+      raise "Could not rebuild flow of funds for purchase #{purchase.id} (charge #{purchase.stripe_transaction_id})" if flow_of_funds.nil?
+
+      # A purchase paid as part of a multi-product charge only owns a slice of the
+      # charge's money; split the combined flow the same way charge processing does.
+      purchase.is_part_of_combined_charge? ? purchase.build_flow_of_funds_from_combined_charge(flow_of_funds) : flow_of_funds
     end
 
     def credit_summary(p)

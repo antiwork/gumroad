@@ -51,6 +51,44 @@ describe Checkout::PaymentMethodResolver do
         expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact")
       end
 
+      context "with the internal buyer-currency flags enabled in Stripe test mode" do
+        before do
+          allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+          Feature.activate_user(:buyer_currency_charging, seller)
+          Feature.activate_user(:buyer_local_currency, seller)
+        end
+
+        it "surfaces the EUR forced-currency methods for manual presentment QA when the cart is priced in EUR" do
+          expect(resolve(cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+        end
+
+        it "keeps them off a USD-priced cart — Stripe rejects an element/intent listing EUR-only methods in USD" do
+          expect(resolve(cart_product_currency: "usd").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps them off when the cart currency is unknown (multi-item carts pass nil), failing safe" do
+          expect(resolve(cart_product_currency: nil).payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps them out when the buyer-currency charging flag is off" do
+          Feature.deactivate_user(:buyer_currency_charging, seller)
+
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps them out of live mode — this is a test-mode-only QA surface" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps them out when the seller opted out of buyer-local currency" do
+          seller.update!(disable_buyer_local_currency: true)
+
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+      end
+
       it "returns an explicit list of method-type strings, never Stripe's automatic_payment_methods shape" do
         expect(resolve.payment_method_types).to be_an(Array).and(all(be_a(String)))
       end

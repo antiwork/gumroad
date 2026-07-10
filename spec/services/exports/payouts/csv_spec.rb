@@ -109,8 +109,10 @@ describe Exports::Payouts::Csv, :vcr do
         ["Full Refund", (@purchase_to_refund.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund.external_id), @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
         ["Partial Refund", (@purchase_to_refund_partially.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund_partially.external_id), @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "-0.0", "-0.0", "-3.5", "-0.55", "-2.95"],
         ["Full Refund", (@purchase_to_refund_from_years_ago.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund_from_years_ago.external_id), @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
-        ["PayPal Payouts", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "-6.5", "", "-6.5"],
+        ["PayPal Payouts", @payout.payout_period_end_date.to_s, "", Exports::Payouts::Csv::PAYPAL_PAYOUTS_NOTE, "", "", "", "", "-6.5", "", "-6.5"],
         ["Payout Fee", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "0.92", "-0.92"],
+        [Exports::Payouts::Csv::CARD_SALES_SUBTOTAL_HEADING, nil, nil, nil, nil, nil, "3.8", "0.0", "54.64", "9.91", "44.73"],
+        [Exports::Payouts::Csv::PAYPAL_SALES_SUBTOTAL_HEADING, nil, nil, nil, nil, nil, "0.0", "0.0", "1.5", "1.5", "0.0"],
         ["Totals", nil, nil, nil, nil, nil, "3.8", "0.0", "56.14", "11.41", "44.73"]
       ]
 
@@ -168,8 +170,10 @@ describe Exports::Payouts::Csv, :vcr do
         ["Stripe Connect Affiliate Fees", stripe_connect_purchase.succeeded_at.to_date.to_s, "", "", "", "", "", "", "-4.03", "", "-4.03"],
         ["Stripe Connect Refund", 10.days.ago.to_date.to_s, csv_safe(stripe_connect_purchase.external_id), stripe_connect_purchase.link.name, stripe_connect_purchase.full_name, stripe_connect_purchase.purchaser_email_or_email, "-0.0", "-0.0", "-75.0", "7.75", "-67.25"],
         ["Stripe Connect Affiliate Fees", 10.days.ago.to_date.to_s, "", "", "", "", "", "", "2.02", "", "2.02"],
-        ["Stripe Connect Payouts", payout.payout_period_end_date.to_date.to_s, "", "", "", "", "", "", "-65.24", "", "-65.24"],
+        ["Stripe Connect Payouts", payout.payout_period_end_date.to_date.to_s, "", Exports::Payouts::Csv::STRIPE_CONNECT_PAYOUTS_NOTE, "", "", "", "", "-65.24", "", "-65.24"],
         ["Payout Fee", payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "2.6", "-2.6"],
+        [Exports::Payouts::Csv::CARD_SALES_SUBTOTAL_HEADING, nil, nil, nil, nil, nil, "0.0", "0.0", "150.0", "22.75", "127.25"],
+        [Exports::Payouts::Csv::STRIPE_CONNECT_SALES_SUBTOTAL_HEADING, nil, nil, nil, nil, nil, "0.0", "0.0", "7.75", "23.25", "0.0"],
         ["Totals", nil, nil, nil, nil, nil, "0.0", "0.0", "157.75", "46.0", "127.25"]
       ]
     end

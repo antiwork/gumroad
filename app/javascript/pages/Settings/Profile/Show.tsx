@@ -37,6 +37,11 @@ import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 type ProfileSettingsTab = "about" | "pages" | "share";
 
+// How long the user's most recent answer to the unsaved-changes prompt stays reusable for a
+// retry of the same navigation. Long enough to absorb a burst of repeated attempts (the bug
+// this guards against), short enough that a deliberate second click a few seconds later asks again.
+const LEAVE_ANSWER_REUSE_WINDOW_MS = 2000;
+
 type ProfileSettingsForm = {
   name: string | null;
   bio: string | null;
@@ -126,16 +131,52 @@ export default function SettingsPage() {
 
   const isDirtyRef = React.useRef(isDirty);
   isDirtyRef.current = isDirty;
+  // Remembers the user's most recent answer to the unsaved-changes prompt so that a burst of
+  // navigation attempts (for example a caller that retries after being blocked, or several visits
+  // queued while the dialog was open) reuses that answer instead of opening one dialog per attempt.
+  // Without this, sellers saw the same confirm dialog dozens of times in a row. We record which
+  // URL the answer was for and only reuse the answer for that same destination: a "leave" grant
+  // must not let an unrelated navigation ride on it, and a "stay" refusal must not silently
+  // swallow a deliberate click somewhere else — a new destination always prompts again.
+  const lastLeaveAnswer = React.useRef<{ time: number; allowed: boolean; href: string } | null>(null);
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current) e.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     const removeInertiaListener = router.on("before", (event) => {
-      if (!isDirtyRef.current || event.detail.visit.method !== "get") return;
+      const visit = event.detail.visit;
+      if (!isDirtyRef.current || visit.method !== "get") return;
+      // Background requests never discard the editor's local state, so they must not prompt:
+      // - prefetch: Inertia warming a link on hover
+      // - async: polling-style requests that update props in place (router.reload sets this,
+      //   which covers our own post-save reload and the preview refresh)
+      // - preserveState visits: the component stays mounted with its state intact
+      // Note we intentionally do NOT exempt plain same-path visits: a regular GET to the current
+      // path defaults to preserveState: false, so Inertia's React adapter remounts the page with
+      // a new key and the pending edits are lost — exactly the loss this prompt protects against.
+      if (visit.prefetch || visit.async || visit.preserveState === true) return;
+      const previousAnswer = lastLeaveAnswer.current;
+      if (
+        previousAnswer &&
+        Date.now() - previousAnswer.time < LEAVE_ANSWER_REUSE_WINDOW_MS &&
+        previousAnswer.href === visit.url.href
+      ) {
+        // Reuse the answer only for the same destination the user was asked about. A retry of
+        // that navigation repeats their choice — "stay" blocks it again silently, "leave" lets it
+        // through — while a click to a different destination is a genuinely new navigation and
+        // falls through to a fresh prompt.
+        if (!previousAnswer.allowed) {
+          event.preventDefault();
+        }
+        return;
+      }
       // eslint-disable-next-line no-alert
-      if (!window.confirm("You have unsaved changes that will be lost if you leave this page. Leave anyway?"))
-        event.preventDefault();
+      const allowed = window.confirm(
+        "You have unsaved changes that will be lost if you leave this page. Leave anyway?",
+      );
+      lastLeaveAnswer.current = { time: Date.now(), allowed, href: visit.url.href };
+      if (!allowed) event.preventDefault();
     });
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);

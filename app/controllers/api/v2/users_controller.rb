@@ -2,8 +2,8 @@
 
 class Api::V2::UsersController < Api::V2::BaseController
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html]
-  before_action(only: [:update, :update_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
-  before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :preview_custom_html]
+  before_action(only: [:update, :update_custom_html, :edit_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
+  before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :edit_custom_html, :preview_custom_html]
 
   def show
     if params[:is_ifttt]
@@ -74,6 +74,84 @@ class Api::V2::UsersController < Api::V2::BaseController
     rescue ActiveRecord::RecordInvalid => e
       return error_with_object(:user, e.record)
     end
+
+    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:, profile_url: profile_url_for(user))
+  end
+
+  # POST a targeted edit to the profile landing page: replaces exactly one occurrence of the
+  # `find` snippet with `replace` inside the existing custom HTML, leaving the rest of the page
+  # untouched, then re-sanitizes and saves the full result.
+  #
+  # This exists so the store agent can make a small change (a color, a button label, a heading)
+  # without regenerating the whole page. Before this endpoint, the agent's only write surface was
+  # a full-page replacement (update_custom_html), so a seller asking for a tiny tweak could lose
+  # their entire hand-built storefront page to a fresh, much smaller regeneration.
+  def edit_custom_html
+    user = current_resource_owner
+
+    return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
+
+    find = params[:find]
+    replace = params[:replace]
+    unless find.is_a?(String) && find.present?
+      return render_response(false, message: "find is required and must be a non-empty string copied exactly from the current custom HTML.")
+    end
+    unless replace.is_a?(String)
+      return render_response(false, message: "replace is required and must be a string (use \"\" to delete the snippet).")
+    end
+
+    previous_custom_html = nil
+    sanitization_report = nil
+    edit_error = nil
+    begin
+      ActiveRecord::Base.transaction do
+        # Same row lock as update_custom_html: serializes concurrent writers and reloads the
+        # association cache, so the find/replace below splices against the latest committed page
+        # instead of a stale in-memory copy.
+        user.lock!
+        previous_custom_html = user.custom_html
+
+        if previous_custom_html.blank?
+          edit_error = "There is no custom HTML page to edit. Publish one first with the full custom_html update."
+          raise ActiveRecord::Rollback
+        end
+
+        # `find` must match exactly once so the edit is unambiguous. Zero matches means the caller
+        # is working from stale HTML; multiple matches means the snippet needs more surrounding
+        # context. Both errors say so explicitly, so the agent can correct itself in the same turn.
+        occurrences = previous_custom_html.scan(find).size
+        if occurrences.zero?
+          edit_error = "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace."
+          raise ActiveRecord::Rollback
+        elsif occurrences > 1
+          edit_error = "find matches #{occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
+          raise ActiveRecord::Rollback
+        end
+
+        # Block form so the replacement is inserted literally — the two-argument form of String#sub
+        # treats backslash sequences (\0, \1, \\) in the replacement specially, which would corrupt
+        # HTML that legitimately contains backslashes.
+        edited = previous_custom_html.sub(find) { replace }
+
+        if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
+          edit_error = "The edited custom_html would be too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
+          raise ActiveRecord::Rollback
+        end
+
+        # Re-sanitize the whole spliced result, not just the inserted snippet: the replacement can
+        # change how surrounding markup parses (for example by opening a tag the snippet closes), so
+        # only the full document is safe to check. Matches update_custom_html's blank-to-nil
+        # normalization so an edit that empties the page unpublishes it the same way.
+        result = Ai::PageSanitizer.sanitize_with_report(edited)
+        user.custom_html = result.html.presence
+        sanitization_report = result.report
+        user.save!
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      return error_with_object(:user, e.record)
+    end
+
+    return render_response(false, message: edit_error) if edit_error
 
     render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:, profile_url: profile_url_for(user))
   end

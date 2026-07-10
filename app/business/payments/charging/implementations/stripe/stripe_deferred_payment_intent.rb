@@ -14,7 +14,7 @@ class StripeDeferredPaymentIntent
 
   def initialize(merchant_account:, amount_cents:, amount_for_gumroad_cents:, reference:, description:,
                  idempotency_key:, payment_method_types:, currency:, statement_description: nil,
-                 transfer_group: nil, metadata: nil)
+                 transfer_group: nil, metadata: nil, stripe_fx_quote_id: nil)
     @merchant_account = merchant_account
     @amount_cents = amount_cents
     @amount_for_gumroad_cents = amount_for_gumroad_cents
@@ -26,6 +26,7 @@ class StripeDeferredPaymentIntent
     @statement_description = statement_description
     @transfer_group = transfer_group
     @metadata = metadata
+    @stripe_fx_quote_id = stripe_fx_quote_id
   end
 
   def create
@@ -37,7 +38,8 @@ class StripeDeferredPaymentIntent
 
   private
     attr_reader :merchant_account, :amount_cents, :amount_for_gumroad_cents, :reference, :description,
-                :idempotency_key, :payment_method_types, :currency, :statement_description, :transfer_group, :metadata
+                :idempotency_key, :payment_method_types, :currency, :statement_description, :transfer_group, :metadata,
+                :stripe_fx_quote_id
 
     def intent_params
       params = {
@@ -47,6 +49,7 @@ class StripeDeferredPaymentIntent
         metadata: metadata || { purchase: reference },
         payment_method_types:,
       }
+      params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
       params[:transfer_group] = transfer_group if transfer_group.present?
       params[:statement_descriptor_suffix] = statement_descriptor_suffix if statement_descriptor_suffix.present?
       params.merge!(StripeIntentChargeRouting.fee_params(merchant_account:, amount_cents:, amount_for_gumroad_cents:))
@@ -54,7 +57,9 @@ class StripeDeferredPaymentIntent
     end
 
     def request_options
-      StripeIntentChargeRouting.request_options(merchant_account:, idempotency_key:)
+      options = StripeIntentChargeRouting.request_options(merchant_account:, idempotency_key:)
+      options[:stripe_version] = StripeFxQuote::API_VERSION if stripe_fx_quote_id.present?
+      options
     end
 
     def statement_descriptor_suffix

@@ -10,14 +10,25 @@ describe ChargePresentment do
     expect(presentment.errors).to include(:processor, :presentment_currency)
   end
 
-  it "requires quote details for Stripe rows" do
+  it "allows Stripe rows with no quote at all (quote-less method-forced presentment)" do
+    # A method-forced local payment method charging a product priced in the forced
+    # currency has no FX conversion, so no quote exists by design.
     presentment = build(:charge_presentment,
                         stripe_fx_quote_id: nil,
                         stripe_fx_quote_expires_at: nil,
                         fx_rate: nil)
 
+    expect(presentment).to be_valid
+  end
+
+  it "rejects Stripe rows with a partially persisted quote" do
+    presentment = build(:charge_presentment,
+                        stripe_fx_quote_id: "fxq_partial",
+                        stripe_fx_quote_expires_at: nil,
+                        fx_rate: nil)
+
     expect(presentment).not_to be_valid
-    expect(presentment.errors).to include(:stripe_fx_quote_id, :stripe_fx_quote_expires_at, :fx_rate)
+    expect(presentment.errors).to include(:base)
   end
 
   it "allows quoteless rows for other processors" do

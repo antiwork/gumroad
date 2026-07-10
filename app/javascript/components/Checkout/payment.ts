@@ -48,9 +48,15 @@ export type PaymentElementConfig = {
 // the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
 // resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
 // the US-locked methods (cashapp, us_bank_account) for US buyers.
+// Currency is "usd" everywhere except the method-forced test-mode QA surface (iDEAL/Bancontact),
+// where the server mounts the element in the payment method's forced currency (e.g. "eur") and
+// supplies presentment_amount_cents — the single product's listed price in that currency — so
+// Stripe shows the EUR-only method tabs (it hides methods that can't charge in the element's
+// currency). When presentment_amount_cents is null the amount derives from the USD total below.
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
-  currency: "usd";
+  currency: string;
+  presentment_amount_cents: number | null;
   payment_method_types: string[];
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
@@ -318,6 +324,14 @@ export function getStripePaymentElementAmount(state: State) {
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
     return null;
+  // Method-forced test-mode QA surface: the element is mounted in the payment method's forced
+  // currency (e.g. EUR for iDEAL/Bancontact), so the USD total below would be the wrong unit.
+  // The server supplies the listed amount in the element's currency instead.
+  if (
+    state.checkoutPayment.integration === "payment_element_client_confirm" &&
+    state.checkoutPayment.elements_options.presentment_amount_cents !== null
+  )
+    return state.checkoutPayment.elements_options.presentment_amount_cents;
   return getTotalPrice(state);
 }
 

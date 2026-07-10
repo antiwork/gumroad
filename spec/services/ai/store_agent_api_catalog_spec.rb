@@ -38,4 +38,24 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.find("drop_tables")).to be_nil
     end
   end
+
+  describe "profile custom HTML endpoints" do
+    it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
+      endpoint = described_class.find("edit_user_custom_html")
+
+      expect(endpoint).to be_present
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:post)
+      expect(endpoint.path).to eq("/user/custom_html/edit")
+      expect(endpoint.scope).to eq("edit_profile")
+      expect(endpoint.params).to eq(%w[find replace])
+    end
+
+    it "warns the model that the full-page update is destructive and points at the targeted edit" do
+      summary = described_class.find("update_user_custom_html").summary
+
+      expect(summary).to match(/destructive/i)
+      expect(summary).to include("edit_user_custom_html")
+    end
+  end
 end

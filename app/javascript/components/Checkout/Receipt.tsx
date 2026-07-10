@@ -321,7 +321,11 @@ export const Receipt = ({
             createAccountData={{
               email: state.email,
               cardParams:
-                state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
+                // Client-confirm methods live in a Stripe ConfirmationToken and carry no
+                // cardParamsResult — reading it crashes the whole receipt view (#5784).
+                state.status.paymentMethod.type === "not-applicable" ||
+                state.status.paymentMethod.type === "saved" ||
+                state.status.paymentMethod.type === "payment-element-client-confirm"
                   ? null
                   : state.status.paymentMethod.cardParamsResult.cardParams,
             }}

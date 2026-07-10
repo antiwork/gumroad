@@ -431,6 +431,24 @@ module StripeMerchantAccountManager
     error.is_a?(Stripe::InvalidRequestError) && error.respond_to?(:code) && error.code == "postal_code_invalid"
   end
 
+  # Luxembourg postal codes are four digits, but residents habitually write them with the
+  # conventional "L-" prefix (e.g. "L-9767"). Stripe rejects the prefixed form with
+  # `postal_code_invalid`, and the resulting account-creation failure is invisible to the
+  # seller at save time (creation runs async), so strip the prefix at the Stripe boundary.
+  # Normalizing here (rather than at input time) also repairs already-saved compliance
+  # records when the retry job re-attempts account creation.
+  private_class_method
+  def self.normalize_postal_code(postal_code, country_code)
+    return postal_code if postal_code.blank?
+
+    if country_code == Compliance::Countries::LUX.alpha2
+      normalized = postal_code.to_s.strip[/\AL[-\s]?(\d{4})\z/i, 1]
+      return normalized if normalized.present?
+    end
+
+    postal_code
+  end
+
   private_class_method
   def self.bank_account_invalid_error?(error)
     return true if error.is_a?(Stripe::CardError)
@@ -716,7 +734,7 @@ module StripeMerchantAccountManager
                              line2: nil,
                              city: user_compliance_info.city,
                              state: user_compliance_info.state,
-                             postal_code: user_compliance_info.zip_code,
+                             postal_code: normalize_postal_code(user_compliance_info.zip_code, country_code),
                              country: country_code
                            },
                          })
@@ -763,7 +781,7 @@ module StripeMerchantAccountManager
           line2: nil,
           city: user_compliance_info.legal_entity_city,
           state: user_compliance_info.legal_entity_state,
-          postal_code: user_compliance_info.legal_entity_zip_code,
+          postal_code: normalize_postal_code(user_compliance_info.legal_entity_zip_code, user_compliance_info.legal_entity_country_code),
           country: user_compliance_info.legal_entity_country_code
         },
         tax_id: business_tax_id.presence,
