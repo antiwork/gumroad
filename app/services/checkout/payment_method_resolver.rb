@@ -62,13 +62,21 @@ class Checkout::PaymentMethodResolver
     def client_confirm_eligible? = client_confirm_eligible
   end
 
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false)
+  # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
+  # in, or nil for multi-item carts / unknown. Only consulted by the test-mode forced-currency
+  # gate below: a forced-currency method (iDEAL/Bancontact) is offered only when the cart is
+  # priced in exactly the currency that method forces, because that is the only shape where the
+  # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_qa_shape?) and
+  # the deferred intent can be created in it. Offering the methods on any other cart puts EUR-only
+  # entries on a USD element/intent, which Stripe rejects outright (no element mounts at all).
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
     @setup_for_future = setup_for_future
     @buyer_country = buyer_country
     @ppp_discounted = ppp_discounted
+    @cart_product_currency = cart_product_currency
   end
 
   def resolve
@@ -90,7 +98,7 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
@@ -127,9 +135,30 @@ class Checkout::PaymentMethodResolver
     # and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += forced_currency_test_mode_methods(eligible)
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched
+    end
+
+    # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered
+    # once buyer-currency presentment carries them, and the public launch is the #5362 cohort with
+    # its own approval gate. But the presentment machinery needs real manual QA before that launch,
+    # so surface them when ALL of these hold: the seller has the internal buyer-currency flags on,
+    # Stripe is in test mode (preview apps / staging), and the cart's single item is priced in the
+    # currency the method forces. The last condition mirrors the presenter's
+    # method_forced_qa_shape? gate: only that cart shape mounts the Payment Element in the forced
+    # currency, and a forced-currency method listed on a USD element/intent makes Stripe reject the
+    # whole element session (no payment form renders at all — this broke flag-on sellers' plain USD
+    # checkouts before the gate was added). Production sellers run live-mode Stripe keys, so this
+    # branch can never add methods to a real checkout.
+    def forced_currency_test_mode_methods(eligible)
+      return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+      return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.seller_enabled?(sellers.first)
+
+      (eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys).select do |method|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency
+      end
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify

@@ -69,6 +69,7 @@ Rails.application.routes.draw do
       match "/user", to: "users#update", via: [:put, :patch]
       get "/user/custom_html", to: "users#custom_html"
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
+      post "/user/custom_html/edit", to: "users#edit_custom_html"
       post "/user/preview_custom_html", to: "users#preview_custom_html"
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies

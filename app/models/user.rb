@@ -783,7 +783,26 @@ class User < ApplicationRecord
   end
 
   def minimum_payout_amount_cents
+    # A terminally Stripe-rejected account can't sell anymore, so holding its
+    # balance to the normal minimum would strand the money forever — release
+    # anything above the $1 transfer floor instead. Appealable rejections
+    # (open verification requests remain) keep the normal minimum: the seller
+    # may be reinstated, and flushing their balance early at the rejected-
+    # account floor would be premature.
+    return Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS if stripe_rejected_payout_floor_applies?
+
     [payout_threshold_cents, minimum_payout_threshold_cents].max
+  end
+
+  # Memoized because the weekly payout batch calls minimum_payout_amount_cents
+  # several times per holding-balance user (payability check, schedule, copy),
+  # and this check costs two queries (merchant account + open requests). The
+  # answer can't change within one payout evaluation of a user instance.
+  def stripe_rejected_payout_floor_applies?
+    return @_stripe_rejected_payout_floor_applies if defined?(@_stripe_rejected_payout_floor_applies)
+
+    @_stripe_rejected_payout_floor_applies =
+      (stripe_account&.stripe_rejected? || false) && !user_compliance_info_requests.requested.exists?
   end
 
   def minimum_payout_threshold_cents

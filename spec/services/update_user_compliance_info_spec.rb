@@ -125,6 +125,247 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Japanese individual account" do
+      let(:japan_user) { create(:user) }
+      let!(:japan_compliance_info) do
+        create(
+          :user_compliance_info,
+          user: japan_user,
+          country: "Japan",
+          city: nil,
+          state: "東京都",
+          zip_code: "1130022",
+          json_data: {
+            street_address_kanji: "文京区千駄木3丁目",
+            street_address_kana: "ブンキョウクセンダギ3チョウメ",
+            building_number: "1-1",
+            building_number_kana: "1-1",
+          }
+        )
+      end
+
+      it "rejects an address submission without a city" do
+        params = ActionController::Parameters.new(
+          street_address_kanji: "文京区千駄木4丁目",
+          street_address_kana: "ブンキョウクセンダギ4チョウメ",
+          building_number: "2-2",
+          building_number_kana: "2-2",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user: japan_user).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
+      end
+
+      it "rejects a submission that fills in only one of the city pair" do
+        # A direct request (bypassing the form) that sets `city` without `city_kana` would
+        # otherwise sync a half-populated address to Stripe.
+        params = ActionController::Parameters.new(city: "文京区")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
+      end
+
+      it "rejects a postal-code-only update on a record with no city" do
+        # Changing just the postal code (or prefecture) still re-syncs the whole address to
+        # Stripe, so it must count as an address change and require the city like any other
+        # address edit — otherwise a legacy no-city record can keep updating its address
+        # piecemeal without ever entering one.
+        params = ActionController::Parameters.new(zip_code: "1130023")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("City/Ward is required for Japanese addresses. Please re-enter your address including the city/ward.")
+      end
+
+      it "accepts an address submission that includes the city fields" do
+        params = ActionController::Parameters.new(
+          street_address_kanji: "千駄木3丁目",
+          street_address_kana: "センダギ3チョウメ",
+          building_number: "1-1",
+          building_number_kana: "1-1",
+          city: "文京区",
+          city_kana: "ブンキョウク",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be true
+        new_compliance_info = japan_user.reload.alive_user_compliance_info
+        expect(new_compliance_info.city).to eq("文京区")
+        expect(new_compliance_info.city_kana).to eq("ブンキョウク")
+        expect(new_compliance_info.street_address_kanji).to eq("千駄木3丁目")
+      end
+
+      it "accepts a full settings-form save that changes only the phone on a legacy record with no city" do
+        # The Payments settings form echoes back every stored compliance field on save, so a
+        # phone-only change still arrives with the whole stored (city-less) Japanese address.
+        # That must not trip the city requirement — the seller didn't touch their address.
+        params = ActionController::Parameters.new(
+          is_business: false,
+          first_name: japan_compliance_info.first_name,
+          last_name: japan_compliance_info.last_name,
+          street_address: japan_compliance_info.street_address,
+          building_number: "1-1",
+          building_number_kana: "1-1",
+          street_address_kanji: "文京区千駄木3丁目",
+          street_address_kana: "ブンキョウクセンダギ3チョウメ",
+          city: "",
+          city_kana: "",
+          state: "東京都",
+          zip_code: "1130022",
+          country: "JP",
+          dob_month: japan_compliance_info.birthday.month.to_s,
+          dob_day: japan_compliance_info.birthday.day.to_s,
+          dob_year: japan_compliance_info.birthday.year.to_s,
+          phone: "+81312345678",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be true
+        expect(japan_user.reload.alive_user_compliance_info.phone).to eq("+81312345678")
+      end
+
+      it "accepts an address submission without city params when the record already has a city" do
+        _result, with_city = japan_compliance_info.dup_and_save! do |n|
+          n.city = "文京区"
+          n.city_kana = "ブンキョウク"
+          n.skip_stripe_job_on_create = true
+        end
+        expect(with_city.city).to eq("文京区")
+
+        params = ActionController::Parameters.new(
+          street_address_kanji: "千駄木4丁目",
+          street_address_kana: "センダギ4チョウメ",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_user).process
+
+        expect(result[:success]).to be true
+        expect(japan_user.reload.alive_user_compliance_info.street_address_kanji).to eq("千駄木4丁目")
+      end
+    end
+
+    context "with a Japanese business account" do
+      let(:japan_business_user) { create(:user) }
+      let!(:japan_business_compliance_info) do
+        create(
+          :user_compliance_info,
+          user: japan_business_user,
+          country: "Japan",
+          city: "文京区",
+          state: "東京都",
+          zip_code: "1130022",
+          is_business: true,
+          business_name: "Buy More KK",
+          business_country: "Japan",
+          business_city: nil,
+          business_state: "東京都",
+          business_zip_code: "1130022",
+          business_type: UserComplianceInfo::BusinessTypes::LLC,
+          business_tax_id: "0000000000000",
+          json_data: {
+            city_kana: "ブンキョウク",
+            street_address_kanji: "千駄木3丁目",
+            street_address_kana: "センダギ3チョウメ",
+          }
+        )
+      end
+
+      it "rejects a business address submission without a business city" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address_kanji: "千代田区丸の内1丁目",
+          business_street_address_kana: "チヨダクマルノウチ1チョウメ",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Business city/Ward is required for Japanese addresses. Please re-enter your business address including the city/ward.")
+      end
+
+      it "rejects a business postal-code-only update on a record with no business city" do
+        # Same reasoning as the individual case: a postal code (or prefecture) change alone
+        # still re-syncs the business address to Stripe, so the business city pair must be
+        # present before it goes through.
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_zip_code: "1000005",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Business city/Ward is required for Japanese addresses. Please re-enter your business address including the city/ward.")
+      end
+
+      it "accepts a business address submission that includes the business city fields" do
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address_kanji: "丸の内1丁目",
+          business_street_address_kana: "マルノウチ1チョウメ",
+          business_city: "千代田区",
+          business_city_kana: "チヨダク",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be true
+        new_compliance_info = japan_business_user.reload.alive_user_compliance_info
+        expect(new_compliance_info.business_city).to eq("千代田区")
+        expect(new_compliance_info.business_city_kana).to eq("チヨダク")
+      end
+
+      it "accepts a business address submission without business city params when the record already has a business city" do
+        _result, with_business_city = japan_business_compliance_info.dup_and_save! do |n|
+          n.business_city = "千代田区"
+          n.business_city_kana = "チヨダク"
+          n.skip_stripe_job_on_create = true
+        end
+        expect(with_business_city.business_city).to eq("千代田区")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_street_address_kanji: "丸の内2丁目",
+          business_street_address_kana: "マルノウチ2チョウメ",
+        )
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: japan_business_user).process
+
+        expect(result[:success]).to be true
+        expect(japan_business_user.reload.alive_user_compliance_info.business_street_address_kanji).to eq("丸の内2丁目")
+      end
+    end
+
     context "with a US business that already has a 9-digit business_tax_id saved" do
       let(:us_business_user) do
         create(:user).tap { |u| create(:user_compliance_info_business, user: u) }

@@ -43,6 +43,25 @@ describe Purchase, :vcr do
       end
     end
 
+    describe "payment_settling" do
+      it "returns in-progress purchases whose payment the processor has confirmed" do
+        settling = create(:purchase, purchase_state: "in_progress", stripe_status: "processing")
+        expect(Purchase.payment_settling).to include settling
+      end
+
+      it "does not return abandoned attempts, which never receive a processor confirmation" do
+        abandoned = create(:purchase, purchase_state: "in_progress", stripe_status: nil)
+        expect(Purchase.payment_settling).to_not include abandoned
+      end
+
+      it "does not return purchases that reached a terminal state, even though stripe_status remains set" do
+        failed = create(:purchase, purchase_state: "failed", stripe_status: "payment_intent.payment_failed")
+        successful = create(:purchase, purchase_state: "successful", stripe_status: "charge.succeeded")
+        expect(Purchase.payment_settling).to_not include failed
+        expect(Purchase.payment_settling).to_not include successful
+      end
+    end
+
     describe "successful" do
       before do
         @successful_purchase = create(:purchase, purchase_state: "successful")
@@ -2553,6 +2572,85 @@ describe Purchase, :vcr do
           purchase = build(:recurring_membership_purchase, link: original_purchase.link, subscription: original_purchase.subscription, purchaser: user, email: giftee_email)
           expect(purchase).to be_valid
         end
+      end
+    end
+
+    context "when an earlier purchase's payment is still settling" do
+      # A delayed-notification payment (like an ACH bank debit) leaves the purchase
+      # in_progress for days with stripe_status set once the processor confirms it.
+      it "disallows a repeat purchase while a confirmed payment is settling, even outside the recent-purchase window" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."]
+      end
+
+      it "disallows the repeat purchase from a different IP address" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: generate(:ip), created_at: Time.current)
+        expect(purchase2).to_not be_valid
+      end
+
+      it "allows a repeat purchase when the earlier attempt was abandoned before payment confirmation" do
+        # An abandoned attempt never gets a stripe_status; the buyer should be able to try again.
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: nil, created_at: 1.hour.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase once the earlier attempt has failed" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "failed", stripe_status: "payment_intent.payment_failed", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a purchase from a different buyer email" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "alice@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase of a different variant" do
+        product = create(:product)
+        category = create(:variant_category, link: product)
+        variant_a = create(:variant, variant_category: category)
+        variant_b = create(:variant, variant_category: category)
+        settling = create(:purchase, link: product, seller: product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                                     purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        settling.variant_attributes << variant_a
+        purchase2 = build(:purchase, link: product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        purchase2.variant_attributes << variant_b
+        expect(purchase2).to be_valid
+      end
+
+      it "already blocks a repeat gift to the same giftee via the gift join in the parent check, without any time window" do
+        # Gift purchases are stored under the sender's email, so the settling check's email
+        # match can't see them. They don't need it: the gift join in `not_double_charged`
+        # has no created_at window, so an in_progress gift (including one settling over ACH
+        # for days) blocks repeat gifts to the same giftee until it resolves.
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        second_gift = build(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        purchase2 = build(:purchase, link: @product, email: "another-sender@gumroad.com", ip_address: @ip_address,
+                                     gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["You have already attempted to purchase this product. We will email you shortly if the purchase is successful."]
+      end
+
+      it "already blocks a direct purchase by the giftee while a gift to them is in progress" do
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "giftee@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
       end
     end
 

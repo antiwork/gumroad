@@ -12,6 +12,9 @@ describe Checkout::StripePaymentPresenter do
         native_type:,
         buyer_currency_display:,
         ppp_details:,
+        # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
+        # which sets currency_code on every real add_products entry.
+        currency_code: product.price_currency_type.to_s.downcase,
       },
       price:,
       recurrence:,
@@ -41,15 +44,16 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, request_apple_pay_merchant_tokens: false)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
-      disable_wallets: false,
+      disable_wallets:,
       request_apple_pay_merchant_tokens:,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
-        currency: "usd",
+        currency:,
+        presentment_amount_cents:,
         payment_method_types:,
         stripe_link_enabled:,
         stripe_connect_account_id:,
@@ -507,6 +511,168 @@ describe Checkout::StripePaymentPresenter do
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))
+    end
+  end
+
+  describe "method-forced test-mode QA surface (iDEAL/Bancontact)" do
+    def buyer_currency_seller_with_product(price_currency_type: "eur", price_cents: 1500)
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type:, price_cents:)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      [seller, product]
+    end
+
+    def activate_buyer_currency_flags(seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+
+    def deactivate_buyer_currency_flags(seller)
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+
+    it "mounts the Payment Element in EUR with the listed amount and the EUR method tabs for an EUR-priced product in test mode with the flags on" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
+        payment_element_client_confirm_props(
+          currency: "eur",
+          presentment_amount_cents: 1500,
+          payment_method_types: %w[card link ideal bancontact],
+        )
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "does not fall back to CardElement for a non-EU tester (buyer-local display) — the EUR element mounts with wallets disabled" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)).to eq(
+        payment_element_client_confirm_props(
+          currency: "eur",
+          presentment_amount_cents: 1500,
+          payment_method_types: %w[card link ideal bancontact],
+          disable_wallets: true,
+        )
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps today's USD element behavior for the same EUR-priced cart in live mode" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props)
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps the CardElement fallback for a non-US buyer of a USD-priced product with the flags on" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)).to eq(
+        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "buyer_currency_presentment_unsupported",
+        disable_wallets: true,
+        request_apple_pay_merchant_tokens: false,
+        elements_options: nil,
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element for a US buyer" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      stub_geoip_country("104.28.0.1", "United States")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "104.28.0.1")
+
+      expect(props[:elements_options][:currency]).to eq("eur")
+      expect(props[:elements_options][:payment_method_types]).not_to include("cashapp", "us_bank_account")
+      expect(props[:elements_options][:payment_method_types]).to include("ideal", "bancontact")
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps the USD element for a two-item cart — the QA surface only supports a single item" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      other_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product), checkout_product_for(other_product)])
+
+      expect(props[:elements_options][:currency]).to eq("usd")
+      expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps today's USD element behavior for an EUR-priced product when the buyer-currency flags are off" do
+      _seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props)
+    end
+
+    it "keeps the CardElement fallback for an EUR-priced product when the client-confirm flag is off" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)).to eq(
+        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "buyer_currency_presentment_unsupported",
+        disable_wallets: true,
+        request_apple_pay_merchant_tokens: false,
+        elements_options: nil,
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
     end
   end
 

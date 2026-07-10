@@ -1,0 +1,17 @@
+<div>
+  <h2>You can no longer accept payments on Gumroad</h2>
+  <p>Our payments processor, Stripe, has reviewed your account and made a final decision to reject it. This decision was made by Stripe, not Gumroad, and unfortunately it cannot be appealed or reversed. Buyers can no longer purchase your products, and you won't receive any further verification requests from us.</p>
+  <% if @balance_cents >= Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS %>
+    <% if @payouts_blocked_by_stripe %>
+      <p>Your remaining balance of <%= @formatted_balance %> is held by Stripe. If Stripe releases it, we'll pay it out to you automatically — you don't need to do anything.</p>
+    <% elsif @payouts_blocked %>
+      <p>Your remaining balance of <%= @formatted_balance %> is on hold. <%= link_to "Contact support", help_center_root_url %> and we'll help you get it paid out.</p>
+    <% else %>
+      <p>Your remaining balance of <%= @formatted_balance %> will be paid out to your bank account automatically <% if @next_payout_date %>on <%= @next_payout_date.strftime("%B %-d, %Y") %><% else %>on your next scheduled payout<% end %><% if @balance_cents < Payouts::MIN_AMOUNT_CENTS %>, even though it's below the usual $100 minimum<% end %>. You don't need to do anything.</p>
+    <% end %>
+  <% elsif @balance_cents > 0 %>
+    <p>Your remaining balance of <%= @formatted_balance %> is below the $1 minimum our payout system can send, so we're unable to pay it out.</p>
+  <% end %>
+  <p>You can check your account status anytime on your <%= link_to "payments settings page", settings_payments_url %>.</p>
+  <p>We're sorry it ended this way, and we thank you for your time on Gumroad.</p>
+</div>

@@ -145,6 +145,79 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
+      describe "abandoned client-confirm charge with method-forced presentment rows" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller) }
+        let(:purchase) { create(:purchase_in_progress, link: product, merchant_account: create(:merchant_account, user: seller)) }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_abandoned_presentment", client_confirmed: true) }
+
+        before do
+          charge.purchases << purchase
+          purchase.create_processor_payment_intent!(intent_id: "pi_abandoned_presentment")
+          charge_presentment = create(:charge_presentment, charge:, presentment_currency: Currency::EUR,
+                                                           stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+          create(:purchase_presentment, purchase:, charge_presentment:, presentment_currency: Currency::EUR)
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+
+          # The buyer bailed at the redirect: the intent is still awaiting confirmation, so the
+          # worker cancels it. (Intent expiry has no separate path — a never-confirmed deferred
+          # intent is cleaned up by exactly this abandonment cancel.)
+          allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_abandoned_presentment")
+            .and_return(Stripe::PaymentIntent.construct_from(id: "pi_abandoned_presentment", status: "requires_payment_method"))
+          allow(ChargeProcessor).to receive(:cancel_payment_intent!)
+        end
+
+        it "cancels the intent, fails the purchase, and removes the orphaned presentment snapshot" do
+          described_class.new.perform(purchase.id)
+
+          expect(ChargeProcessor).to have_received(:cancel_payment_intent!)
+          expect(purchase.reload).to be_failed
+          expect(charge.reload.charge_presentment).to be_nil
+          expect(purchase.purchase_presentment).to be_nil
+          expect(ChargePresentment.count).to eq(0)
+          expect(PurchasePresentment.count).to eq(0)
+        end
+
+        it "leaves nothing behind so a retried checkout's fresh prepare yields exactly one live presentment set" do
+          described_class.new.perform(purchase.id)
+
+          # The buyer retries: a new charge is prepared and persists its own snapshot.
+          retry_charge = create(:charge, seller:, client_confirmed: true)
+          retry_purchase = create(:purchase_in_progress, link: product)
+          retry_charge.purchases << retry_purchase
+          retry_presentment = create(:charge_presentment, charge: retry_charge, presentment_currency: Currency::EUR,
+                                                          stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+          create(:purchase_presentment, purchase: retry_purchase, charge_presentment: retry_presentment, presentment_currency: Currency::EUR)
+
+          expect(ChargePresentment.all).to eq([retry_presentment])
+          expect(PurchasePresentment.count).to eq(1)
+          expect(PurchasePresentment.sole.purchase).to eq(retry_purchase)
+        end
+      end
+
+      describe "abandoned client-confirm charge without presentment rows (flag off / card checkout)" do
+        let(:seller) { create(:user) }
+        let(:purchase) { create(:purchase_in_progress, link: create(:product, user: seller), merchant_account: create(:merchant_account, user: seller)) }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_abandoned_plain", client_confirmed: true) }
+
+        before do
+          charge.purchases << purchase
+          purchase.create_processor_payment_intent!(intent_id: "pi_abandoned_plain")
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+
+          allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_abandoned_plain")
+            .and_return(Stripe::PaymentIntent.construct_from(id: "pi_abandoned_plain", status: "requires_payment_method"))
+          allow(ChargeProcessor).to receive(:cancel_payment_intent!)
+        end
+
+        it "cancels and fails without error when there is no snapshot to clean up" do
+          expect { described_class.new.perform(purchase.id) }.not_to raise_error
+
+          expect(purchase.reload).to be_failed
+          expect(ChargePresentment.count).to eq(0)
+        end
+      end
+
       describe "client-confirm charge that succeeded but was never finalized" do
         let(:seller) { create(:user) }
         let(:product) { create(:product, user: seller) }

@@ -153,4 +153,215 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision).not_to be_eligible
     expect(decision.fallback_reason).to eq(:unsupported_charge_model)
   end
+
+  describe "#method_forced_decision" do
+    let(:payment_method) { "ideal" }
+
+    subject(:forced_decision) do
+      described_class.new(order:,
+                          seller:,
+                          merchant_account:,
+                          chargeable:,
+                          purchases:,
+                          params:,
+                          setup_future_charges:,
+                          off_session:).method_forced_decision(payment_method:)
+    end
+
+    it "allows iDEAL in EUR for a USD-priced product via the FX quote path" do
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.fallback_reason).to be_nil
+      expect(forced_decision.direct_listed_amount?).to eq(false)
+    end
+
+    it "allows iDEAL in EUR for an EUR-priced product and flags the direct listed-amount case" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "allows Bancontact in EUR" do
+      bancontact_decision = described_class.new(order:,
+                                                seller:,
+                                                merchant_account:,
+                                                chargeable:,
+                                                purchases:,
+                                                params:,
+                                                setup_future_charges:,
+                                                off_session:).method_forced_decision(payment_method: "bancontact")
+
+      expect(bancontact_decision).to be_eligible
+      expect(bancontact_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "does not depend on GeoIP buyer currency detection" do
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_raise("GeoIP must not be consulted in method-forced mode")
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "withholds the method for payment methods without a forced currency" do
+      unknown_decision = described_class.new(order:,
+                                             seller:,
+                                             merchant_account:,
+                                             chargeable:,
+                                             purchases:,
+                                             params:,
+                                             setup_future_charges:,
+                                             off_session:).method_forced_decision(payment_method: "card")
+
+      expect(unknown_decision).not_to be_eligible
+      expect(unknown_decision.fallback_reason).to eq(:unsupported_payment_method)
+    end
+
+    # Scenario-4 shape (round-2 QA): a card ConfirmationToken minted on an EUR-mounted
+    # Payment Element can only confirm an EUR intent, so the prepare service passes the
+    # element's mount currency explicitly for methods with no registry entry of their own.
+    it "allows card with an explicit forced currency (EUR-mounted element) and flags the direct listed-amount case" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).to be_eligible
+      expect(card_decision.currency).to eq(Currency::EUR)
+      expect(card_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "still applies the flag gates when the forced currency is explicit" do
+      Feature.deactivate_user(described_class::FEATURE_NAME, seller)
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).not_to be_eligible
+      expect(card_decision.fallback_reason).to eq(:feature_disabled)
+    end
+
+    it "withholds the method when the internal rollout flag is disabled" do
+      Feature.deactivate_user(described_class::FEATURE_NAME, seller)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:feature_disabled)
+    end
+
+    it "withholds the method in live mode" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:live_mode)
+    end
+
+    it "withholds the method for non-Stripe merchant accounts" do
+      paypal_merchant_account = create(:merchant_account_paypal, user: seller)
+      paypal_decision = described_class.new(order:,
+                                            seller:,
+                                            merchant_account: paypal_merchant_account,
+                                            chargeable:,
+                                            purchases:,
+                                            params:,
+                                            setup_future_charges:,
+                                            off_session:).method_forced_decision(payment_method:)
+
+      expect(paypal_decision).not_to be_eligible
+      expect(paypal_decision.fallback_reason).to eq(:unsupported_processor)
+    end
+
+    it "withholds the method for seller-managed destination-charge models" do
+      merchant_account.update!(json_data: {})
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_charge_model)
+    end
+
+    it "withholds the method for merchant accounts that settle in a non-USD currency, even for EUR-priced products" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      merchant_account.update!(currency: Currency::CAD)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
+    it "withholds the method for future-charge setups such as save-card checkouts" do
+      save_card_decision = described_class.new(order:,
+                                               seller:,
+                                               merchant_account:,
+                                               chargeable:,
+                                               purchases:,
+                                               params:,
+                                               setup_future_charges: true,
+                                               off_session:).method_forced_decision(payment_method:)
+
+      expect(save_card_decision).not_to be_eligible
+      expect(save_card_decision.fallback_reason).to eq(:future_charge_setup)
+    end
+
+    it "withholds the method for off-session charges" do
+      off_session_decision = described_class.new(order:,
+                                                 seller:,
+                                                 merchant_account:,
+                                                 chargeable:,
+                                                 purchases:,
+                                                 params:,
+                                                 setup_future_charges:,
+                                                 off_session: true).method_forced_decision(payment_method:)
+
+      expect(off_session_decision).not_to be_eligible
+      expect(off_session_decision.fallback_reason).to eq(:off_session)
+    end
+
+    it "withholds the method for multi-item checkouts" do
+      purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:multi_item_checkout)
+    end
+
+    it "withholds the method for installment payments" do
+      purchase.update!(is_installment_payment: true)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_product_type)
+    end
+
+    it "withholds the method for products priced in a third currency that is neither USD nor the forced one" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::GBP))
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_product_currency)
+    end
+
+    it "withholds the method when the forced currency's minor units differ between Gumroad and Stripe" do
+      stub_const("#{described_class}::FORCED_CURRENCY_PAYMENT_METHODS",
+                 described_class::FORCED_CURRENCY_PAYMENT_METHODS.merge("krw_only_method" => Currency::KRW))
+
+      krw_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "krw_only_method")
+
+      expect(krw_decision).not_to be_eligible
+      expect(krw_decision.fallback_reason).to eq(:unsupported_forced_currency)
+    end
+  end
 end

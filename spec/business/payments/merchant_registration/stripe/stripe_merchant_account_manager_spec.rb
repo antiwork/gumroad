@@ -591,6 +591,58 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "Luxembourg postal codes written with the conventional 'L-' prefix" do
+      # Regression coverage for gumroad-private#1014: LU residents habitually write postal
+      # codes as "L-9767". Stripe only accepts the bare four digits and rejects the prefixed
+      # form with `postal_code_invalid`, which (because account creation runs async) left the
+      # seller silently unable to publish. Normalize at the Stripe boundary so both fresh
+      # saves and retry-job re-attempts of already-saved records succeed.
+      let(:user_compliance_info) do
+        create(:user_compliance_info,
+               user:,
+               street_address: "2 Rue du Château",
+               city: "Ettelbruck",
+               state: nil,
+               zip_code: "L-9767",
+               country: "Luxembourg")
+      end
+
+      it "strips the 'L-' prefix from the individual address postal code" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:address]).to include(country: "LU", postal_code: "9767")
+      end
+
+      it "strips the prefix from the legal-entity address on business accounts" do
+        business_info = create(:user_compliance_info_business,
+                               user:,
+                               business_street_address: "2 Rue du Château",
+                               business_city: "Ettelbruck",
+                               business_state: nil,
+                               business_zip_code: "l 9767",
+                               business_country: "Luxembourg")
+        company_hash = described_class.send(:company_hash, business_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(company_hash[:company][:address]).to include(country: "LU", postal_code: "9767")
+      end
+
+      describe ".normalize_postal_code" do
+        it "normalizes prefixed LU postal codes and leaves everything else untouched" do
+          expect(described_class.send(:normalize_postal_code, "L-9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "l-9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "L 9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "L9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, " L-9767 ", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "9767", "LU")).to eq("9767")
+          # Not the L-prefix shape: pass through so Stripe can report its own validation error.
+          expect(described_class.send(:normalize_postal_code, "L-97", "LU")).to eq("L-97")
+          expect(described_class.send(:normalize_postal_code, "Lot 5", "LU")).to eq("Lot 5")
+          # Other countries are untouched, even when the value looks prefixed.
+          expect(described_class.send(:normalize_postal_code, "L-1234", "FR")).to eq("L-1234")
+          expect(described_class.send(:normalize_postal_code, "94107", "US")).to eq("94107")
+          expect(described_class.send(:normalize_postal_code, nil, "LU")).to be_nil
+        end
+      end
+    end
+
     describe "Bangladesh business with a rep resident outside Bangladesh (person_hash)" do
       # Reverse direction of the foreign-rep fix: gating nationality on the account country instead
       # of the rep's residential country also means BGD/SGP/PAK/UAE *accounts* keep submitting
@@ -9732,7 +9784,8 @@ describe StripeMerchantAccountManager, :vcr do
         alive?: true,
         charge_processor_alive?: true,
         user:,
-        stripe_disabled_reason: nil
+        stripe_disabled_reason: nil,
+        stripe_rejected?: false
       )
     end
     let(:merchant_account_relation) { double(last: merchant_account) }
@@ -10338,6 +10391,180 @@ describe StripeMerchantAccountManager, :vcr do
               described_class.handle_stripe_event(stripe_event)
 
               expect(merchant_account.reload.stripe_disabled_reason).to be_nil
+            end
+
+            describe "when Stripe permanently rejects the account" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                # Terminal rejection: Stripe is asking for nothing more.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+              end
+
+              it "closes open verification requests so remediation reminders stop" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("provided")
+              end
+
+              it "sends the one-time rejection email and records the marker" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected).with(user.id)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to eq(true)
+              end
+
+              it "does not send the rejection email again on subsequent webhooks" do
+                merchant_account.update!(stripe_rejection_email_sent: true)
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+              end
+
+              it "syncs the payouts pause before enqueueing the rejection email when the same webhook disables payouts" do
+                # The rejection email's copy depends on whether Stripe froze
+                # payouts, so the pause written by this same webhook must be
+                # committed by the time the email is enqueued.
+                stripe_event["data"]["object"]["payouts_enabled"] = false
+
+                payouts_paused_when_email_enqueued = nil
+                allow(MerchantRegistrationMailer).to receive(:stripe_account_rejected).with(user.id) do
+                  payouts_paused_when_email_enqueued = user.reload.payouts_paused_internally?
+                  double(deliver_later: true)
+                end
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(payouts_paused_when_email_enqueued).to eq(true)
+              end
+            end
+
+            describe "when Stripe permanently rejects the account but leaves a non-actionable interv_* entry open (the gumroad-private#965 signature)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+                # Stripe leaves this permanent supportability intervention in
+                # currently_due on rejected accounts and never clears it. There
+                # is no form the seller can fill in for it, so the rejection is
+                # terminal despite currently_due being non-empty.
+                stripe_event["data"]["object"]["requirements"]["currently_due"] =
+                  ["interv_1RWtzeAQqMpdRp2IhPb6x4q7.other_supportability_inquiry.support"]
+              end
+
+              it "treats the rejection as terminal: closes open verification requests" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("provided")
+              end
+
+              it "sends the one-time rejection email" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected).with(user.id)
+              end
+
+              it "does not open a verification request or send a remediation email for the interv_* entry" do
+                expect do
+                  expect do
+                    described_class.handle_stripe_event(stripe_event)
+                  end.not_to have_enqueued_mail(ContactingCreatorMailer, :stripe_remediation)
+                end.not_to change { user.user_compliance_info_requests.requested.count }
+              end
+            end
+
+            describe "when Stripe rejects the account with an appeal intervention open (active appeal window)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.other"
+                stripe_event["data"]["object"]["requirements"]["past_due"] = []
+                # An appeal-category intervention means the seller is inside an
+                # active appeal window: the risk loop suspends them pending the
+                # appeal, so the rejection must not be handled as terminal.
+                stripe_event["data"]["object"]["requirements"]["currently_due"] =
+                  ["interv_1RWtzeAQqMpdRp2IhPb6x4q7.rejection_appeal.support"]
+              end
+
+              it "suspends the seller pending the appeal" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(ContactingCreatorMailer, :suspended_due_to_stripe_risk).with(user.id)
+
+                expect(user.reload.suspended_for_tos_violation?).to be true
+              end
+
+              it "does not send the terminal rejection email" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to be_falsey
+              end
+
+              it "leaves open verification requests untouched" do
+                # A request for the intervention field itself survives the
+                # regular request sync (Stripe still lists it), so the only
+                # thing that could close it is the terminal-rejection handling
+                # — which must not run while the appeal is open.
+                request = create(:user_compliance_info_request, user:, field_needed: "interv_1RWtzeAQqMpdRp2IhPb6x4q7.rejection_appeal.support")
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("requested")
+              end
+            end
+
+            describe "when Stripe rejects the account but still has open requirements (appealable fork)" do
+              before do
+                stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+                # e.g. Japan `rejected.listed` collision: rejected, but Stripe
+                # still wants an identity document — the seller can appeal.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.verification.document"]
+              end
+
+              it "does not close open verification requests" do
+                request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+                described_class.handle_stripe_event(stripe_event)
+
+                expect(request.reload.state).to eq("requested")
+              end
+
+              it "re-creates a verification request when none is open locally (failed-document re-request path)" do
+                # After a failed upload Stripe re-adds the requirement while the
+                # local request was already closed by verify_stripe_remediation —
+                # the webhook must recreate it or the appeal path is lost.
+                stripe_event["data"]["object"]["requirements"]["past_due"] = ["individual.id_number"]
+
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to change { user.user_compliance_info_requests.requested.count }.by(1)
+              end
+
+              it "does not send the terminal rejection email" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+
+                expect(merchant_account.reload.stripe_rejection_email_sent).to be_falsey
+              end
+
+              it "still opens a verification request for the document Stripe is asking for" do
+                described_class.handle_stripe_event(stripe_event)
+
+                request = user.user_compliance_info_requests.requested.last
+                expect(request).to be_present
+                expect(request.field_needed).to eq(UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+              end
+
+              it "still emails the seller about the outstanding verification" do
+                expect do
+                  described_class.handle_stripe_event(stripe_event)
+                end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed).with(user.id, [UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID])
+              end
             end
           end
 
