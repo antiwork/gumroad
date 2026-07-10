@@ -26,7 +26,12 @@ const getStripeInstanceMock = vi.mocked(getStripeInstance);
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
 const requestData: StartCartPurchaseRequestPayload = {
-  paymentMethod: { type: "payment-element-client-confirm", confirmationTokenId: "ct_123", cardCountry: "US" },
+  paymentMethod: {
+    type: "payment-element-client-confirm",
+    confirmationTokenId: "ct_123",
+    cardCountry: "US",
+    walletType: null,
+  },
   email: "buyer@example.com",
   fullName: "Buyer",
   zipCode: "10001",

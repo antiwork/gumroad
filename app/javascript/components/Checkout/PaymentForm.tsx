@@ -778,6 +778,7 @@ const CreditCardContent = ({
             type: "payment-element-client-confirm",
             confirmationTokenId: tokenResult.confirmationTokenId,
             cardCountry: tokenResult.cardCountry,
+            walletType: tokenResult.wallet?.type ?? null,
           },
         });
       }
