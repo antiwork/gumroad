@@ -1973,7 +1973,15 @@ class Purchase < ApplicationRecord
     errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
     self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     nil
-  rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+  rescue ChargeProcessorInvalidRequestError => e
+    # The processor rejected our request as malformed — a deterministic failure on our side,
+    # not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+    logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
+    errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+    self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+    self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+    nil
+  rescue ChargeProcessorUnavailableError => e
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
     self.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE
@@ -3551,7 +3559,14 @@ class Purchase < ApplicationRecord
         self.card_visual = chargeable.visual
         self.card_expiry_month = chargeable.expiry_month
         self.card_expiry_year = chargeable.expiry_year
-      rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+      rescue ChargeProcessorInvalidRequestError => e
+        # The processor rejected our request as malformed — a deterministic failure on our
+        # side, not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+        logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
+        errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+        self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+        self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      rescue ChargeProcessorUnavailableError => e
         logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
         errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
         self.error_code = charge_processor_unavailable_error
@@ -3643,7 +3658,15 @@ class Purchase < ApplicationRecord
 
     def with_charge_processor_error_handler
       yield
-    rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+    rescue ChargeProcessorInvalidRequestError => e
+      # The processor rejected our request as malformed — a deterministic failure on our side,
+      # not an outage. Record it distinctly so retry logic doesn't treat it as transient.
+      logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
+      errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      nil
+    rescue ChargeProcessorUnavailableError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
       errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
       self.error_code = charge_processor_unavailable_error

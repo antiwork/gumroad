@@ -333,6 +333,17 @@ class Order::PreparePaymentIntentService
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
+      # Stamp the failure details on the purchases now, before the caller's generic
+      # fail_purchases_with runs (it only fills error_code when blank). An invalid-request
+      # rejection is a deterministic bug on our side — labeling it stripe_unavailable made a
+      # code regression look like a Stripe outage (issue #1026), so record it distinctly and
+      # keep the processor's own error code for debugging.
+      if e.is_a?(ChargeProcessorInvalidRequestError)
+        purchases_to_charge.each do |purchase|
+          purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST if purchase.error_code.blank?
+          purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
+        end
+      end
       nil
     end
 

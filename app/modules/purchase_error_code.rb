@@ -14,6 +14,11 @@ module PurchaseErrorCode
   SUSPENDED_BUYER = "suspended_buyer"
   STRIPE_UNAVAILABLE = "stripe_unavailable"
   PAYPAL_UNAVAILABLE = "paypal_unavailable"
+  # The processor rejected our request as malformed (e.g. Stripe's InvalidRequestError) —
+  # a deterministic failure caused by a bug on our side, NOT a processor outage. Kept
+  # separate from STRIPE_UNAVAILABLE/PAYPAL_UNAVAILABLE so retries and monitoring don't
+  # treat a request we built wrong as transient network trouble.
+  PROCESSOR_INVALID_REQUEST = "processor_invalid_request"
   PROCESSING_ERROR = "processing_error"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
@@ -213,6 +218,7 @@ module PurchaseErrorCode
                                           .concat([
                                                     STRIPE_UNAVAILABLE,
                                                     PAYPAL_UNAVAILABLE,
+                                                    PROCESSOR_INVALID_REQUEST,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
                                                   ])

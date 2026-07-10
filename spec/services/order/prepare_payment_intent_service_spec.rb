@@ -222,6 +222,28 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "when Stripe synchronously rejects the intent create as an invalid request" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails the purchases with processor_invalid_request and keeps Stripe's error code, not stripe_unavailable" do
+        order, params = build_order
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        stripe_error = Stripe::InvalidRequestError.new("The payment method type \"cashapp\" is invalid.", nil, code: "payment_intent_invalid_parameter")
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
+        expect(purchase.stripe_error_code).to eq("payment_intent_invalid_parameter")
+      end
+    end
+
     context "with a multi-seller cart" do
       let(:other_seller) { create(:user) }
       let(:other_product) { create(:product, user: other_seller, price_cents: 5_00) }
