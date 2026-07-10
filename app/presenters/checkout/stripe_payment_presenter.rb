@@ -11,6 +11,10 @@ class Checkout::StripePaymentPresenter
   # buyer's card and Gumroad rather than to the physical device — instead of a device token that
   # dies when the buyer wipes or replaces their phone. Rollout flag for antiwork/gumroad#5727.
   APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME = :apple_pay_merchant_tokens
+  # When active for every seller in the cart, the Payment Element renders Apple Pay / Google Pay
+  # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
+  # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -77,6 +81,9 @@ class Checkout::StripePaymentPresenter
         fallback_reason:,
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        # CardElement carts never mount a Payment Element, so there is no element wallet surface
+        # to enable — they keep the Payment Request Button regardless of the rollout flag.
+        payment_element_wallets: false,
         elements_options: nil,
       }
     end
@@ -87,6 +94,7 @@ class Checkout::StripePaymentPresenter
         fallback_reason: nil,
         disable_wallets: false,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        payment_element_wallets: payment_element_wallets?,
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
@@ -134,6 +142,12 @@ class Checkout::StripePaymentPresenter
     # enabling it for one seller never changes another seller's checkout.)
     def request_apple_pay_merchant_tokens?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, _1) }
+    end
+
+    # Same seller-complete keying as request_apple_pay_merchant_tokens? and for the same reason:
+    # enabling wallets-in-the-element for one seller must never change another seller's checkout.
+    def payment_element_wallets?
+      sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
     end
 
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
@@ -188,6 +202,7 @@ class Checkout::StripePaymentPresenter
         # keeps wallets enabled, exactly as before.
         disable_wallets: items.any? { buyer_currency_presentment_candidate?(_1) },
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        payment_element_wallets: payment_element_wallets?,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
