@@ -369,10 +369,10 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
     def build_gbp_purchase
       purchase = build_affected_purchase
       purchase.update_columns(merchant_account_id: seller_stripe_account.id)
-      # A seller-owned account that is managed by Gumroad (Stripe custom account),
-      # not a standalone Stripe Connect account.
-      allow_any_instance_of(MerchantAccount).to receive(:is_managed_by_gumroad?).and_return(false)
-      allow_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).and_return(false)
+      # No stubs needed: a merchant account created with a user is seller-owned
+      # (is_managed_by_gumroad? is false), and without the stripe_connect metadata flag
+      # it is a Stripe custom account, not a standalone Connect account — exactly the
+      # population affected in production.
       purchase.reload
     end
 

@@ -102,6 +102,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       # Recover the real settlement amounts from the charge processor BEFORE opening the
       # database transaction — this is a network call and must not run while we hold row
       # locks. Eligibility is re-checked under lock below in case anything changed.
+      prefetched_net_cents = purchase.payment_cents.to_i - purchase.affiliate_credit_cents.to_i
       holding_amount = seller_holding_amount(purchase)
 
       ApplicationRecord.transaction do
@@ -114,7 +115,7 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
           next
         end
 
-        new_bt = insert_seller_bt!(purchase, holding_amount)
+        new_bt = insert_seller_bt!(purchase, holding_amount, prefetched_net_cents)
       end
 
       return unless new_bt
@@ -192,9 +193,19 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
       :eligible
     end
 
-    def insert_seller_bt!(p, holding_amount)
+    def insert_seller_bt!(p, holding_amount, prefetched_net_cents)
       existing_bt = p.balance_transactions.first
       missing_net_cents = p.payment_cents.to_i - p.affiliate_credit_cents.to_i
+
+      # The holding amount was built from a read of the purchase taken before this row
+      # lock. If the purchase's fee or affiliate-credit figures changed in that window,
+      # the issued and holding nets would silently disagree — refuse to book rather than
+      # write a mismatched pair. (The holding amount's own net may legitimately be in the
+      # settlement currency, so we compare the USD net it was derived from instead.)
+      if prefetched_net_cents != missing_net_cents
+        raise "Missing net changed between prefetch and lock for purchase #{p.id} " \
+              "(holding built for #{prefetched_net_cents}, locked purchase implies #{missing_net_cents})"
+      end
 
       issued = BalanceTransaction::Amount.new(
         currency: existing_bt.issued_amount_currency,
@@ -245,6 +256,11 @@ class Onetime::BackfillSelfAffiliateDroppedProceeds
     # the normal purchase flow builds and no processor call is needed.
     def flow_of_funds_for(purchase)
       if purchase.merchant_account.holder_of_funds == HolderOfFunds::GUMROAD
+        # For charges presented in the buyer's currency, the gross booked here is the
+        # canonical USD transaction amount rather than a replay of Stripe's exact
+        # post-conversion settled cents, so it can differ from the original booking by
+        # FX rounding. The net cents — the figure balances and payouts actually use —
+        # is computed the same way either way, so payability is unaffected.
         return FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents)
       end
 
