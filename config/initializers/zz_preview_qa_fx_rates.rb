@@ -47,32 +47,14 @@ class PreviewQaDebugMiddleware
   def call(env)
     return @app.call(env) unless Stripe.api_key.to_s.start_with?("sk_test_")
 
-    req = Rack::Request.new(env)
-
-    # Cookie-based spoof for testers without a header extension (phones, locked-down
-    # browsers): visiting /qa/spoof?ip=<addr> sets a cookie; /qa/spoof?off clears it.
-    # Every later request in that browser then behaves as if it came from <addr>.
-    if req.path == "/qa/spoof"
-      ip_param = req.params["ip"].to_s
-      if req.params.key?("off")
-        return [200, { "Content-Type" => "text/html", "Set-Cookie" => "qa_spoof_ip=; Path=/; Max-Age=0" },
-                ["<h2>QA geo spoof OFF</h2><p>You are browsing with your real IP again.</p>"]]
-      elsif ip_param.match?(/\A[0-9a-fA-F.:]+\z/)
-        return [200, { "Content-Type" => "text/html", "Set-Cookie" => "qa_spoof_ip=#{ip_param}; Path=/; SameSite=Lax" },
-                ["<h2>QA geo spoof ON: #{ip_param}</h2><p>All requests from this browser now geo-locate as #{ip_param}. " \
-                 "<a href=\"/qa/preview_debug\">Verify</a> · <a href=\"/qa/spoof?off=1\">Turn off</a></p>"]]
-      else
-        return [400, { "Content-Type" => "text/html" }, ["<p>Usage: /qa/spoof?ip=99.199.99.99 or /qa/spoof?off=1</p>"]]
-      end
-    end
-
-    spoof = env["HTTP_X_QA_SPOOF_IP"].presence || req.cookies["qa_spoof_ip"].presence
+    spoof = env["HTTP_X_QA_SPOOF_IP"]
     if spoof.present? && spoof.match?(/\A[0-9a-fA-F.:]+\z/)
       env["HTTP_CF_CONNECTING_IP"] = spoof
       env["HTTP_X_FORWARDED_FOR"] = spoof
       env["REMOTE_ADDR"] = spoof
     end
 
+    req = Rack::Request.new(env)
     return @app.call(env) unless req.path == "/qa/preview_debug"
 
     helper = Class.new { include CurrencyHelper }.new
