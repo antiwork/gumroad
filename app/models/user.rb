@@ -107,7 +107,11 @@ class User < ApplicationRecord
   has_many :available_cross_sells, -> { cross_sell.alive.available_to_customers }, foreign_key: :seller_id, class_name: "Upsell"
   has_many :blocked_customer_objects, foreign_key: :seller_id
   has_one :seller_profile, foreign_key: :seller_id
-  has_one :page, as: :pageable, dependent: :destroy, autosave: true
+  # The root page (slug NULL) is the whole-profile custom HTML takeover;
+  # slugged pages are the seller's first-class Pages entries served under the
+  # storefront at /<slug>.
+  has_one :page, -> { roots }, as: :pageable, dependent: :destroy, autosave: true
+  has_many :pages, -> { slugged.order(:created_at) }, as: :pageable, dependent: :destroy
   delegate :custom_html, to: :page, allow_nil: true
   has_many :seller_profile_sections, foreign_key: :seller_id
   has_many :seller_profile_products_sections, foreign_key: :seller_id
