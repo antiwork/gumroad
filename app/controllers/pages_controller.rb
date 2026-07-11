@@ -79,9 +79,11 @@ class PagesController < Sellers::BaseController
     authorize :page
 
     if params[:slug] == "profile"
-      # The profile is the special root page: its structured storefront layout
-      # is locked, so the editor renders the locked view with the agent/CLI
-      # full-HTML takeover as the only path beyond the existing settings.
+      # The profile is the special root page: it renders the default storefront
+      # template (product grid, follow form, tabs), with the details edited in
+      # profile settings. Sellers keep it 100% customizable by replacing it with
+      # fully custom HTML via their agent or the CLI, so the editor renders the
+      # template view with that takeover path.
       render inertia: "Pages/Edit", props: {
         page: { slug: "profile", title: "Profile", content: "", custom_html: current_seller.custom_html.present? },
         is_profile: true,

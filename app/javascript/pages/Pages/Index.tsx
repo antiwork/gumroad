@@ -1,4 +1,4 @@
-import { FileDetail, Lock, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
+import { FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -54,7 +54,9 @@ export default function PagesIndex() {
           about pages, licenses, FAQs, or anything else your audience needs.
         </p>
 
-        {/* The profile row: pinned first, undeletable, edited through its own locked editor. */}
+        {/* The profile row: pinned first, undeletable. It renders the default
+            storefront template until the seller (or their agent) replaces it
+            with fully custom HTML. */}
         <div className="rounded border border-border bg-background">
           <div className="flex items-center gap-4 p-4">
             <div className="flex size-10 items-center justify-center rounded bg-black text-white dark:bg-white dark:text-black">
@@ -80,10 +82,7 @@ export default function PagesIndex() {
               </a>
             </div>
             <div className="flex items-center gap-2">
-              <span className="hidden items-center gap-1 text-sm text-muted sm:flex">
-                <Lock className="size-4" />
-                Your storefront
-              </span>
+              <span className="hidden text-sm text-muted sm:block">Default template</span>
               <NavigationButton size="icon" href={Routes.edit_page_path("profile")} aria-label="Edit profile page">
                 <Pencil className="size-4" />
               </NavigationButton>

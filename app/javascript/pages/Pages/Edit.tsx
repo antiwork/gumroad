@@ -137,14 +137,14 @@ export default function PagesEdit() {
         <WithPreviewSidebar className="flex-1">
           <div className="grid content-start gap-6 p-4 md:p-8">
             <Alert role="status" variant="info">
-              Your profile is the home page of your store. Its layout — product grid, follow form, tabs — is fixed, and
-              you edit its details in profile settings. To go beyond it, replace it with a fully custom page built by
-              your agent.
+              Your profile is the home page of your store. It ships with the default template — product grid, follow
+              form, tabs — with the details editable in profile settings. It's yours to change completely: have your
+              agent replace it with a fully custom page.
             </Alert>
             {page.custom_html ? (
               <Alert role="status" variant="success">
-                Your custom profile page is live — it replaces the standard layout. Update it with your agent or the
-                CLI, or remove it from profile settings to restore the default profile.
+                Your custom profile page is live — it replaces the default template. Update it with your agent or the
+                CLI, or remove it from profile settings to restore the default template.
               </Alert>
             ) : null}
             {agentPanel}
