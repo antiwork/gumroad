@@ -122,7 +122,7 @@ class OrdersController < ApplicationController
       # TEMP (revert only AFTER QA sign-off, before merge): previews run Stripe test keys and
       # reCAPTCHA Enterprise fails preview subdomains, blocking scripted + human QA checkouts.
       # Production runs live keys, so this branch can never activate there.
-      return true if Stripe.api_key.to_s.start_with?("sk_test_")
+      return true if Rails.env.staging? && Stripe.api_key.to_s.start_with?("sk_test_")
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
