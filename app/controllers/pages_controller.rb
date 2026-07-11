@@ -35,7 +35,7 @@ class PagesController < Sellers::BaseController
     {
       "slug" => "studio",
       "title" => "Studio",
-      "content" => "<p>A page built by my agent with a fully custom layout.</p>",
+      "content" => "<!doctype html><html><head><style>body{margin:0;font-family:system-ui;background:#0d0d0d;color:#fafafa}header{padding:48px 32px;background:linear-gradient(135deg,#ff90e8,#ffc900);color:#000}h1{margin:0}main{padding:32px;line-height:1.6}a{color:#ff90e8}</style></head><body><header><h1>Studio</h1></header><main><p>A page designed end-to-end by my agent — custom layout, palette, and typography.</p><p><a href=\"/\">Back to the store</a></p></main></body></html>",
       "custom_html" => true,
     },
   ].freeze

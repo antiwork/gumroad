@@ -108,17 +108,31 @@ export default function PagesEdit() {
           <div className="text-sm font-medium">{previewTitle || "Untitled page"}</div>
           <div className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</div>
         </div>
-        {is_profile || page.custom_html ? (
+        {is_profile ? (
+          // The live storefront in a frame. `allow-same-origin` is needed for the
+          // storefront's own scripts to boot — without it the page loads but
+          // renders blank. The frame shows our own domain (the seller's public
+          // profile), same trust level as the parent page.
+          // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
           <iframe
             title="Page preview"
             src={publicUrl}
-            sandbox="allow-scripts allow-forms"
+            sandbox="allow-scripts allow-forms allow-same-origin"
+            className="aspect-[3/4] w-full"
+          />
+        ) : page.custom_html ? (
+          // DESIGN STUB: agent-built pages aren't publicly served yet, so frame
+          // the stored HTML directly. The real build points this at the public
+          // page URL, same as the profile above.
+          <iframe
+            title="Page preview"
+            srcDoc={previewContent}
+            sandbox="allow-scripts"
             className="aspect-[3/4] w-full"
           />
         ) : (
           <div
             className="rich-text aspect-[3/4] w-full overflow-y-auto p-4"
-            // eslint-disable-next-line react/no-danger -- design stub; the real preview goes through the sanitizer pipeline server-side
             dangerouslySetInnerHTML={{ __html: previewContent || "<p style='opacity:.5'>Nothing here yet.</p>" }}
           />
         )}
