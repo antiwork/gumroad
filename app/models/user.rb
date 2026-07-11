@@ -107,6 +107,9 @@ class User < ApplicationRecord
   has_many :available_cross_sells, -> { cross_sell.alive.available_to_customers }, foreign_key: :seller_id, class_name: "Upsell"
   has_many :blocked_customer_objects, foreign_key: :seller_id
   has_one :seller_profile, foreign_key: :seller_id
+  # Additional branded storefronts under this account ("multiple Gumroads, one payout"). The
+  # account's own username/profile continues to act as the first brand; these are extra ones.
+  has_many :storefronts, foreign_key: :seller_id
   has_one :page, as: :pageable, dependent: :destroy, autosave: true
   delegate :custom_html, to: :page, allow_nil: true
   has_many :seller_profile_sections, foreign_key: :seller_id
