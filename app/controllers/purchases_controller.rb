@@ -425,6 +425,10 @@ class PurchasesController < ApplicationController
     end
 
     def skip_recaptcha?
+      # TEMP (revert only AFTER QA sign-off, before merge): previews run Stripe test keys and
+      # reCAPTCHA Enterprise fails preview subdomains, blocking scripted + human QA flows.
+      # Production runs live keys, so this branch can never activate there.
+      return true if Stripe.api_key.to_s.start_with?("sk_test_")
       site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
 
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
