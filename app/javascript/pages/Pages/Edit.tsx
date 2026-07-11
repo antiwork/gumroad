@@ -100,10 +100,6 @@ export default function PagesEdit() {
       )}
     >
       <div className="overflow-hidden rounded border border-border bg-background">
-        {/* DESIGN STUB: the real preview renders the saved page through the same
-            sanitizer + wrapper pipeline as the public page, refreshed on save.
-            Here we approximate it with the saved rich text inside a storefront-
-            like frame. */}
         <div className="border-b border-border p-3">
           <div className="text-sm font-medium">{previewTitle || "Untitled page"}</div>
           <div className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</div>
@@ -121,15 +117,9 @@ export default function PagesEdit() {
             className="aspect-[3/4] w-full"
           />
         ) : page.custom_html ? (
-          // DESIGN STUB: agent-built pages aren't publicly served yet, so frame
-          // the stored HTML directly. The real build points this at the public
-          // page URL, same as the profile above.
-          <iframe
-            title="Page preview"
-            srcDoc={previewContent}
-            sandbox="allow-scripts"
-            className="aspect-[3/4] w-full"
-          />
+          // Agent-built pages frame the live public page, which serves the
+          // stored HTML through the sandboxed wrapper pipeline.
+          <iframe title="Page preview" src={publicUrl} sandbox="allow-scripts" className="aspect-[3/4] w-full" />
         ) : (
           <div
             className="rich-text aspect-[3/4] w-full overflow-y-auto p-4"
