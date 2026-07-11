@@ -272,7 +272,7 @@ describe "Purchase Process", :vcr do
                 purchase.process!
               end
               it "sets error code" do
-                expect(purchase.error_code).to eq PurchaseErrorCode::STRIPE_UNAVAILABLE
+                expect(purchase.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
               end
               it "sets errors" do
                 expect(purchase.errors).to be_present
@@ -317,7 +317,7 @@ describe "Purchase Process", :vcr do
                 purchase.process!
               end
               it "sets error code" do
-                expect(purchase.error_code).to eq PurchaseErrorCode::STRIPE_UNAVAILABLE
+                expect(purchase.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
               end
               it "sets errors" do
                 expect(purchase.errors).to be_present
@@ -387,7 +387,7 @@ describe "Purchase Process", :vcr do
                 purchase.process!
               end
               it "sets error code" do
-                expect(purchase.error_code).to eq PurchaseErrorCode::STRIPE_UNAVAILABLE
+                expect(purchase.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
               end
               it "sets errors" do
                 expect(purchase.errors).to be_present
@@ -432,7 +432,7 @@ describe "Purchase Process", :vcr do
                 purchase.process!
               end
               it "sets error code" do
-                expect(purchase.error_code).to eq PurchaseErrorCode::STRIPE_UNAVAILABLE
+                expect(purchase.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
               end
               it "sets errors" do
                 expect(purchase.errors).to be_present

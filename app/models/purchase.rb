@@ -600,6 +600,14 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
+  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
+  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
+  # is only ever written once Stripe acknowledges a real payment (the checkout return page
+  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
+  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
+  # purchase must still be in_progress — once it reaches a terminal state (failed,
+  # successful), stripe_status remains set but the payment is no longer in flight.
+  scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
   scope :not_successful, -> { without_purchase_state(:successful) }
@@ -1965,7 +1973,16 @@ class Purchase < ApplicationRecord
     errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
     self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     nil
-  rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+  rescue ChargeProcessorInvalidRequestError => e
+    # The processor rejected our request as malformed — a deterministic failure on our side,
+    # not an outage. Record it under its own code so a code regression shows up in monitoring
+    # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+    logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
+    errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+    self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+    self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+    nil
+  rescue ChargeProcessorUnavailableError => e
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
     self.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE
@@ -3543,7 +3560,15 @@ class Purchase < ApplicationRecord
         self.card_visual = chargeable.visual
         self.card_expiry_month = chargeable.expiry_month
         self.card_expiry_year = chargeable.expiry_year
-      rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+      rescue ChargeProcessorInvalidRequestError => e
+        # The processor rejected our request as malformed — a deterministic failure on our
+        # side, not an outage. Record it under its own code so a code regression shows up in
+        # monitoring instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+        logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
+        errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+        self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+        self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      rescue ChargeProcessorUnavailableError => e
         logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
         errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
         self.error_code = charge_processor_unavailable_error
@@ -3635,7 +3660,16 @@ class Purchase < ApplicationRecord
 
     def with_charge_processor_error_handler
       yield
-    rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+    rescue ChargeProcessorInvalidRequestError => e
+      # The processor rejected our request as malformed — a deterministic failure on our side,
+      # not an outage. Record it under its own code so a code regression shows up in monitoring
+      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+      logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
+      errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      nil
+    rescue ChargeProcessorUnavailableError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
       errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
       self.error_code = charge_processor_unavailable_error
@@ -4233,6 +4267,46 @@ class Purchase < ApplicationRecord
       end
 
       add_errors_for_existing_purchase(already)
+      return if errors.present?
+
+      not_double_charged_while_payment_settling(recipient_email)
+    end
+
+    # Blocks a repeat purchase while an earlier attempt's payment is still settling.
+    #
+    # The time-boxed check above assumes payments resolve within minutes, which is true for
+    # cards but not for delayed-notification methods like ACH bank debits: those stay
+    # `in_progress` for several business days while the debit clears, leaving a window where
+    # the same buyer can accidentally pay for the same product twice.
+    #
+    # The `payment_settling` scope only matches attempts whose payment was actually confirmed
+    # and is now clearing — not attempts the buyer started and walked away from (see the scope
+    # definition for how the two are told apart). That means a buyer who abandoned checkout
+    # can always come back and buy, while a buyer whose bank debit is mid-flight is told to wait.
+    def not_double_charged_while_payment_settling(recipient_email)
+      settling = self.class.payment_settling.where(
+        email: recipient_email,
+        link_id: link.id
+      )
+
+      settling = settling.where("purchases.id != ?", id) if id
+      settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
+
+      # No gift join is needed here, even though gift purchases are stored under the sender's
+      # email rather than the giftee's. The gift lookup in `not_double_charged` above
+      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
+      # so an in_progress gift — including one settling over a bank debit for days — already
+      # blocks repeat gifts to the same giftee until it resolves.
+
+      if variant_attributes.present?
+        settling = settling.select do |purchase|
+          purchase.variant_attributes.sort == variant_attributes.sort
+        end
+      end
+
+      if settling.any?
+        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+      end
     end
 
     def cancel_parallel_charge_intents

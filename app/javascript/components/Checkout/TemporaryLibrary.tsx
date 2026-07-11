@@ -41,8 +41,10 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
                   createAccountData={{
                     email: state.email,
                     cardParams:
+                      // Client-confirm methods carry no cardParamsResult (see Receipt.tsx / #5784).
                       state.status.paymentMethod.type === "not-applicable" ||
-                      state.status.paymentMethod.type === "saved"
+                      state.status.paymentMethod.type === "saved" ||
+                      state.status.paymentMethod.type === "payment-element-client-confirm"
                         ? null
                         : state.status.paymentMethod.cardParamsResult.cardParams,
                   }}

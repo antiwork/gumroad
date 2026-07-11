@@ -218,10 +218,27 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
   // The menu is absolutely positioned below the control with a fixed max height, so on short
   // viewports it can run past the bottom of the window. Clamp it to the space available below
   // the control (a long list then scrolls internally instead of clipping off-screen).
+  //
+  // The select can also sit inside a scroll container that clips at its own edge well before
+  // the viewport does — most notably a modal dialog, whose content box is overflow-y-auto
+  // (see Modal.tsx). In that case clamping only against the window leaves the menu taller
+  // than the space inside the dialog, so results past the dialog's bottom edge are cut off
+  // and unreachable. Clamp against every clipping ancestor's bottom edge as well, so the menu
+  // grows its own internal scrollbar instead. We check all ancestors (not just the nearest
+  // clipping one) because an element's bounding box doesn't account for clipping by ancestors
+  // further up — an inner scroll container can report a bottom edge that extends past an outer
+  // clipping wrapper, and the tightest visible boundary is what matters.
   React.useLayoutEffect(() => {
     const control = listRef.current?.offsetParent;
     if (!(control instanceof HTMLElement)) return;
-    const spaceBelow = window.innerHeight - control.getBoundingClientRect().bottom - MENU_VIEWPORT_MARGIN;
+    let bottomLimit = window.innerHeight;
+    for (let ancestor = control.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const { overflowY } = getComputedStyle(ancestor);
+      if (overflowY === "auto" || overflowY === "scroll" || overflowY === "hidden" || overflowY === "clip") {
+        bottomLimit = Math.min(bottomLimit, ancestor.getBoundingClientRect().bottom);
+      }
+    }
+    const spaceBelow = bottomLimit - control.getBoundingClientRect().bottom - MENU_VIEWPORT_MARGIN;
     setMaxHeight(Math.min(props.maxHeight, Math.max(spaceBelow, MIN_MENU_HEIGHT)));
     // `props.children` is a dependency because the control can grow while the menu is open
     // (multi-selects add value pills), moving the menu's top edge.

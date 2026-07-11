@@ -99,10 +99,22 @@ class Charge::CreateService
       purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
     nil
-  rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+  rescue ChargeProcessorInvalidRequestError => e
+    # The processor rejected our request as malformed — a deterministic failure on our side,
+    # not an outage. The intent was never created, so the outcome is known. Record it under its
+    # own code so a code regression shows up in monitoring instead of hiding inside
+    # Stripe-outage noise. Retry behavior is unchanged.
+    logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
+    purchases.each do |purchase|
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
+    end
+    nil
+  rescue ChargeProcessorUnavailableError => e
     # ChargeProcessorUnavailableError wraps connection failures, where the PaymentIntent
     # may have been created (or confirmed) before the response was lost.
-    @processor_outcome_unknown = e.is_a?(ChargeProcessorUnavailableError)
+    @processor_outcome_unknown = true
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
       purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."

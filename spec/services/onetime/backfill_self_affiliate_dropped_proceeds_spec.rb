@@ -345,6 +345,89 @@ describe Onetime::BackfillSelfAffiliateDroppedProceeds do
     end
   end
 
+  describe "holding currency for sellers paid through their own Stripe account" do
+    # Sellers outside the US settle into a Stripe account denominated in their local
+    # currency (GBP, CAD, ...). The seller-leg holding amount must be in that currency
+    # or payout runs will exclude the resulting balance forever. The affiliate-leg BT
+    # is always USD, so the service must NOT copy its holding currency — it has to
+    # rebuild the settlement amounts from the charge processor.
+    let(:seller_stripe_account) do
+      create(:merchant_account, user: seller, currency: "gbp",
+                                charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+
+    def gbp_flow_of_funds(purchase)
+      FlowOfFunds.new(
+        issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: purchase.total_transaction_cents),
+        settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: purchase.total_transaction_cents),
+        gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: purchase.fee_cents),
+        merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::GBP, cents: 790),
+        merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::GBP, cents: 560),
+      )
+    end
+
+    def build_gbp_purchase
+      purchase = build_affected_purchase
+      purchase.update_columns(merchant_account_id: seller_stripe_account.id)
+      # No stubs needed: a merchant account created with a user is seller-owned
+      # (is_managed_by_gumroad? is false), and without the stripe_connect metadata flag
+      # it is a Stripe custom account, not a standalone Connect account — exactly the
+      # population affected in production.
+      purchase.reload
+    end
+
+    it "books the holding amount in the merchant account's settlement currency, not the affiliate leg's USD" do
+      purchase = build_gbp_purchase
+
+      expect(ChargeProcessor).to receive(:get_charge)
+        .with(StripeChargeProcessor.charge_processor_id, purchase.stripe_transaction_id, merchant_account: purchase.merchant_account)
+        .and_return(double(flow_of_funds: gbp_flow_of_funds(purchase)))
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id]).process
+      expect(result[:stats][:credited]).to eq(1)
+
+      seller_leg = purchase.balance_transactions.order(:id).last
+      expect(seller_leg.issued_amount_currency).to eq(Currency::USD)
+      expect(seller_leg.holding_amount_currency).to eq(Currency::GBP)
+      expect(seller_leg.holding_amount_gross_cents).to eq(790)
+      expect(seller_leg.holding_amount_net_cents).to eq(560)
+
+      balance = Balance.find(seller_leg.balance_id)
+      expect(balance.holding_currency).to eq(Currency::GBP)
+      expect(balance.currency).to eq(Currency::USD)
+    end
+
+    it "raises (and records an error, creating no BT) when the processor charge has no flow of funds" do
+      purchase = build_gbp_purchase
+
+      allow(ChargeProcessor).to receive(:get_charge).and_return(double(flow_of_funds: nil))
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id], verbose: true).process
+      expect(result[:stats][:error]).to eq(1)
+      expect(result[:skipped][:error].first[:error]).to include("Could not rebuild flow of funds")
+      expect(purchase.balance_transactions.count).to eq(1)
+    end
+
+    it "raises (and records an error, creating no BT) when the processor charge cannot be fetched" do
+      purchase = build_gbp_purchase
+
+      allow(ChargeProcessor).to receive(:get_charge).and_return(nil)
+
+      result = described_class.new(dry_run: false, purchase_ids: [purchase.id], verbose: true).process
+      expect(result[:stats][:error]).to eq(1)
+      expect(result[:skipped][:error].first[:error]).to include("Could not fetch processor charge")
+      expect(purchase.balance_transactions.count).to eq(1)
+    end
+
+    it "does not call the charge processor when Gumroad holds the funds" do
+      build_affected_purchase
+      expect(ChargeProcessor).not_to receive(:get_charge)
+
+      result = described_class.new(dry_run: false).process
+      expect(result[:stats][:credited]).to eq(1)
+    end
+  end
+
   describe "purchase variations preserved by the bug" do
     it "credits subscription / recurring purchases the same way" do
       subscription = create(:subscription, link: product, user: seller)
