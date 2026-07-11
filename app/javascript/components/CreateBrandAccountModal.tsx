@@ -76,10 +76,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
         </>
       }
     >
-      <p>
-        A new Gumroad is a separate account with its own brand name, profile, and products. You'll be its admin and can
-        switch to it anytime from this menu. You set up payouts in it separately.
-      </p>
+      <p>You'll be its admin and can switch to it anytime from this menu.</p>
       <Fieldset>
         <Label htmlFor={nameUID}>Brand name</Label>
         <Input
