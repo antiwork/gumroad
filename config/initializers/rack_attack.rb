@@ -129,6 +129,15 @@ class Rack::Attack
     # Don't allow spammer to send confirmation emails to many random emails
     throttle_by_ip path: "/settings", requests: 3, period: 20.seconds, method: :put # Initial: 9rpm, Max: 45 requests/9 hours
 
+    # Creating a brand account sends a Devise confirmation email to whatever
+    # address is submitted, so without a limit a flag-enabled creator could use
+    # it to send unsolicited email to arbitrary addresses. Same rate as the
+    # other email-sending endpoints above. Both the plain and .json paths are
+    # throttled because the route accepts a format suffix (same reason /login
+    # and /login.json each have an entry).
+    throttle_by_ip path: "/sellers/brand_accounts",      requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
+    throttle_by_ip path: "/sellers/brand_accounts.json", requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
+
     # Gumroad Walks: realtime token creation is an *expensive* endpoint — each
     # successful response gives the client up to 2h of OpenAI Realtime usage
     # against our key. JWS verification is the primary gate, but a leaked or
