@@ -38,6 +38,11 @@ class Refund < ApplicationRecord
   # balance debit is platform-side FX gain or loss. Persisted for treasury reconciliation.
   attr_json_data_accessor :presentment_settled_currency
   attr_json_data_accessor :presentment_settled_amount_cents
+  # Set when a refund failed after acceptance (async bank-transfer refunds can be
+  # returned by the buyer's bank) and Purchase::HandleFailedRefundService has offset
+  # the balance debits this refund created. Guards the reversal against re-delivered
+  # refund.failed webhooks.
+  attr_json_data_accessor :balance_reversed_on_failure
 
   private
     def assign_product

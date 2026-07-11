@@ -3,6 +3,30 @@
 module Charge::Refundable
   extend ActiveSupport::Concern
 
+  # A refund failed after Stripe had accepted it. Asynchronous bank-transfer refunds
+  # (iDEAL, Bancontact, ACH) can be returned by the buyer's bank days after creation —
+  # the money is back in our Stripe balance and the buyer did NOT receive it. Per the
+  # reversal-depth decision on PR #5779: automatically reverse the balance debits and
+  # refunded flags (the unambiguous money facts), alert a human for everything that
+  # needs judgment (buyer communication, re-refund, subscription/payout follow-up).
+  def handle_event_refund_failed!(event)
+    db_refunds = Refund.where(processor_refund_id: event.refund_id)
+    if db_refunds.blank?
+      # A failure for a refund we have no record of: alert rather than ignore, because
+      # unlike an unmatched refund.updated (usually a seller's own non-Gumroad refund on
+      # a connect endpoint, filtered upstream), an unmatched FAILURE on our platform
+      # endpoint means money moved back to us with no book entry to reconcile against.
+      ErrorNotifier.notify("Received refund.failed for a refund with no Gumroad record — " \
+                           "Stripe refund #{event.refund_id}, charge #{event.charge_id}, " \
+                           "event #{event.charge_event_id}.")
+      return
+    end
+
+    db_refunds.each do |db_refund|
+      Purchase::HandleFailedRefundService.new(refund: db_refund).perform
+    end
+  end
+
   def handle_event_refund_updated!(event)
     stripe_refund_id = event.refund_id
 
