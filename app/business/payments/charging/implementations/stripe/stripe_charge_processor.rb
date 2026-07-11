@@ -875,6 +875,12 @@ class StripeChargeProcessor
         refunded_amount_cents: stripe_event["data"]["object"]["amount"],
         refund_reason: stripe_event["data"]["object"]["reason"],
         refund_failure_reason: stripe_event["data"]["object"]["failure_reason"],
+        # Present only on events delivered via the Connect webhook endpoint: the connected
+        # account the refund belongs to ("user_id" is the same field on older API versions).
+        # Connected accounts send refund events for all of the seller's Stripe activity,
+        # including non-Gumroad sales, so the event handler uses this to silently ignore —
+        # rather than alert on — refunds that match no Gumroad charge.
+        stripe_connect_account_id: stripe_event["user_id"].presence || stripe_event["account"],
       }
       # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
       # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its

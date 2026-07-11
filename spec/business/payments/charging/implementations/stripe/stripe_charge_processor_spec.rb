@@ -2249,6 +2249,39 @@ describe StripeChargeProcessor, :vcr do
 
           expect(refund.reload.status).to eq("failed")
         end
+
+        it "marks the refund failed when the event arrives via the connect endpoint for a Gumroad charge" do
+          refund_event["account"] = "acct_1MExampleConnect"
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+
+        context "when the refund matches no Gumroad charge" do
+          before do
+            refund_event["data"]["object"]["id"] = "re_unmatched0000000000000"
+            refund_event["data"]["object"]["charge"] = "ch_unmatched0000000000000"
+            refund_event["data"]["object"]["payment_intent"] = "pi_unmatched0000000000000"
+          end
+
+          it "notifies when the failure arrives on the platform endpoint" do
+            expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+
+            expect(refund.reload.status).to eq("pending")
+          end
+
+          it "stays quiet when the failure is a connected account's own refund" do
+            refund_event["account"] = "acct_1MExampleConnect"
+            expect(ErrorNotifier).not_to receive(:notify)
+
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+
+            expect(refund.reload.status).to eq("pending")
+          end
+        end
       end
 
       describe "event payment failed" do

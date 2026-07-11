@@ -52,5 +52,16 @@ FactoryBot.define do
       type { ChargeEvent::TYPE_PAYMENT_INTENT_FAILED }
       comment { "payment failed" }
     end
+
+    factory :charge_event_refund_failed do
+      type { ChargeEvent::TYPE_REFUND_FAILED }
+      comment { "refund.failed" }
+      extras do
+        {
+          refund_status: "failed",
+          refund_failure_reason: "declined",
+        }
+      end
+    end
   end
 end
