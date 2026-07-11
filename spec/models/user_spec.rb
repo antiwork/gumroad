@@ -807,7 +807,7 @@ describe User, :vcr do
 
         # purge_later enqueues an ActiveStorage job that deletes the blob's bytes from the public
         # bucket — without it the file would keep serving from the CDN after account closure.
-        expect_any_instance_of(ActiveStorage::Attached::One).to receive(:purge_later)
+        expect_any_instance_of(ActiveStorage::Blob).to receive(:purge_later)
 
         @user.deactivate!
 

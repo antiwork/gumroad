@@ -139,7 +139,7 @@ describe GdprDataErasureService do
 
       # purge_later enqueues an ActiveStorage purge job that deletes the blob's stored bytes;
       # asserting on the call keeps the spec independent of the test queue adapter.
-      expect_any_instance_of(ActiveStorage::Attached::One).to receive(:purge_later)
+      expect_any_instance_of(ActiveStorage::Blob).to receive(:purge_later)
 
       described_class.new(user, performed_by: admin).perform!
 
