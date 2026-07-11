@@ -152,10 +152,8 @@ class CreatePublicMediaService
 
     # Download the remote file to a tempfile with SSRF protection and a hard size ceiling, then
     # store it as a blob. The size is enforced while streaming (both via the Content-Length header
-    # and by counting actual bytes) so a huge file is cut off mid-download instead of filling disk.
-    # The per-type limit is applied mid-stream too: once enough leading bytes have arrived to sniff
-    # the content type, an image download is held to the much smaller image cap — otherwise a
-    # 10–100 MB image would be fully downloaded (and uploaded to public storage) only to be
+    # and by counting actual bytes) so a file larger than the 10 MB image cap is cut off
+    # mid-download instead of being fully downloaded (and uploaded to public storage) only to be
     # rejected by the size check afterwards. Mirrors the hardened fetch the product thumbnail's
     # URL path already uses (Thumbnail#url=).
     def download_blob_from_url

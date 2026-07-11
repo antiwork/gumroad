@@ -403,7 +403,7 @@ class Rack::Attack
   throttle_by_ip path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds
   throttle_by_params path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds, throttle_params: v2_product_token
 
-  # Media uploads: each POST can make the server synchronously download up to 100 MB from a
+  # Media uploads: each POST can make the server synchronously download up to 10 MB from a
   # remote URL (CreatePublicMediaService), so this is one of the most expensive requests in the
   # v2 API — an unthrottled loop would tie up workers and bandwidth. 20 uploads / 10 minutes is
   # plenty for a creator (or the store agent) building a page, and useless for abuse. Keyed by

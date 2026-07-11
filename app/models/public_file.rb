@@ -75,10 +75,14 @@ class PublicFile < ApplicationRecord
 
   private
     def purge_blob_later_if_no_live_owner!(file_blob)
-      live_owner_exists = ActiveStorage::Attachment.where(blob_id: file_blob.id).any? do |attachment|
-        record = attachment.record
-        !(record.is_a?(PublicFile) && record.deleted?)
-      end
+      # A blob can be shared by multiple attachments, so only purge when nothing live still points
+      # at it. "Live" means: any attachment owned by a non-PublicFile record, or a PublicFile that
+      # hasn't been soft-deleted. Both checks are done as queries (rather than loading each
+      # attachment's record one by one) so a widely-shared blob doesn't trigger N+1 lookups.
+      attachments = ActiveStorage::Attachment.where(blob_id: file_blob.id)
+      live_owner_exists =
+        attachments.where.not(record_type: "PublicFile").exists? ||
+        PublicFile.alive.where(id: attachments.where(record_type: "PublicFile").select(:record_id)).exists?
       file_blob.purge_later unless live_owner_exists
     end
 
