@@ -169,5 +169,18 @@ describe "Purchase Notifications", :vcr do
 
       expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, nil, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
+
+    it "includes the buyer's URL parameters even when the refund webhook fires from a freshly loaded purchase" do
+      # Refunds are processed long after checkout, so the refund ping always fires from a
+      # Purchase loaded fresh from the database. The URL parameters captured at checkout
+      # must survive that round trip so the refund ping still carries them.
+      purchase = create(:purchase)
+      purchase.url_parameters = { "discord_id" => "123", "plan" => "pro" }
+      purchase.save!
+
+      Purchase.find(purchase.id).send(:send_refunded_notification_webhook)
+
+      expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, { "discord_id" => "123", "plan" => "pro" }, ResourceSubscription::REFUNDED_RESOURCE_NAME)
+    end
   end
 end
