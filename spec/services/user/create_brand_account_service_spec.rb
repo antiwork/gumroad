@@ -229,7 +229,7 @@ describe User::CreateBrandAccountService do
 
         expect do
           expect(service.perform).to eq(false)
-        end.to not_change(User, :count).and not_change(TeamMembership, :count)
+        end.to not_change(User, :count).and not_change(TeamMembership, :count).and not_change(UserComplianceInfo, :count)
       end
     end
   end
