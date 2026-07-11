@@ -119,9 +119,22 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud,
-                         canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
-                         presentment_refund:)
+        refunded = refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud,
+                                    canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
+                                    presentment_refund:)
+        # When a Gumroad team member (support/admin) refunds a sale on the creator's
+        # behalf, tell the creator by email — otherwise they only discover the refund by
+        # stumbling on the refunded row in their dashboard. Creator-initiated refunds stay
+        # silent (they did it themselves), fraud refunds already send their own email
+        # (see refund_for_fraud!), and suspended sellers are skipped to match that path.
+        # Processor-initiated refunds (issued from the Stripe dashboard) don't go through
+        # this method — Charge::Refundable handles the creator email for those.
+        if refunded && !is_for_fraud &&
+            refunding_user_id.present? && User.find_by(id: refunding_user_id)&.is_team_member? &&
+            !seller.suspended?
+          ContactingCreatorMailer.purchase_refunded(id).deliver_later(queue: "default")
+        end
+        refunded
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false

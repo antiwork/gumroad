@@ -625,6 +625,45 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
     end
 
+    describe "notifying the creator when a team member refunds on their behalf" do
+      it "emails the creator when a Gumroad team member issues the refund" do
+        admin = create(:admin_user)
+
+        expect do
+          expect(@purchase.refund_and_save!(admin.id)).to be(true)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with(@purchase.id)
+      end
+
+      it "does not email the creator when they refund their own sale" do
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+      end
+
+      it "does not email the creator when there is no refunding user (console refund)" do
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(nil)).to be(true)
+      end
+
+      it "does not email the creator for fraud refunds (the fraud path sends its own email)" do
+        admin = create(:admin_user)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(admin.id, is_for_fraud: true)).to be(true)
+      end
+
+      it "does not email the creator when the seller is suspended" do
+        admin = create(:admin_user)
+        @user.update!(user_risk_state: "suspended_for_tos_violation")
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(admin.id)).to be(true)
+      end
+    end
+
     describe "refund with tax" do
       describe "with sales tax" do
         before do
