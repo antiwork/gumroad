@@ -70,12 +70,6 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :last_content_page_id
   attr_json_data_accessor :default_offer_code_id
-  # Custom query params the buyer had on the product URL (e.g. ?discord_id=x), minus
-  # reserved ones. Persisted here (not an attr_accessor) because the "purchase
-  # successful" webhook can fire from a freshly loaded Purchase — PayPal captures,
-  # webhook-driven status syncs — long after the checkout request that knew the
-  # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
-  attr_json_data_accessor :url_parameters
   # Buyer-presentment purchases only: the canonical USD gross the dispute-loss balance
   # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
   # exactly the same amount, even when refunds land between the debit and the win.
@@ -127,6 +121,7 @@ class Purchase < ApplicationRecord
   has_one :recommended_purchase_info, dependent: :destroy
   has_one :purchase_wallet_type
   has_one :purchase_payment_flow, dependent: :destroy, validate: false
+  has_one :purchase_url_parameter, autosave: true, dependent: :destroy
   has_one :purchase_offer_code_discount
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
@@ -2775,6 +2770,23 @@ class Purchase < ApplicationRecord
 
   def sync_status_with_charge_processor(mark_as_failed: false)
     Purchase::SyncStatusWithChargeProcessorService.new(self, mark_as_failed:).perform
+  end
+
+  # Custom query params the buyer had on the product URL at checkout (e.g. ?discord_id=x),
+  # minus reserved ones. Persisted in an associated record (not an attr_accessor) because
+  # the "purchase successful" webhook can fire from a freshly loaded Purchase — PayPal
+  # captures, webhook-driven status syncs — long after the checkout request that knew the
+  # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
+  def url_parameters
+    purchase_url_parameter&.params
+  end
+
+  def url_parameters=(params)
+    if params.blank?
+      purchase_url_parameter&.mark_for_destruction
+    else
+      (purchase_url_parameter || build_purchase_url_parameter).params = params
+    end
   end
 
   def formatted_error_code
