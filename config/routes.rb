@@ -525,6 +525,7 @@ Rails.application.routes.draw do
 
     namespace :sellers do
       resource "switch", only: :create, controller: "switch"
+      resources :brand_accounts, only: :create
     end
 
     resources :test_pings, only: [:create]

@@ -43,6 +43,7 @@ module RenderingExtension
         avatar_url: user.avatar_url,
         confirmed: user.confirmed?,
         team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
+        can_create_brand_account: Feature.active?(:brand_accounts, user),
         policies: policies_props(pundit_user),
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,

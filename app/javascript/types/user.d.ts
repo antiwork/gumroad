@@ -13,6 +13,7 @@ export type LoggedInUser = {
   avatar_url: string;
   confirmed: boolean;
   team_memberships: TeamMembership[];
+  can_create_brand_account: boolean;
   policies: Record<string, Record<string, boolean>>;
   is_gumroad_admin: boolean;
   is_impersonating: boolean;

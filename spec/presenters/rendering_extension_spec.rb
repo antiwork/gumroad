@@ -81,6 +81,7 @@ describe "RenderingExtension" do
                 avatar_url: admin_for_seller.avatar_url,
                 confirmed: true,
                 team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
+                can_create_brand_account: false,
                 policies: {
                   affiliate_requests_onboarding_form: {
                     update: true,
