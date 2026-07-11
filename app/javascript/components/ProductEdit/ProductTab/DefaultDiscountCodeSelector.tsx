@@ -32,7 +32,9 @@ export const DefaultDiscountCodeSelector = ({
   const [query, setQuery] = React.useState(() => (selectedOfferCode ? getLabel(selectedOfferCode) : ""));
   const [options, setOptions] = React.useState<OfferCode[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
-  const [isToggleOn, setIsToggleOn] = React.useState(false);
+  // Start the toggle in the "on" position when the editor opens with a default
+  // code already selected, so it doesn't flash from off to on during the first render.
+  const [isToggleOn, setIsToggleOn] = React.useState(() => Boolean(selectedOfferCode));
 
   const resetSearch = React.useCallback(() => {
     setQuery("");
