@@ -2778,12 +2778,21 @@ class Purchase < ApplicationRecord
   # captures, webhook-driven status syncs — long after the checkout request that knew the
   # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
   def url_parameters
-    purchase_url_parameter&.params
+    record = purchase_url_parameter
+    return nil if record.nil? || record.marked_for_destruction?
+    record.params
   end
 
   def url_parameters=(params)
     if params.blank?
-      purchase_url_parameter&.mark_for_destruction
+      # Assigning blank clears any previously assigned value. A record that was
+      # never saved can simply be dropped; a persisted one is marked so autosave
+      # deletes it on the next save.
+      if purchase_url_parameter&.new_record?
+        self.purchase_url_parameter = nil
+      else
+        purchase_url_parameter&.mark_for_destruction
+      end
     else
       (purchase_url_parameter || build_purchase_url_parameter).params = params
     end
