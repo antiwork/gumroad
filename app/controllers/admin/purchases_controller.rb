@@ -17,7 +17,7 @@ class Admin::PurchasesController < Admin::BaseController
     if @purchase.refund_and_save!(current_user.id, reason: params[:reason].presence)
       render json: { success: true }
     else
-      render json: { success: false }
+      render json: { success: false, message: @purchase.errors.full_messages.presence&.to_sentence }.compact
     end
   end
 

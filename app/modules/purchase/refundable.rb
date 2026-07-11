@@ -9,10 +9,10 @@ class Purchase
     BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE = "Refunds are temporarily unavailable for buyer-local-currency purchases."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
-    # * reason - optional free-text explanation of why the sale is being refunded. It is
-    #   stored on the refund record and shown to the creator in the notification email
-    #   when a Gumroad team member issues the refund. A missing reason never blocks a
-    #   refund — the email simply omits it.
+    # * reason - free-text explanation of why the sale is being refunded. It is stored on
+    #   the refund record and shown to the creator in the notification email when a Gumroad
+    #   team member issues the refund. Required for team-member refunds (except fraud
+    #   refunds, which send their own dedicated email); optional otherwise.
     def refund!(refunding_user_id:, amount: nil, reason: nil)
       if amount.blank?
         refund_and_save!(refunding_user_id, reason:)
@@ -54,9 +54,19 @@ class Purchase
 
       # A refund can be initiated by the creator themselves, by a Gumroad team member
       # (support/admin), or from the console with no user at all. Look the user up once
-      # here; the answer gates both the balance checks below and the creator-notification
-      # email after the refund succeeds.
+      # here; the answer gates the reason requirement and balance checks below, and the
+      # creator-notification email after the refund succeeds.
       refunded_by_team_member = refunding_user_id.present? && User.find(refunding_user_id).is_team_member?
+
+      # A refund made on the creator's behalf must always carry a reason — it is shown in
+      # the email that tells the creator their sale was refunded, and "A sale has been
+      # refunded" with no explanation is exactly the kind of message that sends the creator
+      # to support asking what happened. Fraud refunds are exempt because that path sends
+      # its own dedicated email (see refund_for_fraud!).
+      if refunded_by_team_member && !is_for_fraud && reason.blank?
+        errors.add :base, "A reason is required when refunding on the creator's behalf."
+        return false
+      end
 
       unless refunded_by_team_member
         if seller.refunds_disabled?

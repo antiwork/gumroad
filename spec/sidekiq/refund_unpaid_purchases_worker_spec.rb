@@ -65,17 +65,17 @@ describe RefundUnpaidPurchasesWorker, :vcr do
     it "does not refund purchases if the user is not suspended" do
       @user.mark_compliant!(author_id: @admin_user.id)
       described_class.new.perform(@user.id, @admin_user.id)
-      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase.id, @admin_user.id)
+      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase.id, @admin_user.id, "Account suspended; unpaid sale refunded to the buyer")
     end
 
     it "queues the refund of unpaid purchases" do
       @user.flag_for_fraud!(author_id: @admin_user.id)
       @user.suspend_for_fraud!(author_id: @admin_user.id)
       described_class.new.perform(@user.id, @admin_user.id)
-      expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(@purchase.id, @admin_user.id)
+      expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(@purchase.id, @admin_user.id, "Account suspended; unpaid sale refunded to the buyer")
       expect(@purchase.purchase_success_balance.unpaid?).to be(true)
-      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_without_balance.id, @admin_user.id)
-      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_with_paid_balance.id, @admin_user.id)
+      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_without_balance.id, @admin_user.id, "Account suspended; unpaid sale refunded to the buyer")
+      expect(RefundPurchaseWorker).not_to have_enqueued_sidekiq_job(@purchase_with_paid_balance.id, @admin_user.id, "Account suspended; unpaid sale refunded to the buyer")
 
       comment = @user.comments.where(comment_type: Comment::COMMENT_TYPE_REFUND_BALANCE).last
       expect(comment.content).to eq("Refund balance initiated by #{@admin_user.username}.")

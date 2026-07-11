@@ -25,10 +25,12 @@ type AdminActionButtonProps = {
   color?: ButtonColor | null;
   class?: string | null;
   // When set, a text prompt is shown after the confirm dialog and the entered value is
-  // sent to the server under `prompt_field_name`. Leaving the prompt empty still submits
-  // (the field is simply omitted); cancelling the prompt aborts the action.
+  // sent to the server under `prompt_field_name`. Cancelling the prompt aborts the action.
+  // With `prompt_required`, an empty value also aborts (with an error alert); otherwise an
+  // empty value just omits the field.
   prompt_message?: string | null;
   prompt_field_name?: string | null;
+  prompt_required?: boolean | null;
 };
 
 export const AdminActionButton = ({
@@ -45,6 +47,7 @@ export const AdminActionButton = ({
   class: className,
   prompt_message,
   prompt_field_name,
+  prompt_required,
 }: AdminActionButtonProps) => {
   const [state, setState] = React.useState<"initial" | "loading" | "done">("initial");
 
@@ -58,9 +61,15 @@ export const AdminActionButton = ({
     if (prompt_message && prompt_field_name) {
       // eslint-disable-next-line no-alert
       const promptValue = prompt(prompt_message);
-      // Cancelling the prompt cancels the whole action; an empty value just omits the field.
+      // Cancelling the prompt cancels the whole action.
       if (promptValue === null) return;
-      if (promptValue.trim() !== "") data[prompt_field_name] = promptValue.trim();
+      if (promptValue.trim() !== "") {
+        data[prompt_field_name] = promptValue.trim();
+      } else if (prompt_required) {
+        // A required prompt (e.g. the refund reason emailed to the creator) can't be blank.
+        showAlert("This action requires a reason.", "error");
+        return;
+      }
     }
 
     setState("loading");
