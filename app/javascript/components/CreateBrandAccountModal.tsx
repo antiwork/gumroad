@@ -37,7 +37,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
       );
       if (!responseData.success) throw new ResponseError(responseData.error_message);
       // The session is already switched into the new brand account; land on its dashboard.
-      window.location.href = Routes.dashboard_url();
+      window.location.href = Routes.dashboard_path();
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
