@@ -14,6 +14,7 @@ import {
   Cart,
   DollarCircle,
   Envelope,
+  FileDetail,
   Gift,
   Handshake,
   HomeAlt2,
@@ -142,12 +143,23 @@ export const Nav = (props: Props) => {
           />
         ) : null}
         {currentSeller ? (
-          <ClientNavLink
-            text="Profile"
-            icon={<Store pack="filled" className="size-5" />}
-            href={Routes.profile_url(routeParams)}
-            exactHrefMatch
-          />
+          loggedInUser?.policies.page.index ? (
+            // Pages replaces the old bare "Profile" entry: the profile is the
+            // special first entry of the Pages list (the store's home page).
+            <ClientNavLink
+              text="Pages"
+              icon={<FileDetail pack="filled" className="size-5" />}
+              href={Routes.pages_url(routeParams)}
+              additionalPatterns={["/pages/"]}
+            />
+          ) : (
+            <ClientNavLink
+              text="Profile"
+              icon={<Store pack="filled" className="size-5" />}
+              href={Routes.profile_url(routeParams)}
+              exactHrefMatch
+            />
+          )
         ) : null}
         <ClientNavLink
           text="Products"

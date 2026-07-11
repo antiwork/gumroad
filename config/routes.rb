@@ -1015,6 +1015,9 @@ Rails.application.routes.draw do
     end
     get "/posts", to: redirect("/emails")
 
+    # custom pages (design draft for the first-class Pages feature)
+    resources :pages, only: [:index, :new, :create, :edit, :update, :destroy], param: :slug
+
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
       scope module: "workflows" do
