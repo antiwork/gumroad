@@ -1,0 +1,109 @@
+import * as React from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
+import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
+
+const elementsMounts = vi.hoisted<{ currencies: string[]; unmounts: number }>(() => ({
+  currencies: [],
+  unmounts: 0,
+}));
+
+vi.mock("@stripe/react-stripe-js", async () => {
+  const React = await import("react");
+  const elements = { update: vi.fn() };
+  const stripe = {};
+
+  return {
+    Elements: ({ children, options }: { children: React.ReactNode; options: { currency: string } }) => {
+      React.useEffect(() => {
+        elementsMounts.currencies.push(options.currency);
+        return () => {
+          elementsMounts.unmounts += 1;
+        };
+      }, []);
+      return children;
+    },
+    PaymentElement: ({ onReady }: { onReady: () => void }) => {
+      React.useEffect(onReady, [onReady]);
+      return null;
+    },
+    useElements: () => elements,
+    useStripe: () => stripe,
+  };
+});
+
+vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn() }));
+vi.mock("$app/utils/styles", () => ({ getCssVariable: () => "0 0 0" }));
+vi.mock("$app/components/DesignSettings", () => ({ useFont: () => ({ name: "Inter", url: "inter.woff2" }) }));
+vi.mock("$app/components/LoadingSpinner", () => ({ LoadingSpinner: () => null }));
+vi.mock("$app/components/ui/Fieldset", () => ({
+  Fieldset: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+const elementsOptions: PaymentElementConfig = {
+  stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+  currency: "usd",
+  buyer_currency_presentment: true,
+  payment_method_types: ["card"],
+  payment_method_creation: "manual",
+  stripe_link_enabled: true,
+};
+
+const props = {
+  elementsOptions,
+  disabled: false,
+  defaultEmail: "buyer@example.com",
+  defaultName: "Buyer",
+  invalid: false,
+  onReady: vi.fn<(controller: PaymentElementController | null) => void>(),
+};
+
+describe("PaymentElementInput", () => {
+  beforeEach(() => {
+    elementsMounts.currencies = [];
+    elementsMounts.unmounts = 0;
+    props.onReady.mockClear();
+  });
+
+  it("keeps the mounted currency while a surcharge refresh is in flight", () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<PaymentElementInput {...props} amount={1_625} mountCurrency="cad" />);
+    });
+
+    expect(elementsMounts.currencies).toEqual(["cad"]);
+
+    act(() => {
+      renderer.update(<PaymentElementInput {...props} amount={null} mountCurrency={null} />);
+    });
+    act(() => {
+      renderer.update(<PaymentElementInput {...props} amount={1_750} mountCurrency="cad" />);
+    });
+
+    expect(elementsMounts.currencies).toEqual(["cad"]);
+    expect(elementsMounts.unmounts).toBe(0);
+
+    act(() => renderer.unmount());
+  });
+
+  it("remounts when the currency genuinely changes", () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<PaymentElementInput {...props} amount={1_625} mountCurrency="cad" />);
+    });
+
+    // A definite canonical transition (loaded surcharges without a quote, or the buyer opting
+    // to save the card) must still remount: Stripe cannot change the currency of a live
+    // element, and the sheet must not keep presenting a currency the buyer won't be charged.
+    act(() => {
+      renderer.update(<PaymentElementInput {...props} amount={1_300} mountCurrency="usd" />);
+    });
+
+    expect(elementsMounts.currencies).toEqual(["cad", "usd"]);
+    expect(elementsMounts.unmounts).toBe(1);
+
+    act(() => renderer.unmount());
+  });
+});

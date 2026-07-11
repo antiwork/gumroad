@@ -39,7 +39,7 @@ const CONTACT_PREFILL_DEBOUNCE_MS = 800;
 
 export const PaymentElementInput = ({
   amount,
-  currencyOverride,
+  mountCurrency,
   elementsOptions,
   disabled,
   defaultEmail,
@@ -49,12 +49,16 @@ export const PaymentElementInput = ({
   onChange,
 }: {
   amount: number | null;
-  // Mounts the element in this currency instead of elementsOptions.currency. Used by the
-  // buyer-currency presentment lane, where the currency comes from the checkout's FX quote
-  // (browser state) rather than from the server-rendered config. When set, `amount` must be
-  // minor units of this currency. Changing it remounts the element (it's part of the
-  // provider key) — Stripe does not allow currency updates on a live element.
-  currencyOverride?: string | null | undefined;
+  // Mounts the element in this currency instead of elementsOptions.currency (from
+  // getStripePaymentElementMountCurrency). Used by the buyer-currency presentment lane, where
+  // the currency comes from the checkout's FX quote (browser state) rather than from the
+  // server-rendered config. When set, `amount` must be minor units of this currency. Like
+  // `amount`, null means "not knowable right now" and keeps the last mounted currency (see
+  // mountedCurrency below) — a currency change remounts the element (it's part of the provider
+  // key, because Stripe does not allow currency updates on a live element), which wipes any
+  // card details the buyer already entered, so it must only happen on real transitions, never
+  // while a surcharge refresh is merely in flight.
+  mountCurrency?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
   disabled?: boolean | undefined;
   defaultEmail: string;
@@ -68,6 +72,12 @@ export const PaymentElementInput = ({
   React.useEffect(() => {
     if (amount !== null) setMountedAmount(amount);
   }, [amount]);
+
+  const [mountedCurrency, setMountedCurrency] = React.useState(mountCurrency ?? null);
+
+  React.useEffect(() => {
+    if (mountCurrency != null) setMountedCurrency(mountCurrency);
+  }, [mountCurrency]);
 
   const [linkPrefillContact, setLinkPrefillContact] = React.useState<LinkPrefillContact>(() => ({
     email: defaultEmail,
@@ -92,7 +102,7 @@ export const PaymentElementInput = ({
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
         <StripePaymentElementProvider
           amount={mountedAmount}
-          currencyOverride={currencyOverride}
+          currencyOverride={mountedCurrency}
           elementsOptions={elementsOptions}
         >
           <PaymentElementControllerInput
