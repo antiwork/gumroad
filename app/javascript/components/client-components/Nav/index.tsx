@@ -143,23 +143,23 @@ export const Nav = (props: Props) => {
           />
         ) : null}
         {currentSeller ? (
-          loggedInUser?.policies.page.index ? (
-            // Pages replaces the old bare "Profile" entry: the profile is the
-            // special first entry of the Pages list (the store's home page).
-            <ClientNavLink
-              text="Pages"
-              icon={<FileDetail pack="filled" className="size-5" />}
-              href={Routes.pages_url(routeParams)}
-              additionalPatterns={["/pages/"]}
-            />
-          ) : (
-            <ClientNavLink
-              text="Profile"
-              icon={<Store pack="filled" className="size-5" />}
-              href={Routes.profile_url(routeParams)}
-              exactHrefMatch
-            />
-          )
+          <ClientNavLink
+            text="Profile"
+            icon={<Store pack="filled" className="size-5" />}
+            href={Routes.profile_url(routeParams)}
+            exactHrefMatch
+          />
+        ) : null}
+        {currentSeller && loggedInUser?.policies.page.index ? (
+          // Pages sits alongside Profile in the nav: Profile jumps straight to
+          // the public storefront, while Pages manages the full page tree
+          // (with the profile pinned as its home page).
+          <ClientNavLink
+            text="Pages"
+            icon={<FileDetail pack="filled" className="size-5" />}
+            href={Routes.pages_url(routeParams)}
+            additionalPatterns={["/pages/"]}
+          />
         ) : null}
         <ClientNavLink
           text="Products"

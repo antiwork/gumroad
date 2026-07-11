@@ -17,8 +17,9 @@ describe "Main Navigation", type: :system, js: true do
         expect(page).to have_link("Workflows")
         expect(page).to have_link("Sales")
         expect(page).to have_link("Products")
-        # The bare "Profile" entry was replaced by "Pages" (the profile is the
-        # first entry of the Pages list) for roles that can manage pages.
+        expect(page).to have_link("Profile", href: %r{://[^/]+/profile\z})
+        # Roles that can manage pages also get a "Pages" entry alongside
+        # Profile in the primary nav.
         expect(page).to have_link("Pages", href: %r{://[^/]+/pages\z})
         expect(page).to have_link("Emails")
         expect(page).to have_link("Analytics")
