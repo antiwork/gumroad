@@ -11,6 +11,14 @@ class StripeChargeProcessor
 
   PAYMENT_INTENT_LIFECYCLE_EVENTS = %w(payment_intent.processing payment_intent.succeeded).freeze
 
+  # The two events consumed from Stripe's refund.* family (the replacement for the
+  # deprecated charge.refund.updated). Matched exactly rather than by "refund." prefix:
+  # refund.created fires the moment a refund is requested — while the app's own refund
+  # transaction may still be uncommitted — and letting it through would race that
+  # transaction via the processor-initiated-refund fallback in
+  # Charge::Refundable#handle_event_refund_updated!.
+  HANDLED_REFUND_EVENTS = %w(refund.updated refund.failed).freeze
+
   # https://stripe.com/docs/api/refunds/create#create_refund-reason
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
@@ -735,7 +743,7 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event(stripe_event)
-    if stripe_event["type"].start_with?("charge.", "refund.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded")
+    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded") || HANDLED_REFUND_EVENTS.include?(stripe_event["type"])
       handle_stripe_charge_event(stripe_event)
     elsif stripe_event["type"].start_with?("capital.")
       handle_stripe_capital_loan_event(stripe_event)
@@ -856,12 +864,12 @@ class StripeChargeProcessor
           event.type = ChargeEvent::TYPE_INFORMATIONAL
         end
       end
-    elsif stripe_event["type"] == "charge.refund.updated" || stripe_event["type"].start_with?("refund.")
-      # Stripe deprecated charge.refund.updated in favor of the refund.* family
-      # (refund.updated, refund.failed). Both event shapes carry a Refund object as
-      # data.object, so one builder covers old and new subscriptions. The webhook
-      # endpoint should subscribe to refund.updated + refund.failed; charge.refund.updated
-      # is kept for endpoints that still deliver it.
+    elsif stripe_event["type"] == "charge.refund.updated" || HANDLED_REFUND_EVENTS.include?(stripe_event["type"])
+      # Stripe deprecated charge.refund.updated in favor of the refund.* family. Both event
+      # shapes carry a Refund object as data.object, so one builder covers old and new
+      # subscriptions. The webhook endpoint should subscribe to refund.updated +
+      # refund.failed only (see HANDLED_REFUND_EVENTS for why refund.created must stay out);
+      # charge.refund.updated is kept for endpoints that still deliver it.
       event = ChargeEvent.new
       event.charge_processor_id = charge_processor_id
       event.charge_event_id = stripe_event["id"]

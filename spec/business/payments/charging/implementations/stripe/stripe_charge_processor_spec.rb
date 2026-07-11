@@ -2258,6 +2258,21 @@ describe StripeChargeProcessor, :vcr do
           expect(refund.reload.status).to eq("failed")
         end
 
+        it "ignores refund.created so it cannot race the app's own refund transaction" do
+          refund_event["type"] = "refund.created"
+          refund_event["data"]["object"]["status"] = "succeeded"
+          # Simulate the race this guard exists for: the webhook arrives before the app's
+          # own refund transaction has committed its Refund row.
+          refund.destroy!
+
+          expect(ChargeProcessor).not_to receive(:handle_event)
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(purchase.reload.stripe_refunded?).to be false
+          expect(purchase.refunds.count).to eq 0
+        end
+
         context "when the refund matches no Gumroad charge" do
           before do
             refund_event["data"]["object"]["id"] = "re_unmatched0000000000000"

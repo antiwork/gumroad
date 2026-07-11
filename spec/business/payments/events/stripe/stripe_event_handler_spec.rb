@@ -46,6 +46,38 @@ describe StripeEventHandler do
       end
     end
 
+    describe "a refund event" do
+      let(:stripe_event) do
+        {
+          "id" => event_id,
+          "created" => "1406748559", # "2014-07-30T19:29:19+00:00"
+          "type" => "refund.failed",
+          "data" => {
+            "object" => {
+              "object" => "refund"
+            }
+          }
+        }
+      end
+
+      it "sends a refund.failed event to StripeChargeProcessor" do
+        expect(StripeChargeProcessor).to receive(:handle_stripe_event).with(parsed(stripe_event))
+        described_class.new(stripe_event).handle_stripe_event
+      end
+
+      it "sends a refund.updated event to StripeChargeProcessor" do
+        event = stripe_event.merge("type" => "refund.updated")
+        expect(StripeChargeProcessor).to receive(:handle_stripe_event).with(parsed(event))
+        described_class.new(event).handle_stripe_event
+      end
+
+      it "ignores a refund.created event" do
+        event = stripe_event.merge("type" => "refund.created")
+        expect(StripeChargeProcessor).not_to receive(:handle_stripe_event)
+        described_class.new(event).handle_stripe_event
+      end
+    end
+
     describe "a payment intent failed event" do
       let(:stripe_event) do
         {
