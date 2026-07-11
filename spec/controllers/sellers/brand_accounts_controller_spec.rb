@@ -51,6 +51,32 @@ describe Sellers::BrandAccountsController do
         expect(flash[:notice]).to eq("My Brand is ready — we sent a confirmation link to brand@example.com. Confirm it before publishing.")
       end
 
+      it "ports the payout setup when use_existing_payout_setup is true" do
+        user.update!(payment_address: "paypal@example.com")
+        create(:user_compliance_info, user:)
+
+        post :create, params: { brand_account: valid_params[:brand_account].merge(use_existing_payout_setup: true) }
+
+        expect(response.parsed_body["success"]).to eq(true)
+
+        brand_user = User.find_by(email: "brand@example.com")
+        expect(brand_user.payment_address).to eq("paypal@example.com")
+        expect(brand_user.alive_user_compliance_info).to be_present
+      end
+
+      it "does not port the payout setup when use_existing_payout_setup is false" do
+        user.update!(payment_address: "paypal@example.com")
+        create(:user_compliance_info, user:)
+
+        post :create, params: { brand_account: valid_params[:brand_account].merge(use_existing_payout_setup: false) }
+
+        expect(response.parsed_body["success"]).to eq(true)
+
+        brand_user = User.find_by(email: "brand@example.com")
+        expect(brand_user.payment_address).to be_blank
+        expect(brand_user.alive_user_compliance_info).to be_nil
+      end
+
       it "returns the validation message when the account can't be created" do
         create(:user, email: "brand@example.com")
 

@@ -82,6 +82,9 @@ describe "RenderingExtension" do
                 confirmed: true,
                 team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
                 can_create_brand_account: false,
+                # The user factory sets a payment address, so this user has a
+                # payout setup that could be carried over to a new brand account.
+                has_payout_setup_to_port: true,
                 policies: {
                   affiliate_requests_onboarding_form: {
                     update: true,

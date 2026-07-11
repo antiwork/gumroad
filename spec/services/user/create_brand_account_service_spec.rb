@@ -126,5 +126,111 @@ describe User::CreateBrandAccountService do
         expect(service.error_message).to be_present
       end
     end
+
+    describe "porting the existing payout setup" do
+      def build_service_with_port
+        described_class.new(
+          creator:,
+          email: "brand@example.com",
+          username: "mybrand",
+          name: "My Brand",
+          account_created_ip: "1.2.3.4",
+          use_existing_payout_setup: true,
+        )
+      end
+
+      it "copies the creator's payout currency and PayPal address" do
+        creator.update!(currency_type: Currency::GBP, payment_address: "paypal@example.com")
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+        expect(service.brand_user.currency_type).to eq(Currency::GBP)
+        expect(service.brand_user.payment_address).to eq("paypal@example.com")
+      end
+
+      it "copies the creator's compliance info without enqueueing the Stripe sync job" do
+        create(:user_compliance_info, user: creator)
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+
+        copy = service.brand_user.alive_user_compliance_info
+        expect(copy).to be_present
+        expect(copy.first_name).to eq("Chuck")
+        expect(copy.last_name).to eq("Bartowski")
+        expect(copy.country).to eq("United States")
+        expect(HandleNewUserComplianceInfoWorker.jobs.map { _1["args"] }).not_to include([copy.id])
+      end
+
+      it "copies the creator's bank account with the Stripe identifiers cleared and enqueues Connect account creation" do
+        create(:user_compliance_info, user: creator)
+        create(:ach_account, user: creator, stripe_bank_account_id: "ba_123", stripe_fingerprint: "fp_123", stripe_connect_account_id: "acct_123")
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+
+        copy = service.brand_user.active_bank_account
+        expect(copy).to be_present
+        expect(copy.account_number_last_four).to eq("1234")
+        expect(copy.account_holder_full_name).to eq("Gumbot Gumstein I")
+        expect(copy.stripe_bank_account_id).to be_nil
+        expect(copy.stripe_fingerprint).to be_nil
+        expect(copy.stripe_connect_account_id).to be_nil
+        expect(copy.state).to eq("unverified")
+
+        expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).to include([service.brand_user.id])
+      end
+
+      it "does not copy a debit-card payout account", :vcr do
+        create(:user_compliance_info, user: creator)
+        create(:card_bank_account, user: creator)
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+        expect(service.brand_user.active_bank_account).to be_nil
+        expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
+      end
+
+      it "does not enqueue Connect account creation when there is no bank account to port" do
+        create(:user_compliance_info, user: creator)
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+        expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
+      end
+
+      it "copies nothing when the flag is off" do
+        creator.update!(payment_address: "paypal@example.com")
+        create(:user_compliance_info, user: creator)
+        create(:ach_account, user: creator)
+
+        service = build_service
+
+        expect(service.perform).to eq(true)
+        expect(service.brand_user.payment_address).to be_blank
+        expect(service.brand_user.alive_user_compliance_info).to be_nil
+        expect(service.brand_user.active_bank_account).to be_nil
+      end
+
+      it "creates nothing when the bank account copy fails" do
+        create(:user_compliance_info, user: creator)
+        create(:ach_account, user: creator)
+
+        # Force the bank account copy to fail so the whole transaction — user,
+        # membership, and compliance info copy — must roll back together.
+        allow_any_instance_of(AchAccount).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(AchAccount.new))
+
+        service = build_service_with_port
+
+        expect do
+          expect(service.perform).to eq(false)
+        end.to not_change(User, :count).and not_change(TeamMembership, :count)
+      end
+    end
   end
 end

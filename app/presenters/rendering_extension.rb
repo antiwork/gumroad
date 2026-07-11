@@ -47,6 +47,13 @@ module RenderingExtension
         # this too) — checking it here hides the menu item instead of letting an
         # unconfirmed creator fill in the form and get rejected on submit.
         can_create_brand_account: user.confirmed? && Feature.active?(:brand_accounts, user),
+        # Whether the user has any payout configuration worth carrying over to a
+        # new brand account (compliance info, a bank account, or a PayPal
+        # address). The create-brand-account modal only offers the "use my
+        # existing payout setup" option when there is something to port.
+        has_payout_setup_to_port: user.alive_user_compliance_info.present? ||
+          user.active_bank_account.present? ||
+          user.payment_address.present?,
         policies: policies_props(pundit_user),
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,

@@ -21,6 +21,9 @@ class Sellers::BrandAccountsController < Sellers::BaseController
       username: create_params[:username],
       name: create_params[:name],
       account_created_ip: request.remote_ip,
+      # The checkbox arrives as a JSON boolean, but a form-encoded submission
+      # would send a string — cast so both work.
+      use_existing_payout_setup: ActiveModel::Type::Boolean.new.cast(create_params[:use_existing_payout_setup]) || false,
     )
 
     if service.perform
@@ -39,6 +42,6 @@ class Sellers::BrandAccountsController < Sellers::BaseController
 
   private
     def create_params
-      params.require(:brand_account).permit(:email, :username, :name)
+      params.require(:brand_account).permit(:email, :username, :name, :use_existing_payout_setup)
     end
 end
