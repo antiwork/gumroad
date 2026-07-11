@@ -8,6 +8,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -135,7 +136,7 @@ export default function PagesEdit() {
           actions={<NavigationButton href={Routes.settings_profile_path()}>Open profile settings</NavigationButton>}
         />
         <WithPreviewSidebar className="flex-1">
-          <div className="grid content-start gap-6 p-4 md:p-8">
+          <section className="grid content-start gap-8 p-4! md:p-8!">
             <Alert role="status" variant="info">
               Your profile is the home page of your store. It ships with the default template — product grid, follow
               form, tabs — with the details editable in profile settings. It's yours to change completely: have your
@@ -148,7 +149,7 @@ export default function PagesEdit() {
               </Alert>
             ) : null}
             {agentPanel}
-          </div>
+          </section>
           {previewSidebar}
         </WithPreviewSidebar>
       </>
@@ -167,7 +168,7 @@ export default function PagesEdit() {
         }
       />
       <WithPreviewSidebar className="flex-1">
-        <div className="grid content-start gap-6 p-4 md:p-8">
+        <section className="grid content-start gap-8 p-4! md:p-8!">
           {page.custom_html ? (
             <>
               <Alert role="status" variant="info">
@@ -178,7 +179,7 @@ export default function PagesEdit() {
             </>
           ) : (
             <>
-              <fieldset>
+              <Fieldset>
                 <Label htmlFor="page-title">Title</Label>
                 <Input
                   id="page-title"
@@ -187,21 +188,22 @@ export default function PagesEdit() {
                   placeholder="About"
                   onChange={(e) => setTitle(e.target.value)}
                 />
-              </fieldset>
-              <fieldset>
+              </Fieldset>
+              <Fieldset>
                 <Label htmlFor="page-content">Content</Label>
                 <RichTextEditor
                   id="page-content"
+                  className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
                   ariaLabel="Page content"
                   placeholder="Write your page..."
                   initialValue={page.content}
                   onChange={setContent}
                 />
-              </fieldset>
+              </Fieldset>
               {agentPanel}
             </>
           )}
-        </div>
+        </section>
         {previewSidebar}
       </WithPreviewSidebar>
     </>
