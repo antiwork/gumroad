@@ -2794,7 +2794,14 @@ class Purchase < ApplicationRecord
         purchase_url_parameter&.mark_for_destruction
       end
     else
-      (purchase_url_parameter || build_purchase_url_parameter).params = params
+      record = purchase_url_parameter
+      if record&.marked_for_destruction?
+        # An earlier `url_parameters = nil` on this instance marked the persisted
+        # record for deletion. Reload the association to get a fresh, unmarked
+        # copy so autosave updates it with the new value instead of deleting it.
+        record = reload_purchase_url_parameter
+      end
+      (record || build_purchase_url_parameter).params = params
     end
   end
 

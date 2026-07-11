@@ -37,6 +37,22 @@ describe PurchaseUrlParameter do
       expect(Purchase.find(purchase.id).url_parameters).to eq("discord_id" => "123", "plan" => "pro")
     end
 
+    it "keeps the value when a persisted record is cleared and then reassigned before saving" do
+      purchase = create(:purchase)
+      purchase.url_parameters = { "discord_id" => "123" }
+      purchase.save!
+
+      reloaded = Purchase.find(purchase.id)
+      reloaded.url_parameters = nil
+      reloaded.url_parameters = { "discord_id" => "456" }
+
+      expect(reloaded.url_parameters).to eq("discord_id" => "456")
+
+      reloaded.save!
+
+      expect(Purchase.find(purchase.id).url_parameters).to eq("discord_id" => "456")
+    end
+
     it "destroys the persisted record when cleared and saved" do
       purchase = create(:purchase)
       purchase.url_parameters = { "discord_id" => "123" }
