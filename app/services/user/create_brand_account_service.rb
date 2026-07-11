@@ -30,7 +30,7 @@ class User::CreateBrandAccountService
     # still fail on the email uniqueness validation, but with a generic
     # "Email has already been taken" that doesn't explain what to do instead.
     if @email.to_s.strip.casecmp?(creator.email.to_s)
-      @error_message = "The brand account needs its own email address, different from your current account."
+      @error_message = "The new account needs its own email address, different from your current account."
       return false
     end
 

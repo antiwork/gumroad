@@ -48,6 +48,7 @@ describe Sellers::BrandAccountsController do
         expect(membership.role).to eq(TeamMembership::ROLE_ADMIN)
 
         expect(cookies.encrypted[:current_seller_id]).to eq(brand_user.id)
+        expect(flash[:notice]).to eq("My Brand is ready — we sent a confirmation link to brand@example.com. Confirm it before publishing.")
       end
 
       it "returns the validation message when the account can't be created" do

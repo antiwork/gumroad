@@ -114,7 +114,7 @@ describe User::CreateBrandAccountService do
           expect(service.perform).to eq(false)
         end.to not_change(User, :count).and not_change(TeamMembership, :count)
 
-        expect(service.error_message).to eq("The brand account needs its own email address, different from your current account.")
+        expect(service.error_message).to eq("The new account needs its own email address, different from your current account.")
       end
     end
 
