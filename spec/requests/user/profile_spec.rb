@@ -29,7 +29,9 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_menuitem("Unbecome")
       end
       toggle_disclosure "#{creator.display_name}", expand: false
-      click_on "Profile"
+      # The nav's "Profile" entry became "Pages" for roles that can manage
+      # pages; click it to navigate away before logging out.
+      click_on "Pages"
 
       logout
       sleep 1 # Since logout doesn't seem to immediately invalidate the session

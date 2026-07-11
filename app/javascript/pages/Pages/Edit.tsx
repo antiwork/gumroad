@@ -1,4 +1,4 @@
-import { Copy, Lock, MagicWand, Terminal } from "@boxicons/react";
+import { Copy, MagicWand, Terminal } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -70,11 +70,11 @@ export default function PagesEdit() {
         <MagicWand className="size-5" />
         <h3>Build with your agent</h3>
       </div>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-sm text-muted">
         The best way to build a page. Your agent designs it as full HTML — custom layout, animations, anything — and
         publishes it for you. Copy this prompt to get started:
       </p>
-      <div className="flex items-start gap-2 rounded bg-muted p-3">
+      <div className="flex items-start gap-2 rounded bg-active-bg p-3">
         <p className="min-w-0 flex-1 text-sm">{agentPrompt(username, page.slug, is_profile)}</p>
         <CopyToClipboard text={agentPrompt(username, page.slug, is_profile)}>
           <Button size="icon" aria-label="Copy agent prompt">
@@ -82,7 +82,7 @@ export default function PagesEdit() {
           </Button>
         </CopyToClipboard>
       </div>
-      <div className="text-muted-foreground flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-2 text-sm text-muted">
         <Terminal className="size-4" />
         <span>
           Prefer the command line? <code>gumroad pages list</code>, <code>create</code>, <code>push</code>, and{" "}
@@ -105,7 +105,7 @@ export default function PagesEdit() {
             like frame. */}
         <div className="border-b border-border p-3">
           <div className="text-sm font-medium">{previewTitle || "Untitled page"}</div>
-          <div className="text-muted-foreground truncate text-xs">{publicUrl.replace(/^https?:\/\//u, "")}</div>
+          <div className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</div>
         </div>
         {is_profile || page.custom_html ? (
           <iframe
@@ -122,7 +122,7 @@ export default function PagesEdit() {
           />
         )}
       </div>
-      <p className="text-muted-foreground text-xs">The preview refreshes when you save.</p>
+      <p className="text-xs text-muted">The preview refreshes when you save.</p>
     </PreviewSidebar>
   );
 
@@ -135,16 +135,11 @@ export default function PagesEdit() {
           actions={<NavigationButton href={Routes.settings_profile_path()}>Open profile settings</NavigationButton>}
         />
         <WithPreviewSidebar className="flex-1">
-          <div className="grid gap-6 p-4 md:p-8">
+          <div className="grid content-start gap-6 p-4 md:p-8">
             <Alert role="status" variant="info">
-              <div className="flex items-center gap-2">
-                <Lock className="size-4 shrink-0" />
-                <span>
-                  Your profile is the home page of your store. Its layout — product grid, follow form, tabs — is fixed,
-                  and you edit its details in profile settings. To go beyond it, replace it with a fully custom page
-                  built by your agent.
-                </span>
-              </div>
+              Your profile is the home page of your store. Its layout — product grid, follow form, tabs — is fixed, and
+              you edit its details in profile settings. To go beyond it, replace it with a fully custom page built by
+              your agent.
             </Alert>
             {page.custom_html ? (
               <Alert role="status" variant="success">
@@ -172,7 +167,7 @@ export default function PagesEdit() {
         }
       />
       <WithPreviewSidebar className="flex-1">
-        <div className="grid gap-6 p-4 md:p-8">
+        <div className="grid content-start gap-6 p-4 md:p-8">
           {page.custom_html ? (
             <>
               <Alert role="status" variant="info">

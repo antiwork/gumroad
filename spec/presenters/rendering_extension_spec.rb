@@ -140,6 +140,10 @@ describe "RenderingExtension" do
                   churn: {
                     show: false,
                   },
+                  page: {
+                    index: true,
+                    create: true,
+                  },
                   user: {
                     use_store_agent: true,
                   }
