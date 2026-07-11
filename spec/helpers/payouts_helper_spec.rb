@@ -334,6 +334,23 @@ describe PayoutsHelper do
 
         expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::USD)
       end
+
+      it "uses the connected Stripe account's default currency for Stripe Connect payouts" do
+        user = create(:user, currency_type: Currency::USD, check_merchant_account_is_linked: true)
+        create(:merchant_account_stripe_connect, user:, currency: Currency::CAD)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::CAD)
+      end
+
+      it "falls back to USD when the connected Stripe account has no currency recorded" do
+        user = create(:user, currency_type: Currency::USD, check_merchant_account_is_linked: true)
+        merchant_account = create(:merchant_account_stripe_connect, user:)
+        merchant_account.update_column(:currency, nil)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::USD)
+      end
     end
 
     it "shows payout data without payout given and previous payouts" do
