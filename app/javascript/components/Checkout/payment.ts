@@ -362,9 +362,10 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (state.surcharges.type !== "loaded") return null;
 
   const quote = state.surcharges.result.buyer_currency_quote;
-  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card charges
-  // canonically, so the element must not present local currency the buyer won't be charged.
-  if (!quote || state.willSaveCard) return null;
+  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card or
+  // selecting a non-card payment method (PayPal) charges canonically, so the element must
+  // not present local currency the buyer won't be charged.
+  if (!quote || state.willSaveCard || state.paymentMethod !== "card") return null;
 
   return { currency: quote.currency, amountCents: quote.presentment_total_cents };
 }

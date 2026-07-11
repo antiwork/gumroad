@@ -681,6 +681,21 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
   });
 
+  it("mounts canonical USD while a non-card payment method is selected", () => {
+    // PayPal charges canonical USD (its merchant account can never pass presentment
+    // eligibility), so the quote must be suppressed with the display: the buyer sees and
+    // confirms the USD totals PayPal will charge, and no quote token is sent that the
+    // charge path would fail closed on.
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+      paymentMethod: "paypal",
+    });
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
   it("ignores the quote when the server did not choose the presentment lane", () => {
     const s = state({ surcharges: loadedSurchargesWithQuote });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
