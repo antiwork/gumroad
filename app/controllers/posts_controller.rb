@@ -62,7 +62,7 @@ class PostsController < ApplicationController
     # never receive seller emails, including per-customer resends from the
     # customers page. The blast path already excludes these buyers (they have no
     # AudienceMember row); this keeps the resend path consistent with it.
-    if !purchase.can_contact?
+    unless purchase.can_contact?
       return render json: { message: "This customer has unsubscribed from your emails." }, status: :unprocessable_entity
     end
 

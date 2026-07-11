@@ -69,7 +69,6 @@ describe PostsController, type: :controller, inertia: true do
 
       it "does not resend to a customer who has unsubscribed" do
         @purchase.update!(can_contact: false)
-        @purchase.create_url_redirect!
 
         expect(PostSendgridApi).to_not receive(:process)
         get :send_for_purchase, params: { id: @post.external_id, purchase_id: @purchase.external_id }
