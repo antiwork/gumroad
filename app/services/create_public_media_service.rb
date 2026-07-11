@@ -51,6 +51,7 @@ class CreatePublicMediaService
 
   RemoteFileTooLarge = Class.new(StandardError)
   BlobNotEligible = Class.new(StandardError)
+  QuotaExceeded = Class.new(StandardError)
 
   # @param seller [User] the store owner the file will belong to
   # @param url [String, nil] a public URL to download the file from (SSRF-guarded)
@@ -66,8 +67,10 @@ class CreatePublicMediaService
   # @return [Result]
   def process
     return failure("Please provide a url or signed_blob_id.") if url.blank? && signed_blob_id.blank?
+    # Cheap fast-fail before we spend a download on a request that can't succeed. The
+    # authoritative, race-safe check happens again under a lock right before the record is saved.
     if alive_media_files.count >= MAX_ALIVE_MEDIA_FILES_PER_SELLER
-      return failure("You've reached the limit of #{MAX_ALIVE_MEDIA_FILES_PER_SELLER} uploaded files. Delete some before uploading more.")
+      return failure(quota_error_message)
     end
 
     blob = signed_blob_id.present? ? existing_blob : download_blob_from_url
@@ -86,7 +89,7 @@ class CreatePublicMediaService
       end
 
       public_file = build_public_file(blob)
-      if public_file.save
+      if save_within_quota(public_file)
         Result.new(success: true, public_file:)
       else
         purge_unattached(blob)
@@ -103,6 +106,8 @@ class CreatePublicMediaService
     failure("Please provide a valid public URL.")
   rescue RemoteFileTooLarge
     failure("That file is too large. Images can be up to #{MAX_IMAGE_BYTES / 1.megabyte} MB.")
+  rescue QuotaExceeded
+    failure(quota_error_message)
   rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound, BlobNotEligible
     # BlobNotEligible gets the same reply as a bad signature on purpose: a caller probing with
     # someone else's signed id shouldn't learn that the blob exists but belongs to another account.
@@ -128,6 +133,22 @@ class CreatePublicMediaService
 
     def alive_media_files
       PublicFile.alive.where(seller:, resource: seller)
+    end
+
+    # The early quota check in #process is a read-then-act on a plain count, so two concurrent
+    # uploads could both pass it and push the seller past the cap. Re-check under a row lock on
+    # the seller so the count and the insert happen atomically — concurrent requests for the same
+    # seller serialize here, and the loser gets the same quota error the early check produces.
+    def save_within_quota(public_file)
+      PublicFile.transaction do
+        seller.lock!
+        raise QuotaExceeded if alive_media_files.count >= MAX_ALIVE_MEDIA_FILES_PER_SELLER
+        public_file.save
+      end
+    end
+
+    def quota_error_message
+      "You've reached the limit of #{MAX_ALIVE_MEDIA_FILES_PER_SELLER} uploaded files. Delete some before uploading more."
     end
 
     def existing_blob

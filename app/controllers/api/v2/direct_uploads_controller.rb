@@ -57,10 +57,10 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
       params.require(:blob).permit(:filename, :byte_size, :checksum, :content_type).to_h.symbolize_keys
     end
 
-    # `purpose=media` switches this endpoint into media-library mode: audio is allowed, and the
-    # media pipeline's smaller caps apply. Every other caller (product file uploads) keeps the
-    # original allowlist and 20 GB cap — the parameter is opt-in so existing integrations are
-    # untouched.
+    # `purpose=media` switches this endpoint into media-library mode: only images are accepted
+    # (see MEDIA_ALLOWED_CONTENT_TYPES above) and the media pipeline's smaller 10 MB cap applies.
+    # Every other caller (product file uploads) keeps the original allowlist and 20 GB cap — the
+    # parameter is opt-in so existing integrations are untouched.
     def media_purpose?
       params[:purpose].to_s == "media"
     end

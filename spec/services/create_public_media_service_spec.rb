@@ -229,6 +229,30 @@ describe CreatePublicMediaService do
       expect(result).not_to be_success
       expect(result.error_message).to match(/limit/i)
     end
+
+    it "re-checks the quota under lock before saving so a concurrent upload can't exceed it" do
+      stub_const("#{described_class}::MAX_ALIVE_MEDIA_FILES_PER_SELLER", 1)
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+
+      # Simulate losing the race: the early check sees zero files, but by the time the locked
+      # re-check runs, another request has already filled the seller's last quota slot.
+      allow(seller).to receive(:lock!) do
+        create(:public_file, seller:, resource: seller)
+        seller
+      end
+
+      result = nil
+      expect do
+        result = described_class.new(seller:, url:).process
+      end.not_to change { PublicFile.count }
+      # (The simulated racing file is created inside the quota transaction, so the raise rolls
+      # it back along with everything else — the point is this upload never saved a record.)
+
+      expect(result).not_to be_success
+      expect(result.error_message).to match(/limit/i)
+      expect(ActiveStorage::Blob.count).to eq(0) # the rejected download was purged
+    end
   end
 
   describe "content moderation" do
