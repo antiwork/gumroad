@@ -6,7 +6,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
 import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
-import { ProductEditContext } from "$app/components/ProductEdit/state";
+import { OfferCode, ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -29,6 +29,7 @@ export const PriceEditor = ({
   maxEffectivePriceCents,
   hasPaidVariants,
   currencyCodeSelector,
+  defaultOfferCode,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -45,11 +46,38 @@ export const PriceEditor = ({
   maxEffectivePriceCents?: number;
   hasPaidVariants?: boolean;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  // Editors that don't mount ProductEditContext (like the bundle editor) pass
+  // their default discount code state through this prop instead.
+  defaultOfferCode?: {
+    uniquePermalink: string;
+    selected: OfferCode | null;
+    onChange: (offerCode: OfferCode | null) => void;
+  };
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
   const productEditContext = React.useContext(ProductEditContext);
+
+  // The regular product editor provides ProductEditContext; the bundle editor
+  // passes the defaultOfferCode prop. Either way we can render the selector.
+  const defaultOfferCodeProps = defaultOfferCode
+    ? {
+        uniquePermalink: defaultOfferCode.uniquePermalink,
+        selectedOfferCode: defaultOfferCode.selected,
+        onChange: defaultOfferCode.onChange,
+      }
+    : productEditContext
+      ? {
+          uniquePermalink: productEditContext.uniquePermalink,
+          selectedOfferCode: productEditContext.product.default_offer_code,
+          onChange: (offerCode: OfferCode | null) =>
+            productEditContext.updateProduct({
+              default_offer_code_id: offerCode ? offerCode.id : null,
+              default_offer_code: offerCode,
+            }),
+        }
+      : null;
 
   return (
     <Fieldset>
@@ -102,7 +130,7 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
-      {productEditContext ? <DefaultDiscountCodeSelector /> : null}
+      {defaultOfferCodeProps ? <DefaultDiscountCodeSelector {...defaultOfferCodeProps} /> : null}
     </Fieldset>
   );
 };

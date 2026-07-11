@@ -36,7 +36,11 @@ class RefundUnpaidPurchasesWorker
     return unless user.suspended?
 
     self.class.unpaid_purchases_for(user).ids.each do |purchase_id|
-      RefundPurchaseWorker.perform_async(purchase_id, admin_user_id)
+      # A reason is required for any refund made on the creator's behalf. The seller is
+      # suspended here, so the creator-notification email is skipped, but the reason is
+      # still stored on the refund record for the audit trail.
+      RefundPurchaseWorker.perform_async(purchase_id, admin_user_id,
+                                         "Account suspended; unpaid sale refunded to the buyer")
     end
 
     admin = User.find(admin_user_id)

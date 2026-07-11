@@ -32,7 +32,24 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq [purchase.seller.email]
       expect(mail.subject).to eq("A sale has been refunded")
       expect(mail.body.encoded).to include "test@example.com's purchase of Digital Membership for $10 has been refunded."
+      expect(mail.body.encoded).not_to include "Reason:"
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
+    end
+
+    it "includes the refund reason when the refund has a note" do
+      purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
+      refund = create(:refund, purchase:, note: "Buyer reported being charged twice")
+
+      mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id)
+      expect(mail.body.encoded).to include "Reason: Buyer reported being charged twice"
+    end
+
+    it "omits the reason when the refund has no note" do
+      purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
+      refund = create(:refund, purchase:)
+
+      mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id)
+      expect(mail.body.encoded).not_to include "Reason:"
     end
   end
 

@@ -120,6 +120,39 @@ describe("Bundle edit page", type: :system, js: true) do
     expect(bundle.is_epublication?).to eq(true)
   end
 
+  it "allows setting and persisting a default discount code" do
+    offer_code = create(:offer_code, user: seller, products: [bundle], code: "BUNDLE10", name: "Bundle sale")
+
+    visit edit_bundle_product_path(bundle.external_id)
+
+    expect(page).to have_unchecked_field("Automatically apply discount code")
+    check "Automatically apply discount code"
+    find_field("Discount code").click
+    find("[role='option']", text: "Bundle sale").click
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    expect(bundle.reload.default_offer_code).to eq(offer_code)
+
+    # Reloading the editor shows the saved code, and saving without touching
+    # the toggle keeps it set.
+    visit edit_bundle_product_path(bundle.external_id)
+    expect(page).to have_checked_field("Automatically apply discount code")
+    find_field("Name", with: "Bundle").fill_in with: "Renamed bundle"
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    expect(bundle.reload.default_offer_code).to eq(offer_code)
+
+    # Turning the toggle off clears the code.
+    visit edit_bundle_product_path(bundle.external_id)
+    uncheck "Automatically apply discount code"
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    expect(bundle.reload.default_offer_code).to be_nil
+  end
+
   context "when seller refund is set to false" do
     before do
       seller.update!(refund_policy_enabled: false)

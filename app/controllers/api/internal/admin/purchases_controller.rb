@@ -141,6 +141,12 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     buyer_email = params[:email].to_s.strip.downcase
     return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
 
+    # Refunds through this endpoint are made on the creator's behalf, so a reason is
+    # required — it is stored on the refund and emailed to the creator so they know why
+    # their sale was refunded.
+    reason = params[:reason].to_s.strip.presence
+    return render json: { success: false, message: "reason is required" }, status: :bad_request if reason.blank?
+
     purchase = fetch_purchase
     if purchase.blank? || purchase.email.to_s.downcase != buyer_email
       return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
@@ -180,7 +186,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
         amount = amount_cents / unit_scaling_factor(purchase.displayed_price_currency_type).to_f
       end
 
-      unless purchase.refund!(refunding_user_id: current_admin_actor_id, amount:)
+      unless purchase.refund!(refunding_user_id: current_admin_actor_id, amount:, reason:)
         message = purchase.errors.full_messages.presence&.to_sentence || "Refund failed for purchase number #{purchase.external_id_numeric}"
         return render json: { success: false, message: }, status: :unprocessable_entity
       end

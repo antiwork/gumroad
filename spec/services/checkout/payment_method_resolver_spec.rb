@@ -161,15 +161,111 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)
       end
 
-      it "drops the US-locked methods even for a US buyer — the intent is created on the seller's own Stripe account, which lacks the Cash App/ACH capabilities the platform account has" do
-        expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+      context "when the account has no availability snapshot yet" do
+        it "fails safe to card only for a US buyer and enqueues a background refresh — even Link waits for the snapshot, since link_payments is absent on many connected accounts and listing it fails the intent create" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card])
+        end
+
+        it "resolves card only for a non-US buyer too" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card])
+        end
+
+        it "keeps the checkout render alive when the refresh enqueue itself fails — the refresh is best-effort" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card])
+        end
       end
 
-      it "resolves card-only for a US PPP buyer — Link is PPP-gated and the US-locked methods are account-gated" do
-        expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(["card"])
+      context "when the snapshot is older than SNAPSHOT_MAX_AGE" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                    "refreshed_at" => (StripeConnectPaymentMethodAvailabilityService::SNAPSHOT_MAX_AGE + 1.hour).ago.iso8601,
+                                  })
+        end
+
+        it "still uses the stale snapshot (checkout never blocks) but enqueues a background re-fetch — the self-heal for webhooks dropped by the worker's until_executed lock" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+      end
+
+      context "when the snapshot says the account accepts both US-locked methods" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "offers them to a US buyer without enqueueing a refresh" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
+        it "still drops them for a non-US buyer — our region policy applies regardless of the account's capabilities" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+      end
+
+      context "when the snapshot says the account accepts only Cash App Pay" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "inactive" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "offers exactly the accepted method to a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
+        end
+      end
+
+      context "when the snapshot says the account's Link capability is not active" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "cashapp_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "drops Link too — the capability intersection covers every method, not just the US-locked pair" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card cashapp])
+        end
+      end
+
+      context "when the snapshot says the account accepts neither US-locked method" do
+        before do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "card_payments" => "active", "link_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+        end
+
+        it "resolves card and Link for a US buyer without enqueueing a refresh — the empty snapshot is an answer, not a miss" do
+          expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link])
+        end
+
+        it "resolves card-only for a US PPP buyer — Link is PPP-gated and the account accepts no US-locked methods" do
+          expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(["card"])
+        end
       end
 
       it "drops US-locked methods for a non-US buyer while keeping the connected-account scope" do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "us_bank_account_ach_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+
         resolution = resolve(buyer_country: "GB")
 
         expect(resolution.stripe_connect_account_id).to eq(connect_account.charge_processor_merchant_id)

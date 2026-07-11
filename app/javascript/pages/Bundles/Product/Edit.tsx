@@ -27,7 +27,7 @@ import { MaxPurchaseCountToggle } from "$app/components/ProductEdit/ProductTab/M
 import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor";
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
-import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
+import { OfferCode, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -60,6 +60,7 @@ type ProductPageProps = {
     audio_previews_enabled: boolean;
     is_published: boolean;
     products: BundleProduct[];
+    default_offer_code: OfferCode | null;
   };
   id: string;
   unique_permalink: string;
@@ -91,6 +92,8 @@ type ProductFormData = {
   refund_policy: RefundPolicy;
   allow_installment_plan: boolean;
   installment_plan: { number_of_installments: number } | null;
+  default_offer_code_id: string | null;
+  default_offer_code: OfferCode | null;
   unpublish?: boolean;
   redirect_to?: string;
 };
@@ -149,6 +152,8 @@ export default function BundlesProductEdit() {
     refund_policy: bundle.refund_policy,
     allow_installment_plan: bundle.allow_installment_plan,
     installment_plan: bundle.installment_plan,
+    default_offer_code_id: bundle.default_offer_code?.id ?? null,
+    default_offer_code: bundle.default_offer_code,
   });
 
   if (!currentSeller) return null;
@@ -172,6 +177,7 @@ export default function BundlesProductEdit() {
     covers: form.data.covers.map(({ id }) => id),
     refund_policy: form.data.refund_policy,
     installment_plan: form.data.allow_installment_plan ? form.data.installment_plan : undefined,
+    default_offer_code_id: form.data.default_offer_code_id,
   });
 
   const submitForm = (additionalData: Record<string, unknown> = {}, options?: { onSuccess?: () => void }) => {
@@ -297,6 +303,16 @@ export default function BundlesProductEdit() {
             onNumberOfInstallmentsChange={(value) =>
               form.setData("installment_plan", { ...form.data.installment_plan, number_of_installments: value })
             }
+            defaultOfferCode={{
+              uniquePermalink: unique_permalink,
+              selected: form.data.default_offer_code,
+              onChange: (offerCode) =>
+                form.setData((data) => ({
+                  ...data,
+                  default_offer_code_id: offerCode ? offerCode.id : null,
+                  default_offer_code: offerCode,
+                })),
+            }}
           />
         </section>
         <ThumbnailEditor

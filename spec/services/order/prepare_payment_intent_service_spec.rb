@@ -524,6 +524,12 @@ describe Order::PreparePaymentIntentService, :vcr do
       let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
 
       before do
+        # A capability snapshot must exist for the account to offer anything beyond card
+        # (an uncached connect account resolves card-only while the refresh worker runs).
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         allow(Stripe).to receive(:api_key).and_return("sk_test_currency")

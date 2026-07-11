@@ -576,6 +576,9 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase?"
+          prompt_message="Reason for the refund (required — it is emailed to the creator):"
+          prompt_field_name="reason"
+          prompt_required
           success_message="Refunded!"
         />
         <AdminActionButton

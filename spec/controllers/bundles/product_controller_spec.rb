@@ -287,6 +287,62 @@ describe Bundles::ProductController, inertia: true do
       end
     end
 
+    describe "default discount code" do
+      let(:offer_code) { create(:offer_code, user: seller, products: [bundle]) }
+      let(:universal_offer_code) { create(:universal_offer_code, user: seller) }
+
+      it "sets the default offer code when a valid product offer code is provided" do
+        put :update, params: bundle_params.merge(default_offer_code_id: offer_code.external_id)
+
+        expect(bundle.reload.default_offer_code).to eq(offer_code)
+        expect(flash[:notice]).to eq("Changes saved!")
+      end
+
+      it "sets the default offer code when a valid universal offer code is provided" do
+        put :update, params: bundle_params.merge(default_offer_code_id: universal_offer_code.external_id)
+
+        expect(bundle.reload.default_offer_code).to eq(universal_offer_code)
+      end
+
+      it "does not set the default offer code when offer code belongs to another user" do
+        other_user_offer_code = create(:offer_code)
+        put :update, params: bundle_params.merge(default_offer_code_id: other_user_offer_code.external_id)
+
+        expect(bundle.reload.default_offer_code).to be_nil
+        expect(flash[:alert]).to eq("Invalid offer code")
+      end
+
+      it "does not set the default offer code when offer code is not associated with the bundle" do
+        unassociated_offer_code = create(:offer_code, user: seller)
+        put :update, params: bundle_params.merge(default_offer_code_id: unassociated_offer_code.external_id)
+
+        expect(bundle.reload.default_offer_code).to be_nil
+        expect(flash[:alert]).to eq("Offer code must apply to this product")
+      end
+
+      it "does not set the default offer code when offer code is expired" do
+        expired_offer_code = create(:offer_code, user: seller, products: [bundle], valid_at: 2.days.ago, expires_at: 1.day.ago)
+        put :update, params: bundle_params.merge(default_offer_code_id: expired_offer_code.external_id)
+
+        expect(bundle.reload.default_offer_code).to be_nil
+        expect(flash[:alert]).to eq("Offer code cannot be expired")
+      end
+
+      it "clears the default offer code when an empty value is provided" do
+        bundle.update!(default_offer_code: offer_code)
+        put :update, params: bundle_params.merge(default_offer_code_id: "")
+
+        expect(bundle.reload.default_offer_code).to be_nil
+      end
+
+      it "keeps the existing default offer code when the param is absent" do
+        bundle.update!(default_offer_code: offer_code)
+        put :update, params: bundle_params
+
+        expect(bundle.reload.default_offer_code).to eq(offer_code)
+      end
+    end
+
     context "when seller_refund_policy_disabled_for_all feature flag is set to true" do
       before do
         Feature.activate(:seller_refund_policy_disabled_for_all)

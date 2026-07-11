@@ -75,5 +75,14 @@ describe SendLastPostJob do
         expect(PostSendgridApi).to have_received(:process).with(post: product_post, recipients: [recipient])
       end
     end
+
+    context "when the purchase has opted out of seller emails" do
+      before { purchase.update!(can_contact: false) }
+
+      it "does not send anything" do
+        expect(PostSendgridApi).not_to receive(:process)
+        described_class.new.perform(purchase.id)
+      end
+    end
   end
 end

@@ -127,10 +127,10 @@ describe Charge, :vcr do
       successful_purchase = instance_double(Purchase, refund_and_save!: true)
       allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
 
-      expect(charge.refund_and_save!(123)).to be(false)
+      expect(charge.refund_and_save!(123, reason: "Refund requested by the buyer")).to be(false)
 
-      expect(failed_purchase).to have_received(:refund_and_save!).with(123)
-      expect(successful_purchase).to have_received(:refund_and_save!).with(123)
+      expect(failed_purchase).to have_received(:refund_and_save!).with(123, reason: "Refund requested by the buyer")
+      expect(successful_purchase).to have_received(:refund_and_save!).with(123, reason: "Refund requested by the buyer")
       expect(charge.errors[:base]).to include("First refund failed")
     end
   end

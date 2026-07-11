@@ -45,6 +45,14 @@ describe CustomerPresenter do
         )
       end
     end
+
+    context "when the customer has unsubscribed" do
+      before { purchase.update!(can_contact: false) }
+
+      it "returns no posts" do
+        expect(described_class.new(purchase:).missed_posts).to eq([])
+      end
+    end
   end
 
   describe "#customer" do
