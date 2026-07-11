@@ -213,8 +213,18 @@ const StripePaymentElementProvider = ({
       "stripe_connect_account_id" in elementsOptions ? elementsOptions.stripe_connect_account_id : null,
     ),
   );
-  const [initialAmount] = React.useState(amount);
   const currency = currencyOverride ?? elementsOptions.currency;
+  // The amount and currency Elements is CREATED with, captured together. Later amount
+  // changes reach the live element through elements.update() in
+  // PaymentElementControllerInput, so this deliberately does not follow every amount
+  // change. But a currency change remounts Elements (the currency is part of its key
+  // below), and the new instance must not be created with an amount captured under the
+  // previous currency — that value is denominated in the previous currency's minor
+  // units (e.g. a CAD total reused for a USD mount). Re-capture the amount at the
+  // moment the currency changes so creation options are always internally consistent.
+  const [creation, setCreation] = React.useState({ currency, amount });
+  if (creation.currency !== currency) setCreation({ currency, amount });
+  const initialAmount = creation.amount;
   const font = useFont();
   const color = getCssVariable("color").split(" ").join(",");
   const backgroundColor = `rgb(${getCssVariable("filled").split(" ").join(",")})`;

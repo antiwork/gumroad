@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
 import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
 
-const elementsMounts = vi.hoisted<{ currencies: string[]; unmounts: number }>(() => ({
+const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | undefined)[]; unmounts: number }>(() => ({
   currencies: [],
+  amounts: [],
   unmounts: 0,
 }));
 
@@ -16,9 +17,16 @@ vi.mock("@stripe/react-stripe-js", async () => {
   const stripe = {};
 
   return {
-    Elements: ({ children, options }: { children: React.ReactNode; options: { currency: string } }) => {
+    Elements: ({
+      children,
+      options,
+    }: {
+      children: React.ReactNode;
+      options: { currency: string; amount?: number };
+    }) => {
       React.useEffect(() => {
         elementsMounts.currencies.push(options.currency);
+        elementsMounts.amounts.push(options.amount);
         return () => {
           elementsMounts.unmounts += 1;
         };
@@ -63,6 +71,7 @@ const props = {
 describe("PaymentElementInput", () => {
   beforeEach(() => {
     elementsMounts.currencies = [];
+    elementsMounts.amounts = [];
     elementsMounts.unmounts = 0;
     props.onReady.mockClear();
   });
@@ -102,6 +111,11 @@ describe("PaymentElementInput", () => {
     });
 
     expect(elementsMounts.currencies).toEqual(["cad", "usd"]);
+    // The new Elements instance must be created with the amount that belongs to the new
+    // currency, not the amount captured at the provider's first mount — 1625 is a CAD
+    // total, and reusing it for the USD mount would send a wrong (and wrongly-denominated)
+    // amount in the creation request.
+    expect(elementsMounts.amounts).toEqual([1_625, 1_300]);
     expect(elementsMounts.unmounts).toBe(1);
 
     act(() => renderer.unmount());
