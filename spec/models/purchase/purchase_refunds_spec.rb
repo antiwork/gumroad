@@ -631,7 +631,30 @@ describe "PurchaseRefunds", :vcr do
 
         expect do
           expect(@purchase.refund_and_save!(admin.id)).to be(true)
-        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with(@purchase.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with { |purchase_id, refund_id|
+          expect(purchase_id).to eq(@purchase.id)
+          expect(refund_id).to eq(@purchase.refunds.last.id)
+        }
+      end
+
+      it "stores the reason on the refund and passes the refund to the email" do
+        admin = create(:admin_user)
+
+        expect do
+          expect(@purchase.refund_and_save!(admin.id, reason: "Buyer reported being charged twice")).to be(true)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with { |purchase_id, refund_id|
+          expect(purchase_id).to eq(@purchase.id)
+          expect(refund_id).to eq(@purchase.refunds.last.id)
+        }
+
+        expect(@purchase.refunds.last.note).to eq("Buyer reported being charged twice")
+      end
+
+      it "leaves the refund note empty when no reason is given" do
+        admin = create(:admin_user)
+
+        expect(@purchase.refund_and_save!(admin.id)).to be(true)
+        expect(@purchase.refunds.last.note).to be_nil
       end
 
       it "does not email the creator when they refund their own sale" do

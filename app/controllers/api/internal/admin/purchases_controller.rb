@@ -180,7 +180,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
         amount = amount_cents / unit_scaling_factor(purchase.displayed_price_currency_type).to_f
       end
 
-      unless purchase.refund!(refunding_user_id: current_admin_actor_id, amount:)
+      unless purchase.refund!(refunding_user_id: current_admin_actor_id, amount:, reason: params[:reason].presence)
         message = purchase.errors.full_messages.presence&.to_sentence || "Refund failed for purchase number #{purchase.external_id_numeric}"
         return render json: { success: false, message: }, status: :unprocessable_entity
       end

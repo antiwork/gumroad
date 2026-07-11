@@ -24,6 +24,11 @@ type AdminActionButtonProps = {
   outline?: boolean | null;
   color?: ButtonColor | null;
   class?: string | null;
+  // When set, a text prompt is shown after the confirm dialog and the entered value is
+  // sent to the server under `prompt_field_name`. Leaving the prompt empty still submits
+  // (the field is simply omitted); cancelling the prompt aborts the action.
+  prompt_message?: string | null;
+  prompt_field_name?: string | null;
 };
 
 export const AdminActionButton = ({
@@ -38,6 +43,8 @@ export const AdminActionButton = ({
   outline,
   color,
   class: className,
+  prompt_message,
+  prompt_field_name,
 }: AdminActionButtonProps) => {
   const [state, setState] = React.useState<"initial" | "loading" | "done">("initial");
 
@@ -45,6 +52,15 @@ export const AdminActionButton = ({
     // eslint-disable-next-line no-alert
     if (!confirm(confirm_message || `Are you sure you want to ${label}?`)) {
       return;
+    }
+
+    const data: Record<string, string> = {};
+    if (prompt_message && prompt_field_name) {
+      // eslint-disable-next-line no-alert
+      const promptValue = prompt(prompt_message);
+      // Cancelling the prompt cancels the whole action; an empty value just omits the field.
+      if (promptValue === null) return;
+      if (promptValue.trim() !== "") data[prompt_field_name] = promptValue.trim();
     }
 
     setState("loading");
@@ -56,7 +72,7 @@ export const AdminActionButton = ({
         url,
         method: method || "POST",
         accept: "json",
-        data: { authenticity_token: csrfToken },
+        data: { ...data, authenticity_token: csrfToken },
       });
 
       if (!response.ok) throw new ResponseError("Something went wrong.");
