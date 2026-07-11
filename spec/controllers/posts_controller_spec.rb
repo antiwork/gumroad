@@ -67,6 +67,17 @@ describe PostsController, type: :controller, inertia: true do
         end.to raise_error(ActiveRecord::RecordNotFound)
       end
 
+      it "does not resend to a customer who has unsubscribed" do
+        @purchase.update!(can_contact: false)
+        @purchase.create_url_redirect!
+
+        expect(PostSendgridApi).to_not receive(:process)
+        get :send_for_purchase, params: { id: @post.external_id, purchase_id: @purchase.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("message" => "This customer has unsubscribed from your emails.")
+      end
+
       it "returns success and redelivers the installment" do
         @purchase.create_url_redirect!
         expect(PostSendgridApi).to receive(:process).with(

@@ -6,6 +6,11 @@ class SendLastPostJob
 
   def perform(purchase_id)
     purchase = Purchase.find(purchase_id)
+    # Honor the customer's unsubscribe: skip the welcome "last post" email when
+    # the purchase has can_contact disabled (e.g. the buyer unchecked email
+    # updates at checkout, or unsubscribed before this job ran).
+    return unless purchase.can_contact?
+
     subscription = purchase.subscription
 
     posts = Installment.emailable_posts_for_purchase(purchase:).order(published_at: :desc)

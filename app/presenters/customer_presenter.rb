@@ -8,6 +8,10 @@ class CustomerPresenter
   end
 
   def missed_posts
+    # A customer who unsubscribed (can_contact off) can't be emailed, so don't
+    # offer the seller "Send missed posts" buttons that would only error out.
+    return [] unless purchase.can_contact?
+
     posts = Installment.missed_for_purchase(purchase).order(published_at: :desc, id: :asc)
     posts.map do |post|
       {

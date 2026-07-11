@@ -58,6 +58,14 @@ class PostsController < ApplicationController
     # never let the generic resend path send it to any other purchase.
     e404 if @post.single_recipient_email? && @post.single_recipient_purchase_id.to_i != purchase.id
 
+    # Honor the customer's unsubscribe: a purchase with can_contact disabled must
+    # never receive seller emails, including per-customer resends from the
+    # customers page. The blast path already excludes these buyers (they have no
+    # AudienceMember row); this keeps the resend path consistent with it.
+    if !purchase.can_contact?
+      return render json: { message: "This customer has unsubscribed from your emails." }, status: :unprocessable_entity
+    end
+
     # Limit the number of emails sent per post to avoid abuse.
     Rails.cache.fetch("post_email:#{@post.id}:#{purchase.id}", expires_in: 8.hours) do
       CreatorContactingCustomersEmailInfo.where(purchase:, installment: @post).destroy_all
