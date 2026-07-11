@@ -70,6 +70,12 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :last_content_page_id
   attr_json_data_accessor :default_offer_code_id
+  # Custom query params the buyer had on the product URL (e.g. ?discord_id=x), minus
+  # reserved ones. Persisted here (not an attr_accessor) because the "purchase
+  # successful" webhook can fire from a freshly loaded Purchase — PayPal captures,
+  # webhook-driven status syncs — long after the checkout request that knew the
+  # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
+  attr_json_data_accessor :url_parameters
   # Buyer-presentment purchases only: the canonical USD gross the dispute-loss balance
   # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
   # exactly the same amount, even when refunds land between the debit and the win.
@@ -585,7 +591,7 @@ class Purchase < ApplicationRecord
             check_for_column: false
 
   attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
-                :discount_code, :url_parameters, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
+                :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,

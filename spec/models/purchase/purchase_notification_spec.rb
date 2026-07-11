@@ -25,6 +25,19 @@ describe "Purchase Notifications", :vcr do
       expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, purchase.url_parameters)
     end
 
+    it "includes the buyer's URL parameters even when the webhook fires from a freshly loaded purchase" do
+      # PayPal (and other asynchronous payment flows) mark the purchase successful on a
+      # Purchase loaded fresh from the database, not the instance built during checkout.
+      # The URL parameters must survive that round trip so the sale ping still carries them.
+      purchase = create(:purchase)
+      purchase.url_parameters = { "discord_id" => "123", "plan" => "pro" }
+      purchase.save!
+
+      Purchase.find(purchase.id).send_notification_webhook
+
+      expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, { "discord_id" => "123", "plan" => "pro" })
+    end
+
     it "does not schedule a PostToPingEndpointsWorker job if the transaction creating the purchase was rolled back" do
       Purchase.transaction do
         create(:purchase).send_notification_webhook
