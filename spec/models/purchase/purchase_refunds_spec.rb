@@ -666,6 +666,16 @@ describe "PurchaseRefunds", :vcr do
         expect(@purchase.refund_and_save!(@user.id)).to be(true)
       end
 
+      it "lets a team member refund their own sale without a reason and without an email" do
+        # Gumroad staff can also sell on Gumroad. Refunding their own sale is a
+        # creator refund, not a support action — no reason required, no email sent.
+        @user.update!(is_team_member: true)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+      end
+
       it "does not email the creator when there is no refunding user (console refund)" do
         expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
 

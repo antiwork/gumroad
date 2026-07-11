@@ -58,12 +58,17 @@ class Purchase
       # creator-notification email after the refund succeeds.
       refunded_by_team_member = refunding_user_id.present? && User.find(refunding_user_id).is_team_member?
 
+      # A team member refunding a sale THEY made as the seller is just a creator refunding
+      # their own sale — no reason needed and no email, because they already know about it.
+      # This matters for Gumroad staff who also sell on Gumroad.
+      refunded_on_creators_behalf = refunded_by_team_member && refunding_user_id != seller_id
+
       # A refund made on the creator's behalf must always carry a reason — it is shown in
       # the email that tells the creator their sale was refunded, and "A sale has been
       # refunded" with no explanation is exactly the kind of message that sends the creator
       # to support asking what happened. Fraud refunds are exempt because that path sends
       # its own dedicated email (see refund_for_fraud!).
-      if refunded_by_team_member && !is_for_fraud && reason.blank?
+      if refunded_on_creators_behalf && !is_for_fraud && reason.blank?
         errors.add :base, "A reason is required when refunding on the creator's behalf."
         return false
       end
@@ -152,7 +157,7 @@ class Purchase
         # this method — Charge::Refundable handles the creator email for those.
         # The refund record just created (refunds.last) carries the optional reason so the
         # email can tell the creator why the sale was refunded.
-        if refunded && !is_for_fraud && refunded_by_team_member && !seller.suspended?
+        if refunded && !is_for_fraud && refunded_on_creators_behalf && !seller.suspended?
           ContactingCreatorMailer.purchase_refunded(id, refunds.last&.id).deliver_later(queue: "default")
         end
         refunded
