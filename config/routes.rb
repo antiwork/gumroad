@@ -1367,6 +1367,15 @@ Rails.application.routes.draw do
 
     get "/landing/embed", to: "users#landing_iframe_content"
     get "/landing/version", to: "users#landing_version"
+    # First-class Pages: a seller's slugged pages serve at the root of their
+    # subdomain / custom domain. These come last in this block so every real
+    # route above wins; Page::RESERVED_SLUGS additionally blocks creating a
+    # page whose slug would shadow any of them. The slug constraint mirrors the
+    # model's format validation (and keeps dotted paths like favicon.ico out).
+    page_slug = /[a-z0-9]+(?:-[a-z0-9]+)*/
+    get "/:slug/landing/embed", to: "user_pages#landing_iframe_content", constraints: { slug: page_slug }, as: :user_page_landing
+    get "/:slug/landing/version", to: "user_pages#landing_version", constraints: { slug: page_slug }, as: :user_page_landing_version
+    get "/:slug", to: "user_pages#show", constraints: { slug: page_slug }, as: :user_page
     get "/", to: "users#show", defaults: { format: "html" }
   end
 

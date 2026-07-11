@@ -1,50 +1,22 @@
 # frozen_string_literal: true
 
-# Design draft for first-class Pages (gumroad-private#1047).
+# First-class Pages (gumroad-private#1047): the seller-facing management UI.
 #
-# This controller renders the full Pages UX — a list of the seller's pages with
-# the public profile pinned as the special "home" entry, plus an editor with a
-# live preview — so the flow can be clicked through end to end and iterated on.
-#
-# DESIGN STUB: there is no real data layer behind this yet. Pages live in the
-# session (seeded with sample content the first time the list is opened), so
-# creating, editing, saving, and deleting all feel real within a browser
-# session but nothing is persisted. The real implementation replaces the
-# session store with a `pages` table (seller-scoped, slug + title + content)
-# and routes saved content through the existing sanitizer pipeline.
+# The list shows the seller's public profile pinned as the special "home" entry
+# plus every slugged page; the editor is a title + rich text form with a live
+# preview. Pages built as full custom HTML by an agent/CLI show a preview and
+# the agent path instead of the rich text editor — there is no lossy
+# HTML → rich text conversion.
 class PagesController < Sellers::BaseController
   layout "inertia"
 
-  SESSION_KEY = :design_draft_pages
-
-  # Sample pages so the list and editor render with believable content on
-  # first load instead of an empty state.
-  SEED_PAGES = [
-    {
-      "slug" => "about",
-      "title" => "About",
-      "content" => "<h2>Hey, I'm glad you're here</h2><p>I make design resources for indie creators — icon sets, Figma templates, and the occasional deep-dive tutorial. Everything in the store is something I use in my own client work first.</p><p>If you're not sure where to start, the <strong>Starter Icon Pack</strong> is free.</p>",
-      "custom_html" => false,
-    },
-    {
-      "slug" => "licenses",
-      "title" => "Licenses",
-      "content" => "<h2>How you can use my work</h2><p>Every product includes a standard license for personal and client projects. You can:</p><ul><li>Use assets in unlimited personal and commercial projects</li><li>Modify and combine them with your own work</li></ul><p>You can't resell or redistribute the raw files. For team licenses, reach out through the contact page.</p>",
-      "custom_html" => false,
-    },
-    {
-      "slug" => "studio",
-      "title" => "Studio",
-      "content" => "<!doctype html><html><head><style>body{margin:0;font-family:system-ui;background:#0d0d0d;color:#fafafa}header{padding:48px 32px;background:linear-gradient(135deg,#ff90e8,#ffc900);color:#000}h1{margin:0}main{padding:32px;line-height:1.6}a{color:#ff90e8}</style></head><body><header><h1>Studio</h1></header><main><p>A page designed end-to-end by my agent — custom layout, palette, and typography.</p><p><a href=\"/\">Back to the store</a></p></main></body></html>",
-      "custom_html" => true,
-    },
-  ].freeze
+  before_action :set_page, only: [:edit, :update, :destroy]
 
   def index
     authorize :page
 
     render inertia: "Pages/Index", props: {
-      pages: stub_pages,
+      pages: current_seller.pages.map { page_props(_1) },
       profile: profile_entry,
     }
   end
@@ -64,26 +36,25 @@ class PagesController < Sellers::BaseController
   def create
     authorize :page
 
-    title = params[:title].to_s.strip
-    return redirect_to new_page_path, inertia: { errors: { title: "Title can't be blank" } } if title.blank?
+    page = current_seller.pages.build(title: params[:title].to_s.strip, content: params[:content].to_s)
+    page.slug = generate_slug(page.title)
 
-    slug = title.parameterize
-    slug = "#{slug}-#{stub_pages.size + 1}" if slug.blank? || stub_pages.any? { |p| p["slug"] == slug }
-    pages = stub_pages + [{ "slug" => slug, "title" => title, "content" => params[:content].to_s, "custom_html" => false }]
-    write_stub_pages(pages)
-
-    redirect_to edit_page_path(slug), notice: "Page created!", status: :see_other
+    if page.save
+      redirect_to edit_page_path(page.slug), notice: "Page created!", status: :see_other
+    else
+      redirect_to new_page_path, inertia: { errors: page_errors(page) }
+    end
   end
 
   def edit
     authorize :page
 
-    if params[:slug] == "profile"
+    if @profile_page
       # The profile is the special root page: it renders the default storefront
       # template (product grid, follow form, tabs), with the details edited in
-      # profile settings. Sellers keep it 100% customizable by replacing it with
-      # fully custom HTML via their agent or the CLI, so the editor renders the
-      # template view with that takeover path.
+      # profile settings. Sellers keep it 100% customizable by replacing it
+      # with fully custom HTML via their agent or the CLI, so the editor
+      # renders the template view with that takeover path.
       render inertia: "Pages/Edit", props: {
         page: { slug: "profile", title: "Profile", content: "", custom_html: current_seller.custom_html.present? },
         is_profile: true,
@@ -94,11 +65,8 @@ class PagesController < Sellers::BaseController
       return
     end
 
-    page = stub_pages.find { |p| p["slug"] == params[:slug] }
-    return redirect_to pages_path unless page
-
     render inertia: "Pages/Edit", props: {
-      page:,
+      page: page_props(@page),
       is_profile: false,
       is_new: false,
       username: current_seller.username.to_s,
@@ -109,34 +77,68 @@ class PagesController < Sellers::BaseController
   def update
     authorize :page
 
-    pages = stub_pages
-    page = pages.find { |p| p["slug"] == params[:slug] }
-    return redirect_to pages_path unless page
+    return redirect_to pages_path if @profile_page
 
-    title = params[:title].to_s.strip
-    return redirect_to edit_page_path(page["slug"]), inertia: { errors: { title: "Title can't be blank" } } if title.blank?
+    # A custom HTML page is authored by the seller's agent/CLI; the in-app
+    # editor never writes over it (the UI doesn't offer to, this is the
+    # server-side backstop).
+    return redirect_to edit_page_path(@page.slug) if @page.custom_html.present?
 
-    page["title"] = title
-    page["content"] = params[:content].to_s
-    write_stub_pages(pages)
-
-    redirect_to edit_page_path(page["slug"]), notice: "Changes saved!", status: :see_other
+    if @page.update(title: params[:title].to_s.strip, content: params[:content].to_s)
+      redirect_to edit_page_path(@page.slug), notice: "Changes saved!", status: :see_other
+    else
+      redirect_to edit_page_path(@page.slug), inertia: { errors: page_errors(@page) }
+    end
   end
 
   def destroy
     authorize :page
 
-    write_stub_pages(stub_pages.reject { |p| p["slug"] == params[:slug] })
+    return redirect_to pages_path if @profile_page
+
+    @page.destroy!
     redirect_to pages_path, notice: "Page deleted!", status: :see_other
   end
 
   private
-    def stub_pages
-      session[SESSION_KEY] ||= SEED_PAGES.map(&:dup)
+    def set_page
+      if params[:slug] == "profile"
+        @profile_page = true
+        return
+      end
+
+      @page = current_seller.pages.find_by(slug: params[:slug])
+      redirect_to pages_path unless @page
     end
 
-    def write_stub_pages(pages)
-      session[SESSION_KEY] = pages
+    def page_props(page)
+      {
+        slug: page.slug,
+        title: page.title.to_s,
+        content: page.content.to_s,
+        custom_html: page.custom_html.present?,
+      }
+    end
+
+    def page_errors(page)
+      page.errors.to_hash.transform_values(&:first)
+    end
+
+    # Slugs come from the title; on collision (or an all-symbols title that
+    # parameterizes to nothing) fall back to a numbered variant.
+    def generate_slug(title)
+      base = title.parameterize
+      base = "page" if base.blank?
+      return base unless slug_taken?(base)
+
+      (2..).each do |n|
+        candidate = "#{base}-#{n}"
+        return candidate unless slug_taken?(candidate)
+      end
+    end
+
+    def slug_taken?(slug)
+      Page::RESERVED_SLUGS.include?(slug) || current_seller.pages.exists?(slug:)
     end
 
     # The profile rendered as the root of the page tree: first in the list,
