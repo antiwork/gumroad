@@ -28,12 +28,7 @@ if Rails.env.staging? || Rails.env.development?
       super
     end
   end
-  # App constants are not autoloadable at initializer time (zeitwerk); defer the
-  # prepend until the app's code is ready. to_prepare re-runs on reload, but
-  # prepending an already-prepended module is a no-op, so this stays idempotent.
-  Rails.application.config.to_prepare do
-    ErrorNotifier.singleton_class.prepend(QaErrorNotifierCapture)
-  end
+  ErrorNotifier.singleton_class.prepend(QaErrorNotifierCapture)
 
   # JSON endpoints under /qa/india_mandate/* for driving renewal scenarios.
   class QaIndiaMandateMiddleware
