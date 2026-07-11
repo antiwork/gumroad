@@ -20,6 +20,17 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
   const [email, setEmail] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+  // The modal stays mounted while closed, so clear the fields whenever it
+  // closes — reopening a create form with someone's half-typed details in it
+  // would be confusing.
+  React.useEffect(() => {
+    if (!open) {
+      setName("");
+      setUsername("");
+      setEmail("");
+    }
+  }, [open]);
+
   const nameUID = React.useId();
   const usernameUID = React.useId();
   const emailUID = React.useId();

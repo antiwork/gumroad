@@ -89,6 +89,23 @@ describe User::CreateBrandAccountService do
       end
     end
 
+    context "when a concurrent request hits the database's unique index" do
+      it "returns false with a friendly message instead of raising" do
+        service = build_service
+
+        # Simulate the race where another request creates the same email or
+        # username between our model-level validation and the INSERT — the
+        # database's unique index then raises RecordNotUnique.
+        allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique)
+
+        expect do
+          expect(service.perform).to eq(false)
+        end.to not_change(User, :count).and not_change(TeamMembership, :count)
+
+        expect(service.error_message).to eq("An account with that email or username already exists.")
+      end
+    end
+
     context "when the username has an invalid format" do
       it "returns false with a validation message" do
         service = build_service(username: "My Brand!")

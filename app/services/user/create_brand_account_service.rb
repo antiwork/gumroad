@@ -48,6 +48,12 @@ class User::CreateBrandAccountService
   rescue ActiveRecord::RecordInvalid => e
     @error_message = e.record.errors.full_messages.first
     false
+  rescue ActiveRecord::RecordNotUnique
+    # A concurrent request can slip past the model-level uniqueness checks and
+    # hit the database's unique index instead, which raises RecordNotUnique
+    # rather than RecordInvalid. Treat it the same as a validation failure.
+    @error_message = "An account with that email or username already exists."
+    false
   end
 
   attr_reader :error_message
