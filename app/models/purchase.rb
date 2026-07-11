@@ -3037,6 +3037,32 @@ class Purchase < ApplicationRecord
     ErrorNotifier.notify(e, purchase: external_id)
   end
 
+  # Same idea as check_indian_card_mandate_was_registered, but for purchases whose recurring
+  # payment was registered on a Stripe SetupIntent instead of a charge (multi-product
+  # checkouts, free trials, preorders). When the setup intent needed buyer authentication
+  # (3DS), the synchronous check in Order::ChargeService never runs — the intent only
+  # succeeds later, once the buyer confirms. This is called from that confirmation path,
+  # re-fetching the setup intent so a registration that completed without a Mandate object
+  # is still reported instead of surfacing as an unexplainable decline at first renewal.
+  def check_indian_card_setup_intent_mandate_was_registered
+    return unless stripe_charge_processor?
+    return unless credit_card&.requires_mandate?
+    return if processor_setup_intent_id.blank?
+
+    setup_intent = ChargeProcessor.get_setup_intent(merchant_account, processor_setup_intent_id)
+    return unless setup_intent&.succeeded?
+    return if setup_intent.mandate.present?
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+      purchase: external_id,
+      stripe_setup_intent: processor_setup_intent_id
+    )
+  rescue => e
+    # This check is observability only; never let it break charge processing.
+    ErrorNotifier.notify(e, purchase: external_id)
+  end
+
   # Off-session charges on Indian cards remain in processing for 26 hours on Stripe.
   # We keep the purchase in_progress for that duration, so avoid forced updates (from admin or background jobs).
   def can_force_update?

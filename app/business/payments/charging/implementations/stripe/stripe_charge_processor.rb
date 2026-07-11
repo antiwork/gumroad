@@ -277,12 +277,13 @@ class StripeChargeProcessor
         # registration silently produces no mandate, and — when the flag is on — fail fast with
         # our own error code so the buyer is asked to re-authorize their card (which registers
         # a fresh mandate) instead of receiving an issuer decline they can't act on.
+        fail_fast = Feature.active?(:fail_india_recurring_charge_without_mandate)
         ErrorNotifier.notify(
           "Off-session charge on an Indian card has no e-mandate to reference",
           reference:,
-          fail_fast: Feature.active?(:fail_india_recurring_charge_without_mandate)
+          fail_fast:
         )
-        if Feature.active?(:fail_india_recurring_charge_without_mandate)
+        if fail_fast
           raise ChargeProcessorCardError.new(
             PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
             "Your card's recurring payment authorization is missing. Please re-enter your payment method to complete this payment."
