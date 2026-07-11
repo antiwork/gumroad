@@ -2217,7 +2217,7 @@ describe StripeChargeProcessor, :vcr do
 
         it "marks the refund failed for a refund.failed event" do
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
-          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
 
           expect do
             StripeChargeProcessor.handle_stripe_event(refund_event)
@@ -2232,7 +2232,7 @@ describe StripeChargeProcessor, :vcr do
           refund_event["type"] = "refund.updated"
 
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
-          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
 
           StripeChargeProcessor.handle_stripe_event(refund_event)
 
@@ -2243,7 +2243,7 @@ describe StripeChargeProcessor, :vcr do
           refund_event["type"] = "charge.refund.updated"
 
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
-          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
 
           StripeChargeProcessor.handle_stripe_event(refund_event)
 
