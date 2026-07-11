@@ -28,6 +28,14 @@ describe Api::V2::MediaController do
 
     it_behaves_like "authorized oauth v1 api method"
 
+    it "rejects account-only tokens even though legacy v2 endpoints accept account as a fallback" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+
+      get @action, params: { access_token: token.token }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
     describe "when logged in with view_profile scope" do
       before do
         @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_profile")
@@ -69,8 +77,8 @@ describe Api::V2::MediaController do
 
     it_behaves_like "authorized oauth v1 api method"
 
-    it "rejects a token without the edit_profile scope" do
-      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_profile")
+    it "rejects account-only tokens even though legacy v2 endpoints accept account as a fallback" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
 
       post @action, params: { access_token: token.token, url: "https://example.com/logo.png" }
 
@@ -100,14 +108,14 @@ describe Api::V2::MediaController do
       end
 
       it "returns the service's error message on failure" do
-        result = CreatePublicMediaService::Result.new(success: false, error_message: "Only image, audio, and video files can be uploaded.")
+        result = CreatePublicMediaService::Result.new(success: false, error_message: "Only image files can be uploaded.")
         allow(CreatePublicMediaService).to receive(:new).and_return(instance_double(CreatePublicMediaService, process: result))
 
         post @action, params: @params.merge(url: "https://example.com/file.zip")
 
         body = response.parsed_body
         expect(body["success"]).to be(false)
-        expect(body["message"]).to match(/only image, audio, and video/i)
+        expect(body["message"]).to match(/only image/i)
       end
 
       it "rejects uploads from a suspended seller with a 403 and never calls the service" do
@@ -143,6 +151,16 @@ describe Api::V2::MediaController do
     end
 
     it_behaves_like "authorized oauth v1 api method"
+
+    it "rejects account-only tokens even though legacy v2 endpoints accept account as a fallback" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      file = create_media_file(@user)
+
+      delete @action, params: { access_token: token.token, id: file.public_id }
+
+      expect(response).to have_http_status(:forbidden)
+      expect(file.reload).to be_alive
+    end
 
     describe "when logged in with edit_profile scope" do
       before do

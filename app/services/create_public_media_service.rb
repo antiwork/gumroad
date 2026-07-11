@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# CreatePublicMediaService ingests a seller's own image/audio/video file and hosts it on Gumroad's
+# CreatePublicMediaService ingests a seller's own image file and hosts it on Gumroad's
 # public storage so it can be displayed on the seller's public pages (the profile and product
 # custom-HTML landing pages). Those pages render inside a sandbox whose Content-Security-Policy only
 # allows images/media from Gumroad's own CDN hosts (see RendersCustomHtmlPages::CUSTOM_HTML_CSP), so
@@ -15,14 +15,15 @@
 #   - fetched with SSRF protection — the URL is seller/LLM-supplied, so a naive fetch could be
 #     pointed at internal hosts or redirected somewhere private,
 #   - type-checked by content sniffing (magic bytes via Marcel), never by file extension or the
-#     remote server's Content-Type header, and limited to image/audio/video types that are safe to
-#     serve publicly (SVG is excluded: it's scriptable and would be served from a Gumroad host),
-#   - size-capped per media group — images render inline on landing pages, so they get a much
-#     smaller cap than audio/video,
+#     remote server's Content-Type header, and limited to images that are safe to serve publicly
+#     (SVG is excluded: it's scriptable and would be served from a Gumroad-controlled public host),
+#   - size-capped — images render inline on landing pages, so this synchronous upload path stays
+#     bounded,
 #   - run through the existing content moderation strategies BEFORE the record is created, because
 #     the hosted URL lives on a Gumroad domain and flagged content would look Gumroad-endorsed.
-#     Audio/video get a text-only pass (name/filename) — the classifier doesn't accept those media
-#     types yet, a known limitation rather than a blocker.
+#
+# Audio/video are deliberately out of scope until there is real media-byte moderation for them; a
+# filename-only moderation pass is not enough for Gumroad-hosted public media.
 #
 # On success the file is stored as a PublicFile owned by (and attached to) the seller and served
 # from the public storage CDN — the same host the custom-page CSP already allowlists, so the
@@ -35,24 +36,18 @@ class CreatePublicMediaService
   # Only media that browsers display/play inline. image/svg+xml is deliberately excluded even
   # though it is an image type: an SVG is a scriptable document, and everything this service stores
   # is served publicly from a Gumroad-controlled host.
-  ALLOWED_CONTENT_TYPE_PREFIXES = %w[image/ audio/ video/].freeze
+  ALLOWED_CONTENT_TYPE_PREFIXES = %w[image/].freeze
   DISALLOWED_CONTENT_TYPES = %w[image/svg+xml].freeze
 
   # Images render inline on landing pages, so they get a small cap (mirrors the product thumbnail
-  # cap's order of magnitude). Audio/video are streamed by the browser and may legitimately be
-  # larger, but this download happens synchronously inside a web request, so it stays bounded.
+  # cap's order of magnitude). This download happens synchronously inside a web request, so it stays bounded.
   MAX_IMAGE_BYTES = 10.megabytes
-  MAX_AUDIO_VIDEO_BYTES = 100.megabytes
 
   # Simple ceiling so public hosting can't be farmed as free unlimited storage. Counts only the
   # seller's own media files (resource = the seller), not the per-product public files.
   MAX_ALIVE_MEDIA_FILES_PER_SELLER = 500
 
   MODERATION_NOUN = "file"
-
-  # How many leading bytes we buffer from a download before sniffing the content type mid-stream.
-  # Magic bytes for every format we accept live in the first few hundred bytes, so 512 is plenty.
-  TYPE_SNIFF_BYTES = 512
 
   RemoteFileTooLarge = Class.new(StandardError)
   BlobNotEligible = Class.new(StandardError)
@@ -107,7 +102,7 @@ class CreatePublicMediaService
          SsrfFilter::PrivateIPAddress, SsrfFilter::TooManyRedirects, SsrfFilter::UnresolvedHostname
     failure("Please provide a valid public URL.")
   rescue RemoteFileTooLarge
-    failure("That file is too large. Images can be up to #{MAX_IMAGE_BYTES / 1.megabyte} MB and audio/video up to #{MAX_AUDIO_VIDEO_BYTES / 1.megabyte} MB.")
+    failure("That file is too large. Images can be up to #{MAX_IMAGE_BYTES / 1.megabyte} MB.")
   rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound, BlobNotEligible
     # BlobNotEligible gets the same reply as a bad signature on purpose: a caller probing with
     # someone else's signed id shouldn't learn that the blob exists but belongs to another account.
@@ -172,24 +167,13 @@ class CreatePublicMediaService
       tempfile = Tempfile.new(binmode: true)
       begin
         response = SsrfFilter.get(normalized_url) do |http_response|
-          raise RemoteFileTooLarge if http_response["content-length"].to_i > MAX_AUDIO_VIDEO_BYTES
+          raise RemoteFileTooLarge if http_response["content-length"].to_i > MAX_IMAGE_BYTES
 
           write_file = http_response.is_a?(Net::HTTPSuccess)
           received_bytes = 0
-          sniff_buffer = "".b
-          # Until the type is sniffed we only know the overall ceiling; after sniffing, images are
-          # held to the smaller image cap so an oversized image is cut off mid-transfer.
-          byte_limit = MAX_AUDIO_VIDEO_BYTES
+          byte_limit = MAX_IMAGE_BYTES
           http_response.read_body do |chunk|
             received_bytes += chunk.bytesize
-            if write_file && sniff_buffer && sniff_buffer.bytesize < TYPE_SNIFF_BYTES
-              sniff_buffer << chunk
-              if sniff_buffer.bytesize >= TYPE_SNIFF_BYTES
-                sniffed = Marcel::MimeType.for(StringIO.new(sniff_buffer), name: filename_from(uri))
-                byte_limit = MAX_IMAGE_BYTES if sniffed.to_s.start_with?("image/")
-                sniff_buffer = nil
-              end
-            end
             raise RemoteFileTooLarge if received_bytes > byte_limit
 
             tempfile.write(chunk) if write_file
@@ -237,14 +221,14 @@ class CreatePublicMediaService
     def content_type_error(content_type)
       allowed = ALLOWED_CONTENT_TYPE_PREFIXES.any? { |prefix| content_type.start_with?(prefix) } &&
         !DISALLOWED_CONTENT_TYPES.include?(content_type)
-      allowed ? nil : "Only image, audio, and video files can be uploaded."
+      allowed ? nil : "Only image files can be uploaded."
     end
 
     def size_error_for(content_type, byte_size)
-      limit = content_type.start_with?("image/") ? MAX_IMAGE_BYTES : MAX_AUDIO_VIDEO_BYTES
+      limit = MAX_IMAGE_BYTES
       return nil if byte_size <= limit
 
-      "That file is too large. #{content_type.start_with?('image/') ? 'Images' : 'Audio and video files'} can be up to #{limit / 1.megabyte} MB."
+      "That file is too large. Images can be up to #{limit / 1.megabyte} MB."
     end
 
     # Screen the file with the same moderation strategies that gate product publishing, BEFORE the

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Public v2 endpoint for a creator's public media library: image/audio/video files hosted on
+# Public v2 endpoint for a creator's public media library: image files hosted on
 # Gumroad's public storage so they can be displayed on the creator's public pages. The profile and
 # product custom-HTML landing pages render under a strict CSP that only allows img/media from
 # Gumroad's own CDN hosts (RendersCustomHtmlPages::CUSTOM_HTML_CSP), so an off-platform file URL
@@ -16,7 +16,9 @@
 # per-product public files the product editor manages.
 class Api::V2::MediaController < Api::V2::BaseController
   before_action(only: [:index]) { doorkeeper_authorize! :view_profile }
+  before_action(only: [:index]) { require_oauth_scope! :view_profile }
   before_action(only: [:create, :destroy]) { doorkeeper_authorize! :edit_profile }
+  before_action(only: [:create, :destroy]) { require_oauth_scope! :edit_profile }
   # Suspended or closed accounts must not be able to keep hosting files on Gumroad's public
   # storage. The app-wide suspended-account guard only covers browser sessions (logged_in_user),
   # not OAuth bearer tokens, so without this check a suspended seller's still-valid API token

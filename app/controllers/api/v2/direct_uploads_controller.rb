@@ -9,19 +9,14 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
   MAX_FILE_SIZE = MAX_FILE_SIZE_GB.gigabytes
 
   # A reservation made with `purpose=media` is destined for the public media library
-  # (POST /v2/media with a signed_blob_id → CreatePublicMediaService). That pipeline accepts
-  # audio too, and enforces much smaller size caps than the 20 GB product-file default — so the
-  # reservation mirrors those caps up front. Without this, a caller could reserve a 20 GB video
-  # blob only to have /v2/media reject it after the whole upload finished, or couldn't upload
-  # audio at all. Content types and caps intentionally mirror CreatePublicMediaService: any
-  # image/audio/video subtype except SVG, which is scriptable and would be served from a
-  # Gumroad-controlled public host.
-  MEDIA_ALLOWED_CONTENT_TYPES = /\A(?:image|audio|video)\/[a-z0-9.+-]+\z/i
+  # (POST /v2/media with a signed_blob_id → CreatePublicMediaService). That pipeline is image-only
+  # until Gumroad has real audio/video byte moderation; the direct-upload reservation mirrors that
+  # allowlist and the smaller image cap up front.
+  MEDIA_ALLOWED_CONTENT_TYPES = /\Aimage\/[a-z0-9.+-]+\z/i
   MEDIA_DISALLOWED_CONTENT_TYPES = CreatePublicMediaService::DISALLOWED_CONTENT_TYPES
   MEDIA_MAX_IMAGE_SIZE = CreatePublicMediaService::MAX_IMAGE_BYTES
-  MEDIA_MAX_AUDIO_VIDEO_SIZE = CreatePublicMediaService::MAX_AUDIO_VIDEO_BYTES
 
-  before_action { doorkeeper_authorize! :edit_products }
+  before_action :authorize_upload_scope!
 
   def create
     blob_args = direct_upload_blob_args
@@ -48,6 +43,15 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
   end
 
   private
+    def authorize_upload_scope!
+      if media_purpose?
+        doorkeeper_authorize! :edit_profile
+        require_oauth_scope! :edit_profile
+      else
+        doorkeeper_authorize! :edit_products
+      end
+    end
+
     def direct_upload_blob_args
       params.require(:blob).permit(:filename, :byte_size, :checksum, :content_type).to_h.symbolize_keys
     end
@@ -63,9 +67,8 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     def byte_size_error(blob_args)
       byte_size = blob_args[:byte_size].to_i
       if media_purpose?
-        # Images render inline on landing pages so they get a much smaller cap than audio/video;
-        # same split CreatePublicMediaService enforces when the blob is later ingested.
-        limit = blob_args[:content_type].to_s.match?(/\Aimage\//i) ? MEDIA_MAX_IMAGE_SIZE : MEDIA_MAX_AUDIO_VIDEO_SIZE
+        # Media-library reservations are image-only for now, so the same image cap always applies.
+        limit = MEDIA_MAX_IMAGE_SIZE
         return "byte_size exceeds the #{limit / 1.megabyte} MB maximum for media uploads" if byte_size > limit
       elsif byte_size > MAX_FILE_SIZE
         return "byte_size exceeds the #{MAX_FILE_SIZE_GB} GB maximum"
@@ -84,7 +87,7 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
 
     def content_type_error_message
       if media_purpose?
-        "content_type must be an image, audio, or video type."
+        "content_type must be an image type."
       else
         "content_type must be JPEG, PNG, GIF, or video."
       end

@@ -31,11 +31,11 @@ class PublicFile < ApplicationRecord
   # can be shared between records). Used when a creator deletes a media file, and during account
   # closure / GDPR erasure, where a closed account must not keep hosting files on Gumroad's CDN.
   def mark_deleted_and_purge_file!
+    file_blob = blob
+
     ActiveRecord::Base.transaction do
       mark_deleted!
-      if blob && !ActiveStorage::Attachment.where(blob_id: blob.id).where.not(record: self).exists?
-        file.purge_later
-      end
+      purge_blob_later_if_no_live_owner!(file_blob) if file_blob
     end
   end
 
@@ -74,6 +74,14 @@ class PublicFile < ApplicationRecord
   end
 
   private
+    def purge_blob_later_if_no_live_owner!(file_blob)
+      live_owner_exists = ActiveStorage::Attachment.where(blob_id: file_blob.id).any? do |attachment|
+        record = attachment.record
+        !(record.is_a?(PublicFile) && record.deleted?)
+      end
+      file_blob.purge_later unless live_owner_exists
+    end
+
     def set_file_group_and_file_type
       return if original_file_name.blank?
 

@@ -82,18 +82,19 @@ describe CreatePublicMediaService do
       result = described_class.new(seller:, url:).process
 
       expect(result).not_to be_success
-      expect(result.error_message).to match(/only image, audio, and video/i)
+      expect(result.error_message).to match(/only image/i)
       expect(PublicFile.count).to eq(0)
     end
 
-    it "accepts audio files" do
+    it "rejects audio files until there is real media-byte moderation for them" do
       url = "https://example.com/track.mp3"
       stub_remote_file(url, "magic.mp3", "audio/mpeg")
 
       result = described_class.new(seller:, url:).process
 
-      expect(result).to be_success
-      expect(result.public_file.file_group).to eq("audio")
+      expect(result).not_to be_success
+      expect(result.error_message).to match(/only image/i)
+      expect(PublicFile.count).to eq(0)
     end
 
     it "rejects SVG even though it is an image type" do
@@ -103,12 +104,12 @@ describe CreatePublicMediaService do
       result = described_class.new(seller:, url:).process
 
       expect(result).not_to be_success
-      expect(result.error_message).to match(/only image, audio, and video/i)
+      expect(result.error_message).to match(/only image/i)
     end
 
     it "rejects a download whose Content-Length exceeds the cap without storing anything" do
       url = "https://example.com/huge.mp4"
-      stub_remote_file(url, "smilie.png", "video/mp4", content_length: described_class::MAX_AUDIO_VIDEO_BYTES + 1)
+      stub_remote_file(url, "smilie.png", "video/mp4", content_length: described_class::MAX_IMAGE_BYTES + 1)
 
       result = described_class.new(seller:, url:).process
 

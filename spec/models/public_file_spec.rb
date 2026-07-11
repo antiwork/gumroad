@@ -198,4 +198,35 @@ describe PublicFile do
       expect(public_file.scheduled_for_deletion_at).to be_within(5.second).of(10.days.from_now)
     end
   end
+
+  describe "#mark_deleted_and_purge_file!" do
+    def create_image_public_file(seller, display_name: "Logo")
+      public_file = PublicFile.new(seller:, resource: seller, display_name:)
+      public_file.file.attach(
+        io: File.open(Rails.root.join("spec/support/fixtures/smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png",
+      )
+      public_file.save!
+      public_file
+    end
+
+    it "purges a shared blob once all PublicFile owners are deleted" do
+      seller = create(:user)
+      first_file = create_image_public_file(seller)
+      blob = first_file.blob
+      second_file = PublicFile.new(seller:, resource: seller, display_name: "Logo copy")
+      second_file.file.attach(blob.signed_id)
+      second_file.save!
+
+      expect(ActiveStorage::Attachment.where(blob_id: blob.id).count).to eq(2)
+      expect do
+        first_file.mark_deleted_and_purge_file!
+      end.not_to have_enqueued_job(ActiveStorage::PurgeJob)
+
+      expect do
+        second_file.mark_deleted_and_purge_file!
+      end.to have_enqueued_job(ActiveStorage::PurgeJob).with(blob)
+    end
+  end
 end
