@@ -6,6 +6,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 
@@ -65,7 +66,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
         A new Gumroad is a separate account with its own brand name, profile, and products. You'll be its admin and can
         switch to it anytime from this menu. Payout settings are configured on the new account.
       </p>
-      <fieldset>
+      <Fieldset>
         <Label htmlFor={nameUID}>Brand name</Label>
         <Input
           id={nameUID}
@@ -74,8 +75,8 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
           value={name}
           onChange={(evt) => setName(evt.target.value)}
         />
-      </fieldset>
-      <fieldset>
+      </Fieldset>
+      <Fieldset>
         <Label htmlFor={usernameUID}>Username</Label>
         <Input
           id={usernameUID}
@@ -84,8 +85,8 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
           value={username}
           onChange={(evt) => setUsername(evt.target.value)}
         />
-      </fieldset>
-      <fieldset>
+      </Fieldset>
+      <Fieldset>
         <Label htmlFor={emailUID}>Email</Label>
         <Input
           id={emailUID}
@@ -94,11 +95,11 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
           value={email}
           onChange={(evt) => setEmail(evt.target.value)}
         />
-        <small>
+        <FieldsetDescription>
           Must be different from your account email. We'll send a confirmation link so the new account has its own
           login.
-        </small>
-      </fieldset>
+        </FieldsetDescription>
+      </Fieldset>
     </Modal>
   );
 };
