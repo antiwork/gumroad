@@ -77,7 +77,17 @@ class PagesController < Sellers::BaseController
   def update
     authorize :page
 
-    return redirect_to pages_path if @profile_page
+    if @profile_page
+      # The only edit the profile entry supports here is removing a custom HTML
+      # takeover, which restores the default storefront template. Everything
+      # else about the profile is edited in profile settings.
+      if params[:remove_custom_html]
+        current_seller.custom_html = nil
+        current_seller.save!
+        return redirect_to edit_page_path("profile"), notice: "Custom page removed — your profile is back on the default template.", status: :see_other
+      end
+      return redirect_to pages_path
+    end
 
     # A custom HTML page is authored by the seller's agent/CLI; the in-app
     # editor never writes over it (the UI doesn't offer to, this is the

@@ -71,6 +71,9 @@ Rails.application.routes.draw do
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
       post "/user/custom_html/edit", to: "users#edit_custom_html"
       post "/user/preview_custom_html", to: "users#preview_custom_html"
+      # First-class Pages: slugged storefront pages, addressed by slug. The
+      # profile root page stays on the /user/custom_html endpoints above.
+      resources :pages, only: [:index, :show, :create, :update, :destroy]
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do

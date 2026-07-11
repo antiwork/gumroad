@@ -127,6 +127,16 @@ describe PagesController, type: :controller, inertia: true do
 
       expect(response).to redirect_to(pages_path)
     end
+
+    it "removes the profile's custom HTML takeover, restoring the default template" do
+      seller.custom_html = "<h1>Takeover</h1>"
+      seller.save!
+
+      patch :update, params: { slug: "profile", remove_custom_html: true }
+
+      expect(seller.reload.custom_html).to be_nil
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
   end
 
   describe "DELETE destroy" do

@@ -65,6 +65,18 @@ export default function PagesEdit() {
     else if (page.slug) router.patch(Routes.page_path(page.slug), params, options);
   };
 
+  const [isRemovingCustomHtml, setIsRemovingCustomHtml] = React.useState(false);
+  // Removing the custom HTML takeover restores the profile's default
+  // storefront template. The server clears it and redirects back here.
+  const removeProfileCustomHtml = () => {
+    setIsRemovingCustomHtml(true);
+    router.patch(
+      Routes.page_path("profile"),
+      { remove_custom_html: true },
+      { onFinish: () => setIsRemovingCustomHtml(false) },
+    );
+  };
+
   const agentPanel = (
     <div className="grid gap-3 rounded border border-border p-4">
       <div className="flex items-center gap-2">
@@ -148,8 +160,15 @@ export default function PagesEdit() {
             </Alert>
             {page.custom_html ? (
               <Alert role="status" variant="success">
-                Your custom profile page is live — it replaces the default template. Update it with your agent or the
-                CLI, or remove it from profile settings to restore the default template.
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                  <span>
+                    Your custom profile page is live — it replaces the default template. Update it with your agent or
+                    the CLI, or remove it to restore the default template.
+                  </span>
+                  <Button color="danger" outline disabled={isRemovingCustomHtml} onClick={removeProfileCustomHtml}>
+                    {isRemovingCustomHtml ? "Removing..." : "Remove custom page"}
+                  </Button>
+                </div>
               </Alert>
             ) : null}
             {agentPanel}
