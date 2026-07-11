@@ -33,6 +33,35 @@ if Rails.env.staging? || Rails.env.development?
   # prepending an already-prepended module is a no-op, so this stays idempotent.
   Rails.application.config.to_prepare do
     ErrorNotifier.singleton_class.prepend(QaErrorNotifierCapture)
+
+    # Also capture ChargeProcessorError construction: renewal failures surface to the
+    # purchase only as the generic "stripe_unavailable" error code, hiding the underlying
+    # Stripe exception. Recording the message + original error class at raise time lets
+    # QA see WHY a forced renewal failed without console/Sentry access.
+    unless GumroadRuntimeError.method_defined?(:qa_capture_installed)
+      module QaChargeErrorCapture
+        def qa_capture_installed; end
+        def initialize(message = nil, original_error: nil)
+          super
+          if is_a?(ChargeProcessorError) && Stripe.api_key.to_s.start_with?("sk_test_")
+            begin
+              redis = Redis::Namespace.new(:qa_india_mandate, redis: $redis)
+              redis.lpush("charge_errors", {
+                klass: self.class.name,
+                message: message.to_s,
+                original: original_error&.class&.name,
+                original_message: original_error&.message.to_s[0, 500],
+                at: Time.current.iso8601
+              }.to_json)
+              redis.ltrim("charge_errors", 0, 99)
+            rescue => e
+              Rails.logger.error("QA charge error capture failed: #{e.message}")
+            end
+          end
+        end
+      end
+      GumroadRuntimeError.prepend(QaChargeErrorCapture)
+    end
   end
 
   # JSON endpoints under /qa/india_mandate/* for driving renewal scenarios.
@@ -54,6 +83,14 @@ if Rails.env.staging? || Rails.env.development?
           json(200, cleared: true)
         else
           json(200, notifications: redis.lrange("notifications", 0, 99).map { |n| JSON.parse(n) })
+        end
+      when "/qa/india_mandate/charge_errors"
+        redis = Redis::Namespace.new(:qa_india_mandate, redis: $redis)
+        if req.params["clear"]
+          redis.del("charge_errors")
+          json(200, cleared: true)
+        else
+          json(200, charge_errors: redis.lrange("charge_errors", 0, 99).map { |n| JSON.parse(n) })
         end
       when "/qa/india_mandate/subscription"
         sub = find_subscription(req.params)
