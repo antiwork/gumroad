@@ -2166,6 +2166,91 @@ describe StripeChargeProcessor, :vcr do
         end
       end
 
+      describe "refund failure events" do
+        let(:refund_event) do
+          {
+            "id" => "evt_2Q7bRK9e1RjUNIyY1R1OIZDn",
+            "object" => "event",
+            "api_version" => "2023-10-16",
+            "created" => 1728386835,
+            "data" => {
+              "object" => {
+                "id" => "re_2Q7bRK9e1RjUNIyY1icyswlr",
+                "object" => "refund",
+                "amount" => 1700,
+                "balance_transaction" => "txn_2Q7bRK9e1RjUNIyY1hpvIOPN",
+                "charge" => "ch_2Q7bRK9e1RjUNIyY1SMUhNqu",
+                "created" => 1728386832,
+                "currency" => "usd",
+                "failure_reason" => "declined",
+                "metadata" => {},
+                "payment_intent" => "pi_2Q7bRK9e1RjUNIyY1J2BBTCh",
+                "reason" => "requested_by_customer",
+                "status" => "failed"
+              }
+            },
+            "livemode" => false,
+            "pending_webhooks" => 2,
+            "request" => {
+              "id" => nil,
+              "idempotency_key" => nil
+            },
+            "type" => "refund.failed"
+          }
+        end
+
+        let!(:purchase) do
+          create(:purchase,
+                 price_cents: 1700,
+                 total_transaction_cents: 1700,
+                 stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+        end
+
+        let!(:refund) do
+          create(:refund,
+                 purchase:,
+                 amount_cents: 1700,
+                 total_transaction_cents: 1700,
+                 processor_refund_id: "re_2Q7bRK9e1RjUNIyY1icyswlr",
+                 status: "pending")
+        end
+
+        it "marks the refund failed for a refund.failed event" do
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+
+          expect do
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+          end.to not_have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud)
+             .and not_have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded)
+
+          expect(refund.reload.status).to eq("failed")
+          expect(purchase.reload.refunds.count).to eq 1
+        end
+
+        it "marks the refund failed when refund.updated carries a failed status" do
+          refund_event["type"] = "refund.updated"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+
+        it "marks the refund failed when charge.refund.updated carries a failed status" do
+          refund_event["type"] = "charge.refund.updated"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+      end
+
       describe "event payment failed" do
         let(:stripe_event_type) { "payment_intent.payment_failed" }
         let(:purchase_external_id) { "q3jUBQrrGrIId3SjC4VJ0g==" }

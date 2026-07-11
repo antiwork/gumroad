@@ -51,6 +51,14 @@ module Purchase::ChargeEventsHandler
       handle_event_failed!(event)
     when ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
       handle_event_refund_updated!(event)
+    when ChargeEvent::TYPE_REFUND_FAILED
+      # A refund that fails after Stripe accepted it (async bank-transfer refunds — iDEAL,
+      # Bancontact, ACH — can be returned by the buyer's bank days later) needs dedicated
+      # handling: reversing the refund's balance effects and alerting, per the reversal-depth
+      # decision on #5779. That handler ships separately. Until it lands, route through the
+      # status updater so the Refund record is still marked failed — the behavior these
+      # events had before they were split out of TYPE_CHARGE_REFUND_UPDATED.
+      handle_event_refund_updated!(event)
     when ChargeEvent::TYPE_INFORMATIONAL
       handle_event_informational!(event)
     end
