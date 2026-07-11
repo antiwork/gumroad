@@ -106,6 +106,18 @@ describe User::CreateBrandAccountService do
       end
     end
 
+    context "when the email is the same as the creator's email" do
+      it "returns false with a message explaining a different email is needed" do
+        service = build_service(email: creator.email.upcase)
+
+        expect do
+          expect(service.perform).to eq(false)
+        end.to not_change(User, :count).and not_change(TeamMembership, :count)
+
+        expect(service.error_message).to eq("The brand account needs its own email address, different from your current account.")
+      end
+    end
+
     context "when the username has an invalid format" do
       it "returns false with a validation message" do
         service = build_service(username: "My Brand!")

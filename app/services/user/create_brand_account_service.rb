@@ -25,6 +25,15 @@ class User::CreateBrandAccountService
   # Returns true when the brand account was created. On failure, validation
   # messages are available on #error_message.
   def perform
+    # The brand account must have its own email — it gets its own login and
+    # confirmation email. Without this check, reusing the creator's email would
+    # still fail on the email uniqueness validation, but with a generic
+    # "Email has already been taken" that doesn't explain what to do instead.
+    if @email.to_s.strip.casecmp?(creator.email.to_s)
+      @error_message = "The brand account needs its own email address, different from your current account."
+      return false
+    end
+
     @brand_user = User.new(
       email: @email,
       username: @username,
