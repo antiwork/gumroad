@@ -46,6 +46,7 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     def authorize_upload_scope!
       if media_purpose?
         doorkeeper_authorize! :edit_profile
+        return if performed?
         require_oauth_scope! :edit_profile
       else
         doorkeeper_authorize! :edit_products

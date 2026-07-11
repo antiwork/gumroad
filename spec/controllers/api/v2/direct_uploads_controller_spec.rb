@@ -225,5 +225,23 @@ describe Api::V2::DirectUploadsController do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    it "rejects tokens with an unrelated scope for media-library reservations without double-rendering" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_sales")
+
+      expect do
+        post @action, params: @params.merge(access_token: token.token, purpose: "media")
+      end.not_to change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "rejects unauthenticated media-library reservations without double-rendering" do
+      expect do
+        post @action, params: @params.except(:access_token).merge(purpose: "media")
+      end.not_to change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:unauthorized)
+    end
   end
 end
