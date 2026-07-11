@@ -324,7 +324,17 @@ class UrlRedirectsController < ApplicationController
     def redirect_bundle_purchase_to_library_if_needed
       return unless @url_redirect.purchase&.is_bundle_purchase?
 
-      redirect_to library_url(bundles: @url_redirect.purchase.link.external_id, purchase_id: params[:receipt] && @url_redirect.purchase.external_id)
+      # Build the library URL on the main app domain explicitly. This redirect can run after
+      # redirect_to_custom_domain_if_needed has already moved the request onto the seller's
+      # subdomain (or custom domain), and /library requires authentication. A signed-out buyer
+      # would get bounced to /login on the seller's host, which isn't routed there and 404s.
+      # Pinning the host to the app domain keeps the login redirect on a host that routes it.
+      redirect_to library_url(
+        bundles: @url_redirect.purchase.link.external_id,
+        purchase_id: params[:receipt] && @url_redirect.purchase.external_id,
+        host: DOMAIN,
+        protocol: PROTOCOL
+      ), allow_other_host: true
     end
 
     def redirect_to_coffee_page_if_needed

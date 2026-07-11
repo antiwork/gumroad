@@ -86,6 +86,8 @@ export type LoggedInUser = {
   avatarUrl: string;
   confirmed: boolean;
   teamMemberships: TeamMembership[];
+  canCreateBrandAccount: boolean;
+  hasPayoutSetupToPort: boolean;
   policies: Policies;
   isGumroadAdmin: boolean;
   isImpersonating: boolean;
@@ -105,6 +107,8 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     name: string | null;
     avatar_url: string;
     team_memberships: TeamMembership[];
+    can_create_brand_account: boolean;
+    has_payout_setup_to_port: boolean;
     policies: Policies;
     confirmed: boolean;
     is_gumroad_admin: boolean;
@@ -119,6 +123,8 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     avatarUrl: parsed.avatar_url,
     confirmed: parsed.confirmed,
     teamMemberships: parsed.team_memberships,
+    canCreateBrandAccount: parsed.can_create_brand_account,
+    hasPayoutSetupToPort: parsed.has_payout_setup_to_port,
     policies: parsed.policies,
     isGumroadAdmin: parsed.is_gumroad_admin,
     isImpersonating: parsed.is_impersonating,

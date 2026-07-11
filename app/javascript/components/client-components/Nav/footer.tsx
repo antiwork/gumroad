@@ -1,8 +1,9 @@
-import { ArrowOutRightSquareHalf, Book, Cog, Group, Store } from "@boxicons/react";
+import { ArrowOutRightSquareHalf, Book, Cog, Group, Plus, Store } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
 import { ClientNavLink } from "$app/components/client-components/Nav";
+import { CreateBrandAccountModal } from "$app/components/CreateBrandAccountModal";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -15,6 +16,7 @@ function NavbarFooter() {
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
   const teamMemberships = loggedInUser?.teamMemberships;
+  const [showCreateBrandAccountModal, setShowCreateBrandAccountModal] = React.useState(false);
 
   return (
     <>
@@ -40,6 +42,20 @@ function NavbarFooter() {
               <hr className="my-2" />
             </>
           ) : null}
+          {loggedInUser?.canCreateBrandAccount ? (
+            <>
+              <NavLinkDropdownItem
+                text="New Gumroad"
+                icon={<Plus pack="filled" className="mx-1 size-5 shrink-0" />}
+                href="#"
+                onClick={(ev) => {
+                  ev.preventDefault();
+                  setShowCreateBrandAccountModal(true);
+                }}
+              />
+              <hr className="my-2" />
+            </>
+          ) : null}
           <NavLinkDropdownItem
             text="Settings"
             icon={<Cog pack="filled" className="mx-1 size-5" />}
@@ -61,6 +77,10 @@ function NavbarFooter() {
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
         </Menu>
       </DashboardNavProfilePopover>
+      <CreateBrandAccountModal
+        open={showCreateBrandAccountModal}
+        onClose={() => setShowCreateBrandAccountModal(false)}
+      />
     </>
   );
 }

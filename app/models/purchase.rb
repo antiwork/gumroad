@@ -121,6 +121,7 @@ class Purchase < ApplicationRecord
   has_one :recommended_purchase_info, dependent: :destroy
   has_one :purchase_wallet_type
   has_one :purchase_payment_flow, dependent: :destroy, validate: false
+  has_one :purchase_url_parameter, autosave: true, dependent: :destroy
   has_one :purchase_offer_code_discount
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
@@ -585,7 +586,7 @@ class Purchase < ApplicationRecord
             check_for_column: false
 
   attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
-                :discount_code, :url_parameters, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
+                :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
@@ -2769,6 +2770,39 @@ class Purchase < ApplicationRecord
 
   def sync_status_with_charge_processor(mark_as_failed: false)
     Purchase::SyncStatusWithChargeProcessorService.new(self, mark_as_failed:).perform
+  end
+
+  # Custom query params the buyer had on the product URL at checkout (e.g. ?discord_id=x),
+  # minus reserved ones. Persisted in an associated record (not an attr_accessor) because
+  # the "purchase successful" webhook can fire from a freshly loaded Purchase — PayPal
+  # captures, webhook-driven status syncs — long after the checkout request that knew the
+  # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
+  def url_parameters
+    record = purchase_url_parameter
+    return nil if record.nil? || record.marked_for_destruction?
+    record.params
+  end
+
+  def url_parameters=(params)
+    if params.blank?
+      # Assigning blank clears any previously assigned value. A record that was
+      # never saved can simply be dropped; a persisted one is marked so autosave
+      # deletes it on the next save.
+      if purchase_url_parameter&.new_record?
+        self.purchase_url_parameter = nil
+      else
+        purchase_url_parameter&.mark_for_destruction
+      end
+    else
+      record = purchase_url_parameter
+      if record&.marked_for_destruction?
+        # An earlier `url_parameters = nil` on this instance marked the persisted
+        # record for deletion. Reload the association to get a fresh, unmarked
+        # copy so autosave updates it with the new value instead of deleting it.
+        record = reload_purchase_url_parameter
+      end
+      (record || build_purchase_url_parameter).params = params
+    end
   end
 
   def formatted_error_code

@@ -1903,6 +1903,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000000) do
     t.index ["purchase_id"], name: "index_purchase_taxjar_infos_on_purchase_id"
   end
 
+  create_table "purchase_url_parameters", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.json "params", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchase_id"], name: "index_purchase_url_parameters_on_purchase_id", unique: true
+  end
+
   create_table "purchase_wallet_types", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "purchase_id", null: false
     t.string "wallet_type", null: false
