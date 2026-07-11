@@ -48,7 +48,13 @@ class Purchase
         return false
       end
 
-      if refunding_user_id.blank? || !User.find(refunding_user_id)&.is_team_member?
+      # A refund can be initiated by the creator themselves, by a Gumroad team member
+      # (support/admin), or from the console with no user at all. Look the user up once
+      # here; the answer gates both the balance checks below and the creator-notification
+      # email after the refund succeeds.
+      refunded_by_team_member = refunding_user_id.present? && User.find(refunding_user_id).is_team_member?
+
+      unless refunded_by_team_member
         if seller.refunds_disabled?
           errors.add :base, "Refunds are temporarily disabled in your account."
           return false
@@ -129,9 +135,7 @@ class Purchase
         # (see refund_for_fraud!), and suspended sellers are skipped to match that path.
         # Processor-initiated refunds (issued from the Stripe dashboard) don't go through
         # this method — Charge::Refundable handles the creator email for those.
-        if refunded && !is_for_fraud &&
-            refunding_user_id.present? && User.find_by(id: refunding_user_id)&.is_team_member? &&
-            !seller.suspended?
+        if refunded && !is_for_fraud && refunded_by_team_member && !seller.suspended?
           ContactingCreatorMailer.purchase_refunded(id).deliver_later(queue: "default")
         end
         refunded
