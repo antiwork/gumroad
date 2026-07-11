@@ -99,6 +99,10 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
           value={username}
           onChange={(evt) => setUsername(evt.target.value)}
         />
+        <FieldsetDescription>
+          3 to 20 characters, lowercase letters and numbers only, with at least one letter. This becomes the new
+          account's profile URL.
+        </FieldsetDescription>
       </Fieldset>
       <Fieldset>
         <Label htmlFor={emailUID}>Email</Label>
