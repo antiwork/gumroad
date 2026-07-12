@@ -82,12 +82,18 @@ class Exports::TaxSummary::TransactionReport
     # A charge with no matching row here is one Stripe counted toward the
     # form's gross but Gumroad never recorded as a successful sale (for
     # example, a capture on a purchase our system marked as failed). Leaving
-    # the Gumroad columns blank surfaces those instead of hiding them.
+    # the Gumroad columns blank surfaces those instead of hiding them. Only
+    # purchases in a success state count as a match — a failed purchase can
+    # still carry the charge ID of a captured payment, and treating it as a
+    # sale would hide exactly the orphan captures this report exists to show.
+    # Chargebacked purchases stay in a success state (the chargeback is
+    # recorded separately), so they still match, which is right: their charge
+    # is part of the form's gross.
     def purchases_by_charge_id(transactions)
       charge_ids = transactions.map(&:source).compact
       purchases = {}
       charge_ids.each_slice(1_000) do |ids|
-        user.sales.where(stripe_transaction_id: ids).each do |purchase|
+        user.sales.all_success_states.where(stripe_transaction_id: ids).each do |purchase|
           purchases[purchase.stripe_transaction_id] = purchase
         end
       end
