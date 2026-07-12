@@ -425,12 +425,13 @@ class PurchasesController < ApplicationController
     end
 
     def skip_recaptcha?
-      # TEMP: QA on test-mode preview apps only; revert after wallet QA sign-off.
-      # Preview apps run in production env with test-mode Stripe keys, where the
-      # checkout reCAPTCHA can't be solved. Excluding Rails.env.test keeps CI's
-      # reCAPTCHA coverage running for real (specs also use sk_test_ keys, but
-      # they stub the verification and must exercise these code paths).
-      return true if !Rails.env.test? && Stripe.api_key.to_s.start_with?("sk_test_")
+      # TEMP: QA on preview apps only; revert after wallet QA sign-off.
+      # Preview apps (deployed per-branch, marked by BRANCH_DEPLOYMENT=true) run with
+      # test-mode Stripe keys, where the checkout reCAPTCHA can't be solved. The bypass
+      # requires BOTH the explicit preview-app marker and a test-mode key, so a
+      # misconfigured key in real production (which never sets BRANCH_DEPLOYMENT) can't
+      # accidentally disable reCAPTCHA, and CI keeps exercising these code paths.
+      return true if ENV["BRANCH_DEPLOYMENT"] == "true" && Stripe.api_key.to_s.start_with?("sk_test_")
       site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
 
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?

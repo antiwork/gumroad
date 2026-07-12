@@ -26,6 +26,9 @@ export type CardPaymentMethodParams = {
 };
 export type PaymentRequestPaymentMethodParams = {
   wallet_type: string;
+  // Payment Request Button params never carry Payment Element wallet details; declaring the
+  // key as always-undefined lets code handle the union of both param shapes type-safely.
+  wallet?: undefined;
   status: "success";
   type: "payment-request";
   reusable: false;

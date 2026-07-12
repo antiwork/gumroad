@@ -264,8 +264,7 @@ export const prepareFutureCharges = async <
   // the wallet_type reported with the purchase) — the setup-intent endpoint has no contract for
   // them, so keep them out of the request body while preserving them on the returned reusable
   // params, which the purchase submission still needs.
-  const setupIntentCardParams: Partial<Record<string, unknown>> = { ...data.cardParams };
-  delete setupIntentCardParams.wallet;
+  const { wallet: _wallet, ...setupIntentCardParams } = data.cardParams;
   const response = await request({
     method: "POST",
     url: Routes.stripe_setup_intents_path(),
