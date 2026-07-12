@@ -13,8 +13,9 @@ WEB_BASE_REPO=${ECR_REGISTRY}/gumroad/web_base
 RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
 
 # generate_tag_for_web_base.sh hashes `docker history` of the ruby base image,
-# so it must be present locally — but only pull it when it's missing instead of
-# unconditionally re-pulling on every build.
+# so it must be present and current locally. The helper always pulls (cheap
+# manifest check when already current) and only falls back to an existing local
+# copy if the pull fails, e.g. during a Docker Hub outage.
 pull_ruby_base_image "$RUBY_IMAGE"
 
 WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
