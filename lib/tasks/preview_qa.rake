@@ -63,6 +63,10 @@ module PreviewQa
 
   # Rake passes every argument as a string; workers usually expect integer ids and booleans.
   # Casts the obvious scalar types and leaves everything else as a string.
+  #
+  # Heads-up: the literal strings "nil" and "null" become Ruby nil, so there is no way to pass
+  # those exact strings through to a worker. That trade-off is fine for a QA convenience tool —
+  # if a worker ever needs the string "nil", run it from the console instead of this task.
   def cast_argument(value)
     case value
     when /\A-?\d+\z/ then Integer(value)
@@ -117,7 +121,10 @@ if PreviewQa.safe_environment?
 
       siblings = purchases_to_shift.size - 1
       sibling_note = siblings.positive? ? " (plus #{siblings} other successful charge(s) on its subscription)" : ""
-      puts "Backdated purchase #{purchase.external_id} (id #{purchase.id})#{sibling_note} by #{days} days."
+      # Spell out when succeeded_at was untouched, so the output doesn't imply a purchase that
+      # never succeeded now has a success timestamp.
+      succeeded_at_note = purchase.succeeded_at.present? ? "" : " succeeded_at was nil and stays nil."
+      puts "Backdated purchase #{purchase.external_id} (id #{purchase.id})#{sibling_note} by #{days} days.#{succeeded_at_note}"
     end
 
     desc "Remove the Stripe e-mandate linkage (stripe_setup_intent_id) from the card charged for a subscription, to QA the missing-mandate path for Indian cards"

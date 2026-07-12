@@ -133,7 +133,7 @@ describe "preview_qa rake tasks" do
 
       expect do
         run_task("preview_qa:backdate_purchase", purchase.external_id, "10")
-      end.to output(/by 10 days/).to_stdout
+      end.to output(/succeeded_at was nil and stays nil/).to_stdout
 
       expect(purchase.reload.succeeded_at).to be_nil
     end
