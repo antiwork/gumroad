@@ -116,20 +116,24 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
 
     # Re-sync assets to S3. The compiled files were already uploaded when the
     # cache entry was created, so this is a fast no-op sync — kept as a
-    # safety net in case that earlier upload was interrupted.
+    # safety net in case that earlier upload was interrupted. Best-effort:
+    # the expensive part (the docker commit above) already succeeded, so a
+    # transient S3 failure here is logged but never discards the committed
+    # image or triggers the full recompile.
     logger "Syncing cached assets to S3"
-    local container_id sync_status
+    local container_id
     container_id=$(docker run -d --entrypoint="bash" --volume /app $WEB_REPO:staging-$WEB_TAG) || return 1
-    docker run --rm \
+    if ! docker run --rm \
       -e AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
       -e AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
       -e ASSETS_S3_BUCKET=gumroad-staging-assets \
       --volumes-from $container_id \
       garland/aws-cli-docker \
-      sh /app/docker/web/push_assets_to_s3.sh
-    sync_status=$?
+      sh /app/docker/web/push_assets_to_s3.sh; then
+      logger "S3 asset sync failed — continuing with the cached staging image (assets were already uploaded when the cache entry was created)"
+    fi
     docker rm -f $container_id >/dev/null 2>&1 || true
-    return $sync_status
+    return 0
   }
 
   if [[ $ASSET_CACHE_HIT == true ]]; then
