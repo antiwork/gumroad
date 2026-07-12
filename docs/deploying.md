@@ -218,6 +218,9 @@ COMMAND='Rake::Task["preview_qa:seed_dead_job"].invoke("RecurringChargeWorker", 
 
 # Run a worker inline, e.g. to force a renewal charge attempt
 COMMAND='Rake::Task["preview_qa:run_worker"].invoke("RecurringChargeWorker", "123")' ./console.sh -w <branch>
+
+# Inspect a subscription after a QA run: renewal timing, mandate linkage, recent charges (read-only)
+COMMAND='Rake::Task["preview_qa:inspect_subscription"].invoke("<subscription external_id>")' ./console.sh <branch>
 ```
 
 Record ids can be passed as either database ids or external ids. If a QA scenario you need isn't covered, add a task to the namespace (with specs) rather than shipping a temporary hook in your feature PR.

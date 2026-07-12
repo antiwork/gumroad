@@ -172,6 +172,46 @@ if PreviewQa.safe_environment?
       puts "Seeded dead job #{worker_class.name}(#{job_args.map(&:inspect).join(', ')}) into the Sidekiq dead set."
     end
 
+    desc "Print a read-only snapshot of a subscription for QA verification: renewal timing, the charged card's mandate linkage, and recent purchases with charge ids"
+    task :inspect_subscription, [:subscription_id] => :environment do |_task, args|
+      PreviewQa.ensure_safe_environment!
+
+      subscription = PreviewQa.find_record!(Subscription, args[:subscription_id])
+
+      puts "Subscription #{subscription.external_id} (id #{subscription.id})"
+      puts "  alive?: #{subscription.alive?}"
+      puts "  cancelled_at: #{subscription.cancelled_at.inspect}  failed_at: #{subscription.failed_at.inspect}  ended_at: #{subscription.ended_at.inspect}"
+      recurrence = subscription.recurrence
+      if recurrence.present?
+        puts "  recurrence: #{recurrence}  (period: #{(subscription.period / 1.day).round(2)} days)"
+        puts "  free_trial_ends_at: #{subscription.free_trial_ends_at.inspect}" if subscription.free_trial_ends_at.present?
+        puts "  last successful charge at: #{subscription.last_successful_charge_at.inspect}"
+        puts "  end of current period: #{subscription.end_time_of_subscription.inspect}"
+        puts "  overdue_for_charge?: #{subscription.overdue_for_charge?}"
+      else
+        # A subscription without a price/recurrence (possible for bare records in dev/test)
+        # can't have its renewal timing computed — Subscription#period would raise. Note it
+        # instead of crashing the whole snapshot.
+        puts "  recurrence: none (cannot compute renewal timing)"
+      end
+
+      credit_card = subscription.credit_card_to_charge
+      if credit_card.nil?
+        puts "  card to charge: none"
+      else
+        puts "  card to charge: CreditCard #{credit_card.id} (#{credit_card.card_type} #{credit_card.visual})"
+        puts "    stripe_setup_intent_id (e-mandate linkage): #{credit_card.stripe_setup_intent_id.inspect}"
+        puts "    stripe_payment_intent_id: #{credit_card.stripe_payment_intent_id.inspect}"
+      end
+
+      puts "  recent purchases (newest first):"
+      subscription.purchases.order(created_at: :desc).limit(10).each do |record|
+        puts "    #{record.external_id} (id #{record.id})  state=#{record.purchase_state}  " \
+             "succeeded_at=#{record.succeeded_at.inspect}  charge=#{record.stripe_transaction_id.inspect}  " \
+             "#{record.formatted_total_price}"
+      end
+    end
+
     desc "Run a Sidekiq worker inline (synchronously). Usage: preview_qa:run_worker[RecurringChargeWorker,123]"
     task :run_worker, [:worker_class] => :environment do |_task, args|
       PreviewQa.ensure_safe_environment!

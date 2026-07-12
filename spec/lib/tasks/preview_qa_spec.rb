@@ -46,6 +46,7 @@ describe "preview_qa rake tasks" do
         preview_qa:clear_mandate
         preview_qa:seed_dead_job
         preview_qa:run_worker
+        preview_qa:inspect_subscription
       ]
     end
 
@@ -210,6 +211,45 @@ describe "preview_qa rake tasks" do
     it "aborts for an unknown class name" do
       expect do
         run_task("preview_qa:seed_dead_job", "TotallyNotARealWorker")
+      end.to raise_error(SystemExit)
+    end
+  end
+
+  describe "preview_qa:inspect_subscription" do
+    def capture_stdout
+      original = $stdout
+      $stdout = StringIO.new
+      yield
+      $stdout.string
+    ensure
+      $stdout = original
+    end
+
+    it "prints renewal timing, the card's mandate linkage, and recent purchases without mutating anything" do
+      credit_card = build_saved_credit_card(json_data: { stripe_setup_intent_id: "seti_123" })
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+      subscription.update!(credit_card:)
+
+      output = capture_stdout { run_task("preview_qa:inspect_subscription", subscription.external_id) }
+
+      expect(output).to include("Subscription #{subscription.external_id}")
+      expect(output).to include("overdue_for_charge?: #{subscription.reload.overdue_for_charge?}")
+      expect(output).to include('stripe_setup_intent_id (e-mandate linkage): "seti_123"')
+      expect(output).to include(purchase.external_id)
+    end
+
+    it "reports when the subscription has no chargeable card instead of aborting" do
+      subscription = create(:subscription, user: nil, credit_card: nil)
+
+      expect do
+        run_task("preview_qa:inspect_subscription", subscription.external_id)
+      end.to output(/card to charge: none/).to_stdout
+    end
+
+    it "aborts when the subscription cannot be found" do
+      expect do
+        run_task("preview_qa:inspect_subscription", "nonexistent")
       end.to raise_error(SystemExit)
     end
   end
