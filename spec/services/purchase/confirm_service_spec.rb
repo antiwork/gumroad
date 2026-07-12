@@ -6,6 +6,20 @@ describe Purchase::ConfirmService, :vcr do
   let(:user) { create(:user) }
   let(:chargeable) { build(:chargeable, card: StripePaymentMethodHelper.success_sca_not_required) }
 
+  context "when the recurring payment was registered on a setup intent" do
+    it "runs the Indian card e-mandate check once the buyer has confirmed" do
+      purchase = create(:purchase_in_progress, chargeable:)
+      allow(purchase).to receive(:confirm_charge_intent!)
+
+      service = Purchase::ConfirmService.new(purchase:, params: {})
+      allow(service).to receive(:handle_purchase_success)
+
+      expect(purchase).to receive(:check_indian_card_setup_intent_mandate_was_registered)
+
+      service.perform
+    end
+  end
+
   context "when purchase has been marked as failed" do
     # Sometimes we mark a purchase failed before the confirmation request comes from the UI,
     # if time to complete SCA expired or a parallel purchase has been made.

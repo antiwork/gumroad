@@ -10,9 +10,16 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
   # their rows (sales, refunds, fees, and the offsetting "Payouts" deduction) add up to
   # zero within this payout. Splitting the subtotals out lets a seller verify each group's
   # math on its own instead of reading one blind grand total. See gumroad-private#999.
-  CARD_SALES_SUBTOTAL_HEADING = "Subtotal — activity paid out by Gumroad"
-  PAYPAL_SALES_SUBTOTAL_HEADING = "Subtotal — PayPal sales (paid out by PayPal, nets to zero here)"
-  STRIPE_CONNECT_SALES_SUBTOTAL_HEADING = "Subtotal — Stripe Connect sales (paid out by Stripe, nets to zero here)"
+  # These headings are deliberately ASCII-only and comma-free. The CSV writer quotes
+  # fields correctly, but many sellers re-parse the file with Excel's "Text to Columns"
+  # using a comma delimiter (the standard workaround in locales where Excel's list
+  # separator is a semicolon), which splits inside quoted fields, so a comma in a heading
+  # misaligns the subtotal row. Also, because this export is UTF-8 without a BOM, Windows
+  # Excel reads non-ASCII characters (like an em dash) as cp1252 mojibake.
+  # See gumroad-private#1028.
+  CARD_SALES_SUBTOTAL_HEADING = "Subtotal - activity paid out by Gumroad"
+  PAYPAL_SALES_SUBTOTAL_HEADING = "Subtotal - PayPal sales (paid out by PayPal; nets to zero here)"
+  STRIPE_CONNECT_SALES_SUBTOTAL_HEADING = "Subtotal - Stripe Connect sales (paid out by Stripe; nets to zero here)"
 
   # One-line explanation placed in the "Item Name" column of the deduction rows, so the
   # negative amount is self-explanatory: the fee shown on each PayPal / Stripe Connect

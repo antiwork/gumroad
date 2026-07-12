@@ -61,6 +61,30 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
   end
 
+  describe "POST refund" do
+    before do
+      @purchase = create(:purchase_in_progress, chargeable: create(:chargeable), purchaser: create(:user))
+      @purchase.process!
+      @purchase.mark_successful!
+    end
+
+    it "refunds the purchase and stores the reason when one is given" do
+      post :refund, params: { external_id: @purchase.external_id, reason: "Buyer reported being charged twice" }
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(@purchase.reload.stripe_refunded).to be(true)
+      expect(@purchase.refunds.last.note).to eq("Buyer reported being charged twice")
+    end
+
+    it "rejects the refund when no reason is given" do
+      post :refund, params: { external_id: @purchase.external_id }
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("A reason is required when refunding on the creator's behalf.")
+      expect(@purchase.reload.stripe_refunded).to be(false)
+    end
+  end
+
   describe "POST refund_for_fraud" do
     before do
       @purchase = create(:purchase_in_progress, chargeable: create(:chargeable), purchaser: create(:user))

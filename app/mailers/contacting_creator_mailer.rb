@@ -322,9 +322,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Fraud was detected on your Gumroad account."
   end
 
-  def purchase_refunded(purchase_id)
+  # refund_id is optional: when the refund carries a note (the reason a team member
+  # entered when refunding on the creator's behalf), the email shows it so the creator
+  # knows why the sale was refunded without having to write in to support.
+  def purchase_refunded(purchase_id, refund_id = nil)
     @purchase = Purchase.find_by(id: purchase_id)
     @seller = @purchase.seller
+    @refund_reason = Refund.find_by(id: refund_id)&.note
     @subject = "A sale has been refunded"
   end
 

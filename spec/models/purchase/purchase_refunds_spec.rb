@@ -526,7 +526,7 @@ describe "PurchaseRefunds", :vcr do
                                                           is_for_fraud: false, purchase:).and_call_original
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
-        purchase.refund_and_save!(create(:admin_user).id)
+        purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
 
         expect(charge_refund.transfer_reversal).to be nil
       end
@@ -623,6 +623,81 @@ describe "PurchaseRefunds", :vcr do
     it "returns false if charge processor indicates already refunded" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorAlreadyRefundedError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+    end
+
+    describe "notifying the creator when a team member refunds on their behalf" do
+      it "emails the creator when a Gumroad team member issues the refund" do
+        admin = create(:admin_user)
+
+        expect do
+          expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with { |purchase_id, refund_id|
+          expect(purchase_id).to eq(@purchase.id)
+          expect(refund_id).to eq(@purchase.refunds.last.id)
+        }
+      end
+
+      it "stores the reason on the refund and passes the refund to the email" do
+        admin = create(:admin_user)
+
+        expect do
+          expect(@purchase.refund_and_save!(admin.id, reason: "Buyer reported being charged twice")).to be(true)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded).with { |purchase_id, refund_id|
+          expect(purchase_id).to eq(@purchase.id)
+          expect(refund_id).to eq(@purchase.refunds.last.id)
+        }
+
+        expect(@purchase.refunds.last.note).to eq("Buyer reported being charged twice")
+      end
+
+      it "fails the refund when a team member gives no reason" do
+        admin = create(:admin_user)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(admin.id)).to be(false)
+        expect(@purchase.errors.full_messages).to include("A reason is required when refunding on the creator's behalf.")
+        expect(@purchase.reload.stripe_refunded?).to be(false)
+      end
+
+      it "does not email the creator when they refund their own sale" do
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+      end
+
+      it "lets a team member refund their own sale without a reason and without an email" do
+        # Gumroad staff can also sell on Gumroad. Refunding their own sale is a
+        # creator refund, not a support action — no reason required, no email sent.
+        @user.update!(is_team_member: true)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(@user.id)).to be(true)
+      end
+
+      it "does not email the creator when there is no refunding user (console refund)" do
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(nil)).to be(true)
+      end
+
+      it "does not email the creator for fraud refunds (the fraud path sends its own email)" do
+        admin = create(:admin_user)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(admin.id, is_for_fraud: true)).to be(true)
+      end
+
+      it "does not email the creator when the seller is suspended" do
+        admin = create(:admin_user)
+        @user.update!(user_risk_state: "suspended_for_tos_violation")
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+      end
     end
 
     describe "refund with tax" do
@@ -1038,7 +1113,7 @@ describe "PurchaseRefunds", :vcr do
         it "does not issue a refund while the dispute is still active" do
           expect(ChargeProcessor).not_to receive(:refund!)
 
-          expect(purchase.refund_and_save!(create(:admin_user).id)).to be(false)
+          expect(purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")).to be(false)
           expect(purchase.errors[:base]).to include(Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE)
           expect(purchase.reload.refunds).to be_empty
         end
@@ -1055,13 +1130,13 @@ describe "PurchaseRefunds", :vcr do
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_purchase_balance)
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_affiliate_credit_balance)
 
-          purchase.refund_and_save!(create(:admin_user).id)
+          purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
         end
       end
 
       describe "dispute after a refund event does not decrement seller balance" do
         before do
-          purchase.refund_and_save!(create(:admin_user).id)
+          purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
         end
 
         it "does not decrement balance from the user on such an event" do
@@ -1107,7 +1182,7 @@ describe "PurchaseRefunds", :vcr do
         it "issues a refund" do
           expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
 
-          @purchase.refund_and_save!(@admin_user.id)
+          @purchase.refund_and_save!(@admin_user.id, reason: "Refund requested by the buyer")
         end
       end
     end
@@ -1190,7 +1265,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
 
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
-          purchase.reload.refund_and_save!(admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id, reason: "Refund requested by the buyer")
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
@@ -1205,7 +1280,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
 
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
-          purchase.reload.refund_and_save!(admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id, reason: "Refund requested by the buyer")
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
@@ -1221,7 +1296,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
 
-          purchase.reload.refund_and_save!(admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id, reason: "Refund requested by the buyer")
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
@@ -1361,7 +1436,7 @@ describe "PurchaseRefunds", :vcr do
 
         it "excludes the subscriber's review when refunding the first charge" do
           expect do
-            first_charge.refund_and_save!(create(:admin_user).id)
+            first_charge.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
           end.to change { original_purchase.reload.should_exclude_product_review? }.from(false).to(true)
         end
 
@@ -1762,7 +1837,7 @@ describe "PurchaseRefunds", :vcr do
     end
 
     it "updates balance of affiliate user as well as seller", :vcr do
-      purchase.refund_and_save!(create(:admin_user).id)
+      purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
       seller.reload
       affiliate_user.reload
       verify_balance(affiliate_user, 0)
@@ -1789,7 +1864,7 @@ describe "PurchaseRefunds", :vcr do
       end
       expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
-      purchase.refund_and_save!(create(:admin_user).id)
+      purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
       flow_of_funds = charge_refund.flow_of_funds
 
       balance_transaction_1 = BalanceTransaction.where(user_id: affiliate_user.id).last
@@ -1826,7 +1901,7 @@ describe "PurchaseRefunds", :vcr do
       let(:affiliate) { create(:collaborator, affiliate_user:, seller:, affiliate_basis_points: 5000, products: [product]) }
 
       it "refunds the full affiliate credit (net of fees)" do
-        purchase.refund_and_save!(create(:admin_user).id)
+        purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
         verify_balance(affiliate_user.reload, 0)
       end
     end
@@ -1836,7 +1911,7 @@ describe "PurchaseRefunds", :vcr do
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!).and_call_original
 
         seller_balance = seller.unpaid_balance_cents
-        purchase.refund_and_save!(create(:admin_user).id, amount_cents: 600)
+        purchase.refund_and_save!(create(:admin_user).id, amount_cents: 600, reason: "Refund requested by the buyer")
         seller.reload
         affiliate_user.reload
         # affiliate_basis_points: 1000, on 1000 cents, 600 cents refunded => 100 - 60% of 100 = 100 - 60 = 40
@@ -1905,7 +1980,7 @@ describe "PurchaseRefunds", :vcr do
         seller.reload
         affiliate_user.reload
 
-        purchase.refund_and_save!(create(:admin_user).id)
+        purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
 
         # affiliate_partial_refunds total sum should tally up to actual credits
         expect(affiliate_user.affiliate_partial_refunds.sum(:amount_cents)).to eq(80)
@@ -1931,7 +2006,7 @@ describe "PurchaseRefunds", :vcr do
         it "refunds part of the fees" do
           seller_balance = seller.unpaid_balance_cents
 
-          purchase.refund_and_save!(create(:admin_user).id, amount_cents: 400)
+          purchase.refund_and_save!(create(:admin_user).id, amount_cents: 400, reason: "Refund requested by the buyer")
           seller.reload
           affiliate_user.reload
 
@@ -1989,7 +2064,7 @@ describe "PurchaseRefunds", :vcr do
 
       it "updates balance of affiliate user as well as seller" do
         travel_to(Time.zone.local(2023, 10, 6)) do
-          purchase.refund_and_save!(create(:admin_user).id)
+          purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
         end
         seller.reload
         affiliate_user.reload
@@ -2017,7 +2092,7 @@ describe "PurchaseRefunds", :vcr do
         end
 
         travel_to(Time.zone.local(2023, 10, 6)) do
-          purchase.refund_and_save!(create(:admin_user).id)
+          purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
         end
         flow_of_funds = charge_refund.flow_of_funds
 

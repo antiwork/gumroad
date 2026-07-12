@@ -21,6 +21,12 @@ class StripeSetupIntent < SetupIntent
     setup_intent.status == StripeIntentStatus::CANCELED
   end
 
+  # The Stripe Mandate this setup intent registered, if any. Indian cards must register an
+  # RBI e-mandate here for future off-session renewals to be approved by the issuer.
+  def mandate
+    setup_intent.try(:mandate)
+  end
+
   private
     def validate_next_action
       if setup_intent.status == StripeIntentStatus::REQUIRES_ACTION && setup_intent.next_action.type != StripeIntentStatus::ACTION_TYPE_USE_SDK

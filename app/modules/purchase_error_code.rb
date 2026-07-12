@@ -14,6 +14,12 @@ module PurchaseErrorCode
   SUSPENDED_BUYER = "suspended_buyer"
   STRIPE_UNAVAILABLE = "stripe_unavailable"
   PAYPAL_UNAVAILABLE = "paypal_unavailable"
+  # The processor rejected our request as malformed (e.g. Stripe's InvalidRequestError) —
+  # a deterministic failure caused by a bug on our side, NOT a processor outage. Kept
+  # separate from STRIPE_UNAVAILABLE/PAYPAL_UNAVAILABLE so monitoring can tell a code
+  # regression apart from Stripe being down (a regression shows up as a spike in this
+  # code against a near-zero baseline, instead of hiding inside outage noise).
+  PROCESSOR_INVALID_REQUEST = "processor_invalid_request"
   PROCESSING_ERROR = "processing_error"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
@@ -50,6 +56,10 @@ module PurchaseErrorCode
   CARD_DECLINED_FRAUDULENT = "card_declined_fraudulent"
   BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE = "brazilian_merchant_account_with_affiliate"
   BUYER_CURRENCY_QUOTE_INVALID = "buyer_currency_quote_invalid"
+  # Off-session renewal on an Indian card that has no registered RBI e-mandate to reference.
+  # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
+  # decline mandate-less recurring charges (as transaction_not_allowed) every time.
+  INDIA_CARD_MANDATE_MISSING = "india_card_mandate_missing"
 
   PAYPAL_ERROR_CODES = {
     "2000" => "Do Not Honor",
@@ -213,6 +223,7 @@ module PurchaseErrorCode
                                           .concat([
                                                     STRIPE_UNAVAILABLE,
                                                     PAYPAL_UNAVAILABLE,
+                                                    PROCESSOR_INVALID_REQUEST,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
                                                   ])
@@ -224,7 +235,13 @@ module PurchaseErrorCode
   end
 
   def self.is_temporary_network_error?(error_code)
-    error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR
+    # PROCESSOR_INVALID_REQUEST is deliberately included: it keeps subscription and preorder
+    # retry behavior identical to when these failures were labeled stripe_unavailable. The
+    # rejection is deterministic for a given request, but the code that BUILDS the request can
+    # be fixed (these usually come from a short-lived deploy bug), so retrying lets renewals
+    # self-heal once the bug is reverted instead of terminating subscriptions. Tightening the
+    # retry policy is a separate decision from the observability split this code exists for.
+    error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR || error_code == PROCESSOR_INVALID_REQUEST
   end
 
   def self.is_error_retryable?(error_code)

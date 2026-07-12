@@ -81,6 +81,10 @@ describe "RenderingExtension" do
                 avatar_url: admin_for_seller.avatar_url,
                 confirmed: true,
                 team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
+                can_create_brand_account: false,
+                # The user factory sets a payment address, so this user has a
+                # payout setup that could be carried over to a new brand account.
+                has_payout_setup_to_port: true,
                 policies: {
                   affiliate_requests_onboarding_form: {
                     update: true,
@@ -158,6 +162,32 @@ describe "RenderingExtension" do
               }
             }
           )
+        end
+      end
+
+      describe "has_payout_setup_to_port" do
+        let(:seller) { create(:named_seller) }
+        let(:user) { seller }
+        let(:pundit_user) { SellerContext.new(user:, seller:) }
+
+        before do
+          # The user factory sets a payment address; clear it so each example
+          # controls exactly which payout pieces exist.
+          user.update!(payment_address: "")
+        end
+
+        it "is false when the user's only payout method is a debit card", :vcr do
+          # The create-brand-account service cannot copy debit-card payout
+          # accounts, so the modal should not offer to carry the setup over.
+          create(:card_bank_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+        end
+
+        it "is true when the user has a regular bank account" do
+          create(:ach_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
         end
       end
     end

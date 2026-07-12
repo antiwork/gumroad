@@ -91,6 +91,15 @@ module Ai::StoreAgentApiCatalog
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
     ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost. Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html]),
     ep("edit_user_custom_html", :post, "/user/custom_html/edit", "Make a targeted edit to the creator's existing profile custom HTML: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_user_custom_html when a page already exists.", scope: "edit_profile", params: %w[find replace]),
+
+    # ---- Public media library ----
+    # The creator's hosted image files. These are the ONLY file URLs that render on
+    # custom HTML pages: the page sandbox's CSP restricts img/media sources to Gumroad's own CDN
+    # hosts, so an off-platform URL displays as a broken image. To place a creator's image on a
+    # page: upload_media with the image's URL, then embed the returned `url` in the page HTML.
+    ep("list_media", :get, "/media", "List the creator's uploaded image files with their hosted urls. Only these hosted urls display on custom HTML pages — external image urls are blocked by the page's security policy.", read: true, scope: "view_profile"),
+    ep("upload_media", :post, "/media", "Upload an image file to the creator's media library by giving the file's public url; Gumroad downloads and hosts it. Use this whenever the creator wants their image (logo, photo, banner) shown on their page: upload first, then embed the returned hosted url in the page HTML. Optional name labels the file in their library.", scope: "edit_profile", params: %w[url name]),
+    ep("delete_media", :delete, "/media/:id", "Delete a file from the creator's media library. Its hosted url stops working, so remove it from any page that embeds it.", scope: "edit_profile", path_params: %w[id]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
     ep("get_refund_policy", :get, "/refund_policy", "Get the creator's account-level refund policy.", read: true, scope: "view_profile"),
     # Account-level refund policy is changed via Settings in the dashboard, which is owner-only

@@ -514,6 +514,16 @@ describe Api::Mobile::SalesController, :vcr do
       expect(response).to have_http_status(:unauthorized)
       expect(response.parsed_body).to eq("success" => false, "message" => "You are not eligible to resend this email.")
     end
+
+    it "does not resend to a customer who has unsubscribed" do
+      @purchase.update!(can_contact: false)
+      expect(PostEmailApi).not_to receive(:process)
+
+      post :send_post, params: @params.merge(id: @purchase.external_id, post_id: @post.external_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "This customer has unsubscribed from your emails.")
+    end
   end
 
   describe "GET blob_url" do

@@ -8,6 +8,17 @@ class Api::V2::BaseController < ApplicationController
       super(*scopes, :account)
     end
 
+    # Most legacy v2 endpoints intentionally accept the broad `account` scope as a fallback. New
+    # endpoints with a narrower security boundary can call this immediately after
+    # `doorkeeper_authorize!` to preserve the normal OAuth 401/expired-token handling while refusing
+    # an otherwise-valid broad `account` token. Doorkeeper treats the requested scopes as "any of";
+    # this helper keeps that behavior, but without the implicit account fallback above.
+    def require_oauth_scope!(*scopes)
+      return if doorkeeper_token&.scopes && scopes.any? { |scope| doorkeeper_token.scopes.include?(scope.to_s) }
+
+      render json: { success: false, message: "This endpoint requires the #{scopes.to_sentence(last_word_connector: ' or ')} scope." }, status: :forbidden
+    end
+
     def fetch_product
       products = current_resource_owner.links
       @product = products.find_by_external_id(params[:link_id]) || products.find_by(unique_permalink: params[:link_id]) || error_with_object(:product, nil)

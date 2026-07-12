@@ -1,0 +1,108 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Runs only the specs relevant to your local changes, instead of the whole suite.
+#
+# It collects changed files (committed on your branch relative to a base ref,
+# plus staged, unstaged, and untracked files), maps them to spec files, and
+# execs bin/rspec (Spring-enabled) with the result.
+#
+# Usage:
+#   bin/rspec-changed                  # run specs for everything changed vs origin/main
+#   bin/rspec-changed --base main      # use a different base ref
+#   bin/rspec-changed --dry-run        # just print the specs that would run
+#   bin/rspec-changed --fail-fast      # extra args are passed through to rspec
+#
+# Mapping rules:
+#   spec/**/*_spec.rb                        -> itself
+#   app/<dir>/**/foo.rb                      -> spec/<dir>/**/foo_spec.rb
+#   app/controllers/**/foo_controller.rb     -> also spec/requests/**/foo_spec.rb (if it exists)
+#   lib/**/foo.rb                            -> spec/lib/**/foo_spec.rb
+#
+# Only specs that actually exist on disk are run. Files with no matching spec
+# (views, frontend, config, docs, ...) are ignored.
+
+require "set"
+require "shellwords"
+
+def git(*args)
+  out = IO.popen(["git", *args], err: File::NULL, &:read)
+  $?.success? ? out.split("\n") : []
+end
+
+base = "origin/main"
+base_given = false
+dry_run = false
+rspec_args = []
+
+argv = ARGV.dup
+until argv.empty?
+  arg = argv.shift
+  case arg
+  when "--base"
+    base = argv.shift or abort("--base requires a ref")
+    base_given = true
+  when "--dry-run" then dry_run = true
+  when "-h", "--help"
+    # Print the documentation comment block at the top of this file, skipping
+    # the shebang and the frozen_string_literal magic comment above it.
+    doc = File.read(__FILE__).lines
+      .drop_while { |line| line.start_with?("#!") || line.include?("frozen_string_literal") || line.strip.empty? }
+      .take_while { |line| line.start_with?("#") }
+    puts doc.join.gsub(/^# ?/, "")
+    exit 0
+  else
+    rspec_args << arg
+  end
+end
+
+if git("rev-parse", "--verify", "--quiet", base).empty?
+  # An explicitly requested base that doesn't resolve is an error — falling
+  # back silently would diff against the wrong ref. Only the default
+  # origin/main falls back to a local main (e.g. clones without a remote).
+  abort("bin/rspec-changed: base ref #{base.inspect} does not resolve") if base_given
+  base = "main"
+  abort("bin/rspec-changed: neither origin/main nor main resolves") if git("rev-parse", "--verify", "--quiet", base).empty?
+end
+merge_base = git("merge-base", base, "HEAD").first
+
+changed = Set.new
+changed.merge(git("diff", "--name-only", "--diff-filter=d", "#{merge_base}..HEAD")) if merge_base
+changed.merge(git("diff", "--name-only", "--diff-filter=d", "HEAD"))
+changed.merge(git("ls-files", "--others", "--exclude-standard"))
+
+def spec_candidates(path)
+  case path
+  when %r{\Aspec/.*_spec\.rb\z}
+    [path]
+  when %r{\Aapp/controllers/(.*)_controller\.rb\z}
+    ["spec/controllers/#{$1}_controller_spec.rb", "spec/requests/#{$1}_spec.rb"]
+  when %r{\Aapp/([^/]+)/(.*)\.rb\z}
+    ["spec/#{$1}/#{$2}_spec.rb"]
+  when %r{\Alib/(.*)\.rb\z}
+    ["spec/lib/#{$1}_spec.rb"]
+  else
+    []
+  end
+end
+
+specs = changed
+  .flat_map { |path| spec_candidates(path) }
+  .uniq
+  .select { |spec| File.exist?(spec) }
+  .sort
+
+if specs.empty?
+  puts "bin/rspec-changed: no matching specs for changed files (base: #{base})."
+  puts "Changed files considered: #{changed.size}. Run bin/rspec <path> directly if you expected a match."
+  exit 0
+end
+
+puts "bin/rspec-changed: running #{specs.size} spec file(s) (base: #{base}):"
+specs.each { |spec| puts "  #{spec}" }
+
+exit 0 if dry_run
+
+bin_rspec = File.expand_path("rspec", __dir__)
+puts "\n$ bin/rspec #{(rspec_args + specs).shelljoin}"
+exec bin_rspec, *rspec_args, *specs

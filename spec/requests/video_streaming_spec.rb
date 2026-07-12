@@ -72,7 +72,10 @@ describe "Video stream scenario", type: :system, js: true do
       within_window new_window do
         expect(page).to have_selector(".jwplayer")
         expect(page).to have_selector("[aria-label^='Video Player']")
-        click_on "Play"
+        # The Play control only becomes visible once the player has fetched the video
+        # file, which can take longer than the global wait on a busy CI shard, so this
+        # step opts in to a longer wait.
+        click_on "Play", wait: 25
         expect(page).to have_selector(".jw-text-duration", text: "00:12", visible: :all)
       end
     end

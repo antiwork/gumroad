@@ -121,6 +121,7 @@ class Purchase < ApplicationRecord
   has_one :recommended_purchase_info, dependent: :destroy
   has_one :purchase_wallet_type
   has_one :purchase_payment_flow, dependent: :destroy, validate: false
+  has_one :purchase_url_parameter, autosave: true, dependent: :destroy
   has_one :purchase_offer_code_discount
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
@@ -585,7 +586,7 @@ class Purchase < ApplicationRecord
             check_for_column: false
 
   attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
-                :discount_code, :url_parameters, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
+                :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
@@ -600,6 +601,14 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
+  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
+  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
+  # is only ever written once Stripe acknowledges a real payment (the checkout return page
+  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
+  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
+  # purchase must still be in_progress — once it reaches a terminal state (failed,
+  # successful), stripe_status remains set but the payment is no longer in flight.
+  scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
   scope :not_successful, -> { without_purchase_state(:successful) }
@@ -1965,7 +1974,16 @@ class Purchase < ApplicationRecord
     errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
     self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     nil
-  rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+  rescue ChargeProcessorInvalidRequestError => e
+    # The processor rejected our request as malformed — a deterministic failure on our side,
+    # not an outage. Record it under its own code so a code regression shows up in monitoring
+    # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+    logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
+    errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+    self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+    self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+    nil
+  rescue ChargeProcessorUnavailableError => e
     logger.error "Error while confirming charge intent: #{e.message} in purchase: #{external_id}"
     errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
     self.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE
@@ -2754,6 +2772,39 @@ class Purchase < ApplicationRecord
     Purchase::SyncStatusWithChargeProcessorService.new(self, mark_as_failed:).perform
   end
 
+  # Custom query params the buyer had on the product URL at checkout (e.g. ?discord_id=x),
+  # minus reserved ones. Persisted in an associated record (not an attr_accessor) because
+  # the "purchase successful" webhook can fire from a freshly loaded Purchase — PayPal
+  # captures, webhook-driven status syncs — long after the checkout request that knew the
+  # params has ended. Sellers rely on these reaching the sale ping as `url_params`.
+  def url_parameters
+    record = purchase_url_parameter
+    return nil if record.nil? || record.marked_for_destruction?
+    record.params
+  end
+
+  def url_parameters=(params)
+    if params.blank?
+      # Assigning blank clears any previously assigned value. A record that was
+      # never saved can simply be dropped; a persisted one is marked so autosave
+      # deletes it on the next save.
+      if purchase_url_parameter&.new_record?
+        self.purchase_url_parameter = nil
+      else
+        purchase_url_parameter&.mark_for_destruction
+      end
+    else
+      record = purchase_url_parameter
+      if record&.marked_for_destruction?
+        # An earlier `url_parameters = nil` on this instance marked the persisted
+        # record for deletion. Reload the association to get a fresh, unmarked
+        # copy so autosave updates it with the new value instead of deleting it.
+        record = reload_purchase_url_parameter
+      end
+      (record || build_purchase_url_parameter).params = params
+    end
+  end
+
   def formatted_error_code
     fallback_code = stripe_error_code || error_code
     formatted_error_message || fallback_code.to_s.tr("_", " ").titleize
@@ -2992,6 +3043,8 @@ class Purchase < ApplicationRecord
     self.was_zipcode_check_performed = !processor_charge.zip_check_result.nil?
     save!
 
+    check_indian_card_mandate_was_registered(processor_charge)
+
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
     return false if allow_missing_flow_of_funds && stripe_charge_processor? && processor_charge.flow_of_funds.blank?
 
@@ -3001,6 +3054,56 @@ class Purchase < ApplicationRecord
 
   def is_an_off_session_charge_on_indian_card?
     stripe_charge_processor? && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
+  end
+
+  # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
+  # without one, every future off-session renewal is declined by the issuer. Stripe can
+  # complete the registration charge WITHOUT creating a Mandate object, and today that
+  # only surfaces a year later as an unexplainable renewal decline. Report it at
+  # registration time instead, so the affected subscriptions are visible immediately.
+  def check_indian_card_mandate_was_registered(processor_charge)
+    return unless stripe_charge_processor?
+    return unless credit_card&.requires_mandate?
+    # Only the purchase that registers the recurring payment is expected to carry a mandate.
+    return unless is_original_subscription_purchase? || is_preorder_authorization? || is_upgrade_purchase?
+    # Multi-product checkouts register the mandate on a separate setup intent, not this charge.
+    return if is_multi_buy?
+    return if processor_charge.card_mandate.present?
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+      purchase: external_id,
+      stripe_charge: processor_charge.id
+    )
+  rescue => e
+    # This check is observability only; never let it break charge processing.
+    ErrorNotifier.notify(e, purchase: external_id)
+  end
+
+  # Same idea as check_indian_card_mandate_was_registered, but for purchases whose recurring
+  # payment was registered on a Stripe SetupIntent instead of a charge (multi-product
+  # checkouts, free trials, preorders). When the setup intent needed buyer authentication
+  # (3DS), the synchronous check in Order::ChargeService never runs — the intent only
+  # succeeds later, once the buyer confirms. This is called from that confirmation path,
+  # re-fetching the setup intent so a registration that completed without a Mandate object
+  # is still reported instead of surfacing as an unexplainable decline at first renewal.
+  def check_indian_card_setup_intent_mandate_was_registered
+    return unless stripe_charge_processor?
+    return unless credit_card&.requires_mandate?
+    return if processor_setup_intent_id.blank?
+
+    setup_intent = ChargeProcessor.get_setup_intent(merchant_account, processor_setup_intent_id)
+    return unless setup_intent&.succeeded?
+    return if setup_intent.mandate.present?
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+      purchase: external_id,
+      stripe_setup_intent: processor_setup_intent_id
+    )
+  rescue => e
+    # This check is observability only; never let it break charge processing.
+    ErrorNotifier.notify(e, purchase: external_id)
   end
 
   # Off-session charges on Indian cards remain in processing for 26 hours on Stripe.
@@ -3543,7 +3646,15 @@ class Purchase < ApplicationRecord
         self.card_visual = chargeable.visual
         self.card_expiry_month = chargeable.expiry_month
         self.card_expiry_year = chargeable.expiry_year
-      rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+      rescue ChargeProcessorInvalidRequestError => e
+        # The processor rejected our request as malformed — a deterministic failure on our
+        # side, not an outage. Record it under its own code so a code regression shows up in
+        # monitoring instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+        logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
+        errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+        self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+        self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      rescue ChargeProcessorUnavailableError => e
         logger.error "Error while preparing chargeable: #{e.message} in purchase: #{external_id}"
         errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
         self.error_code = charge_processor_unavailable_error
@@ -3635,7 +3746,16 @@ class Purchase < ApplicationRecord
 
     def with_charge_processor_error_handler
       yield
-    rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
+    rescue ChargeProcessorInvalidRequestError => e
+      # The processor rejected our request as malformed — a deterministic failure on our side,
+      # not an outage. Record it under its own code so a code regression shows up in monitoring
+      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+      logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
+      errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
+      nil
+    rescue ChargeProcessorUnavailableError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
       errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
       self.error_code = charge_processor_unavailable_error
@@ -4233,6 +4353,46 @@ class Purchase < ApplicationRecord
       end
 
       add_errors_for_existing_purchase(already)
+      return if errors.present?
+
+      not_double_charged_while_payment_settling(recipient_email)
+    end
+
+    # Blocks a repeat purchase while an earlier attempt's payment is still settling.
+    #
+    # The time-boxed check above assumes payments resolve within minutes, which is true for
+    # cards but not for delayed-notification methods like ACH bank debits: those stay
+    # `in_progress` for several business days while the debit clears, leaving a window where
+    # the same buyer can accidentally pay for the same product twice.
+    #
+    # The `payment_settling` scope only matches attempts whose payment was actually confirmed
+    # and is now clearing — not attempts the buyer started and walked away from (see the scope
+    # definition for how the two are told apart). That means a buyer who abandoned checkout
+    # can always come back and buy, while a buyer whose bank debit is mid-flight is told to wait.
+    def not_double_charged_while_payment_settling(recipient_email)
+      settling = self.class.payment_settling.where(
+        email: recipient_email,
+        link_id: link.id
+      )
+
+      settling = settling.where("purchases.id != ?", id) if id
+      settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
+
+      # No gift join is needed here, even though gift purchases are stored under the sender's
+      # email rather than the giftee's. The gift lookup in `not_double_charged` above
+      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
+      # so an in_progress gift — including one settling over a bank debit for days — already
+      # blocks repeat gifts to the same giftee until it resolves.
+
+      if variant_attributes.present?
+        settling = settling.select do |purchase|
+          purchase.variant_attributes.sort == variant_attributes.sort
+        end
+      end
+
+      if settling.any?
+        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+      end
     end
 
     def cancel_parallel_charge_intents

@@ -202,6 +202,11 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     post = Installment.alive.where(seller_id: current_resource_owner.id).find_by_external_id(params[:post_id])
     return fetch_error("Could not find post") if post.nil?
 
+    # Honor the customer's unsubscribe: never resend a post to a purchase whose
+    # can_contact flag is off, mirroring the guard on the web resend endpoint
+    # (PostsController#send_for_purchase).
+    return fetch_error("This customer has unsubscribed from your emails.", status: :unprocessable_entity) unless @purchase.can_contact?
+
     cache_key = "post_email:#{post.id}:#{@purchase.id}"
     sent = false
     Rails.cache.fetch(cache_key, expires_in: 8.hours) do

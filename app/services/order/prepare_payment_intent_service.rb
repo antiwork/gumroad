@@ -105,6 +105,7 @@ class Order::PreparePaymentIntentService
       Stripe::ConfirmationToken.retrieve(confirmation_token, confirmation_token_request_options).payment_method_preview
     rescue Stripe::StripeError => e
       Rails.logger.error("Error retrieving ConfirmationToken for order #{order.id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
+      stamp_stripe_error_details(e)
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       nil
     end
@@ -333,6 +334,22 @@ class Order::PreparePaymentIntentService
       )
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
+      # Stamp the failure details on the purchases now, before the caller's generic
+      # fail_purchases_with runs (it only fills error_code when blank). An invalid-request
+      # rejection is a deterministic bug on our side — labeling it stripe_unavailable made a
+      # code regression look like a Stripe outage (issue #1026), so record it distinctly and
+      # keep the processor's own error code for debugging. A genuine connection failure is
+      # the one case that actually IS "Stripe unavailable", so it keeps that code.
+      if e.is_a?(ChargeProcessorInvalidRequestError)
+        purchases_to_charge.each do |purchase|
+          purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST if purchase.error_code.blank?
+          purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
+        end
+      elsif e.is_a?(ChargeProcessorUnavailableError)
+        purchases_to_charge.each do |purchase|
+          purchase.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE if purchase.error_code.blank?
+        end
+      end
       nil
     end
 
@@ -436,11 +453,38 @@ class Order::PreparePaymentIntentService
     def fail_purchases_with(message)
       purchases_to_charge.each do |purchase|
         purchase.errors.add(:base, message) if purchase.errors.empty?
-        purchase.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE if purchase.error_code.blank?
+        # This is the catch-all for every prepare-time failure (missing confirmation token,
+        # blocked carts, unexpected exceptions), almost none of which mean Stripe is down.
+        # Stamp the generic processing_error here so stripe_unavailable stays a clean
+        # "Stripe is actually unreachable" signal; paths that know the real cause (invalid
+        # request, connection failure) set a more specific code before this filler runs.
+        # processing_error keeps the same retry semantics (is_temporary_network_error?).
+        purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR if purchase.error_code.blank?
         # Read before MarkFailedService: its save re-runs validations and clears errors (#5784).
         error_message = purchase.errors.first&.message
         Purchase::MarkFailedService.new(purchase).perform
         responses[line_item_uid_for(purchase)] = error_response(error_message, purchase:)
+      end
+    end
+
+    # For raw Stripe errors caught before the charge processor wraps them (the
+    # ConfirmationToken retrieve), classify the failure the same way StripeErrorHandler
+    # would so the recorded code means the same thing everywhere: invalid request =
+    # deterministic bug on our side, connection failure = Stripe actually unreachable.
+    # Runs before fail_purchases_with, which only fills error_code when blank.
+    def stamp_stripe_error_details(error)
+      error_code, stripe_error_code =
+        case error
+        when Stripe::InvalidRequestError
+          [PurchaseErrorCode::PROCESSOR_INVALID_REQUEST, error.code]
+        when Stripe::APIConnectionError, Stripe::APIError
+          [PurchaseErrorCode::STRIPE_UNAVAILABLE, nil]
+        end
+      return if error_code.nil?
+
+      purchases_to_charge.each do |purchase|
+        purchase.error_code = error_code if purchase.error_code.blank?
+        purchase.stripe_error_code = stripe_error_code if stripe_error_code.present? && purchase.stripe_error_code.blank?
       end
     end
 

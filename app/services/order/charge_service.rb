@@ -145,6 +145,22 @@ class Order::ChargeService
           purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if purchase.credit_card&.requires_mandate?
 
           if setup_intent.succeeded?
+            # Indian cards register an RBI e-mandate on this setup intent; renewals reference it.
+            # If Stripe completed the setup without creating a Mandate object, every future
+            # off-session renewal will be declined by the issuer — report it now rather than
+            # letting it surface as an unexplainable decline at first renewal.
+            begin
+              if purchase.credit_card&.requires_mandate? && setup_intent.mandate.blank?
+                ErrorNotifier.notify(
+                  "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+                  purchase: purchase.external_id,
+                  stripe_setup_intent: setup_intent.id
+                )
+              end
+            rescue => e
+              # This check is observability only; never let it break charge processing.
+              ErrorNotifier.notify(e, purchase: purchase.external_id)
+            end
             mark_setup_future_charges_successful(purchase)
           elsif setup_intent.requires_action?
             # Check back later to see if the purchase has been completed. If not, transition to a failed state.

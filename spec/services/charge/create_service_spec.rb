@@ -376,6 +376,40 @@ describe Charge::CreateService, :vcr do
       expect(PurchasePresentment.count).to eq(1)
     end
 
+    it "marks purchases with processor_invalid_request and Stripe's error code when Stripe rejects the request synchronously" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      # An invalid-request rejection is deterministic — our request was malformed, Stripe is
+      # healthy — so it gets its own error code instead of stripe_unavailable (the transient
+      # outage code monitoring keys on).
+      stripe_error = Stripe::InvalidRequestError.new("Invalid parameter.", nil, code: "payment_intent_invalid_parameter")
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!)
+        .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                params: {}).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
+      expect(purchase.stripe_error_code).to eq("payment_intent_invalid_parameter")
+      expect(purchase.has_payment_network_error?).to eq(true)
+    end
+
     it "stops before Stripe and marks purchases when the locked buyer-currency quote is invalid" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

@@ -25,6 +25,20 @@ class PublicFile < ApplicationRecord
     file&.blob
   end
 
+  # Soft-deletes the record and removes the underlying file from public storage. Because the file
+  # lives on Gumroad's PUBLIC bucket, marking the record deleted isn't enough — the URL would keep
+  # serving the bytes. The blob is only purged when no other attachment still references it (blobs
+  # can be shared between records). Used when a creator deletes a media file, and during account
+  # closure / GDPR erasure, where a closed account must not keep hosting files on Gumroad's CDN.
+  def mark_deleted_and_purge_file!
+    file_blob = blob
+
+    ActiveRecord::Base.transaction do
+      mark_deleted!
+      purge_blob_later_if_no_live_owner!(file_blob) if file_blob
+    end
+  end
+
   def analyzed?
     blob&.analyzed? || false
   end
@@ -60,6 +74,18 @@ class PublicFile < ApplicationRecord
   end
 
   private
+    def purge_blob_later_if_no_live_owner!(file_blob)
+      # A blob can be shared by multiple attachments, so only purge when nothing live still points
+      # at it. "Live" means: any attachment owned by a non-PublicFile record, or a PublicFile that
+      # hasn't been soft-deleted. Both checks are done as queries (rather than loading each
+      # attachment's record one by one) so a widely-shared blob doesn't trigger N+1 lookups.
+      attachments = ActiveStorage::Attachment.where(blob_id: file_blob.id)
+      live_owner_exists =
+        attachments.where.not(record_type: "PublicFile").exists? ||
+        PublicFile.alive.where(id: attachments.where(record_type: "PublicFile").select(:record_id)).exists?
+      file_blob.purge_later unless live_owner_exists
+    end
+
     def set_file_group_and_file_type
       return if original_file_name.blank?
 

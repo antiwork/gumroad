@@ -43,6 +43,25 @@ describe Purchase, :vcr do
       end
     end
 
+    describe "payment_settling" do
+      it "returns in-progress purchases whose payment the processor has confirmed" do
+        settling = create(:purchase, purchase_state: "in_progress", stripe_status: "processing")
+        expect(Purchase.payment_settling).to include settling
+      end
+
+      it "does not return abandoned attempts, which never receive a processor confirmation" do
+        abandoned = create(:purchase, purchase_state: "in_progress", stripe_status: nil)
+        expect(Purchase.payment_settling).to_not include abandoned
+      end
+
+      it "does not return purchases that reached a terminal state, even though stripe_status remains set" do
+        failed = create(:purchase, purchase_state: "failed", stripe_status: "payment_intent.payment_failed")
+        successful = create(:purchase, purchase_state: "successful", stripe_status: "charge.succeeded")
+        expect(Purchase.payment_settling).to_not include failed
+        expect(Purchase.payment_settling).to_not include successful
+      end
+    end
+
     describe "successful" do
       before do
         @successful_purchase = create(:purchase, purchase_state: "successful")
@@ -2556,6 +2575,85 @@ describe Purchase, :vcr do
       end
     end
 
+    context "when an earlier purchase's payment is still settling" do
+      # A delayed-notification payment (like an ACH bank debit) leaves the purchase
+      # in_progress for days with stripe_status set once the processor confirms it.
+      it "disallows a repeat purchase while a confirmed payment is settling, even outside the recent-purchase window" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."]
+      end
+
+      it "disallows the repeat purchase from a different IP address" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: generate(:ip), created_at: Time.current)
+        expect(purchase2).to_not be_valid
+      end
+
+      it "allows a repeat purchase when the earlier attempt was abandoned before payment confirmation" do
+        # An abandoned attempt never gets a stripe_status; the buyer should be able to try again.
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: nil, created_at: 1.hour.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase once the earlier attempt has failed" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "failed", stripe_status: "payment_intent.payment_failed", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a purchase from a different buyer email" do
+        create(:purchase, link: @product, seller: @product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        purchase2 = build(:purchase, link: @product, email: "alice@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to be_valid
+      end
+
+      it "allows a repeat purchase of a different variant" do
+        product = create(:product)
+        category = create(:variant_category, link: product)
+        variant_a = create(:variant, variant_category: category)
+        variant_b = create(:variant, variant_category: category)
+        settling = create(:purchase, link: product, seller: product.user, email: "bob@gumroad.com", ip_address: @ip_address,
+                                     purchase_state: "in_progress", stripe_status: "processing", created_at: 1.day.ago)
+        settling.variant_attributes << variant_a
+        purchase2 = build(:purchase, link: product, email: "bob@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        purchase2.variant_attributes << variant_b
+        expect(purchase2).to be_valid
+      end
+
+      it "already blocks a repeat gift to the same giftee via the gift join in the parent check, without any time window" do
+        # Gift purchases are stored under the sender's email, so the settling check's email
+        # match can't see them. They don't need it: the gift join in `not_double_charged`
+        # has no created_at window, so an in_progress gift (including one settling over ACH
+        # for days) blocks repeat gifts to the same giftee until it resolves.
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        second_gift = build(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        purchase2 = build(:purchase, link: @product, email: "another-sender@gumroad.com", ip_address: @ip_address,
+                                     gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+        expect(purchase2.errors[:base]).to eq ["You have already attempted to purchase this product. We will email you shortly if the purchase is successful."]
+      end
+
+      it "already blocks a direct purchase by the giftee while a gift to them is in progress" do
+        gift = create(:gift, giftee_email: "giftee@gumroad.com", link: @product)
+        create(:purchase, link: @product, seller: @product.user, email: "sender@gumroad.com", ip_address: @ip_address,
+                          gift_given: gift, is_gift_sender_purchase: true,
+                          purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+        purchase2 = build(:purchase, link: @product, email: "giftee@gumroad.com", ip_address: @ip_address, created_at: Time.current)
+        expect(purchase2).to_not be_valid
+      end
+    end
+
     context "purchasing physical products" do
       let(:product) { create(:physical_product) }
 
@@ -4606,6 +4704,11 @@ describe Purchase, :vcr do
       expect(purchase.has_payment_network_error?).to eq true
     end
 
+    it "returns true if error_code is PROCESSOR_INVALID_REQUEST, keeping subscription/preorder retries so a fixed deploy bug can self-heal" do
+      purchase = build(:purchase, error_code: PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
+      expect(purchase.has_payment_network_error?).to eq true
+    end
+
     it "returns false if error_code or stripe_error_code are other errors" do
       purchase = build(:purchase, error_code: "foo")
       expect(purchase.has_payment_network_error?).to eq false
@@ -6358,6 +6461,190 @@ describe Purchase, :vcr do
       expect(purchase.stripe_card_id).to eq("pm_card")
       expect(purchase.flow_of_funds).to be_nil
       expect(charge.reload.processor_transaction_id).to eq("ch_pending_settlement")
+    end
+
+    describe "Indian card e-mandate registration check" do
+      # Indian cards must register an RBI e-mandate on the purchase that sets up a recurring
+      # payment; if Stripe completes that charge without creating a Mandate object, every
+      # future renewal is declined by the issuer. save_charge_data reports that case.
+      #
+      # The credit card is built directly rather than via the :credit_card factory: the
+      # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+      # cassette for these examples. The check under test only reads card_country.
+      def create_credit_card(card_country:)
+        CreditCard.create!(
+          card_type: CardType::VISA,
+          visual: "**** **** **** 4242",
+          stripe_fingerprint: "india_mandate_check_fp",
+          stripe_customer_id: "cus_india_mandate_check",
+          expiry_month: 12,
+          expiry_year: 5.years.from_now.year,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          card_country:
+        )
+      end
+
+      let(:credit_card) { create_credit_card(card_country: "IN") }
+
+      def build_processor_charge(mandate: nil)
+        stripe_charge = BaseProcessorCharge.new
+        stripe_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        stripe_charge.id = "ch_india_registration"
+        stripe_charge.refunded = false
+        stripe_charge.card_fingerprint = "card-fingerprint"
+        stripe_charge.card_mandate = mandate
+        stripe_charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 100)
+        stripe_charge
+      end
+
+      def build_purchase(is_original_subscription_purchase:, card: nil, card_country: "IN")
+        card ||= credit_card
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product, credit_card: card)
+        original_purchase = create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                          card_country:, is_original_subscription_purchase: true)
+        return original_purchase if is_original_subscription_purchase
+
+        # Renewal purchases validate their price against the subscription's original
+        # purchase, so that record must exist before the renewal can be created.
+        create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                      card_country:, is_original_subscription_purchase: false)
+      end
+
+      it "reports an original subscription purchase whose charge carries no mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+          purchase: purchase.external_id,
+          stripe_charge: "ch_india_registration"
+        )
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report when the charge carries a mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: "mandate_123"))
+      end
+
+      it "does not report recurring renewal charges (only the registering purchase carries a mandate)" do
+        purchase = build_purchase(is_original_subscription_purchase: false)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report non-Indian cards" do
+        non_indian_card = create_credit_card(card_country: "US")
+        purchase = build_purchase(is_original_subscription_purchase: true, card: non_indian_card, card_country: "US")
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+    end
+  end
+
+  describe "#check_indian_card_setup_intent_mandate_was_registered" do
+    # Covers recurring registrations that happen on a Stripe SetupIntent (multi-product
+    # checkouts, free trials, preorders) and only succeed asynchronously after the buyer
+    # completes 3DS — the synchronous check in Order::ChargeService never runs for those.
+    #
+    # The credit card is built directly rather than via the :credit_card factory: the
+    # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+    # cassette for these examples. The check under test only reads card_country.
+    def create_credit_card(card_country:)
+      CreditCard.create!(
+        card_type: CardType::VISA,
+        visual: "**** **** **** 4242",
+        stripe_fingerprint: "india_mandate_check_fp",
+        stripe_customer_id: "cus_india_mandate_check",
+        expiry_month: 12,
+        expiry_year: 5.years.from_now.year,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        card_country:
+      )
+    end
+
+    def build_purchase(card_country: "IN", setup_intent_id: "seti_india_registration")
+      card = create_credit_card(card_country:)
+      product = create(:membership_product)
+      subscription = create(:subscription, link: product, credit_card: card)
+      create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                    charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                    card_country:, is_original_subscription_purchase: true,
+                                    processor_setup_intent_id: setup_intent_id)
+    end
+
+    def stub_setup_intent(succeeded: true, mandate: nil)
+      setup_intent = instance_double(StripeSetupIntent, succeeded?: succeeded, mandate:)
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      setup_intent
+    end
+
+    it "reports a succeeded setup intent that carries no mandate" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: true, mandate: nil)
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+        purchase: purchase.external_id,
+        stripe_setup_intent: "seti_india_registration"
+      )
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report when the setup intent carries a mandate" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: true, mandate: "mandate_123")
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report when the setup intent has not succeeded" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: false, mandate: nil)
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report purchases without a setup intent" do
+      purchase = build_purchase(setup_intent_id: nil)
+
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report non-Indian cards" do
+      purchase = build_purchase(card_country: "US")
+
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "never lets an unexpected error escape (observability only)" do
+      purchase = build_purchase
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(StandardError, "boom")
+
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), purchase: purchase.external_id)
+
+      expect { purchase.check_indian_card_setup_intent_mandate_was_registered }.not_to raise_error
     end
   end
 

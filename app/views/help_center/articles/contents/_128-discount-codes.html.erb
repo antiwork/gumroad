@@ -3,6 +3,7 @@
   <ul>
     <li><a href="#checkout-page" target="_self">Create a discount code</a></li>
     <li><a href="#Allow-customers-to-enter-discount-codes-IN4wU" target="_self">Allow customers to enter discount codes</a></li>
+    <li><a href="#Automatically-apply-a-discount-code-vR3mN" target="_self">Automatically apply a discount code</a></li>
     <li><a href="#Discounts-for-memberships-_Pxb_" target="_self">Discounts for memberships</a></li>
     <li><a href="#Discount-code-customization-nlf76" target="_self">Discount code customization</a></li>
     <li><a href="#limit-to-existing-customers" target="_self">Limit to existing customers</a></li>
@@ -23,6 +24,15 @@
   <h3 id="Allow-customers-to-enter-discount-codes-IN4wU">Allow customers to enter discount codes</h3>
   <p>To show the discount code input box on the checkout page, toggle  "Only if a discount is available" in the <a href="https://gumroad.com/checkout/form">Checkout form</a> tab, otherwise, it will only be possible to apply a discount code by using a <a href="270-url-parameters">URL parameter</a>.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b142ea55b5524fb50d6a5/file-RPDfnvrDVr.png" %></figure>
+  <h3 id="Automatically-apply-a-discount-code-vR3mN">Automatically apply a discount code</h3>
+  <p>You can have a discount applied for every customer automatically, without them entering a code or using a special link. In the product editor, scroll to the pricing section and turn on <b>Automatically apply discount code</b>, then pick one of your existing discount codes. This works for bundles too, from the bundle editor.</p>
+  <p>The code you pick must apply to that product and can't be expired. Once it's set, the product page shows the original price crossed out next to the discounted price, with a note that the discount will be applied at checkout, and every customer gets the discount without doing anything.</p>
+  <p>A few things to know:</p>
+  <ul>
+    <li>If a customer arrives with a different discount from a <a href="270-url-parameters">discount link or URL parameter</a>, Gumroad applies whichever discount is larger. Discounts never stack.</li>
+    <li>If the automatically applied code's validity period ends, customers simply pay full price until you pick a different code or turn the setting off.</li>
+    <li>You can't delete a discount code while it's set as the automatic discount on a product. Remove it from the product first.</li>
+  </ul>
   <h3 id="Discounts-for-memberships-_Pxb_">Discounts for memberships</h3>
   <p>When a discount code applies to a membership, choose how long it lasts under <b>Discount duration for memberships</b>:</p>
   <ul>
@@ -86,7 +96,7 @@
   <p>Click any discount you want to edit, and a side panel will open. </p>
   <p>Under "Products", click the share button to copy a product-specific link. This copies the URL to your <a href="136-find-your-products-url">Gumroad product</a> with "/{yourdiscountcode}" attached.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/657b140e4773693a6d83e080/file-JRg3rVoT9r.png" %></figure>
-  <p>Once you click on the discounted link, you will see that the original price is crossed out, and the discounted price is displayed next to it. This only displays if a discount code is applied from the product-specific link. Currently, this is the only way to show slashed prices.</p>
+  <p>Once you click on the discounted link, you will see that the original price is crossed out, and the discounted price is displayed next to it. This displays when a discount is applied from the product-specific link, or when the product has an <a href="#Automatically-apply-a-discount-code-vR3mN">automatically applied discount code</a>.</p>
   <figure><%= image_tag "https://lh6.googleusercontent.com/6uHGn-GggrtKugV2fc3VLzfq6gRBxad8U1E5Q2SMs04eRvUAfktDmKg7qCECcX-vcukIPXtsG_ZcNbmn-UtoLlCgT_MF6DYNqrCjNolpv-AzRnwzXRMAHOibKoAFY4ysHRQy000KN8-dp5ybEhU4Gyo" %></figure>
   <h3 id="FAQs-pJIfb">FAQs</h3>
   <p><strong>Q: How do I embed a discount code in my product's URL? </strong></p>

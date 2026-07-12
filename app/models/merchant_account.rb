@@ -18,6 +18,18 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :stripe_disabled_reason
   attr_json_data_accessor :stripe_payouts_pause_email_sent
   attr_json_data_accessor :stripe_rejection_email_sent
+  # For Stripe Connect (direct-charge) accounts: a cached snapshot of the account's Stripe
+  # capabilities. Charges for these sellers are created on their account, not Gumroad's platform
+  # account, and Stripe rejects a PaymentIntent whose payment_method_types lists a method the
+  # account hasn't activated — so checkout must only offer what the account actually supports.
+  # The FULL capabilities hash is stored (not just the methods consulted today) so future payment
+  # method launches read from existing snapshots without a re-fetch sweep. Shape:
+  # { "capabilities" => { "cashapp_payments" => "active", ... }, "refreshed_at" => <iso8601> }.
+  # Refreshed by RefreshMerchantAccountPaymentMethodAvailabilityWorker (Stripe account.updated /
+  # capability.updated webhooks, plus a lazy checkout-time backfill). A missing snapshot means
+  # "not yet fetched" and checkout fails safe. Read via
+  # StripeConnectPaymentMethodAvailabilityService, which owns the method-type → capability mapping.
+  attr_json_data_accessor :stripe_capabilities_snapshot
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }

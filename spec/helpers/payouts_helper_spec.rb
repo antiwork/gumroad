@@ -306,6 +306,53 @@ describe PayoutsHelper do
       end
     end
 
+    describe "payout currency for the upcoming payout" do
+      # Regression coverage: the upcoming payout's currency must come from the
+      # payout destination, not from the seller's selling currency. A seller
+      # who sells in USD but is paid to a European bank still gets converted
+      # to EUR, so the "Will be converted to EUR" notice must stay visible.
+      it "uses the bank account's local currency even when the seller sells in USD" do
+        user = create(:user, currency_type: Currency::USD)
+        create(:european_bank_account, user:)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::EUR)
+      end
+
+      it "stays USD for a US bank account regardless of the selling currency" do
+        user = create(:user, currency_type: Currency::GBP)
+        create(:ach_account, user:)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+        create(:bank, routing_number: "110000000", name: "Bank of America")
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::USD)
+      end
+
+      it "uses USD for PayPal payouts, which are always sent in USD" do
+        user = create(:user, currency_type: Currency::EUR, payment_address: "seller-paypal@example.com")
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::USD)
+      end
+
+      it "uses the connected Stripe account's default currency for Stripe Connect payouts" do
+        user = create(:user, currency_type: Currency::USD, check_merchant_account_is_linked: true)
+        create(:merchant_account_stripe_connect, user:, currency: Currency::CAD)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::CAD)
+      end
+
+      it "falls back to USD when the connected Stripe account has no currency recorded" do
+        user = create(:user, currency_type: Currency::USD, check_merchant_account_is_linked: true)
+        merchant_account = create(:merchant_account_stripe_connect, user:)
+        merchant_account.update_column(:currency, nil)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+        expect(self.payout_period_data(user)[:payout_currency]).to eq(Currency::USD)
+      end
+    end
+
     it "shows payout data without payout given and previous payouts" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)

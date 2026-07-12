@@ -72,6 +72,22 @@ describe BundlePresenter do
       expect(props[:is_bundle]).to eq(true)
       expect(props).not_to include(:currency_type, :thumbnail, :taxonomies, :products_count)
     end
+
+    it "includes the default offer code when one is set" do
+      presenter = described_class.new(bundle:)
+      expect(presenter.send(:shared_props)[:bundle][:default_offer_code]).to be_nil
+
+      offer_code = create(:offer_code, user: seller, products: [bundle], name: "Launch sale")
+      bundle.update!(default_offer_code: offer_code)
+
+      props = described_class.new(bundle: bundle.reload).send(:shared_props)
+      expect(props[:bundle][:default_offer_code]).to eq(
+        id: offer_code.external_id,
+        code: offer_code.code,
+        name: "Launch sale",
+        discount: offer_code.configured_discount_for_display,
+      )
+    end
   end
 
   describe "#edit_product_props" do

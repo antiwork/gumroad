@@ -169,11 +169,11 @@ class Charge < ApplicationRecord
     purchase_with_gumroad_tax_as_chargeable.present?
   end
 
-  def refund_and_save!(refunding_user_id)
+  def refund_and_save!(refunding_user_id, reason: nil)
     transaction do
       refunded_all_purchases = true
       successful_purchases.each do |purchase|
-        refunded = purchase.refund_and_save!(refunding_user_id)
+        refunded = purchase.refund_and_save!(refunding_user_id, reason:)
         unless refunded
           copy_refund_errors_from(purchase)
           refunded_all_purchases = false

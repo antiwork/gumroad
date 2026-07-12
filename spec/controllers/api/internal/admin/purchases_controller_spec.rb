@@ -700,7 +700,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST refund" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
     let(:refund_policy) { double("PurchaseRefundPolicy", fine_print: nil) }
 
     include_examples "admin api authorization required", :post, :refund, { id: "123", email: "buyer@example.com" }
@@ -716,16 +716,30 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
     end
 
+    it "returns 400 when reason is missing" do
+      post :refund, params: { id: purchase.external_id_numeric.to_s, email: purchase.email }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "reason is required" }.as_json)
+    end
+
+    it "returns 400 when reason is blank" do
+      post :refund, params: { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "   " }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "reason is required" }.as_json)
+    end
+
     context "when the purchase is not found or the email does not match" do
       it "returns 404 for a missing purchase" do
-        post :refund, params: { id: "999999999", email: "buyer@example.com" }
+        post :refund, params: { id: "999999999", email: "buyer@example.com", reason: "Refund requested by the buyer" }
 
         expect(response).to have_http_status(:not_found)
         expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
       end
 
       it "returns 404 for a non-numeric purchase ID" do
-        post :refund, params: { id: "abc", email: "buyer@example.com" }
+        post :refund, params: { id: "abc", email: "buyer@example.com", reason: "Refund requested by the buyer" }
 
         expect(response).to have_http_status(:not_found)
         expect(response.parsed_body).to eq({ success: false, message: "Purchase not found or email doesn't match" }.as_json)
@@ -745,7 +759,7 @@ describe Api::Internal::Admin::PurchasesController do
         allow(purchase).to receive(:stripe_transaction_id).and_return("ch_test")
         allow(purchase).to receive(:amount_refundable_cents).and_return(1000)
         purchase.errors.clear
-        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
         post :refund, params: params.merge(email: purchase.email.upcase)
 
@@ -765,7 +779,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "fully refunds the purchase when amount_cents is omitted" do
-        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
         post :refund, params: params
 
@@ -777,7 +791,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "performs a partial refund when amount_cents is provided" do
-        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 5.0).and_return(true)
+        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 5.0, reason: "Refund requested by the buyer").and_return(true)
 
         post :refund, params: params.merge(amount_cents: "500")
 
@@ -786,7 +800,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "passes amount_cents equal to the full price through to refund! (model short-circuits to a full refund)" do
-        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 10.0).and_return(true)
+        expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 10.0, reason: "Refund requested by the buyer").and_return(true)
 
         post :refund, params: params.merge(amount_cents: "1000")
 
@@ -795,7 +809,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "returns 422 with the model error when amount_cents exceeds the refundable amount" do
-        allow(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 50.0) do
+        allow(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: 50.0, reason: "Refund requested by the buyer") do
           purchase.errors.add :base, "Refund amount cannot be greater than the purchase price."
           false
         end
@@ -881,7 +895,7 @@ describe Api::Internal::Admin::PurchasesController do
         end
 
         it "succeeds with force=true" do
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
           post :refund, params: params.merge(force: "true")
 
@@ -904,7 +918,7 @@ describe Api::Internal::Admin::PurchasesController do
         end
 
         it "succeeds with force=true" do
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
           post :refund, params: params.merge(force: "true")
 
@@ -914,7 +928,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "still surfaces an active chargeback error even when force=true" do
-        allow(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil) do
+        allow(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer") do
           purchase.errors.add :base, Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
           false
         end
@@ -931,7 +945,7 @@ describe Api::Internal::Admin::PurchasesController do
 
         it "cancels the subscription with admin/seller semantics after a successful refund" do
           allow(purchase).to receive(:subscription).and_return(subscription)
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
           expect(subscription).to receive(:cancel!).with(by_seller: true, by_admin: true) do
             allow(subscription).to receive(:cancelled_at).and_return(Time.current)
           end
@@ -946,7 +960,7 @@ describe Api::Internal::Admin::PurchasesController do
 
         it "succeeds with subscription_cancelled: false when there is no subscription" do
           allow(purchase).to receive(:subscription).and_return(nil)
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
           post :refund, params: params.merge(cancel_subscription: "true")
 
@@ -959,7 +973,7 @@ describe Api::Internal::Admin::PurchasesController do
         it "does not re-cancel a subscription that is already deactivated" do
           deactivated_subscription = instance_double(Subscription, deactivated?: true, cancelled_at: 1.hour.ago, price: nil)
           allow(purchase).to receive(:subscription).and_return(deactivated_subscription)
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
           expect(deactivated_subscription).not_to receive(:cancel!)
 
           post :refund, params: params.merge(cancel_subscription: "true")
@@ -971,7 +985,7 @@ describe Api::Internal::Admin::PurchasesController do
         it "does not re-cancel a subscription that is already pending cancellation" do
           pending_subscription = instance_double(Subscription, deactivated?: false, cancelled_at: 1.day.from_now, price: nil)
           allow(purchase).to receive(:subscription).and_return(pending_subscription)
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
           expect(pending_subscription).not_to receive(:cancel!)
 
           post :refund, params: params.merge(cancel_subscription: "true")
@@ -982,7 +996,7 @@ describe Api::Internal::Admin::PurchasesController do
 
         it "still returns success with subscription_cancel_error when cancel! raises after a successful refund" do
           allow(purchase).to receive(:subscription).and_return(subscription)
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
           expect(subscription).to receive(:cancel!).with(by_seller: true, by_admin: true).and_raise(StandardError, "stripe blew up")
 
           post :refund, params: params.merge(cancel_subscription: "true")
@@ -996,7 +1010,7 @@ describe Api::Internal::Admin::PurchasesController do
 
       context "with whitespace in the email parameter" do
         it "strips whitespace before comparing against the purchase email" do
-          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
 
           post :refund, params: params.merge(email: "  #{purchase.email.upcase}  ")
 
@@ -1096,7 +1110,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST refund_taxes" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
 
     include_examples "admin api authorization required", :post, :refund_taxes, { id: "123", email: "buyer@example.com" }
 
@@ -1250,7 +1264,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST cancel_subscription" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
 
     include_examples "admin api authorization required", :post, :cancel_subscription, { id: "123", email: "buyer@example.com" }
 
@@ -1378,7 +1392,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST block_buyer" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
 
     include_examples "admin api authorization required", :post, :block_buyer, { id: "123", email: "buyer@example.com" }
 
@@ -1476,7 +1490,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST unblock_buyer" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
 
     include_examples "admin api authorization required", :post, :unblock_buyer, { id: "123", email: "buyer@example.com" }
 
@@ -1550,7 +1564,7 @@ describe Api::Internal::Admin::PurchasesController do
   describe "POST refund_for_fraud" do
     let(:admin_user) { create(:admin_user) }
     let(:purchase) { create(:free_purchase, email: "buyer@example.com") }
-    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email } }
+    let(:params) { { id: purchase.external_id_numeric.to_s, email: purchase.email, reason: "Refund requested by the buyer" } }
 
     include_examples "admin api authorization required", :post, :refund_for_fraud, { id: "123", email: "buyer@example.com" }
 

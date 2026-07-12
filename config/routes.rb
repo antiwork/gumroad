@@ -71,6 +71,10 @@ Rails.application.routes.draw do
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
       post "/user/custom_html/edit", to: "users#edit_custom_html"
       post "/user/preview_custom_html", to: "users#preview_custom_html"
+      # Creator public media library (images hosted on public storage so they render on
+      # custom pages under their CSP). `create` accepts a remote url (downloaded server-side with
+      # SSRF protection) or a signed_blob_id; also the store agent's media ingestion path.
+      resources :media, only: [:index, :create, :destroy]
       resources :categories, only: [:index]
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
@@ -525,6 +529,7 @@ Rails.application.routes.draw do
 
     namespace :sellers do
       resource "switch", only: :create, controller: "switch"
+      resources :brand_accounts, only: :create
     end
 
     resources :test_pings, only: [:create]

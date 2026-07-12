@@ -12319,6 +12319,77 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  describe "payment method availability refresh on account/capability webhooks" do
+    let(:seller) { create(:user) }
+    let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+    def capability_updated_event(account_id)
+      {
+        "api_version" => API_VERSION,
+        "type" => "capability.updated",
+        "id" => "stripe-event-id",
+        "data" => {
+          "object" => {
+            "object" => "capability",
+            "id" => "cashapp_payments",
+            "account" => account_id,
+            "status" => "active",
+          }
+        }
+      }
+    end
+
+    def account_updated_event(account_id)
+      {
+        "api_version" => API_VERSION,
+        "type" => "account.updated",
+        "id" => "stripe-event-id",
+        "account" => account_id,
+        "user_id" => account_id,
+        "data" => {
+          "object" => {
+            "object" => "account",
+            "id" => account_id,
+            "type" => "standard",
+            "requirements" => { "currently_due" => [], "eventually_due" => [], "past_due" => [] }
+          }
+        }
+      }
+    end
+
+    it "enqueues a refresh for a connect account on capability.updated — including non-JP accounts, which the JP-only guard below the call returns early for" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+      described_class.handle_stripe_event(capability_updated_event(connect_account.charge_processor_merchant_id))
+    end
+
+    it "enqueues a refresh for a connect account on account.updated — including standard accounts, which handle_stripe_info_requirements returns early for" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+      described_class.handle_stripe_event(account_updated_event(connect_account.charge_processor_merchant_id))
+    end
+
+    it "does not enqueue for an unknown account" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event("acct_nonexistent"))
+    end
+
+    it "does not enqueue for a non-connect (Gumroad-managed) account" do
+      managed_account = create(:merchant_account)
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event(managed_account.charge_processor_merchant_id))
+    end
+
+    it "does not enqueue for a deauthorized (charge-processor-dead) connect account" do
+      connect_account.update!(charge_processor_alive_at: nil)
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event(connect_account.charge_processor_merchant_id))
+    end
+  end
+
   describe "handling information update" do
     let(:user) { create(:user) }
     let(:user_compliance_info) { create(:user_compliance_info, user:) }

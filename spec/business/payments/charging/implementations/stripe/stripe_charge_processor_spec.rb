@@ -798,6 +798,52 @@ describe StripeChargeProcessor, :vcr do
             charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
             expect(charge_intent).to be_a(StripeChargeIntent)
           end
+
+          context "when the saved card has a registered e-mandate" do
+            it "references the mandate on the payment intent" do
+              allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return("mandate_123")
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+
+              expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_123")).and_return(payment_intent)
+              charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
+              expect(charge_intent).to be_a(StripeChargeIntent)
+            end
+          end
+
+          context "when the saved card has no registered e-mandate" do
+            before do
+              allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return(nil)
+            end
+
+            it "reports the missing mandate and still submits the charge when the fail-fast flag is off" do
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+
+              expect(ErrorNotifier).to receive(:notify).with(
+                "Off-session charge on an Indian card has no e-mandate to reference",
+                reference: "reference",
+                fail_fast: false
+              )
+              expect(Stripe::PaymentIntent).to receive(:create).with(hash_excluding(:mandate)).and_return(payment_intent)
+
+              charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
+              expect(charge_intent).to be_a(StripeChargeIntent)
+            end
+
+            it "fails fast without calling Stripe when the fail-fast flag is on" do
+              Feature.activate(:fail_india_recurring_charge_without_mandate)
+
+              expect(ErrorNotifier).to receive(:notify)
+              expect(Stripe::PaymentIntent).not_to receive(:create)
+
+              expect do
+                subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
+              end.to raise_error(ChargeProcessorCardError) do |error|
+                expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
+              end
+            ensure
+              Feature.deactivate(:fail_india_recurring_charge_without_mandate)
+            end
+          end
         end
 
         context "for a non-Indian card with SCA support" do
