@@ -10,6 +10,9 @@ describe Ai::AnthropicClient do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
+    # Pin OpenRouter routing OFF by default so these specs exercise the direct-to-Anthropic path
+    # regardless of what the host machine's environment has configured.
+    allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
   end
 
   describe "#messages" do
@@ -184,6 +187,83 @@ describe Ai::AnthropicClient do
       expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
         .to raise_error(described_class::Error, /not configured/i)
       expect(request).not_to have_been_requested
+    end
+  end
+
+  describe "OpenRouter gateway routing" do
+    let(:openrouter_url) { "https://openrouter.ai/api/v1/messages" }
+
+    before do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return(nil)
+    end
+
+    it "routes requests to OpenRouter with its key and a GPT fallback when OPENROUTER_API_KEY is set" do
+      captured = nil
+      stub = stub_request(:post, openrouter_url)
+        .with(headers: { "x-api-key" => "sk-or-test", "anthropic-version" => "2023-06-01" }) { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(result.text).to eq("ok")
+      expect(captured["model"]).to eq(described_class::DEFAULT_MODEL)
+      expect(captured["fallbacks"]).to eq([{ "model" => described_class::DEFAULT_FALLBACK_MODEL }])
+    end
+
+    it "streams through OpenRouter with the same Anthropic SSE protocol" do
+      stream = "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+               "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "hi" } }.to_json}\n\n" \
+               "event: message_delta\ndata: #{{ delta: { stop_reason: "end_turn" } }.to_json}\n\n"
+      stub = stub_request(:post, openrouter_url)
+        .with(body: hash_including("stream" => true, "fallbacks" => [{ "model" => described_class::DEFAULT_FALLBACK_MODEL }]))
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      chunks = []
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+      expect(stub).to have_been_requested
+      expect(chunks).to eq(["hi"])
+      expect(result.stop_reason).to eq("end_turn")
+    end
+
+    it "honors an OPENROUTER_FALLBACK_MODEL override" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return("openai/gpt-4o")
+      captured = nil
+      stub_request(:post, openrouter_url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(captured["fallbacks"]).to eq([{ "model" => "openai/gpt-4o" }])
+    end
+
+    it "retries OpenRouter's 408 upstream-timeout status like other transient failures" do
+      allow(client).to receive(:sleep)
+      body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+      stub_request(:post, openrouter_url)
+        .to_return({ status: 408, body: { error: { code: 408, message: "Your request timed out" } }.to_json },
+                   { status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" } })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.text).to eq("ok")
+      expect(client).to have_received(:sleep).once
+    end
+
+    it "does not send fallbacks or touch OpenRouter when the key is not configured" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("")
+      captured = nil
+      stub = stub_request(:post, url)
+        .with(headers: { "x-api-key" => "sk-ant-test" }) { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(captured).not_to have_key("fallbacks")
     end
   end
 

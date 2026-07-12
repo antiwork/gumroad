@@ -16,6 +16,12 @@
 #
 # The API key stays server-side (GlobalConfig). Nothing here is creator-specific; the seller scoping
 # lives entirely in StoreAgentApiClient, which this never touches.
+#
+# When OPENROUTER_API_KEY is configured, all traffic routes through OpenRouter's
+# Anthropic-compatible endpoint instead of Anthropic directly. OpenRouter acts as a gateway:
+# it fails over between Anthropic's hosting providers, and falls back to GPT (via the request's
+# `fallbacks` parameter) when Claude is entirely unavailable — so an Anthropic outage degrades
+# the agent instead of taking it down. Without the key, behavior is byte-identical to before.
 class Ai::AnthropicClient
   class Error < StandardError; end
   # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
@@ -24,11 +30,24 @@ class Ai::AnthropicClient
   class TransientError < Error; end
 
   API_URL = "https://api.anthropic.com/v1/messages"
+  # OpenRouter exposes an endpoint compatible with Anthropic's Messages API — same request and
+  # response shapes, same streaming protocol — so routing through it is just a different URL and
+  # API key. We use it as a reliability layer: OpenRouter fails over between Anthropic's own
+  # providers and, via the `fallbacks` request parameter below, to a non-Anthropic model when
+  # Anthropic is entirely down. Routing is opt-in: it turns on only when OPENROUTER_API_KEY is
+  # configured, and without it every request goes straight to Anthropic exactly as before.
+  OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   API_VERSION = "2023-06-01"
   # Claude Opus 4.7 — top of the vending-bench leaderboard for autonomous commercial operation, which
   # is exactly the store-management job the agent does for creators.
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
+  # When requests go through OpenRouter, this model is tried if Claude itself errors out (provider
+  # down, rate limited, overloaded). OpenRouter translates the Anthropic-format request for the
+  # fallback provider, so no OpenAI-specific code is needed here. The `~` prefix is OpenRouter's
+  # "latest in this family" resolution, so we always fall back to the current GPT flagship without
+  # having to bump a pinned version. Overridable via the OPENROUTER_FALLBACK_MODEL config.
+  DEFAULT_FALLBACK_MODEL = "~openai/gpt-latest"
 
   # How long we wait to open the connection and to send the request. These are short on purpose:
   # if Anthropic isn't reachable quickly, we want to fail fast and retry rather than sit on a dead
@@ -42,10 +61,11 @@ class Ai::AnthropicClient
   MAX_ATTEMPTS = 3
   RETRY_BASE_DELAY_IN_SECONDS = 1
 
-  # Response statuses worth a retry: rate limit (429), server errors (5xx), and Anthropic's
-  # "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is deterministic —
-  # retrying would just repeat the same failure slower.
-  RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504, 529].freeze
+  # Response statuses worth a retry: request timeout (408 — OpenRouter returns it when the upstream
+  # timed out; Anthropic itself doesn't use it), rate limit (429), server errors (5xx), and
+  # Anthropic's "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is
+  # deterministic — retrying would just repeat the same failure slower.
+  RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504, 529].freeze
   # Mid-stream `error` events with these types are the streaming equivalents of the statuses above.
   RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
 
@@ -69,7 +89,7 @@ class Ai::AnthropicClient
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
     with_retries do
-      response = http.post(API_URL, json: body)
+      response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "request")
 
       parse_message(response.parse)
@@ -99,7 +119,7 @@ class Ai::AnthropicClient
       blocks = {}
       stop_reason = nil
 
-      response = http.post(API_URL, json: body)
+      response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "stream")
 
       each_sse_event(response.body) do |event, data|
@@ -201,6 +221,12 @@ class Ai::AnthropicClient
         stream:,
       }
       body[:tools] = cacheable_tools(tools) if tools.present?
+      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list (same shape as
+      # Anthropic's SDKs): if Claude errors — rate limit, overload, provider downtime — OpenRouter
+      # retries the request against the fallback model and translates the wire format for it, so
+      # the agent stays up on GPT when Anthropic is down. Sent only when routing through
+      # OpenRouter; Anthropic's own API would reject the unknown parameter.
+      body[:fallbacks] = [{ model: fallback_model }] if openrouter? && fallback_model.present?
       body
     end
 
@@ -249,12 +275,37 @@ class Ai::AnthropicClient
     # generic "Sorry, I ran into a problem" error. Remove the fallback once ANTHROPIC_API_KEY is set.
     # Failing fast here with a clear message (rather than shipping a blank key upstream) keeps a future
     # config gap legible instead of surfacing as a confusing upstream 401.
+    #
+    # When OPENROUTER_API_KEY is configured, requests route through OpenRouter instead and that key
+    # is sent in the same x-api-key header — OpenRouter's Anthropic-compatible endpoint accepts it
+    # there, so nothing else about the request changes.
     def api_key
+      return openrouter_api_key if openrouter?
+
       key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
             GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
       raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
 
       key
+    end
+
+    # OpenRouter routing is on when its key is configured, off otherwise. A plain config check (no
+    # feature flag) keeps the switch trivially auditable: delete the key and traffic is back on
+    # Anthropic directly.
+    def openrouter?
+      openrouter_api_key.present?
+    end
+
+    def openrouter_api_key
+      GlobalConfig.get("OPENROUTER_API_KEY").presence
+    end
+
+    def api_url
+      openrouter? ? OPENROUTER_API_URL : API_URL
+    end
+
+    def fallback_model
+      GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence || DEFAULT_FALLBACK_MODEL
     end
 
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
