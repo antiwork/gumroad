@@ -6462,6 +6462,190 @@ describe Purchase, :vcr do
       expect(purchase.flow_of_funds).to be_nil
       expect(charge.reload.processor_transaction_id).to eq("ch_pending_settlement")
     end
+
+    describe "Indian card e-mandate registration check" do
+      # Indian cards must register an RBI e-mandate on the purchase that sets up a recurring
+      # payment; if Stripe completes that charge without creating a Mandate object, every
+      # future renewal is declined by the issuer. save_charge_data reports that case.
+      #
+      # The credit card is built directly rather than via the :credit_card factory: the
+      # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+      # cassette for these examples. The check under test only reads card_country.
+      def create_credit_card(card_country:)
+        CreditCard.create!(
+          card_type: CardType::VISA,
+          visual: "**** **** **** 4242",
+          stripe_fingerprint: "india_mandate_check_fp",
+          stripe_customer_id: "cus_india_mandate_check",
+          expiry_month: 12,
+          expiry_year: 5.years.from_now.year,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          card_country:
+        )
+      end
+
+      let(:credit_card) { create_credit_card(card_country: "IN") }
+
+      def build_processor_charge(mandate: nil)
+        stripe_charge = BaseProcessorCharge.new
+        stripe_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        stripe_charge.id = "ch_india_registration"
+        stripe_charge.refunded = false
+        stripe_charge.card_fingerprint = "card-fingerprint"
+        stripe_charge.card_mandate = mandate
+        stripe_charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 100)
+        stripe_charge
+      end
+
+      def build_purchase(is_original_subscription_purchase:, card: nil, card_country: "IN")
+        card ||= credit_card
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product, credit_card: card)
+        original_purchase = create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                          card_country:, is_original_subscription_purchase: true)
+        return original_purchase if is_original_subscription_purchase
+
+        # Renewal purchases validate their price against the subscription's original
+        # purchase, so that record must exist before the renewal can be created.
+        create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                      card_country:, is_original_subscription_purchase: false)
+      end
+
+      it "reports an original subscription purchase whose charge carries no mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+          purchase: purchase.external_id,
+          stripe_charge: "ch_india_registration"
+        )
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report when the charge carries a mandate" do
+        purchase = build_purchase(is_original_subscription_purchase: true)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: "mandate_123"))
+      end
+
+      it "does not report recurring renewal charges (only the registering purchase carries a mandate)" do
+        purchase = build_purchase(is_original_subscription_purchase: false)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+
+      it "does not report non-Indian cards" do
+        non_indian_card = create_credit_card(card_country: "US")
+        purchase = build_purchase(is_original_subscription_purchase: true, card: non_indian_card, card_country: "US")
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase.save_charge_data(build_processor_charge(mandate: nil))
+      end
+    end
+  end
+
+  describe "#check_indian_card_setup_intent_mandate_was_registered" do
+    # Covers recurring registrations that happen on a Stripe SetupIntent (multi-product
+    # checkouts, free trials, preorders) and only succeed asynchronously after the buyer
+    # completes 3DS — the synchronous check in Order::ChargeService never runs for those.
+    #
+    # The credit card is built directly rather than via the :credit_card factory: the
+    # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+    # cassette for these examples. The check under test only reads card_country.
+    def create_credit_card(card_country:)
+      CreditCard.create!(
+        card_type: CardType::VISA,
+        visual: "**** **** **** 4242",
+        stripe_fingerprint: "india_mandate_check_fp",
+        stripe_customer_id: "cus_india_mandate_check",
+        expiry_month: 12,
+        expiry_year: 5.years.from_now.year,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        card_country:
+      )
+    end
+
+    def build_purchase(card_country: "IN", setup_intent_id: "seti_india_registration")
+      card = create_credit_card(card_country:)
+      product = create(:membership_product)
+      subscription = create(:subscription, link: product, credit_card: card)
+      create(:purchase_in_progress, link: product, subscription:, credit_card: card,
+                                    charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                    card_country:, is_original_subscription_purchase: true,
+                                    processor_setup_intent_id: setup_intent_id)
+    end
+
+    def stub_setup_intent(succeeded: true, mandate: nil)
+      setup_intent = instance_double(StripeSetupIntent, succeeded?: succeeded, mandate:)
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      setup_intent
+    end
+
+    it "reports a succeeded setup intent that carries no mandate" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: true, mandate: nil)
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+        purchase: purchase.external_id,
+        stripe_setup_intent: "seti_india_registration"
+      )
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report when the setup intent carries a mandate" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: true, mandate: "mandate_123")
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report when the setup intent has not succeeded" do
+      purchase = build_purchase
+      stub_setup_intent(succeeded: false, mandate: nil)
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report purchases without a setup intent" do
+      purchase = build_purchase(setup_intent_id: nil)
+
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "does not report non-Indian cards" do
+      purchase = build_purchase(card_country: "US")
+
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      purchase.check_indian_card_setup_intent_mandate_was_registered
+    end
+
+    it "never lets an unexpected error escape (observability only)" do
+      purchase = build_purchase
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(StandardError, "boom")
+
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), purchase: purchase.external_id)
+
+      expect { purchase.check_indian_card_setup_intent_mandate_was_registered }.not_to raise_error
+    end
   end
 
   describe "#refunded?" do

@@ -77,6 +77,13 @@ describe Api::V2::DirectUploadsController do
         expect(blob.metadata).not_to include("analyzed", "width", "height", "duration")
       end
 
+      it "stamps the uploader's user id into the blob metadata" do
+        post @action, params: @params
+
+        expect(response).to be_successful
+        expect(ActiveStorage::Blob.last.metadata["uploaded_by_user_id"]).to eq(@user.id)
+      end
+
       it "rejects missing content type before creating a blob" do
         expect do
           post @action, params: @params.deep_dup.tap { |params| params[:blob].delete(:content_type) }
@@ -150,13 +157,91 @@ describe Api::V2::DirectUploadsController do
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
       end
+
+      describe "with purpose=media (media library reservations)" do
+        before do
+          @token.update!(scopes: "edit_profile")
+        end
+
+        it "accepts image uploads with the edit_profile scope" do
+          expect do
+            post @action, params: @params.merge(purpose: "media")
+          end.to change { ActiveStorage::Blob.count }.by(1)
+
+          expect(response).to be_successful
+          expect(response.parsed_body["content_type"]).to eq("image/png")
+        end
+
+        it "rejects audio because media-library uploads are image-only until real media moderation exists" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { filename: "track.mp3", content_type: "audio/mpeg" }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("content_type must be an image type.")
+        end
+
+        it "rejects images above the media pipeline's image cap before creating a blob" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { byte_size: CreatePublicMediaService::MAX_IMAGE_BYTES + 1 }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("byte_size exceeds the 10 MB maximum for media uploads")
+        end
+
+        it "still rejects SVG (scriptable, would be served from a Gumroad public host)" do
+          expect do
+            post @action, params: @params.deep_merge(blob: { filename: "logo.svg", content_type: "image/svg+xml" }).merge(purpose: "media")
+          end.not_to change { ActiveStorage::Blob.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body["error"]).to eq("content_type must be an image type.")
+        end
+
+        it "keeps the 20 GB product-file cap for requests without the media purpose" do
+          @token.update!(scopes: "edit_products")
+
+          post @action, params: @params.deep_merge(blob: { filename: "clip.mp4", content_type: "video/mp4", byte_size: 1.gigabyte })
+
+          expect(response).to be_successful
+        end
+      end
     end
 
-    it "grants access with the account scope" do
+    it "grants access with the account scope for legacy product-file reservations" do
       token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
       post @action, params: @params.merge(access_token: token.token)
       expect(response).to be_successful
       expect(response.parsed_body["signed_id"]).to eq(ActiveStorage::Blob.last.signed_id)
+    end
+
+    it "rejects account-only tokens for media-library reservations" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+
+      expect do
+        post @action, params: @params.merge(access_token: token.token, purpose: "media")
+      end.not_to change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "rejects tokens with an unrelated scope for media-library reservations without double-rendering" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_sales")
+
+      expect do
+        post @action, params: @params.merge(access_token: token.token, purpose: "media")
+      end.not_to change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "rejects unauthenticated media-library reservations without double-rendering" do
+      expect do
+        post @action, params: @params.except(:access_token).merge(purpose: "media")
+      end.not_to change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 end

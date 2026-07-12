@@ -3043,6 +3043,8 @@ class Purchase < ApplicationRecord
     self.was_zipcode_check_performed = !processor_charge.zip_check_result.nil?
     save!
 
+    check_indian_card_mandate_was_registered(processor_charge)
+
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
     return false if allow_missing_flow_of_funds && stripe_charge_processor? && processor_charge.flow_of_funds.blank?
 
@@ -3052,6 +3054,56 @@ class Purchase < ApplicationRecord
 
   def is_an_off_session_charge_on_indian_card?
     stripe_charge_processor? && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
+  end
+
+  # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
+  # without one, every future off-session renewal is declined by the issuer. Stripe can
+  # complete the registration charge WITHOUT creating a Mandate object, and today that
+  # only surfaces a year later as an unexplainable renewal decline. Report it at
+  # registration time instead, so the affected subscriptions are visible immediately.
+  def check_indian_card_mandate_was_registered(processor_charge)
+    return unless stripe_charge_processor?
+    return unless credit_card&.requires_mandate?
+    # Only the purchase that registers the recurring payment is expected to carry a mandate.
+    return unless is_original_subscription_purchase? || is_preorder_authorization? || is_upgrade_purchase?
+    # Multi-product checkouts register the mandate on a separate setup intent, not this charge.
+    return if is_multi_buy?
+    return if processor_charge.card_mandate.present?
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+      purchase: external_id,
+      stripe_charge: processor_charge.id
+    )
+  rescue => e
+    # This check is observability only; never let it break charge processing.
+    ErrorNotifier.notify(e, purchase: external_id)
+  end
+
+  # Same idea as check_indian_card_mandate_was_registered, but for purchases whose recurring
+  # payment was registered on a Stripe SetupIntent instead of a charge (multi-product
+  # checkouts, free trials, preorders). When the setup intent needed buyer authentication
+  # (3DS), the synchronous check in Order::ChargeService never runs — the intent only
+  # succeeds later, once the buyer confirms. This is called from that confirmation path,
+  # re-fetching the setup intent so a registration that completed without a Mandate object
+  # is still reported instead of surfacing as an unexplainable decline at first renewal.
+  def check_indian_card_setup_intent_mandate_was_registered
+    return unless stripe_charge_processor?
+    return unless credit_card&.requires_mandate?
+    return if processor_setup_intent_id.blank?
+
+    setup_intent = ChargeProcessor.get_setup_intent(merchant_account, processor_setup_intent_id)
+    return unless setup_intent&.succeeded?
+    return if setup_intent.mandate.present?
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without a registered e-mandate — its renewals will be declined by the issuer",
+      purchase: external_id,
+      stripe_setup_intent: processor_setup_intent_id
+    )
+  rescue => e
+    # This check is observability only; never let it break charge processing.
+    ErrorNotifier.notify(e, purchase: external_id)
   end
 
   # Off-session charges on Indian cards remain in processing for 26 hours on Stripe.

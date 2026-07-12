@@ -63,6 +63,10 @@ class StripeCharge < BaseProcessorCharge
       end
       self.card_expiry_month = payment_card[:exp_month]
       self.card_expiry_year = payment_card[:exp_year]
+      # Indian cards need a Stripe Mandate (RBI e-mandate) for future off-session renewals.
+      # Stripe reports the mandate it created for this charge here; we surface it so callers
+      # can detect a recurring-payment registration that completed without one.
+      self.card_mandate = payment_card[:mandate]
       self.card_zip_code = billing_details[:address][:postal_code]
       self.card_country = payment_card[:country]
       self.zip_check_result = case payment_card[:checks][:address_postal_code_check]

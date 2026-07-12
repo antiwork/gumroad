@@ -171,8 +171,21 @@ class GdprDataErasureService
 
     def remove_profile_assets!
       @user.avatar&.purge if @user.respond_to?(:avatar) && @user.avatar&.attached?
+
+      # The user's public media library (files uploaded via Api::V2::MediaController) lives on
+      # Gumroad's public CDN. Erasure has to take those files down too — soft-deleting the records
+      # would leave the public URLs serving the content. Purges each blob unless another record
+      # still references it.
+      # Rescue per file rather than letting one failure bubble up to the method-level rescue
+      # below: find_each stops at the first raised error, which would silently leave every
+      # remaining file publicly accessible after the erasure completes.
+      PublicFile.alive.where(seller: @user, resource: @user).find_each do |file|
+        file.mark_deleted_and_purge_file!
+      rescue => e
+        Rails.logger.warn("GDPR: Failed to purge media file #{file.id} for user #{@user.id}: #{e.message}")
+      end
     rescue => e
-      Rails.logger.warn("GDPR: Failed to purge avatar for user #{@user.id}: #{e.message}")
+      Rails.logger.warn("GDPR: Failed to purge profile assets for user #{@user.id}: #{e.message}")
     end
 
     def credit_card_ids_for_erasure

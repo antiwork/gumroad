@@ -412,6 +412,27 @@ class Rack::Attack
   throttle_by_ip path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds
   throttle_by_params path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds, throttle_params: v2_product_token
 
+  # Media uploads: each POST can make the server synchronously download up to 10 MB from a
+  # remote URL (CreatePublicMediaService), so this is one of the most expensive requests in the
+  # v2 API — an unthrottled loop would tie up workers and bandwidth. 20 uploads / 10 minutes is
+  # plenty for a creator (or the store agent) building a page, and useless for abuse. Keyed by
+  # OAuth token (falling back to IP-keyed throttle for tokenless probes) so rotating IPs doesn't
+  # bypass it. Both `/api/v2/media` (gumroad.com) and `/v2/media` (api.gumroad.com) prefixes are
+  # matched, mirroring the products/custom_html throttles above.
+  #
+  # `max_level: 1` skips the exponential-backoff tiers: with a 10-minute base period the derived
+  # rpm is 2, so the level-2 tier would allow only 4 requests per 64 seconds — stricter than the
+  # base limit and it would block a legitimate burst of uploads (same trap the walks throttles
+  # above document). The base 20/10min limit already caps the damage.
+  v2_media_path = /\A\/(api\/)?v2\/media(\.\w+)?\z/
+  throttle_by_ip path: v2_media_path, method: :post, requests: 20, period: 10.minutes, max_level: 1
+  throttle_with_exponential_backoff(name: "media_uploads/token", requests: 20, period: 10.minutes, max_level: 1) do |req|
+    if req.path.match?(v2_media_path) && req.post?
+      token = req.params["access_token"].presence || req.env["HTTP_AUTHORIZATION"].to_s[/\Abearer\s+(\S+)/i, 1]
+      token.presence
+    end
+  end
+
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
 end

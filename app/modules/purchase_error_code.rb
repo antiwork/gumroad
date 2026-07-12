@@ -56,6 +56,10 @@ module PurchaseErrorCode
   CARD_DECLINED_FRAUDULENT = "card_declined_fraudulent"
   BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE = "brazilian_merchant_account_with_affiliate"
   BUYER_CURRENCY_QUOTE_INVALID = "buyer_currency_quote_invalid"
+  # Off-session renewal on an Indian card that has no registered RBI e-mandate to reference.
+  # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
+  # decline mandate-less recurring charges (as transaction_not_allowed) every time.
+  INDIA_CARD_MANDATE_MISSING = "india_card_mandate_missing"
 
   PAYPAL_ERROR_CODES = {
     "2000" => "Do Not Honor",

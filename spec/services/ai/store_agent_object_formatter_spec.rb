@@ -61,5 +61,26 @@ describe Ai::StoreAgentObjectFormatter do
     it "returns [] for an endpoint with no renderable shape" do
       expect(described_class.from_response(catalog.find("get_earnings"), { "success" => true, "earnings" => {} })).to eq([])
     end
+
+    it "builds a media card from upload_media with the hosted url as the copy target" do
+      response = { "success" => true, "media" => { "id" => "abc123", "name" => "My logo", "extension" => "PNG", "file_size" => 49_152, "file_group" => "image", "url" => "https://public-files.gumroad.com/abc.png" } }
+
+      card = described_class.from_response(catalog.find("upload_media"), response).first
+
+      expect(card[:type]).to eq("media")
+      expect(card[:title]).to eq("My logo")
+      expect(card[:subtitle]).to eq("Image")
+      expect(card[:url]).to eq("https://public-files.gumroad.com/abc.png")
+      expect(card[:copy]).to eq("https://public-files.gumroad.com/abc.png")
+      expect(card[:fields]).to include({ label: "Type", value: "PNG" })
+    end
+
+    it "builds media cards from list_media" do
+      response = { "success" => true, "media" => [{ "id" => "m1", "name" => "Track" }, { "id" => "m2", "name" => "Banner" }] }
+
+      cards = described_class.from_response(catalog.find("list_media"), response)
+
+      expect(cards.map { |c| c[:title] }).to eq(%w[Track Banner])
+    end
   end
 end
