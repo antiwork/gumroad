@@ -1,6 +1,7 @@
 import { ArrowUpRight, Eye, Pencil } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "$app/components/Button";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -24,6 +25,11 @@ export const WithPreviewSidebar = ({ children, className, ...props }: React.Comp
       <div
         className={cx(
           "squished lg:grid lg:grid-cols-[1fr_30vw]",
+          // Reserve space at the bottom on phones so the fixed Edit/Preview pill never covers
+          // the last form field or button at max scroll (applies in both modes). The `!` is
+          // needed because the `squished` utility's own `&:last-child { padding-bottom: 0 }`
+          // rule has higher specificity and would zero this out again.
+          "max-lg:pb-24!",
           // In mobile preview mode, hide everything except the preview pane and the mode
           // toggle (both marked with data-mobile-preview). The window scroll position is
           // deliberately kept when switching, so the preview lands roughly where you were
@@ -102,40 +108,45 @@ export const PreviewSidebar = ({
               {children}
             </section>
           ) : null}
-          <div
-            data-mobile-preview
-            className="fixed inset-x-0 z-[9] flex justify-center lg:hidden"
-            style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
-          >
+          {/* Portaled to <body>: the page's <main> scroller uses [contain:paint], which turns it
+              into the containing block for position:fixed descendants — a pill rendered inline
+              here would scroll away with the form instead of staying pinned to the viewport. */}
+          {createPortal(
             <div
-              role="tablist"
-              aria-label="Edit or preview"
-              className="flex gap-1 rounded-full border border-border bg-background p-1"
+              className="fixed inset-x-0 z-[9] flex justify-center lg:hidden"
+              style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
             >
-              <Button
-                role="tab"
-                aria-selected={mode === "edit"}
-                color={mode === "edit" ? "primary" : undefined}
-                size="sm"
-                className={cx("rounded-full", mode !== "edit" && "border-transparent")}
-                onClick={() => modeContext.setMode("edit")}
+              <div
+                role="tablist"
+                aria-label="Edit or preview"
+                className="flex gap-1 rounded-full border border-border bg-background p-1"
               >
-                <Pencil className="size-4" />
-                Edit
-              </Button>
-              <Button
-                role="tab"
-                aria-selected={mode === "preview"}
-                color={mode === "preview" ? "primary" : undefined}
-                size="sm"
-                className={cx("rounded-full", mode !== "preview" && "border-transparent")}
-                onClick={() => modeContext.setMode("preview")}
-              >
-                <Eye className="size-4" />
-                Preview
-              </Button>
-            </div>
-          </div>
+                <Button
+                  role="tab"
+                  aria-selected={mode === "edit"}
+                  color={mode === "edit" ? "primary" : undefined}
+                  size="sm"
+                  className={cx("rounded-full", mode !== "edit" && "border-transparent")}
+                  onClick={() => modeContext.setMode("edit")}
+                >
+                  <Pencil className="size-4" />
+                  Edit
+                </Button>
+                <Button
+                  role="tab"
+                  aria-selected={mode === "preview"}
+                  color={mode === "preview" ? "primary" : undefined}
+                  size="sm"
+                  className={cx("rounded-full", mode !== "preview" && "border-transparent")}
+                  onClick={() => modeContext.setMode("preview")}
+                >
+                  <Eye className="size-4" />
+                  Preview
+                </Button>
+              </div>
+            </div>,
+            document.body,
+          )}
         </>
       ) : null}
     </>
