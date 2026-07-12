@@ -1183,8 +1183,6 @@ Rails.application.routes.draw do
 
     # webhook providers
     post "/stripe-webhook", to: "foreign_webhooks#stripe"
-    # TEMP: preview-QA endpoint for injecting refund.* events (revert before merge)
-    post "/qa/stripe-events", to: "qa_stripe_events#create"
     post "/stripe-connect-webhook", to: "foreign_webhooks#stripe_connect"
     post "/paypal-webhook", to: "foreign_webhooks#paypal"
     post "/sendgrid-webhook", to: "foreign_webhooks#sendgrid"
