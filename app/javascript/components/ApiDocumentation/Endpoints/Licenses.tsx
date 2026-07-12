@@ -25,7 +25,12 @@ const LicenseResponseFields = () => (
 export const VerifyLicense = () => (
   <ApiEndpoint method="post" path="/licenses/verify" description="Verify a license">
     <ApiParameters>
-      <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
+      <ApiParameter
+        name="product_id"
+        description={
+          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
+        }
+      />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
       <ApiParameter name="increment_uses_count" description='("true"/"false", optional, default: "true")' />
     </ApiParameters>
@@ -92,7 +97,12 @@ export const VerifyLicense = () => (
 export const EnableLicense = () => (
   <ApiEndpoint method="put" path="/licenses/enable" description="Enable a license">
     <ApiParameters>
-      <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
+      <ApiParameter
+        name="product_id"
+        description={
+          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
+        }
+      />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
     <LicenseResponseFields />
@@ -159,7 +169,12 @@ export const EnableLicense = () => (
 export const DisableLicense = () => (
   <ApiEndpoint method="put" path="/licenses/disable" description="Disable a license">
     <ApiParameters>
-      <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
+      <ApiParameter
+        name="product_id"
+        description={
+          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
+        }
+      />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
     <LicenseResponseFields />
@@ -226,7 +241,12 @@ export const DisableLicense = () => (
 export const DecrementUsesCount = () => (
   <ApiEndpoint method="put" path="/licenses/decrement_uses_count" description="Decrement the uses count of a license">
     <ApiParameters>
-      <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
+      <ApiParameter
+        name="product_id"
+        description={
+          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
+        }
+      />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
     <LicenseResponseFields />
@@ -297,7 +317,12 @@ export const RotateLicense = () => (
     description="Rotate a license key. The old license key will no longer be valid."
   >
     <ApiParameters>
-      <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
+      <ApiParameter
+        name="product_id"
+        description={
+          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
+        }
+      />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
     <LicenseResponseFields />
