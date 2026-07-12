@@ -62,6 +62,31 @@ if Rails.env.staging? || Rails.env.development?
       end
       GumroadRuntimeError.prepend(QaChargeErrorCapture)
     end
+
+    # Record executions of the new async mandate check so QA can assert the job actually
+    # ran (queue name + purchase) after a buyer confirm, without Sidekiq UI digging.
+    unless CheckIndianCardMandateRegistrationJob.method_defined?(:qa_job_capture_installed)
+      module QaMandateJobCapture
+        def qa_job_capture_installed; end
+        def perform(purchase_id)
+          if Stripe.api_key.to_s.start_with?("sk_test_")
+            begin
+              redis = Redis::Namespace.new(:qa_india_mandate, redis: $redis)
+              redis.lpush("job_runs", {
+                purchase_id: purchase_id,
+                queue: self.class.get_sidekiq_options["queue"].to_s,
+                at: Time.current.iso8601
+              }.to_json)
+              redis.ltrim("job_runs", 0, 99)
+            rescue => e
+              Rails.logger.error("QA job capture failed: #{e.message}")
+            end
+          end
+          super
+        end
+      end
+      CheckIndianCardMandateRegistrationJob.prepend(QaMandateJobCapture)
+    end
   end
 
   # JSON endpoints under /qa/india_mandate/* for driving renewal scenarios.
@@ -91,6 +116,14 @@ if Rails.env.staging? || Rails.env.development?
           json(200, cleared: true)
         else
           json(200, charge_errors: redis.lrange("charge_errors", 0, 99).map { |n| JSON.parse(n) })
+        end
+      when "/qa/india_mandate/job_runs"
+        redis = Redis::Namespace.new(:qa_india_mandate, redis: $redis)
+        if req.params["clear"]
+          redis.del("job_runs")
+          json(200, cleared: true)
+        else
+          json(200, job_runs: redis.lrange("job_runs", 0, 99).map { |n| JSON.parse(n) })
         end
       when "/qa/india_mandate/subscription"
         sub = find_subscription(req.params)
