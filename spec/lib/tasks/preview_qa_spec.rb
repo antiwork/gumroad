@@ -147,6 +147,20 @@ describe "preview_qa rake tasks" do
       end.to raise_error(SystemExit)
     end
 
+    it "aborts with a clear message instead of crashing when the subscription has no recurrence" do
+      purchase = create(:membership_purchase)
+      # A subscription without a recurrence (possible for hand-built records in dev/test) has no
+      # billing period to derive a default from — Subscription#period would raise. The task should
+      # ask for an explicit days argument instead of blowing up.
+      allow_any_instance_of(Subscription).to receive(:recurrence).and_return(nil)
+
+      expect do
+        expect do
+          run_task("preview_qa:backdate_purchase", purchase.external_id)
+        end.to raise_error(SystemExit)
+      end.to output(/has a subscription with no recurrence/).to_stderr
+    end
+
     it "aborts when the purchase cannot be found" do
       expect do
         run_task("preview_qa:backdate_purchase", "nonexistent")

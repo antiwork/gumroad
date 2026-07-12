@@ -135,6 +135,7 @@ module ChargeProcessor
                                             reference, description,
                                             metadata: nil, statement_description: nil, transfer_group: nil,
                                             off_session: true, setup_future_charges: false, mandate_options: nil,
+                                            mandate_expected: false,
                                             processor_amount_cents: nil, processor_currency: nil,
                                             processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil,
                                             idempotency_key: nil)
@@ -147,6 +148,7 @@ module ChargeProcessor
       off_session:,
       setup_future_charges:,
       mandate_options:,
+      mandate_expected:,
     }
     charge_options[:processor_amount_cents] = processor_amount_cents unless processor_amount_cents.nil?
     charge_options[:processor_currency] = processor_currency unless processor_currency.nil?

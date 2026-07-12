@@ -24,12 +24,15 @@ class Purchase::ConfirmService < Purchase::BaseService
     error_message = check_for_card_handling_error
     return error_message if error_message.present?
 
-    # Recurring registrations on a setup intent (multi-product checkouts, free trials,
-    # preorders) complete asynchronously when the buyer had to authenticate (3DS), so the
-    # synchronous mandate check in Order::ChargeService never saw the succeeded intent.
-    # Re-check here, now that the buyer has confirmed. Observability only — it never fails
+    # Recurring registrations on a setup intent (multi-product checkouts, free trials, preorders) complete
+    # asynchronously when the buyer had to authenticate (3DS), so the synchronous mandate
+    # check in Order::ChargeService never saw the succeeded intent. Re-check now that the
+    # buyer has confirmed — in the background, because the check retrieves the setup intent
+    # from Stripe and this is a buyer-facing request. Observability only — it never fails
     # the purchase.
-    purchase.check_indian_card_setup_intent_mandate_was_registered
+    if purchase.processor_setup_intent_id.present? && purchase.credit_card&.requires_mandate?
+      CheckIndianCardMandateRegistrationJob.perform_async(purchase.id)
+    end
 
     if purchase.is_preorder_authorization?
       mark_preorder_authorized

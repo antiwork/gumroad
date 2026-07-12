@@ -3052,8 +3052,15 @@ class Purchase < ApplicationRecord
     true
   end
 
+  # A charge that rebills a card the buyer saved earlier: subscription renewals and
+  # preorder releases. These run off-session against credentials from a past purchase,
+  # unlike first-time checkout charges (even off-session ones in multi-seller carts).
+  def is_a_saved_card_rebill?
+    preorder.present? || is_recurring_subscription_charge
+  end
+
   def is_an_off_session_charge_on_indian_card?
-    stripe_charge_processor? && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
+    stripe_charge_processor? && card_country == "IN" && is_a_saved_card_rebill?
   end
 
   # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
@@ -3718,6 +3725,12 @@ class Purchase < ApplicationRecord
         description = "You bought #{link.long_url}!"
         mandate_options = mandate_options_for_stripe
 
+        # Renewals and preorder releases rebill a saved card whose e-mandate (Indian cards)
+        # was registered at the original purchase, so a missing mandate on those charges is
+        # an anomaly worth reporting/failing on. First-time checkout charges can also run
+        # off-session (multi-seller carts) but must not be treated that way.
+        mandate_expected = is_a_saved_card_rebill?
+
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
                                                                          amount_cents,
@@ -3728,7 +3741,8 @@ class Purchase < ApplicationRecord
                                                                          transfer_group: id,
                                                                          off_session:,
                                                                          setup_future_charges:,
-                                                                         mandate_options:)
+                                                                         mandate_options:,
+                                                                         mandate_expected:)
 
         if charge_intent.id.present?
           if processor_payment_intent.present?

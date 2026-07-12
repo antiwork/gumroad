@@ -91,12 +91,15 @@ if PreviewQa.safe_environment?
       purchase = PreviewQa.find_record!(Purchase, args[:purchase_id])
 
       days = args[:days].presence&.to_i
-      if days.nil? && purchase.subscription.present?
+      if days.nil? && purchase.subscription&.recurrence.present?
         # Default to just past the subscription's billing period, which is the common case:
         # make the subscription look overdue so RecurringChargeWorker will actually charge it.
+        # The recurrence check matters: a bare subscription without a price/recurrence (possible
+        # for hand-built records in dev/test) can't have a billing period computed —
+        # Subscription#period would raise — so those need an explicit days argument instead.
         days = (purchase.subscription.period / 1.day).ceil + 1
       end
-      abort "Pass a positive number of days (this purchase has no subscription to derive a billing period from)." if days.nil? || days <= 0
+      abort "Pass a positive number of days (this purchase #{purchase.subscription.present? ? "has a subscription with no recurrence" : "has no subscription"} to derive a billing period from)." if days.nil? || days <= 0
 
       purchases_to_shift = [purchase]
       if purchase.subscription.present?

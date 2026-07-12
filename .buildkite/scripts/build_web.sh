@@ -7,15 +7,20 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") build_web.sh: $1${NC}"
 }
 
+source .buildkite/scripts/buildkit_cache.sh
+
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
 WEB_BASE_REPO=${ECR_REGISTRY}/gumroad/web_base
 AWS_NGINX_REPO=${ECR_REGISTRY}/gumroad/web_nginx
 REVISION=${BUILDKITE_COMMIT}
+RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
 
-logger "pulling ruby:$(cat .ruby-version)-slim-bullseye"
-docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
+# The Makefile's generate_tag_for_web_base.sh hashes `docker history` of the
+# ruby base image, so it must be present and current locally. The helper always
+# pulls (cheap manifest check when already current) and only falls back to an
+# existing local copy if the pull fails, e.g. during a Docker Hub outage.
+pull_ruby_base_image "$RUBY_IMAGE"
 
-WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
 WEB_TAG=$(echo $REVISION | cut -c1-12)
 
 # Copy secrets from credentials repo
@@ -23,11 +28,26 @@ source .buildkite/scripts/copy_secrets.sh
 copy_secrets
 
 # Build web image
+build_web_image() {
+  NEW_WEB_TAG=$WEB_TAG \
+    NEW_WEB_REPO=$WEB_REPO \
+    NEW_BASE_REPO=$WEB_BASE_REPO \
+    make build "$@"
+}
+
 logger "Building $WEB_REPO:web-$WEB_TAG"
-NEW_WEB_TAG=$WEB_TAG \
-  NEW_WEB_REPO=$WEB_REPO \
-  NEW_BASE_REPO=$WEB_BASE_REPO \
-  make build
+if buildkit_cache_available; then
+  logger "Using BuildKit registry cache ($WEB_REPO:buildcache)"
+  if ! build_web_image \
+    DOCKER_BUILD="$(buildkit_docker_build)" \
+    WEB_CACHE_OPTS="$(buildkit_cache_opts $WEB_REPO:buildcache)"; then
+    buildkit_fallback_notice "web" "buildx build failed"
+    build_web_image
+  fi
+else
+  buildkit_fallback_notice "web" "buildx unavailable"
+  build_web_image
+fi
 
 # Push web image
 logger "Pushing $WEB_REPO:web-$WEB_TAG"
@@ -60,10 +80,26 @@ function generate_nginx_tag() {
 
 # Build and push nginx image
 NGINX_TAG=$(generate_nginx_tag "public" "docker/nginx")
+
+build_nginx_image() {
+  NGINX_TAG=$NGINX_TAG \
+    NGINX_REPO=$AWS_NGINX_REPO \
+    make build_nginx "$@"
+}
+
 logger "Building $AWS_NGINX_REPO:$NGINX_TAG"
-NGINX_TAG=$NGINX_TAG \
-  NGINX_REPO=$AWS_NGINX_REPO \
-  make build_nginx
+if buildkit_cache_available; then
+  logger "Using BuildKit registry cache ($AWS_NGINX_REPO:buildcache)"
+  if ! build_nginx_image \
+    DOCKER_BUILD="$(buildkit_docker_build)" \
+    NGINX_CACHE_OPTS="$(buildkit_cache_opts $AWS_NGINX_REPO:buildcache)"; then
+    buildkit_fallback_notice "web_nginx" "buildx build failed"
+    build_nginx_image
+  fi
+else
+  buildkit_fallback_notice "web_nginx" "buildx unavailable"
+  build_nginx_image
+fi
 
 logger "Pushing $AWS_NGINX_REPO:$NGINX_TAG"
 for i in {1..3}; do

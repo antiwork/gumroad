@@ -18,12 +18,24 @@ steps:
           username: gumroadteam
           password-env: DOCKERHUB_PASSWORD
 
+  # The branch app nginx image is content-addressed (tagged by the last commit
+  # touching docker/branch_app_nginx) and has no dependency on the base/web
+  # images or compiled assets, so it builds in parallel with the rest of the
+  # pipeline instead of serially inside the deploy step.
+  - label: ":docker: Build Branch App Nginx Image"
+    key: preview-build-nginx-image
+    command: ".buildkite/scripts/build_branch_app_nginx.sh"
+    timeout_in_minutes: 15
+    plugins:
+      - docker-login#v3.0.0:
+          username: gumroadteam
+          password-env: DOCKERHUB_PASSWORD
+
   - label: ":gear: Compile Assets"
     key: preview-compile-assets
     depends_on: preview-build-web-image
     command: ".buildkite/scripts/compile_assets.sh"
     artifact_paths: "log/**/*"
-    parallelism: 2
     timeout_in_minutes: 25
     plugins:
       - docker-login#v3.0.0:
@@ -36,7 +48,9 @@ steps:
 
   - label: ":rocket: Deploy Preview App"
     key: build-and-deploy-preview
-    depends_on: preview-compile-assets
+    depends_on:
+      - preview-compile-assets
+      - preview-build-nginx-image
     command: ".buildkite/scripts/deploy_branch.sh"
     timeout_in_minutes: 45
     plugins:
