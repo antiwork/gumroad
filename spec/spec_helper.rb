@@ -17,6 +17,11 @@ JsonMatchers.schema_root = "spec/support/schemas"
 
 KnapsackPro::Adapters::RSpecAdapter.bind
 
+# TestProf profilers (factory profiling, event profiling, etc.) activate only when
+# their environment variables are set, e.g. FPROF=1 or EVENT_PROF=factory.create.
+# Requiring the gem is otherwise a no-op, so it is safe to load unconditionally.
+require "test_prof" if ENV["FPROF"] || ENV["EVENT_PROF"] || ENV["TEST_RUBY_PROF"] || ENV["TEST_STACK_PROF"]
+
 ActiveRecord::Migration.maintain_test_schema!
 
 # Capybara settings
