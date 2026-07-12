@@ -67,6 +67,12 @@ $ DISABLE_SPRING=1 bin/rspec spec/...   # bypass Spring for a pristine boot (e.g
 
 Spring watches `config/`, `.env*` files, and Gemfile.lock and restarts itself when they change — but if test behavior looks stale or env vars don't take effect, `bin/spring stop` is the first thing to try.
 
+On macOS, Spring's fork-based workers can crash inside Apple's Objective-C runtime (`+[NSCharacterSet initialize] may have been in progress in another thread when fork() was called`). If you hit that, set this in your shell profile:
+
+```bash
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
+
 ### Integration testing
 
 We use capybara with selenium (webdriver) for our integration specs.
