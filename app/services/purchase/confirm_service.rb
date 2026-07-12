@@ -24,7 +24,7 @@ class Purchase::ConfirmService < Purchase::BaseService
     error_message = check_for_card_handling_error
     return error_message if error_message.present?
 
-    # Recurring registrations on a setup intent (free trials, preorders) complete
+    # Recurring registrations on a setup intent (multi-product checkouts, free trials, preorders) complete
     # asynchronously when the buyer had to authenticate (3DS), so the synchronous mandate
     # check in Order::ChargeService never saw the succeeded intent. Re-check now that the
     # buyer has confirmed — in the background, because the check retrieves the setup intent

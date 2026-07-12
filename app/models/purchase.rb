@@ -3052,8 +3052,15 @@ class Purchase < ApplicationRecord
     true
   end
 
+  # A charge that rebills a card the buyer saved earlier: subscription renewals and
+  # preorder releases. These run off-session against credentials from a past purchase,
+  # unlike first-time checkout charges (even off-session ones in multi-seller carts).
+  def is_a_saved_card_rebill?
+    preorder.present? || is_recurring_subscription_charge
+  end
+
   def is_an_off_session_charge_on_indian_card?
-    stripe_charge_processor? && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
+    stripe_charge_processor? && card_country == "IN" && is_a_saved_card_rebill?
   end
 
   # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
@@ -3722,7 +3729,7 @@ class Purchase < ApplicationRecord
         # was registered at the original purchase, so a missing mandate on those charges is
         # an anomaly worth reporting/failing on. First-time checkout charges can also run
         # off-session (multi-seller carts) but must not be treated that way.
-        mandate_expected = preorder.present? || is_recurring_subscription_charge
+        mandate_expected = is_a_saved_card_rebill?
 
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
