@@ -21,7 +21,12 @@ ActiveRecord::Migration.maintain_test_schema!
 
 # Capybara settings
 Capybara.test_id = "data-testid"
-Capybara.default_max_wait_time = 25
+# 10 seconds is enough for a healthy page to settle. The old value (25s) meant
+# every failing selector — including the retries rspec-retry adds on CI — sat
+# for 25 seconds before giving up, which dominated the tail of slow shards.
+# Specs that genuinely need longer (Stripe redirects, file uploads) already
+# pass an explicit `wait:` at the call site.
+Capybara.default_max_wait_time = 10
 Capybara.app_host = "#{PROTOCOL}://#{DOMAIN}"
 Capybara.server = :puma
 Capybara.server_port = URI(Capybara.app_host).port
