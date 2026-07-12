@@ -29,7 +29,9 @@ module Purchase::Reportable
       return 0 if chargedback_not_reversed_or_refunded?
       # No chargeback or refunds
       return self.send(purchase_attribute) unless stripe_partially_refunded? || chargedback_not_reversed_or_refunded?
-      refunded_cents = refunds.sum(refund_attribute)
+      # Effective refunds only: a failed (bounced) refund never delivered money, so
+      # it must not reduce reported net revenue.
+      refunded_cents = refunds.effective.sum(refund_attribute)
       # No refunded amount
       return self.send(purchase_attribute) unless refunded_cents > 0
       # Partially refunded amount

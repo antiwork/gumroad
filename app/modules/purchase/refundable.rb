@@ -525,7 +525,10 @@ class Purchase
       amounts_query = "COALESCE(SUM(total_transaction_cents), 0) AS tt_cents, COALESCE(SUM(amount_cents), 0) AS p_cents, " \
                         "COALESCE(SUM(creator_tax_cents), 0) AS ct_cents, COALESCE(SUM(gumroad_tax_cents), 0) as gt_cents," \
                         "COALESCE(SUM(fee_cents), 0) AS ft_cents"
-      existing_refunds = refunds.select(amounts_query).first
+      # Effective refunds only: a failed refund's money came back to us, so its
+      # amounts are still refundable — counting the failed row here would record a
+      # zero-amount Refund row after Stripe already moved real money on a re-refund.
+      existing_refunds = refunds.effective.select(amounts_query).first
       return unless existing_refunds
       { total_transaction_cents: (total_transaction_cents - existing_refunds.tt_cents),
         amount_cents: (price_cents - existing_refunds.p_cents),

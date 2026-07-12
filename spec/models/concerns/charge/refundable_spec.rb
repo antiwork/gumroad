@@ -4,6 +4,29 @@ require "spec_helper"
 
 describe Charge::Refundable do
   describe "#handle_event_refund_updated!" do
+    describe "failed refunds are frozen" do
+      let(:purchase) { create(:purchase, stripe_transaction_id: "ch_frozen_#{SecureRandom.hex(6)}") }
+
+      it "does not let a late refund.updated overwrite a failed status" do
+        # A stale "pending" update (Stripe retry delivered after the failure landed)
+        # must not resurrect the refund: the failure handling already reversed the
+        # balance debits, so flipping status off "failed" would make the bounced
+        # refund count as delivered money again and block re-refunding.
+        refund = create(:refund, purchase:, processor_refund_id: "re_frozen_#{SecureRandom.hex(6)}", status: "failed")
+
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund.processor_refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "pending", refunded_amount_cents: 100, refund_reason: nil }
+
+        purchase.handle_event_refund_updated!(event)
+
+        expect(refund.reload.status).to eq("failed")
+      end
+    end
+
     let(:purchase) do
       create(:purchase,
              price_cents: 10_00,

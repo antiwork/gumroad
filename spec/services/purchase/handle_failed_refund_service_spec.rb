@@ -81,6 +81,92 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.gross_amount_refunded_cents).to eq(0)
     end
 
+    it "clears the purchase_refund_balance pointer so a re-refund debits the seller again" do
+      # Regression: the original refund parks the seller's debited balance in
+      # purchase_refund_balance, and seller_balance_update_eligible? refuses a second
+      # debit while it's set (for a fully-refunded purchase). Without clearing it, a
+      # re-refund after a failure would move real money at Stripe but never debit the
+      # seller — the seller keeps earnings for a sale the buyer got refunded.
+      purchase.update!(purchase_refund_balance: refund.balance_transactions.first.balance)
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.purchase_refund_balance).to be_nil
+      expect(purchase.seller_balance_update_eligible?).to eq(true)
+    end
+
+    it "keeps the purchase_refund_balance pointer when another effective refund remains" do
+      create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+      balance = refund.balance_transactions.first.balance
+      purchase.update!(purchase_refund_balance: balance)
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.purchase_refund_balance).to eq(balance)
+    end
+
+    it "restores the giftee purchase's refunded flags alongside the main purchase" do
+      gift = create(:gift, gifter_purchase: purchase, link: product)
+      giftee_purchase = create(:purchase, link: product, is_gift_receiver_purchase: true, stripe_refunded: true)
+      gift.update!(giftee_purchase:)
+      purchase.update!(is_gift_sender_purchase: true)
+
+      described_class.new(refund:).perform
+
+      expect(giftee_purchase.reload.stripe_refunded?).to eq(false)
+    end
+
+    it "mirrors update_user_balance from the original transaction" do
+      # An original debit created with update_user_balance: false (e.g. an affiliate
+      # debit during a merchant migration) has no balance attached; its offset must
+      # not credit a live balance the original never debited.
+      issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -100, net_cents: -100)
+      holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -100, net_cents: -100)
+      no_balance_original = BalanceTransaction.create!(
+        user: seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        issued_amount:,
+        holding_amount:,
+        update_user_balance: false
+      )
+      expect(no_balance_original.balance_id).to be_nil
+
+      described_class.new(refund:).perform
+
+      offsets = refund.reload.balance_transactions.where("issued_amount_gross_cents > 0")
+      no_balance_offset = offsets.find { |bt| bt.issued_amount_gross_cents == 100 }
+      expect(no_balance_offset.balance_id).to be_nil
+      with_balance_offset = offsets.find { |bt| bt.issued_amount_gross_cents == 2000 }
+      expect(with_balance_offset.balance_id).to be_present
+    end
+
+    context "when the refund's money moved outside Gumroad's ledger" do
+      it "marks the refund failed but reverses nothing for a Stripe Connect purchase" do
+        allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          a_string_including("NOTHING was reversed automatically"),
+          context: hash_including(refund_id: refund.id, balance_reversed: false)
+        )
+
+        expect(described_class.new(refund:).perform).to eq(true)
+
+        expect(refund.reload.status).to eq("failed")
+        expect(refund.balance_reversed_on_failure).to be_falsey
+        expect(refund.balance_transactions.count).to eq(1) # only the original debit
+        expect(purchase.reload.stripe_refunded?).to eq(true) # untouched — human queue owns it
+      end
+
+      it "does not notify twice for a re-delivered webhook on a manual-review case" do
+        allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+        expect(described_class.new(refund:).perform).to eq(true)
+
+        expect(ErrorNotifier).not_to receive(:notify)
+        expect(described_class.new(refund: Refund.find(refund.id)).perform).to eq(false)
+      end
+    end
+
     it "keeps a partial refund flag when another non-failed refund remains" do
       create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
 
@@ -145,6 +231,40 @@ describe Purchase::HandleFailedRefundService do
       expect(reversal.issued_amount_currency).to eq(Currency::USD)
       expect(reversal.issued_amount_gross_cents).to eq(2000)
       expect(refund.presentment_amount_cents).to eq(1850)
+    end
+
+    it "allows a full end-to-end re-refund that debits the seller again" do
+      # The whole point of the reversal: after the failure is handled, a support
+      # re-refund must behave like a first refund — real processor call, a new
+      # effective refund row, and a fresh seller balance debit. This is the exact
+      # sequence preview QA exercised (refund → refund.failed → re-refund).
+      purchase.update!(purchase_refund_balance: refund.balance_transactions.first.balance)
+      described_class.new(refund:).perform
+      purchase.reload
+
+      stripe_refund = double("stripe_refund", status: "pending", id: "re_rerefund_#{SecureRandom.hex(6)}")
+      charge_refund = ChargeRefund.new
+      charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      charge_refund.id = stripe_refund.id
+      charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -2000)
+      charge_refund.instance_variable_set(:@refund, stripe_refund)
+      expect(ChargeProcessor).to receive(:refund!)
+        .with(purchase.charge_processor_id, purchase.stripe_transaction_id, hash_including(amount_cents: nil))
+        .and_return(charge_refund)
+
+      # Refund as a Gumroad team member (the admin flow exercised in preview QA);
+      # creator-initiated refunds additionally check the seller's unpaid balance.
+      admin = create(:admin_user)
+      expect(purchase.refund_and_save!(admin.id, reason: "re-refund after bounced bank-transfer refund")).to be(true)
+
+      purchase.reload
+      expect(purchase.stripe_refunded?).to eq(true)
+      new_refund = purchase.refunds.order(:id).last
+      expect(new_refund.id).not_to eq(refund.id)
+      expect(new_refund.amount_cents).to eq(2000)
+      seller_debits = new_refund.balance_transactions.where(user: seller)
+                                .where("issued_amount_gross_cents < 0")
+      expect(seller_debits).to be_present
     end
   end
 end
