@@ -8,10 +8,13 @@
 # noise, and a real risk of the hook leaking into main. These tasks are reviewed once and reused
 # forever instead.
 #
-# Run them through the preview app's Rails console one-shot path (see "Deploying to a preview app"
-# in docs/deploying.md), for example:
+# Run them through the preview app's Rails console (see "Deploying to a preview app" in
+# docs/deploying.md). The deployment repo's console.sh takes the branch via the BRANCH env var
+# and needs -w for a writable connection (these tasks write; the default is a read-only replica):
 #
-#   COMMAND='Rake::Task["preview_qa:backdate_purchase"].invoke("<purchase external_id>")' ./console.sh -w <branch>
+#   cd nomad/staging/deploy_branch && BRANCH=<branch name> ./console.sh -w
+#   # then, at the console prompt:
+#   system 'bundle exec rake "preview_qa:backdate_purchase[<purchase external_id>]"'
 #
 # These tasks mutate data, so they only exist where mutating data is safe: preview apps,
 # development, and the test suite. Production is obviously off-limits, but so is shared staging
