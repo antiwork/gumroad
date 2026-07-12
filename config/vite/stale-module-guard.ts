@@ -31,10 +31,19 @@ export function staleModuleGuard(): Plugin {
       return null;
     },
     configureServer(server) {
+      // In development this app serves its assets under a base path
+      // ("/vite-dev/" — see config/vite.json), but Vite's module graph keys
+      // URLs without that prefix. Plugin middlewares run before Vite strips
+      // the base from req.url, so we have to strip it ourselves or every
+      // module graph lookup below silently misses.
+      const base = server.config.base;
       server.middlewares.use((req, _res, next) => {
         void (async () => {
           try {
-            const url = req.url?.split("?")[0];
+            let url = req.url?.split("?")[0];
+            if (url && base !== "/" && url.startsWith(base)) {
+              url = url.slice(base.length - 1);
+            }
             if (url && /\.(?:[jt]sx?|css|scss|json)$/u.test(url)) {
               const mod = await server.moduleGraph.getModuleByUrl(url);
               const file = mod?.file;
