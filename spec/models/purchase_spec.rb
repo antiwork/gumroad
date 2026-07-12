@@ -2775,6 +2775,20 @@ describe Purchase, :vcr do
           .with(anything, anything, anything, anything, anything, anything, hash_including(mandate_expected: true))
       end
 
+      it "is true when charging a preorder release" do
+        product = create(:product, is_in_preorder_state: true)
+        preorder_link = create(:preorder_link, link: product)
+        authorization_purchase = create(:preorder_authorization_purchase, link: product)
+        preorder = preorder_link.build_preorder(authorization_purchase)
+        preorder.save!
+        purchase = create(:purchase, purchase_state: "in_progress", link: product, preorder:)
+
+        purchase.send(:create_charge_intent, build(:chargeable), off_session: true)
+
+        expect(ChargeProcessor).to have_received(:create_payment_intent_or_charge!)
+          .with(anything, anything, anything, anything, anything, anything, hash_including(mandate_expected: true))
+      end
+
       it "is false when charging a first-time purchase" do
         purchase = create(:purchase, purchase_state: "in_progress")
 
