@@ -13,6 +13,16 @@ COMPOSE_PROJECT_NAME ?= web
 RUBY_VERSION := $(shell cat .ruby-version)
 WEB_BASE_DOCKERFILE_FROM ?= ruby:$(RUBY_VERSION)-slim-bullseye
 DOCKER_CMD ?= docker
+# Overridable so CI can swap in `docker buildx build --load` (BuildKit) while
+# local/fallback builds keep the classic builder. --compress lives here because
+# buildx does not support the flag.
+DOCKER_BUILD ?= $(DOCKER_CMD) build --compress
+# Per-target cache flags. Defaults reproduce the pre-BuildKit behavior exactly;
+# CI overrides them with --cache-from/--cache-to type=registry against ECR.
+BASE_CACHE_OPTS ?= --cache-from $(NEW_BASE_REPO):latest
+WEB_CACHE_OPTS ?= --cache-from $(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) --cache-from $(NEW_WEB_REPO):web-$(NEW_WEB_TAG)
+NGINX_CACHE_OPTS ?=
+BRANCH_APP_NGINX_CACHE_OPTS ?=
 DOCKER_COMPOSE_CMD ?= docker compose
 AWS_CLI_DOCKER_IMAGE ?= garland/aws-cli-docker
 PUSH_ASSETS ?= false
@@ -24,11 +34,11 @@ build_base:
 	rm -f docker/base/Gemfile* docker/base/.ruby-version
 	cp Gemfile* .ruby-version docker/base
 	cd docker/base \
-		&& $(DOCKER_CMD) build -t $(NEW_BASE_REPO):latest \
+		&& $(DOCKER_BUILD) -t $(NEW_BASE_REPO):latest \
 			--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
 			--build-arg WEB_BASE_DOCKERFILE_FROM=$(WEB_BASE_DOCKERFILE_FROM) \
-			--cache-from $(NEW_BASE_REPO):latest \
-			--compress . \
+			$(BASE_CACHE_OPTS) \
+			. \
 		&& ./generate_tag_for_web_base.sh | xargs -I{} $(DOCKER_CMD) tag $(NEW_BASE_REPO):latest $(NEW_BASE_REPO):{} \
 		&& rm -f Gemfile* .ruby-version
 
@@ -48,24 +58,25 @@ build:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	echo $(NEW_WEB_TAG) > revision
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
-	$(DOCKER_CMD) build -t $(NEW_WEB_REPO):latest \
+	$(DOCKER_BUILD) -t $(NEW_WEB_REPO):latest \
 		--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
-		--cache-from $(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
-		--cache-from $(NEW_WEB_REPO):web-$(NEW_WEB_TAG) \
+		$(WEB_CACHE_OPTS) \
 		--build-arg WEB_DOCKERFILE_FROM \
 		--file docker/web/Dockerfile \
-		--compress .
+		.
 	$(DOCKER_CMD) tag $(NEW_WEB_REPO):latest $(NEW_WEB_REPO):web-$(NEW_WEB_TAG)
 
 build_nginx:
-	$(DOCKER_CMD) build -t $(NGINX_REPO):$(NGINX_TAG) \
+	$(DOCKER_BUILD) -t $(NGINX_REPO):$(NGINX_TAG) \
+		$(NGINX_CACHE_OPTS) \
 		--file docker/nginx/Dockerfile \
-		--compress .
+		.
 
 build_branch_app_nginx:
-	$(DOCKER_CMD) build -t $(BRANCH_APP_NGINX_REPO):$(BRANCH_APP_NGINX_TAG) \
+	$(DOCKER_BUILD) -t $(BRANCH_APP_NGINX_REPO):$(BRANCH_APP_NGINX_TAG) \
+		$(BRANCH_APP_NGINX_CACHE_OPTS) \
 		--file docker/branch_app_nginx/Dockerfile \
-		--compress .
+		.
 
 build_test:
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \

@@ -6,6 +6,7 @@ set -euo pipefail
 # a drifted copy here would push an image the deploy never looks for.
 # (Sourced first: helper.sh also defines a generic logger; ours below wins.)
 source "$(git rev-parse --show-toplevel)/ci_scripts/helper.sh"
+source "$(git rev-parse --show-toplevel)/.buildkite/scripts/buildkit_cache.sh"
 
 GREEN="\033[0;32m"
 NC="\033[0m"
@@ -21,10 +22,25 @@ AWS_BRANCH_APP_NGINX_REPO=${ECR_REGISTRY}/gumroad/branch_app_nginx
 BRANCH_APP_NGINX_TAG=$(generate_nginx_tag "docker/branch_app_nginx")
 
 if ! docker manifest inspect "$AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG" > /dev/null 2>&1; then
+  build_image() {
+    BRANCH_APP_NGINX_REPO=$AWS_BRANCH_APP_NGINX_REPO \
+      BRANCH_APP_NGINX_TAG=$BRANCH_APP_NGINX_TAG \
+      make build_branch_app_nginx "$@"
+  }
+
   logger "Building $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"
-  BRANCH_APP_NGINX_REPO=$AWS_BRANCH_APP_NGINX_REPO \
-    BRANCH_APP_NGINX_TAG=$BRANCH_APP_NGINX_TAG \
-    make build_branch_app_nginx
+  if buildkit_cache_available; then
+    logger "Using BuildKit registry cache ($AWS_BRANCH_APP_NGINX_REPO:buildcache)"
+    if ! build_image \
+      DOCKER_BUILD="$(buildkit_docker_build)" \
+      BRANCH_APP_NGINX_CACHE_OPTS="$(buildkit_cache_opts "$AWS_BRANCH_APP_NGINX_REPO:buildcache")"; then
+      logger "buildx build failed — falling back to plain docker build"
+      build_image
+    fi
+  else
+    logger "buildx unavailable — using plain docker build"
+    build_image
+  fi
 
   logger "Pushing $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"
   for i in {1..3}; do
