@@ -3718,6 +3718,12 @@ class Purchase < ApplicationRecord
         description = "You bought #{link.long_url}!"
         mandate_options = mandate_options_for_stripe
 
+        # Renewals and preorder releases rebill a saved card whose e-mandate (Indian cards)
+        # was registered at the original purchase, so a missing mandate on those charges is
+        # an anomaly worth reporting/failing on. First-time checkout charges can also run
+        # off-session (multi-seller carts) but must not be treated that way.
+        mandate_expected = preorder.present? || is_recurring_subscription_charge
+
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
                                                                          amount_cents,
@@ -3728,7 +3734,8 @@ class Purchase < ApplicationRecord
                                                                          transfer_group: id,
                                                                          off_session:,
                                                                          setup_future_charges:,
-                                                                         mandate_options:)
+                                                                         mandate_options:,
+                                                                         mandate_expected:)
 
         if charge_intent.id.present?
           if processor_payment_intent.present?

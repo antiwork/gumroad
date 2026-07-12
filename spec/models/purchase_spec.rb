@@ -2755,6 +2755,35 @@ describe Purchase, :vcr do
         @purchase.process!
       end
     end
+
+    describe "mandate_expected" do
+      # Renewals and preorder releases rebill a saved card whose e-mandate (Indian cards)
+      # was registered at the original purchase; the charge processor uses this signal to
+      # report — and, behind a flag, fail fast on — a missing mandate. First-time checkout
+      # charges also run off-session (multi-seller carts) but must not carry the signal,
+      # or the fail-fast would block legitimate checkouts.
+      before do
+        allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!).and_return(double(id: nil))
+      end
+
+      it "is true when charging a recurring subscription purchase" do
+        purchase = create(:recurring_membership_purchase, purchase_state: "in_progress")
+
+        purchase.send(:create_charge_intent, build(:chargeable), off_session: true)
+
+        expect(ChargeProcessor).to have_received(:create_payment_intent_or_charge!)
+          .with(anything, anything, anything, anything, anything, anything, hash_including(mandate_expected: true))
+      end
+
+      it "is false when charging a first-time purchase" do
+        purchase = create(:purchase, purchase_state: "in_progress")
+
+        purchase.send(:create_charge_intent, build(:chargeable), off_session: true)
+
+        expect(ChargeProcessor).to have_received(:create_payment_intent_or_charge!)
+          .with(anything, anything, anything, anything, anything, anything, hash_including(mandate_expected: false))
+      end
+    end
   end
 
   describe "total_transaction_amount_for_gumroad_cents" do
