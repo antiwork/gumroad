@@ -135,7 +135,7 @@ const tsxConfig = tseslint.config({
 });
 
 const nodeConfig = {
-  files: ["eslint.config.js", "vite.config.ts", "vite.config.widget.ts"],
+  files: ["eslint.config.js", "vite.config.ts", "vite.config.widget.ts", "config/vite/**/*.ts"],
   languageOptions: {
     globals: {
       ...globals.node,
