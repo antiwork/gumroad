@@ -46,7 +46,12 @@ LOCAL_DUMP=$(mktemp /tmp/prepared_test_db.XXXXXX.sql.gz)
 # stopped container we can copy files out of.
 CONTAINER_ID=$(docker create "$IMAGE")
 
-if docker cp "$CONTAINER_ID:$DUMP_PATH_IN_IMAGE" "$LOCAL_DUMP" 2>/dev/null; then
+# The dump must both exist in the image AND be a valid gzip file. A truncated
+# or corrupt dump (say, from a build that got interrupted mid-copy) would
+# otherwise make every retry of this step fail the same way; checking validity
+# up front lets us fall back to `rake db:prepare` instead.
+if docker cp "$CONTAINER_ID:$DUMP_PATH_IN_IMAGE" "$LOCAL_DUMP" 2>/dev/null \
+    && gunzip -t "$LOCAL_DUMP" 2>/dev/null; then
   echo "Restoring baked test database dump ($(du -h "$LOCAL_DUMP" | cut -f1))..."
   # The mysql client runs from the same image the db_test service uses,
   # because the test image doesn't ship a mysql client binary. The dump was
@@ -57,7 +62,7 @@ if docker cp "$CONTAINER_ID:$DUMP_PATH_IN_IMAGE" "$LOCAL_DUMP" 2>/dev/null; then
     mysql --host=db_test --user=root
   echo "Test database restored from baked dump"
 else
-  echo "No baked test database dump found in image — falling back to rake db:prepare"
+  echo "No usable baked test database dump in image (missing or corrupt) — falling back to rake db:prepare"
   docker run --rm --entrypoint="" --network "$NETWORK" -e RAILS_ENV=test "$IMAGE" \
     bundle exec rake db:prepare
 fi
