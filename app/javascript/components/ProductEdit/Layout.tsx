@@ -253,14 +253,18 @@ export const Layout = ({
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
+              {/* Hidden on mobile: the form's URL field already has a Copy URL affordance there,
+                  and four header actions render as an awkward 2x2 grid on small screens. */}
               <CopyToClipboard text={url} copyTooltip="Copy product URL">
-                <Button size="icon">
+                <Button className="max-lg:hidden">
                   <LinkIcon className="size-5" />
+                  Copy link
                 </Button>
               </CopyToClipboard>
               <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
-                <Button size="icon">
+                <Button className="max-lg:hidden">
                   <CartPlus className="size-5" />
+                  Copy checkout link
                 </Button>
               </CopyToClipboard>
             </>
