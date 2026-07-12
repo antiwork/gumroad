@@ -52,7 +52,13 @@ module Ai::StoreAgentApiCatalog
         if value.match?(%r{[/\\]}) || value.include?("..") || value.include?("%")
           raise ArgumentError, "Invalid path parameter :#{key}"
         end
-        value
+        # Percent-encode the value before it is spliced into the URL. LLM-proposed ids sometimes
+        # carry stray non-ASCII characters (e.g. "GJs2આ"), and Ruby's URI.parse — which rack-test
+        # runs on the internal request path — raises URI::InvalidURIError on any non-ASCII URI,
+        # turning a merely-wrong id into a 500 at confirm time (gumroad-private#1054). Encoded,
+        # the request routes normally and the API answers with its own clean "not found" message.
+        # Encoding happens AFTER the validations above so their view of the raw value is unchanged.
+        ERB::Util.url_encode(value)
       end
     end
 
