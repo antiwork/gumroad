@@ -20,8 +20,25 @@ class Ai::AnthropicClient
   class Error < StandardError; end
   # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
   # limited, returned a 5xx, or the network dropped. Distinct from Error so callers (and our own
-  # retry loop) never retry a real bug like a malformed tool call.
-  class TransientError < Error; end
+  # retry loop) never retry a real bug like a malformed tool call. `retry_after` carries the
+  # server's own back-off hint (the Retry-After header on a 429) in seconds, when it sent one.
+  class TransientError < Error
+    attr_reader :retry_after
+
+    def initialize(message, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
+  # the retry loop uses it so we don't retry into the same rate-limit window and waste an attempt.
+  class TransientError < Error
+    attr_reader :retry_after
+
+    def initialize(message, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
 
   API_URL = "https://api.anthropic.com/v1/messages"
   API_VERSION = "2023-06-01"
@@ -41,6 +58,13 @@ class Ai::AnthropicClient
   # never retried once any output has reached the caller — the seller would see the reply restart.
   MAX_ATTEMPTS = 3
   RETRY_BASE_DELAY_IN_SECONDS = 1
+
+  # Ceiling on the TOTAL seconds one client instance may spend asleep between retries, across all
+  # of its calls. The agent's buffered tool loop makes several requests on one client from the web
+  # request thread (which Rack::Timeout is watching), so without a shared cap each request could
+  # add its own retry delays and stack up many seconds of blocked time. Once the budget is spent,
+  # failures surface immediately instead of sleeping.
+  RETRY_SLEEP_BUDGET_IN_SECONDS = 6
 
   # Response statuses worth a retry: rate limit (429), server errors (5xx), and Anthropic's
   # "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is deterministic —
