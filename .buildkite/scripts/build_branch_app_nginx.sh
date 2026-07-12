@@ -34,11 +34,11 @@ if ! docker manifest inspect "$AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG" 
     if ! build_image \
       DOCKER_BUILD="$(buildkit_docker_build)" \
       BRANCH_APP_NGINX_CACHE_OPTS="$(buildkit_cache_opts "$AWS_BRANCH_APP_NGINX_REPO:buildcache")"; then
-      logger "buildx build failed — falling back to plain docker build"
+      buildkit_fallback_notice "branch_app_nginx" "buildx build failed"
       build_image
     fi
   else
-    logger "buildx unavailable — using plain docker build"
+    buildkit_fallback_notice "branch_app_nginx" "buildx unavailable"
     build_image
   fi
 

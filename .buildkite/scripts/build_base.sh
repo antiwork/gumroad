@@ -15,7 +15,7 @@ RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
 # generate_tag_for_web_base.sh hashes `docker history` of the ruby base image,
 # so it must be present locally — but only pull it when it's missing instead of
 # unconditionally re-pulling on every build.
-pull_image_if_missing "$RUBY_IMAGE"
+pull_ruby_base_image "$RUBY_IMAGE"
 
 WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
 if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
@@ -31,11 +31,11 @@ if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
     if ! build_base_image \
       DOCKER_BUILD="$(buildkit_docker_build)" \
       BASE_CACHE_OPTS="$(buildkit_cache_opts $WEB_BASE_REPO:buildcache)"; then
-      logger "buildx build failed — falling back to plain docker build"
+      buildkit_fallback_notice "web_base" "buildx build failed"
       build_base_image
     fi
   else
-    logger "buildx unavailable — using plain docker build"
+    buildkit_fallback_notice "web_base" "buildx unavailable"
     build_base_image
   fi
 

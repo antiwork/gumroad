@@ -18,7 +18,7 @@ RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
 # The Makefile's generate_tag_for_web_base.sh hashes `docker history` of the
 # ruby base image, so it must be present locally — but only pull it when it's
 # missing instead of unconditionally re-pulling on every build.
-pull_image_if_missing "$RUBY_IMAGE"
+pull_ruby_base_image "$RUBY_IMAGE"
 
 WEB_TAG=$(echo $REVISION | cut -c1-12)
 
@@ -40,11 +40,11 @@ if buildkit_cache_available; then
   if ! build_web_image \
     DOCKER_BUILD="$(buildkit_docker_build)" \
     WEB_CACHE_OPTS="$(buildkit_cache_opts $WEB_REPO:buildcache)"; then
-    logger "buildx build failed — falling back to plain docker build"
+    buildkit_fallback_notice "web" "buildx build failed"
     build_web_image
   fi
 else
-  logger "buildx unavailable — using plain docker build"
+  buildkit_fallback_notice "web" "buildx unavailable"
   build_web_image
 fi
 
@@ -92,11 +92,11 @@ if buildkit_cache_available; then
   if ! build_nginx_image \
     DOCKER_BUILD="$(buildkit_docker_build)" \
     NGINX_CACHE_OPTS="$(buildkit_cache_opts $AWS_NGINX_REPO:buildcache)"; then
-    logger "buildx build failed — falling back to plain docker build"
+    buildkit_fallback_notice "web" "buildx build failed"
     build_nginx_image
   fi
 else
-  logger "buildx unavailable — using plain docker build"
+  buildkit_fallback_notice "web" "buildx unavailable"
   build_nginx_image
 fi
 
