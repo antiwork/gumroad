@@ -132,7 +132,9 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
       sh /app/docker/web/push_assets_to_s3.sh; then
       logger "S3 asset sync failed — continuing with the cached staging image (assets were already uploaded when the cache entry was created)"
     fi
-    docker rm -f $container_id >/dev/null 2>&1 || true
+    # -v also removes the anonymous /app volume the data container created,
+    # so cache-hit builds don't leak a volume on the CI agent every deploy.
+    docker rm -fv $container_id >/dev/null 2>&1 || true
     return 0
   }
 
