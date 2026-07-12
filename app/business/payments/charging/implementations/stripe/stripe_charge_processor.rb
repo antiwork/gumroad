@@ -487,6 +487,12 @@ class StripeChargeProcessor
   rescue Stripe::InvalidRequestError => e
     raise ChargeProcessorAlreadyRefundedError.new("Stripe charge was already refunded. Stripe response: #{e.message}", original_error: e) unless e.message[/already been refunded/].nil?
 
+    # Refunds of bank-transfer payment methods (iDEAL, Bancontact, ACH) are rejected
+    # immediately when the Stripe balance can't cover them — unlike card refunds, which
+    # Stripe queues until the balance recovers. Surface that as its own error so the
+    # person refunding sees an actionable message instead of a silent failure.
+    raise ChargeProcessorInsufficientFundsError.new("Stripe balance has insufficient funds to refund this charge. Stripe response: #{e.message}", original_error: e) if e.code == "balance_insufficient" || e.message[/insufficient.*(funds|balance)/i]
+
     raise ChargeProcessorInvalidRequestError.new(original_error: e)
   rescue Stripe::APIConnectionError, Stripe::APIError => e
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)

@@ -1494,6 +1494,34 @@ describe StripeChargeProcessor, :vcr do
         end
       end
 
+      describe "insufficient Stripe balance" do
+        # Bank-transfer refunds (iDEAL, Bancontact, ACH) are rejected immediately by
+        # Stripe when the platform balance can't cover them, unlike card refunds which
+        # queue until the balance recovers. Fully stubbed: no live charge needed to
+        # exercise the error-mapping path.
+        let(:stubbed_charge_id) { "ch_balance_insufficient_test" }
+
+        before do
+          allow(Stripe::Charge).to receive(:retrieve).with(stubbed_charge_id).and_return(
+            Stripe::Charge.construct_from(id: stubbed_charge_id, destination: nil)
+          )
+        end
+
+        it "raises an insufficient funds error when Stripe rejects for balance_insufficient" do
+          expect(Stripe::Refund).to receive(:create).and_raise(
+            Stripe::InvalidRequestError.new("You have insufficient funds in your Stripe account.", "amount", code: "balance_insufficient")
+          )
+          expect { subject.refund!(stubbed_charge_id) }.to raise_error(ChargeProcessorInsufficientFundsError)
+        end
+
+        it "raises an insufficient funds error when only the message indicates the balance shortfall" do
+          expect(Stripe::Refund).to receive(:create).and_raise(
+            Stripe::InvalidRequestError.new("Insufficient funds in Stripe balance to process refund.", "amount")
+          )
+          expect { subject.refund!(stubbed_charge_id) }.to raise_error(ChargeProcessorInsufficientFundsError)
+        end
+      end
+
       describe "error accessing stripe due to connection error" do
         before do
           expect(Stripe::Refund).to receive(:create).and_raise(Stripe::APIConnectionError)

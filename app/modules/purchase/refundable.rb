@@ -165,8 +165,16 @@ class Purchase
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false
       rescue ChargeProcessorInsufficientFundsError => e
-        logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
-        errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
+        logger.error "Insufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
+        # Same failure, two very different remedies: a creator refunding a PayPal sale
+        # must top up their own PayPal account, while a Stripe-balance shortfall (bank
+        # transfer methods like iDEAL/Bancontact reject the refund immediately instead
+        # of queueing it like cards) is on Gumroad's platform balance, not the creator.
+        if charge_processor_id == StripeChargeProcessor.charge_processor_id
+          errors.add :base, "The refund cannot be processed right now due to a temporary balance issue. Try again later or contact support."
+        else
+          errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
+        end
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
