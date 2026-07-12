@@ -27,9 +27,7 @@ export const VerifyLicense = () => (
     <ApiParameters>
       <ApiParameter
         name="product_id"
-        description={
-          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
-        }
+        description="(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
       />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
       <ApiParameter name="increment_uses_count" description='("true"/"false", optional, default: "true")' />
@@ -99,9 +97,7 @@ export const EnableLicense = () => (
     <ApiParameters>
       <ApiParameter
         name="product_id"
-        description={
-          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
-        }
+        description="(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
       />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
@@ -171,9 +167,7 @@ export const DisableLicense = () => (
     <ApiParameters>
       <ApiParameter
         name="product_id"
-        description={
-          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
-        }
+        description="(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
       />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
@@ -243,9 +237,7 @@ export const DecrementUsesCount = () => (
     <ApiParameters>
       <ApiParameter
         name="product_id"
-        description={
-          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
-        }
+        description="(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
       />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
@@ -319,9 +311,7 @@ export const RotateLicense = () => (
     <ApiParameters>
       <ApiParameter
         name="product_id"
-        description={
-          "(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
-        }
+        description="(the unique ID of the product — copy it from the license key block on the product's Content tab, or use the id field returned by the GET /products endpoint)"
       />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
