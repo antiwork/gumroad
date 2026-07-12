@@ -47,6 +47,8 @@ preview_asset_cache_inputs() {
     app/javascript \
     config \
     lib/json_schemas \
+    lib/tasks \
+    Rakefile \
     public \
     vendor/assets \
     patches \
@@ -86,15 +88,34 @@ preview_asset_cache_url() {
   echo "s3://$PREVIEW_ASSET_CACHE_BUCKET/$PREVIEW_ASSET_CACHE_PREFIX/$1.tar.gz"
 }
 
+# Copies between S3 and a local file. The Buildkite preview agents do all
+# their S3 work through the garland/aws-cli-docker image (see
+# docker/web/push_assets_to_s3.sh) rather than a host-installed aws CLI, so
+# prefer host aws when present but fall back to the container.
+preview_asset_cache_s3_cp() {
+  local src=$1 dst=$2
+  if command -v aws >/dev/null 2>&1; then
+    AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
+      AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
+      aws s3 cp "$src" "$dst"
+  else
+    docker run --rm \
+      -e AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
+      -e AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
+      -v "$PWD:/workdir" \
+      -w /workdir \
+      garland/aws-cli-docker \
+      aws s3 cp "$src" "$dst"
+  fi
+}
+
 # Downloads the tarball for the current tag. Returns non-zero (a miss) when
 # the object doesn't exist or S3 is unreachable — the caller falls back to a
 # full compile either way.
 preview_asset_cache_restore() {
   local tag=$1
   rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
-  AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
-    AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
-    aws s3 cp "$(preview_asset_cache_url "$tag")" "$PREVIEW_ASSET_CACHE_TARBALL"
+  preview_asset_cache_s3_cp "$(preview_asset_cache_url "$tag")" "$PREVIEW_ASSET_CACHE_TARBALL"
 }
 
 # Extracts the compiled artifacts out of the freshly built staging image and
@@ -114,9 +135,7 @@ preview_asset_cache_save() {
     return 1
   fi
 
-  if AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
-    AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
-    aws s3 cp "$PREVIEW_ASSET_CACHE_TARBALL" "$(preview_asset_cache_url "$tag")"; then
+  if preview_asset_cache_s3_cp "$PREVIEW_ASSET_CACHE_TARBALL" "$(preview_asset_cache_url "$tag")"; then
     preview_asset_cache_logger "Uploaded asset cache for tag $tag"
   else
     preview_asset_cache_logger "Failed to upload asset cache for tag $tag"
