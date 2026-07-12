@@ -22,9 +22,6 @@ class Page < ApplicationRecord
   # Slugs serve at the root of the username subdomain and custom domains, so
   # they must never shadow a path those domains already route. Keep this list
   # aligned with the storefront routes in config/routes.rb (root-domain
-  # Slugs serve at the root of the username subdomain and custom domains, so
-  # they must never shadow a path those domains already route. Keep this list
-  # aligned with the storefront routes in config/routes.rb (root-domain
   # `/:username/...` routes and the UserCustomDomainConstraint block).
   #
   # "profile" is reserved for a different reason: the pages management UI uses
