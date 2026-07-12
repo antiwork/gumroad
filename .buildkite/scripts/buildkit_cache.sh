@@ -23,6 +23,12 @@ buildkit_cache_available() {
     docker buildx create --name "$BUILDX_BUILDER_NAME" \
       --driver docker-container > /dev/null 2>&1 || return 1
   fi
+  # Inspecting with --bootstrap starts the builder container if it is not
+  # already running. Without this, the function reports the cache as available
+  # even when the container cannot start (for example, an unhealthy daemon),
+  # and the build only fails later inside the BuildKit path before falling
+  # back — one wasted build cycle and a confusing error in the logs.
+  docker buildx inspect "$BUILDX_BUILDER_NAME" --bootstrap > /dev/null 2>&1 || return 1
   return 0
 }
 
