@@ -38,8 +38,9 @@ preview_asset_cache_logger() {
 
 # Everything that can change the output of `docker/web/compile_assets.sh`.
 # Kept deliberately broad (all of config/, vendored assets, tracked public
-# files): a false miss costs one full compile; a false hit serves stale assets
-# on a preview app.
+# files, the base-image definition that pins the Node version, the Makefile
+# recipe the cache-hit path mirrors): a false miss costs one full compile; a
+# false hit serves stale assets on a preview app.
 preview_asset_cache_inputs() {
   git ls-tree -r HEAD -- \
     app/assets \
@@ -50,8 +51,10 @@ preview_asset_cache_inputs() {
     vendor/assets \
     patches \
     scripts/build_pages_tailwind.mjs \
+    docker/base \
     docker/web/compile_assets.sh \
     docker/web/push_assets_to_s3.sh \
+    Makefile \
     package.json \
     package-lock.json \
     .npmrc \
