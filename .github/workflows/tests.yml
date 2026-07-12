@@ -277,10 +277,11 @@ jobs:
             # Non-fatal: if the dump fails, shards detect the missing file
             # and fall back to rake db:prepare.
             logger "Baking prepared test database dump into the image"
-            if docker/ci/dump_test_db.sh web_${{ github.run_id }}_${{ github.run_attempt }}_default /tmp/prepared_test_db.sql.gz; then
-              docker cp /tmp/prepared_test_db.sql.gz $CONTAINER:/app/db/prepared_test_db.sql.gz
+            if docker/ci/dump_test_db.sh web_${{ github.run_id }}_${{ github.run_attempt }}_default /tmp/prepared_test_db.sql.gz \
+               && docker cp /tmp/prepared_test_db.sql.gz $CONTAINER:/app/db/prepared_test_db.sql.gz; then
+              logger "Test database dump baked into image"
             else
-              logger "Test database dump failed (non-fatal) — shards will fall back to db:prepare"
+              logger "Test database dump/copy failed (non-fatal) — shards will fall back to db:prepare"
             fi
 
             docker ps -lq \
