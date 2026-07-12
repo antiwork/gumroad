@@ -28,7 +28,7 @@ function generate_nginx_tag(){
 
 BRANCH_APP_NGINX_TAG=$(generate_nginx_tag "docker/branch_app_nginx")
 
-if ! docker manifest inspect $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG > /dev/null 2>&1; then
+if ! docker manifest inspect "$AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG" > /dev/null 2>&1; then
   logger "Building $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"
   BRANCH_APP_NGINX_REPO=$AWS_BRANCH_APP_NGINX_REPO \
     BRANCH_APP_NGINX_TAG=$BRANCH_APP_NGINX_TAG \
@@ -37,7 +37,7 @@ if ! docker manifest inspect $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG > 
   logger "Pushing $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"
   for i in {1..3}; do
     logger "Attempt $i"
-    if docker push $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG; then
+    if docker push "$AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"; then
       logger "Pushed $AWS_BRANCH_APP_NGINX_REPO:$BRANCH_APP_NGINX_TAG"
       break
     elif [ $i -eq 3 ]; then
