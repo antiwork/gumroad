@@ -31,6 +31,8 @@ PREVIEW_ASSET_CACHE_PREFIX="preview-asset-cache"
 # the artifact list below or discovering a missing hash input).
 PREVIEW_ASSET_CACHE_VERSION="v1"
 PREVIEW_ASSET_CACHE_TARBALL="preview-asset-cache.tar.gz"
+# Local scratch file for the SHA-256 sidecar (see restore/save below).
+PREVIEW_ASSET_CACHE_CHECKSUM="preview-asset-cache.tar.gz.sha256"
 
 preview_asset_cache_logger() {
   echo -e "\033[0;32m$(date '+%Y/%m/%d %H:%M:%S') preview_asset_cache.sh: $1\033[0m"
@@ -84,8 +86,10 @@ preview_asset_cache_enabled() {
   [[ -n $BUILDKITE_BRANCH ]] || return 1
   [[ $BUILDKITE_BRANCH != "main" ]] || return 1
   [[ $BUILDKITE_BRANCH != comp-assets-* ]] || return 1
-  # Same escape hatch as the branch cache in ci_scripts/helper.sh.
-  [[ ! $BUILDKITE_MESSAGE =~ no.cache ]] && return 0
+  # Same escape hatch as the branch cache in ci_scripts/helper.sh (which
+  # matches "no.cache" with a regex wildcard dot; here the separator is
+  # spelled out so an unrelated word like "noXcache" can't disable the cache).
+  [[ ! $BUILDKITE_MESSAGE =~ no[-_.[:space:]]cache ]] && return 0
   return 1
 }
 
@@ -114,13 +118,36 @@ preview_asset_cache_s3_cp() {
   fi
 }
 
-# Downloads the tarball for the current tag. Returns non-zero (a miss) when
-# the object doesn't exist or S3 is unreachable — the caller falls back to a
-# full compile either way.
+# Downloads the tarball for the current tag and verifies it against the
+# SHA-256 sidecar uploaded alongside it. Returns non-zero (a miss) when the
+# object doesn't exist, S3 is unreachable, the sidecar is missing, or the
+# checksum doesn't match — the caller falls back to a full compile either way.
+#
+# The check matters because the tarball is extracted into a container that
+# gets committed as the staging image: a truncated download or a tampered
+# object must never make it that far. (The sidecar proves the tarball is the
+# one this pipeline uploaded, byte for byte; keeping the bucket write-locked
+# to CI is what proves who uploaded it.)
 preview_asset_cache_restore() {
   local tag=$1
-  rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
-  preview_asset_cache_s3_cp "$(preview_asset_cache_url "$tag")" "$PREVIEW_ASSET_CACHE_TARBALL"
+  rm -f "$PREVIEW_ASSET_CACHE_TARBALL" "$PREVIEW_ASSET_CACHE_CHECKSUM"
+  preview_asset_cache_s3_cp "$(preview_asset_cache_url "$tag")" "$PREVIEW_ASSET_CACHE_TARBALL" || return 1
+
+  if ! preview_asset_cache_s3_cp "$(preview_asset_cache_url "$tag").sha256" "$PREVIEW_ASSET_CACHE_CHECKSUM"; then
+    preview_asset_cache_logger "No checksum sidecar for tag $tag — treating as a cache miss"
+    rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+    return 1
+  fi
+
+  local expected actual
+  expected=$(tr -d '[:space:]' < "$PREVIEW_ASSET_CACHE_CHECKSUM")
+  actual=$(sha256sum "$PREVIEW_ASSET_CACHE_TARBALL" | cut -d " " -f1)
+  rm -f "$PREVIEW_ASSET_CACHE_CHECKSUM"
+  if [[ -z $expected || $expected != "$actual" ]]; then
+    preview_asset_cache_logger "Checksum mismatch for tag $tag — treating as a cache miss"
+    rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+    return 1
+  fi
 }
 
 # Extracts the compiled artifacts out of the freshly built staging image and
@@ -140,10 +167,16 @@ preview_asset_cache_save() {
     return 1
   fi
 
-  if preview_asset_cache_s3_cp "$PREVIEW_ASSET_CACHE_TARBALL" "$(preview_asset_cache_url "$tag")"; then
+  # The sidecar is what restore verifies before extracting the tarball into
+  # the staging image. Upload it after the tarball: restore fetches the
+  # tarball first, so it can never see a sidecar without its tarball, and a
+  # tarball without a sidecar is treated as a miss.
+  sha256sum "$PREVIEW_ASSET_CACHE_TARBALL" | cut -d " " -f1 > "$PREVIEW_ASSET_CACHE_CHECKSUM"
+  if preview_asset_cache_s3_cp "$PREVIEW_ASSET_CACHE_TARBALL" "$(preview_asset_cache_url "$tag")" \
+    && preview_asset_cache_s3_cp "$PREVIEW_ASSET_CACHE_CHECKSUM" "$(preview_asset_cache_url "$tag").sha256"; then
     preview_asset_cache_logger "Uploaded asset cache for tag $tag"
   else
     preview_asset_cache_logger "Failed to upload asset cache for tag $tag"
   fi
-  rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+  rm -f "$PREVIEW_ASSET_CACHE_TARBALL" "$PREVIEW_ASSET_CACHE_CHECKSUM"
 }
