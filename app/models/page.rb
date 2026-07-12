@@ -22,11 +22,19 @@ class Page < ApplicationRecord
   # Slugs serve at the root of the username subdomain and custom domains, so
   # they must never shadow a path those domains already route. Keep this list
   # aligned with the storefront routes in config/routes.rb (root-domain
+  # Slugs serve at the root of the username subdomain and custom domains, so
+  # they must never shadow a path those domains already route. Keep this list
+  # aligned with the storefront routes in config/routes.rb (root-domain
   # `/:username/...` routes and the UserCustomDomainConstraint block).
+  #
+  # "profile" is reserved for a different reason: the pages management UI uses
+  # /pages/profile as the special entry for the seller's pinned profile page
+  # (see PagesController#set_page), so a real page with that slug would be
+  # unreachable from the UI.
   RESERVED_SLUGS = %w[
     affiliate_requests affiliates braintree checkout coffee confirm confirm-redirect
     consumption_analytics d edit follow integrations l landing library media_locations
-    p pages posts posts_paginated product_reviews products purchases r read s
+    p pages posts posts_paginated product_reviews products profile purchases r read s
     save_to_library signup subscribe subscribe_preview updates wishlists zip
   ].freeze
 
