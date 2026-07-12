@@ -158,7 +158,7 @@ describe "preview_qa rake tasks" do
         expect do
           run_task("preview_qa:backdate_purchase", purchase.external_id)
         end.to raise_error(SystemExit)
-      end.to output(/no subscription with a recurrence/).to_stderr
+      end.to output(/has a subscription with no recurrence/).to_stderr
     end
 
     it "aborts when the purchase cannot be found" do
