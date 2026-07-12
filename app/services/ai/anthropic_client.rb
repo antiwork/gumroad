@@ -18,19 +18,11 @@
 # lives entirely in StoreAgentApiClient, which this never touches.
 class Ai::AnthropicClient
   class Error < StandardError; end
+
   # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
   # limited, returned a 5xx, or the network dropped. Distinct from Error so callers (and our own
   # retry loop) never retry a real bug like a malformed tool call. `retry_after` carries the
   # server's own back-off hint (the Retry-After header on a 429) in seconds, when it sent one.
-  class TransientError < Error
-    attr_reader :retry_after
-
-    def initialize(message, retry_after: nil)
-      super(message)
-      @retry_after = retry_after
-    end
-  end
-  # the retry loop uses it so we don't retry into the same rate-limit window and waste an attempt.
   class TransientError < Error
     attr_reader :retry_after
 
@@ -83,6 +75,8 @@ class Ai::AnthropicClient
   def initialize(timeout: 60, model: DEFAULT_MODEL)
     @timeout = timeout
     @model = model
+    # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
+    @retry_sleep_spent = 0.0
   end
 
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
@@ -165,17 +159,29 @@ class Ai::AnthropicClient
   private
     attr_reader :timeout, :model
 
-    # Run the block, retrying on TransientError with a short linear backoff. `retryable` lets the
-    # caller veto a retry at failure time — the streaming path uses it to stop retrying once any
-    # output has already reached the seller.
+    # Run the block, retrying on TransientError. The wait between attempts is the server's own
+    # Retry-After hint when it sent one (a rate-limited 429 says exactly how long to back off —
+    # retrying sooner just burns an attempt on another guaranteed 429), otherwise a short linear
+    # backoff. `retryable` lets the caller veto a retry at failure time — the streaming path uses
+    # it to stop retrying once any output has already reached the seller.
+    #
+    # Every sleep is charged against the instance-wide RETRY_SLEEP_BUDGET_IN_SECONDS, so a web
+    # request that chains several calls on one client (the agent's tool loop) can never accumulate
+    # more than that much blocked time. If the next wait would blow the budget — including a
+    # Retry-After longer than we're willing to hold the request thread — the failure surfaces
+    # immediately instead.
     def with_retries(retryable: -> { true })
       attempt = 1
       begin
         yield
-      rescue TransientError
+      rescue TransientError => e
         raise if attempt >= MAX_ATTEMPTS || !retryable.call
 
-        sleep(attempt * RETRY_BASE_DELAY_IN_SECONDS)
+        delay = e.retry_after || attempt * RETRY_BASE_DELAY_IN_SECONDS
+        raise if @retry_sleep_spent + delay > RETRY_SLEEP_BUDGET_IN_SECONDS
+
+        @retry_sleep_spent += delay
+        sleep(delay)
         attempt += 1
         retry
       end
@@ -187,9 +193,20 @@ class Ai::AnthropicClient
       return if response.status.success?
 
       message = "Anthropic #{kind} failed: #{response.status} — #{error_detail(response)}"
-      raise TransientError, message if RETRYABLE_STATUS_CODES.include?(response.status.code)
+      if RETRYABLE_STATUS_CODES.include?(response.status.code)
+        raise TransientError.new(message, retry_after: parse_retry_after(response))
+      end
 
       raise Error, message
+    end
+
+    # The Retry-After header on a rate-limited response, as a number of seconds. Anthropic sends the
+    # numeric form; the header can technically also be an HTTP date, which we treat the same as "no
+    # hint" and fall back to the linear backoff.
+    def parse_retry_after(response)
+      Float(response.headers["Retry-After"])
+    rescue ArgumentError, TypeError
+      nil
     end
 
     # Classify a mid-stream `error` event. Overload/rate-limit/server errors are transient (the

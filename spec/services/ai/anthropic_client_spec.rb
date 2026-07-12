@@ -102,6 +102,47 @@ describe Ai::AnthropicClient do
       expect(stub).to have_been_requested.once
     end
 
+    it "sleeps the Retry-After header value on a 429 instead of the default backoff" do
+      body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+      stub_request(:post, url)
+        .to_return({ status: 429, body: { error: { type: "rate_limit_error", message: "rate limited" } }.to_json, headers: { "Retry-After" => "4" } },
+                   { status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" } })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.text).to eq("ok")
+      expect(client).to have_received(:sleep).with(4.0)
+    end
+
+    it "gives up instead of sleeping when Retry-After exceeds the retry sleep budget" do
+      # A long server-mandated wait would block the calling (Rack request) thread; surfacing the
+      # failure immediately is better than holding the request hostage.
+      stub = stub_request(:post, url)
+        .to_return(status: 429, body: { error: { type: "rate_limit_error", message: "rate limited" } }.to_json, headers: { "Retry-After" => "30" })
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::TransientError, /rate limited/)
+      expect(stub).to have_been_requested.once
+      expect(client).not_to have_received(:sleep)
+    end
+
+    it "caps total retry sleep across calls on the same client instance" do
+      # The agent's tool loop chains several buffered calls on one client inside a single web
+      # request; the shared budget keeps repeated transient failures from stacking up blocked time.
+      failure = { status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json }
+      success = { status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } }
+      stub_request(:post, url).to_return(failure, success, failure, success, failure, failure)
+
+      slept = 0.0
+      allow(client).to receive(:sleep) { |seconds| slept += seconds }
+
+      2.times { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) } # 1s + 1s spent
+      expect { 3.times { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) } }
+        .to raise_error(described_class::TransientError)
+
+      expect(slept).to be <= described_class::RETRY_SLEEP_BUDGET_IN_SECONDS
+    end
+
     it "retries a streaming request that fails before any output reached the caller" do
       good_stream = "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
                     "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "hi" } }.to_json}\n\n" \
