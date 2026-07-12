@@ -100,6 +100,23 @@ describe "preview_qa rake tasks" do
       expect(purchase.succeeded_at).to be_within(1.minute).of(expected_days.days.ago)
     end
 
+    it "shifts every successful charge on the subscription, so the renewal is due by every code path" do
+      original_purchase = create(:membership_purchase)
+      subscription = original_purchase.subscription
+      renewal_purchase = create(:membership_purchase, link: subscription.link, subscription:, is_original_subscription_purchase: false)
+
+      expect do
+        run_task("preview_qa:backdate_purchase", original_purchase.external_id)
+      end.to output(/plus 1 other successful charge/).to_stdout
+
+      expected_days = (subscription.period / 1.day).ceil + 1
+      expect(original_purchase.reload.succeeded_at).to be_within(1.minute).of(expected_days.days.ago)
+      expect(renewal_purchase.reload.succeeded_at).to be_within(1.minute).of(expected_days.days.ago)
+      # This is the point of shifting siblings: overdue_for_charge? keys off the newest
+      # succeeded_at across all successful charges, not the one purchase named on the task.
+      expect(subscription.reload.overdue_for_charge?).to be(true)
+    end
+
     it "backdates by an explicit number of days and accepts a numeric database id" do
       purchase = create(:free_purchase)
 
