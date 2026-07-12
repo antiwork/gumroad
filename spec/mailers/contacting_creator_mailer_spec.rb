@@ -1527,6 +1527,20 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "tax_form_transaction_report" do
+    it "contains the correct text, attachment, and attributes" do
+      user = create(:user)
+      file = Tempfile.new(["1099-K-transactions", ".csv"])
+      mail = ContactingCreatorMailer.tax_form_transaction_report(user.id, 2025, file)
+      expect(mail.body.encoded).to include "Your 1099-K transaction report"
+      expect(mail.body.encoded).to include "We've attached the transaction report"
+      expect(mail.attachments.size).to eq(1)
+      expect(mail.attachments.first.filename).to eq("1099-K-transactions-2025.csv")
+      expect(mail.to).to eq([user.email])
+      expect(mail.subject).to eq("Your 2025 1099-K transaction report")
+    end
+  end
+
   describe "payout_data" do
     let(:recipient) { create(:user) }
     let(:attachment_name) { "payout_data_#{SecureRandom.hex}.csv" }

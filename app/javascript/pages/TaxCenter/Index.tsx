@@ -4,8 +4,10 @@ import * as React from "react";
 import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
+import { asyncVoid } from "$app/utils/promise";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -29,6 +31,7 @@ type TaxDocument = {
   affiliate_credit?: string;
   net: string;
   filed_at: string | null;
+  transaction_report_available: boolean;
 };
 
 const FAQ_ITEMS: {
@@ -57,7 +60,11 @@ const FAQ_ITEMS: {
     answer: (
       <>
         The 1099-K shows your total unadjusted transaction volume, not your actual payouts. It includes Gumroad fees,
-        VAT, affiliate commissions, and other adjustments, so it won't match the amount you were paid.{" "}
+        sales tax and VAT collected at checkout, affiliate commissions, and other adjustments, so it won't match the
+        amount you were paid. Transactions are also grouped into tax years by the date the funds became available
+        (usually a couple of days after the charge), so late-December sales may fall into the next year's form. For a
+        charge-by-charge breakdown that adds up to your form's gross amount, use the "Transaction report" button next to
+        your 1099-K above.{" "}
         <a href="/help/article/15-1099s#mismatch" target="_blank" rel="noreferrer">
           Learn more
         </a>
@@ -98,6 +105,24 @@ const TaxCenterIndex = () => {
   const loggedInUser = useLoggedInUser();
   const [isLoading, setIsLoading] = React.useState(false);
   const [downloadingFormType, setDownloadingFormType] = React.useState<string | null>(null);
+  const [requestingReportFormType, setRequestingReportFormType] = React.useState<string | null>(null);
+
+  const handleRequestTransactionReport = asyncVoid(async (doc: TaxDocument) => {
+    setRequestingReportFormType(doc.form_type);
+    try {
+      const response = await request({
+        method: "POST",
+        accept: "json",
+        url: Routes.tax_form_transaction_report_path(doc.year),
+      });
+      if (!response.ok) throw new ResponseError();
+      showAlert("You will receive an email shortly with your transaction report.", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+    setRequestingReportFormType(null);
+  });
 
   const handleYearChange = (year: number) => {
     router.reload({
@@ -202,7 +227,17 @@ const TaxCenterIndex = () => {
                       {doc.filed_at ? `Filed with IRS on ${doc.filed_at}` : "Informational only (Not Filed with IRS)"}
                     </TableCell>
                     <TableCell data-label="" className="text-right">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                        {doc.transaction_report_available ? (
+                          <Button
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            disabled={requestingReportFormType === doc.form_type}
+                            onClick={() => handleRequestTransactionReport(doc)}
+                          >
+                            {requestingReportFormType === doc.form_type ? "Requesting..." : "Transaction report"}
+                          </Button>
+                        ) : null}
                         <NavigationButton
                           size="sm"
                           className="w-full sm:w-auto"
