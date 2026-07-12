@@ -6,6 +6,7 @@
   tmp/restart.txt
   tmp/caching-dev.txt
   .env
+  .env.local
   .env.development
   .env.development.local
   .env.test

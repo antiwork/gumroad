@@ -31,6 +31,7 @@ def git(*args)
 end
 
 base = "origin/main"
+base_given = false
 dry_run = false
 rspec_args = []
 
@@ -38,17 +39,31 @@ argv = ARGV.dup
 until argv.empty?
   arg = argv.shift
   case arg
-  when "--base" then base = argv.shift or abort("--base requires a ref")
+  when "--base"
+    base = argv.shift or abort("--base requires a ref")
+    base_given = true
   when "--dry-run" then dry_run = true
   when "-h", "--help"
-    puts File.read(__FILE__)[/(?:^#.*\n)+/].gsub(/^# ?/, "")
+    # Print the documentation comment block at the top of this file, skipping
+    # the shebang and the frozen_string_literal magic comment above it.
+    doc = File.read(__FILE__).lines
+      .drop_while { |line| line.start_with?("#!") || line.include?("frozen_string_literal") || line.strip.empty? }
+      .take_while { |line| line.start_with?("#") }
+    puts doc.join.gsub(/^# ?/, "")
     exit 0
   else
     rspec_args << arg
   end
 end
 
-base = "main" if git("rev-parse", "--verify", "--quiet", base).empty? && !git("rev-parse", "--verify", "--quiet", "main").empty?
+if git("rev-parse", "--verify", "--quiet", base).empty?
+  # An explicitly requested base that doesn't resolve is an error — falling
+  # back silently would diff against the wrong ref. Only the default
+  # origin/main falls back to a local main (e.g. clones without a remote).
+  abort("bin/rspec-changed: base ref #{base.inspect} does not resolve") if base_given
+  base = "main"
+  abort("bin/rspec-changed: neither origin/main nor main resolves") if git("rev-parse", "--verify", "--quiet", base).empty?
+end
 merge_base = git("merge-base", base, "HEAD").first
 
 changed = Set.new
