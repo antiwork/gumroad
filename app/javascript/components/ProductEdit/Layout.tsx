@@ -1,4 +1,3 @@
-import { CartPlus, Link as LinkIcon } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
@@ -10,7 +9,6 @@ import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
@@ -143,7 +141,6 @@ export const Layout = ({
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
   const url = useProductUrl();
-  const checkoutUrl = useProductUrl({ wanted: true });
 
   const [match] = useMatches();
   const tab = match?.handle ?? "product";
@@ -249,24 +246,13 @@ export const Layout = ({
         actions={
           product.is_published ? (
             <>
+              {/* Just these two actions, on desktop and mobile alike. Copying the product /
+                  checkout links lives at the top of the Share tab instead of crowding the
+                  header. */}
               <Button disabled={isBusy} onClick={() => void setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              {/* Hidden on mobile: the form's URL field already has a Copy URL affordance there,
-                  and four header actions render as an awkward 2x2 grid on small screens. */}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
-                <Button className="max-lg:hidden">
-                  <LinkIcon className="size-5" />
-                  Copy link
-                </Button>
-              </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
-                <Button className="max-lg:hidden">
-                  <CartPlus className="size-5" />
-                  Copy checkout link
-                </Button>
-              </CopyToClipboard>
             </>
           ) : tab === "product" && !isCoffee ? (
             <Button
