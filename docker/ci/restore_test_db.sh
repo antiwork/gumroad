@@ -24,16 +24,27 @@ IMAGE=$2
 
 MYSQL_IMAGE=mysql:8.0.32
 DUMP_PATH_IN_IMAGE=/app/db/prepared_test_db.sql.gz
+
+# Register the cleanup trap before creating anything it needs to clean up, so
+# a failure partway through setup (for example `docker create` erroring out)
+# still removes whatever did get created.
+CONTAINER_ID=""
+LOCAL_DUMP=""
+cleanup() {
+  if [ -n "$CONTAINER_ID" ]; then
+    docker rm "$CONTAINER_ID" > /dev/null 2>&1 || true
+  fi
+  if [ -n "$LOCAL_DUMP" ]; then
+    rm -f "$LOCAL_DUMP"
+  fi
+}
+trap cleanup EXIT
+
 LOCAL_DUMP=$(mktemp /tmp/prepared_test_db.XXXXXX.sql.gz)
 
 # Extract the dump from the image without running it. `docker create` makes a
 # stopped container we can copy files out of.
 CONTAINER_ID=$(docker create "$IMAGE")
-cleanup() {
-  docker rm "$CONTAINER_ID" > /dev/null 2>&1 || true
-  rm -f "$LOCAL_DUMP"
-}
-trap cleanup EXIT
 
 if docker cp "$CONTAINER_ID:$DUMP_PATH_IN_IMAGE" "$LOCAL_DUMP" 2>/dev/null; then
   echo "Restoring baked test database dump ($(du -h "$LOCAL_DUMP" | cut -f1))..."
