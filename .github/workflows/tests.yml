@@ -269,6 +269,21 @@ jobs:
               docker cp "$CONTAINER:/app/$src" "/tmp/asset-cache/$dst" 2>/dev/null || true
             done
 
+            # Bake the prepared test database into the image. The db:setup
+            # above left a fully prepared gumroad_test in this stack's MySQL;
+            # snapshotting it here lets every test shard restore the dump in
+            # seconds instead of re-running db:prepare from scratch (see
+            # docker/ci/dump_test_db.sh and docker/ci/restore_test_db.sh).
+            # Non-fatal: if the dump fails, shards detect the missing file
+            # and fall back to rake db:prepare.
+            logger "Baking prepared test database dump into the image"
+            if docker/ci/dump_test_db.sh web_${{ github.run_id }}_${{ github.run_attempt }}_default /tmp/prepared_test_db.sql.gz \
+               && docker cp /tmp/prepared_test_db.sql.gz $CONTAINER:/app/db/prepared_test_db.sql.gz; then
+              logger "Test database dump baked into image"
+            else
+              logger "Test database dump/copy failed (non-fatal) — shards will fall back to db:prepare"
+            fi
+
             docker ps -lq \
               --filter='label=routes_compiled=true' \
               --filter='exited=0' \
@@ -346,10 +361,11 @@ jobs:
           command: |
             IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
             NET=${{ env.COMPOSE_PROJECT_NAME }}_default
-            # db:prepare only needs db_test; ES/minio waits run in parallel.
+            # Restore the baked test database dump (seconds) instead of
+            # re-running db:prepare via Rails; ES/minio waits run in parallel.
             (
               docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
-                && docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
+                && docker/ci/restore_test_db.sh $NET $IMG
             ) &
             DB_PID=$!
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
@@ -528,10 +544,11 @@ jobs:
           command: |
             IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
             NET=${{ env.COMPOSE_PROJECT_NAME }}_default
-            # db:prepare only needs db_test; ES/minio waits run in parallel.
+            # Restore the baked test database dump (seconds) instead of
+            # re-running db:prepare via Rails; ES/minio waits run in parallel.
             (
               docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
-                && docker run --rm --entrypoint="" --network $NET -e RAILS_ENV=test $IMG bundle exec rake db:prepare
+                && docker/ci/restore_test_db.sh $NET $IMG
             ) &
             DB_PID=$!
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &

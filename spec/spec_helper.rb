@@ -21,7 +21,7 @@ ActiveRecord::Migration.maintain_test_schema!
 
 # Capybara settings
 Capybara.test_id = "data-testid"
-Capybara.default_max_wait_time = 25
+Capybara.default_max_wait_time = 10
 Capybara.app_host = "#{PROTOCOL}://#{DOMAIN}"
 Capybara.server = :puma
 Capybara.server_port = URI(Capybara.app_host).port
