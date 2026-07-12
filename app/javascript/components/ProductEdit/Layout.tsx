@@ -345,7 +345,16 @@ export const Layout = ({
                   href={url}
                   onClick={(evt) => {
                     evt.preventDefault();
-                    void save().then(() => window.open(url, "_blank"));
+                    // Open the tab NOW, while we still have the user's click activation, then
+                    // point it at the product page once the save finishes. Calling window.open
+                    // after the await instead gets popup-blocked on iOS Safari (the async gap
+                    // consumes the transient activation), which matters because the mobile
+                    // preview sheet is this button's main audience.
+                    const previewWindow = window.open("about:blank", "_blank");
+                    void save().then(() => {
+                      if (previewWindow) previewWindow.location.href = url;
+                      else window.open(url, "_blank");
+                    });
                   }}
                 />
               ),
