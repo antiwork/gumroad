@@ -61,12 +61,15 @@ class Ai::AnthropicClient
   MAX_ATTEMPTS = 3
   RETRY_BASE_DELAY_IN_SECONDS = 1
 
-  # Response statuses worth a retry: request timeout (408 — OpenRouter returns it when the upstream
-  # timed out; Anthropic itself doesn't use it), rate limit (429), server errors (5xx), and
-  # Anthropic's "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is
-  # deterministic — retrying would just repeat the same failure slower.
+  # Response statuses worth a retry: request timeout (408), rate limit (429), server errors (5xx),
+  # and Anthropic's "overloaded" status (529). 408 was added for OpenRouter (it returns 408 when the
+  # upstream model times out; Anthropic itself doesn't use it today), but the list applies to both
+  # routing modes — so if a proxy in front of api.anthropic.com ever returned a 408, we'd retry that
+  # too, which is the right call for a timeout either way. Anything else (400 bad request, 401 bad
+  # key, ...) is deterministic — retrying would just repeat the same failure slower.
   RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504, 529].freeze
-  # Mid-stream `error` events with these types are the streaming equivalents of the statuses above.
+  # `error` objects with these types — arriving mid-stream or inside a buffered 200 body — are the
+  # embedded equivalents of the retryable statuses above.
   RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
 
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
@@ -148,7 +151,7 @@ class Ai::AnthropicClient
         when "message_delta"
           stop_reason = data.dig("delta", "stop_reason") || stop_reason
         when "error"
-          raise stream_error(data)
+          raise embedded_error(data, kind: "stream")
         end
       end
 
@@ -188,11 +191,14 @@ class Ai::AnthropicClient
       raise Error, message
     end
 
-    # Classify a mid-stream `error` event. Overload/rate-limit/server errors are transient (the
-    # retry loop may replay the request if nothing was yielded yet); anything else is a real error.
-    def stream_error(data)
+    # Classify an `error` object embedded in an otherwise-successful response — either a mid-stream
+    # `error` event, or (OpenRouter only) an HTTP 200 whose buffered body carries an error object.
+    # Overload/rate-limit/server errors are transient (the retry loop may replay the request if
+    # nothing was yielded yet); anything else is a real error. `kind` keeps the raised message
+    # accurate for the path it came from ("stream" vs "response").
+    def embedded_error(data, kind:)
       error = data["error"] || {}
-      message = "Anthropic stream error: #{error["message"] || "unknown"}"
+      message = "Anthropic #{kind} error: #{error["message"] || "unknown"}"
       return TransientError.new(message) if RETRYABLE_STREAM_ERROR_TYPES.include?(error["type"])
 
       Error.new(message)
@@ -226,7 +232,7 @@ class Ai::AnthropicClient
       # retries the request against the fallback model and translates the wire format for it, so
       # the agent stays up on GPT when Anthropic is down. Sent only when routing through
       # OpenRouter; Anthropic's own API would reject the unknown parameter.
-      body[:fallbacks] = [{ model: fallback_model }] if openrouter? && fallback_model.present?
+      body[:fallbacks] = [{ model: fallback_model }] if openrouter?
       body
     end
 
@@ -318,7 +324,7 @@ class Ai::AnthropicClient
     # as mid-stream errors lets the retry loop recover from the transient ones.
     def parse_message(body)
       return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
-      raise stream_error(body) if body["error"].is_a?(Hash)
+      raise embedded_error(body, kind: "response") if body["error"].is_a?(Hash)
 
       content = Array(body["content"])
       text = content.filter_map { |b| b["text"].to_s if b.is_a?(Hash) && b["type"] == "text" }.join
